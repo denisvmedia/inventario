@@ -58,6 +58,7 @@ func (*CommodityRegistry) SupportsNativePhotoFilter() {}
 // the loans, file links and custom field values their subqueries join.
 type commodityTables struct {
 	commodities       string
+	areas             string
 	loans             string
 	fileLinks         string
 	files             string
@@ -67,6 +68,7 @@ type commodityTables struct {
 func (r *CommodityRegistry) whereTables() commodityTables {
 	return commodityTables{
 		commodities:       string(r.tableNames.Commodities()),
+		areas:             string(r.tableNames.Areas()),
 		loans:             string(r.tableNames.CommodityLoans()),
 		fileLinks:         string(r.tableNames.FileLinks()),
 		files:             string(r.tableNames.Files()),
@@ -645,6 +647,7 @@ func commodityWhere(opts registry.CommodityListOptions, tables commodityTables) 
 		add(cond.In("status", anyStrings(opts.Statuses)...))
 	}
 	add(commodityAreaExpr(cond, opts))
+	add(commodityLocationExpr(cond, opts.LocationID, tables.areas))
 	if len(opts.SellerIDs) > 0 {
 		add(cond.In("seller_id", anyStrings(opts.SellerIDs)...))
 	}
@@ -744,6 +747,17 @@ func commodityAreaExpr(cond *sqlb.Cond, opts registry.CommodityListOptions) stri
 	default:
 		return ""
 	}
+}
+
+// commodityLocationExpr keeps the items in an area of the location (#2897),
+// empty when no location is asked for. Row-level security on the areas
+// table keeps the subquery to the caller's group, so an area of another
+// group never matches.
+func commodityLocationExpr(cond *sqlb.Cond, locationID, areasTable string) string {
+	if locationID == "" {
+		return ""
+	}
+	return fmt.Sprintf("area_id IN (SELECT id FROM %s WHERE %s)", areasTable, cond.Equal("location_id", locationID))
 }
 
 // warrantyStatusExpr builds the computed-warranty-status disjunction, empty
@@ -934,6 +948,15 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	reg := r.newSQLRegistry()
 
 	err := reg.UpdateWithHooks(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, stored models.Commodity, row *models.Commodity) error {
+		// The tag locks come before the item's row lock, the order a tag
+		// rename or delete takes them in (see ensureTagRowsInTx). Taking
+		// the row first deadlocks against a rename that holds the slug and
+		// waits for this row. The tag rows are created or locked here too,
+		// so a concurrent delete of one of the tags cannot leave the item
+		// pointing at a tag that no longer exists.
+		if err := ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindCommodity, []string(commodity.Tags)); err != nil {
+			return err
+		}
 		// A trashed item is read-only until it is restored. stored was read
 		// without a lock, so the check is made again under one. The trash
 		// columns themselves belong to Trash and Restore.
@@ -971,14 +994,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 				return err
 			}
 		}
-		if err := r.checkSeller(ctx, tx, commodity.SellerID); err != nil {
-			return err
-		}
-		// Same orphan-prevention as in Create — an Update that adds new
-		// tag slugs needs to grab the per-(group, slug) lock + upsert the
-		// tag row before the JSONB column is rewritten by the surrounding
-		// Update query.
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindCommodity, []string(commodity.Tags))
+		return r.checkSeller(ctx, tx, commodity.SellerID)
 	}, func(ctx context.Context, tx *sqlx.Tx, _ models.Commodity, row *models.Commodity) error {
 		if err := writeCustomFieldValuesInTx(ctx, tx, r.tableNames, row, commodity.CustomFields); err != nil {
 			return err

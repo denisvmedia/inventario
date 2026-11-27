@@ -125,6 +125,9 @@ describe("<FeedbackDialog />", () => {
     await user.click(screen.getByTestId("feedback-submit"))
 
     expect(await screen.findByTestId("feedback-message-error")).toBeInTheDocument()
+    const message = screen.getByTestId("feedback-message")
+    expect(message).toHaveAttribute("aria-invalid", "true")
+    expect(message).toHaveAccessibleDescription("Please describe your feedback.")
     expect(onOpenChange).not.toHaveBeenCalled()
   })
 

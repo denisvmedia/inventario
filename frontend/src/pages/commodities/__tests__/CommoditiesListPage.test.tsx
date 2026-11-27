@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { http as msw, HttpResponse } from "msw"
 import { Route, Routes, useLocation, useNavigate, type Location } from "react-router-dom"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { CommoditiesListPage } from "@/pages/commodities/CommoditiesListPage"
+import { useAuth } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
@@ -14,6 +15,7 @@ import { server } from "@/test/server"
 import {
   apiUrl,
   areaHandlers,
+  authHandlers,
   commodityHandlers,
   draftHandlers,
   groupHandlers,
@@ -46,6 +48,13 @@ function commodityRes(id: string, attrs: Record<string, unknown>) {
     type: "commodities",
     attributes: { id, count: 1, status: "in_use", type: "other", area_id: "a1", ...attrs },
   }
+}
+
+// SignedIn renders the page once the user is known, as the app's route
+// guard does: Add item keeps its input per user (#2920).
+function SignedIn({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  return user ? children : null
 }
 
 function renderList(initialPath = `/g/${SLUG}/commodities`) {
@@ -465,6 +474,7 @@ describe("<CommoditiesListPage />", () => {
     await user.click(await screen.findByTestId("commodities-bulk-move"))
     // The dialog renders a <select> populated from the areas fixture.
     const select = await screen.findByTestId("bulk-move-area")
+    expect(select).toHaveAttribute("data-slot", "native-select")
     expect(within(select as HTMLSelectElement).getByText(/Garage/i)).toBeInTheDocument()
     expect(within(select as HTMLSelectElement).getByText(/Kitchen/i)).toBeInTheDocument()
   })
@@ -614,6 +624,47 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("filters by location from the Location menu and narrows the area menu (#2897)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, [
+        ...areaFixture,
+        { id: "a3", type: "areas", attributes: { id: "a3", name: "Boathouse", location_id: "l2" } },
+      ]),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+        { id: "l2", type: "locations", attributes: { id: "l2", name: "Cottage" } },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?unassigned=1`)
+    await screen.findByTestId("commodity-card")
+
+    await user.click(screen.getByTestId("commodities-filter-location"))
+    await user.click(await screen.findByTestId("commodities-filter-location-l2"))
+    await waitFor(() => {
+      expect(queries.some((q) => /[?&]location_id=l2\b/.test(q))).toBe(true)
+    })
+    // An item without an area is in no location, so the location ends
+    // "No location", which the server refuses alongside it.
+    expect(screen.getByTestId("commodities-filter-unassigned")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    )
+    expect(/[?&]unassigned=/.test(queries[queries.length - 1] ?? "")).toBe(false)
+
+    // The area menu offers the areas of that location only.
+    await user.click(screen.getByTestId("commodities-filter-area"))
+    const menu = await screen.findByRole("menu")
+    expect(within(menu).getByRole("menuitemradio", { name: "Boathouse" })).toBeInTheDocument()
+    expect(within(menu).queryByRole("menuitemradio", { name: "Garage" })).not.toBeInTheDocument()
+  })
+
   it("filters by missing details from the Missing menu and keeps them in the URL (#2794)", async () => {
     const user = userEvent.setup()
     const queries: string[] = []
@@ -712,6 +763,7 @@ describe("<CommoditiesListPage />", () => {
     const requests: Record<string, unknown>[] = []
     const drafts = draftHandlers.backend(SLUG)
     server.use(
+      ...authHandlers.signedIn(),
       ...drafts.handlers,
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
@@ -749,17 +801,20 @@ describe("<CommoditiesListPage />", () => {
     }
     setAccessToken("good-token")
     renderWithProviders({
+      withAuth: true,
       initialPath: `/g/${SLUG}/commodities`,
       routes: (
         <>
           <Route
             path="/g/:groupSlug/commodities"
             element={
-              <GroupProvider>
-                <ConfirmProvider>
-                  <CommoditiesListPage />
-                </ConfirmProvider>
-              </GroupProvider>
+              <SignedIn>
+                <GroupProvider>
+                  <ConfirmProvider>
+                    <CommoditiesListPage />
+                  </ConfirmProvider>
+                </GroupProvider>
+              </SignedIn>
             }
           />
           <Route path="/g/:groupSlug/commodities/:id" element={<NavSentinel />} />
@@ -816,6 +871,7 @@ describe("<CommoditiesListPage />", () => {
       release = resolve
     })
     server.use(
+      ...authHandlers.signedIn(),
       ...drafts.handlers,
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
@@ -842,16 +898,19 @@ describe("<CommoditiesListPage />", () => {
           <button data-testid="back" type="button" onClick={() => navigate(-1)}>
             Back
           </button>
-          <GroupProvider>
-            <ConfirmProvider>
-              <CommoditiesListPage />
-            </ConfirmProvider>
-          </GroupProvider>
+          <SignedIn>
+            <GroupProvider>
+              <ConfirmProvider>
+                <CommoditiesListPage />
+              </ConfirmProvider>
+            </GroupProvider>
+          </SignedIn>
         </>
       )
     }
     setAccessToken("good-token")
     renderWithProviders({
+      withAuth: true,
       initialEntries: [
         { pathname: `/g/${SLUG}/commodities` },
         { pathname: `/g/${SLUG}/commodities/new` },

@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
+import { FieldError } from "@/components/FieldError"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { FEEDBACK_TYPES, type FeedbackType } from "@/features/feedback/api"
@@ -49,8 +50,8 @@ import { parseServerError } from "@/lib/server-error"
 const MESSAGE_MAX_BYTES = 5 * 1024
 
 // Match the BE's byte-counted bound: `len()` on a Go string is
-// UTF-8 bytes, whereas Zod's built-in `.max()` measures UTF-16 code
-// units. A multibyte payload (emoji, CJK, accented characters) that
+// UTF-8 bytes, whereas Zod's built-in `.max()` counts code points.
+// A multibyte payload (emoji, CJK, accented characters) that
 // looks fine to the FE could trip the BE's 400 if we used `.max()`
 // here — using TextEncoder mirrors `len(message)` exactly.
 const utf8ByteLength = (value: string) => new TextEncoder().encode(value).length
@@ -242,13 +243,15 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               rows={6}
               placeholder={t("feedback:fields.messagePlaceholder")}
               data-testid="feedback-message"
+              aria-invalid={!!errors.message}
+              aria-describedby={errors.message ? `${formId}-message-error` : undefined}
               {...register("message")}
             />
-            {errors.message?.message ? (
-              <p className="text-xs text-destructive" data-testid="feedback-message-error">
-                {t(errors.message.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id={`${formId}-message-error`}
+              testId="feedback-message-error"
+              message={errors.message?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -259,12 +262,16 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               autoComplete="email"
               placeholder={t("feedback:fields.replyToPlaceholder")}
               data-testid="feedback-reply-to"
+              aria-invalid={!!errors.reply_to_email}
+              aria-describedby={errors.reply_to_email ? `${formId}-reply-to-error` : undefined}
               {...register("reply_to_email")}
             />
             {errors.reply_to_email?.message ? (
-              <p className="text-xs text-destructive" data-testid="feedback-reply-to-error">
-                {t(errors.reply_to_email.message)}
-              </p>
+              <FieldError
+                id={`${formId}-reply-to-error`}
+                testId="feedback-reply-to-error"
+                message={errors.reply_to_email.message}
+              />
             ) : (
               <p className="text-xs text-muted-foreground">{t("feedback:fields.replyToHelp")}</p>
             )}

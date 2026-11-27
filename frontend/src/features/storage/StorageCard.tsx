@@ -14,7 +14,9 @@ import type { StorageBreakdown } from "./api"
 // StorageCard renders the per-group storage usage panel under
 // Settings → Data & storage (#1388). Shows headline used / quota,
 // a progress bar (when a quota is set), and a per-category byte
-// breakdown so users can see where their space went.
+// breakdown so users can see where their space went. The usage is the
+// size of the uploaded files; the thumbnails rendered for photos are
+// stored apart and not counted, and the card says so (#2896).
 //
 // Settings sits on the personal `/settings` route (no active group
 // in the URL), so we resolve a slug explicitly: the URL-active group
@@ -56,6 +58,12 @@ export function StorageCard() {
       {isPending ? <UsageSkeleton /> : null}
 
       {data ? <UsageBody data={data} /> : null}
+
+      {data ? (
+        <p className="text-xs text-muted-foreground" data-testid="storage-card-counts-note">
+          {t("settings:storage.countsNote")}
+        </p>
+      ) : null}
 
       {data && (data.breakdown.trash ?? 0) > 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="storage-card-trash">

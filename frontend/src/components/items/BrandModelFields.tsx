@@ -3,11 +3,7 @@ import { Controller, type Control, type FieldErrors, type UseFormRegister } from
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  BRAND_MAX_LEN,
-  MODEL_MAX_LEN,
-  type CommodityFormInput,
-} from "@/features/commodities/schemas"
+import type { CommodityFormInput } from "@/features/commodities/schemas"
 
 import { BrandInput } from "./BrandInput"
 
@@ -46,7 +42,6 @@ export function BrandModelFields({
               value={field.value ?? ""}
               onChange={field.onChange}
               onBlur={field.onBlur}
-              maxLength={BRAND_MAX_LEN}
               placeholder={t("commodities:fields.brandPlaceholder")}
               aria-invalid={!!errors.brand}
               data-testid="commodity-brand-input"
@@ -55,6 +50,7 @@ export function BrandModelFields({
         />
         {errors.brand?.message ? (
           <p className="text-xs text-destructive" role="alert">
+            {/* eslint-disable-next-line no-restricted-syntax -- the Add item dialog's own error line (design-mocks/src/components/AddItemDialog.tsx) */}
             {t(errors.brand.message)}
           </p>
         ) : null}
@@ -64,7 +60,6 @@ export function BrandModelFields({
         <Input
           id={modelId}
           autoComplete="off"
-          maxLength={MODEL_MAX_LEN}
           placeholder={t("commodities:fields.modelPlaceholder")}
           {...register("model")}
           aria-invalid={!!errors.model}
@@ -72,6 +67,7 @@ export function BrandModelFields({
         />
         {errors.model?.message ? (
           <p className="text-xs text-destructive" role="alert">
+            {/* eslint-disable-next-line no-restricted-syntax -- the Add item dialog's own error line (design-mocks/src/components/AddItemDialog.tsx) */}
             {t(errors.model.message)}
           </p>
         ) : null}

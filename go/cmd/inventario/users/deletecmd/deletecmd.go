@@ -9,7 +9,10 @@ import (
 
 	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/defaults"
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services"
 	"go.5x5.cz/inventario/services/admin"
 )
 
@@ -36,7 +39,8 @@ This command deletes a user and associated data. It shows user details
 and requires confirmation unless --force is used.
 
 WARNING: This operation is irreversible and will delete the user account
-and any associated personal data.
+and any associated personal data, the profile photo included. The photo is
+deleted from --upload-location, which must be the one the server uses.
 
 SAFETY FEATURES:
   • User details display before deletion
@@ -54,7 +58,10 @@ Examples:
   inventario users delete admin@acme.com --force
 
   # Delete by ID
-  inventario users delete 550e8400-e29b-41d4-a716-446655440000`,
+  inventario users delete 550e8400-e29b-41d4-a716-446655440000
+
+  # Delete a user whose photo is kept in S3
+  inventario users delete admin@acme.com --upload-location=s3://bucket`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.deleteUser(&c.config, dbConfig, args[0])
@@ -72,6 +79,8 @@ func (c *Command) registerFlags() {
 
 	// Delete options
 	c.Cmd().Flags().BoolVar(&c.config.Force, "force", c.config.Force, "Skip confirmation prompts")
+	c.Cmd().Flags().StringVar(&c.config.UploadLocation, "upload-location", c.config.UploadLocation,
+		"Object-store location of uploaded files; the user's profile photo is deleted there (defaults to the configured upload location)")
 }
 
 // deleteUser handles the user deletion process
@@ -156,7 +165,12 @@ func (c *Command) deleteUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 		}
 	}
 
-	// Delete the user via service
+	// Delete the user via service, and their profile photo with them.
+	uploadLocation := strings.TrimSpace(cfg.UploadLocation)
+	if uploadLocation == "" {
+		uploadLocation = defaults.GetUploadLocation()
+	}
+	adminService.SetAvatarService(services.NewAvatarService(adminService.FactorySet(), filekit.NormalizeFileURL(uploadLocation)))
 	err = adminService.DeleteUser(context.Background(), idOrEmail)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)

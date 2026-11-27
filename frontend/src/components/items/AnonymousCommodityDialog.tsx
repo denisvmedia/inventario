@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
-import { writeDraft } from "@/features/commodities/draft"
+import { ANON_ITEM_SLOT, writeDraft } from "@/features/commodities/draft"
 import { priceToFormValue } from "@/features/commodities/price"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { savePendingFirstItem } from "@/features/auth/firstItemHandoff"
@@ -11,7 +11,7 @@ import { inferDefaultCurrency } from "@/lib/currency-default"
 // dialog's auto-save, the explicit writeDraft on submit, and the
 // post-login FirstItemResolver replay — they MUST agree on one key so
 // the resolver can find the stashed values + IndexedDB pending files.
-export const ANON_DRAFT_KEY = "commodity-draft:anon:create"
+export const ANON_DRAFT_KEY = ANON_ITEM_SLOT
 
 // Where the resolver replays the stash. The hand-off sends the visitor to
 // /register first (the anonymous fill is new-user onboarding); the marker

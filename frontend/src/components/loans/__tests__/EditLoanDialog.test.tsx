@@ -51,6 +51,21 @@ describe("<EditLoanDialog />", () => {
     expect(onSubmit).toHaveBeenCalledWith({ due_back_at: null })
   })
 
+  it("marks an emptied borrower name invalid and describes it by its message", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<EditLoanDialog open loan={baseLoan()} onOpenChange={vi.fn()} onSubmit={onSubmit} />)
+
+    const name = screen.getByTestId("edit-loan-borrower-name")
+    await user.clear(name)
+    await user.click(screen.getByTestId("edit-loan-submit"))
+
+    expect(await screen.findByTestId("edit-loan-borrower-name-error")).toBeInTheDocument()
+    expect(name).toHaveAttribute("aria-invalid", "true")
+    expect(name).toHaveAccessibleDescription("Borrower name is required.")
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it("setting a new due date emits the date in the patch", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)

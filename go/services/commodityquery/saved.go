@@ -12,7 +12,7 @@ import (
 // condition the list cannot show would either be dropped on the way, which
 // broadens the view, or stay invisible to the person looking at it.
 var savedParams = []string{
-	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
+	ParamText, ParamType, ParamStatus, ParamAreaID, ParamLocationID, ParamUnassigned,
 	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamLentOut,
 	ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
 	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate, ParamCustomField,

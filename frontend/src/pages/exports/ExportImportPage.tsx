@@ -14,6 +14,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { formatBytes } from "@/lib/intl"
 import { getServerErrorCode, parseServerError } from "@/lib/server-error"
+import { capCodePoints } from "@/lib/text-length"
 
 // A personal data export (Settings → Account → Download my data, #2177) is a
 // copy of one person's data, not a group backup. Its download name is
@@ -186,9 +187,8 @@ export function ExportImportPage() {
           <Input
             id="import-description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => setDescription(capCodePoints(e.target.value, 500))}
             placeholder={t("exports:importView.descriptionPlaceholder")}
-            maxLength={500}
             data-testid="import-description"
           />
           <p className="text-xs text-muted-foreground">{t("exports:importView.descriptionHint")}</p>

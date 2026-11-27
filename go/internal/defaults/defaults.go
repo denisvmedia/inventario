@@ -42,6 +42,7 @@ type Workers struct {
 	MaintenanceReminderInterval      string // Maintenance reminder worker interval (e.g., "1h")
 	ItemReminderInterval             string // Item reminder worker interval (e.g., "1h")
 	CurrencyMigrationInterval        string // Currency migration worker active-poll interval (e.g., "5s")
+	CurrencyMigrationRetention       string // How long a finished currency migration stays before it is deleted (e.g., "2160h")
 	BusinessMetricsInterval          string // Business-metrics collector interval (e.g., "60s")
 	WorkerControlRefreshInterval     string // Worker soft-pause control poll interval (e.g., "10s")
 	OrphanFileGCInterval             string // Orphan-file GC sweep interval (e.g., "24h")
@@ -121,6 +122,7 @@ func New() Config {
 			MaintenanceReminderInterval:      "1h",
 			ItemReminderInterval:             "1h",
 			CurrencyMigrationInterval:        "5s",
+			CurrencyMigrationRetention:       "2160h",
 			BusinessMetricsInterval:          "60s",
 			WorkerControlRefreshInterval:     "10s",
 			// Orphan-file GC (#2237). Ships in REPORT mode: it evaluates the
@@ -331,6 +333,12 @@ func GetItemReminderInterval() string {
 // knob the operator tunes.
 func GetCurrencyMigrationInterval() string {
 	return defaultConfig.Workers.CurrencyMigrationInterval
+}
+
+// GetCurrencyMigrationRetention returns how long a completed or failed
+// currency migration stays, with its audit rows, by default (90 days).
+func GetCurrencyMigrationRetention() string {
+	return defaultConfig.Workers.CurrencyMigrationRetention
 }
 
 // GetBusinessMetricsInterval returns the default interval between

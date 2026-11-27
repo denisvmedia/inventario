@@ -142,13 +142,15 @@ export function SendForServiceDialog({
               data-testid="service-provider-name"
               placeholder={t("services:dialog.providerNamePlaceholder")}
               autoComplete="off"
+              aria-invalid={!!errors.provider_name}
+              aria-describedby={errors.provider_name ? "service-provider-name-error" : undefined}
               {...register("provider_name")}
             />
-            {errors.provider_name?.message ? (
-              <p className="text-xs text-destructive" data-testid="service-provider-name-error">
-                {t(errors.provider_name.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="service-provider-name-error"
+              testId="service-provider-name-error"
+              message={errors.provider_name?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -158,16 +160,20 @@ export function SendForServiceDialog({
               data-testid="service-provider-contact"
               placeholder={t("services:dialog.providerContactPlaceholder")}
               autoComplete="off"
+              aria-invalid={!!errors.provider_contact}
+              aria-describedby={
+                errors.provider_contact ? "service-provider-contact-error" : undefined
+              }
               {...register("provider_contact")}
             />
             <p className="text-xs text-muted-foreground">
               {t("services:dialog.providerContactHint")}
             </p>
-            {errors.provider_contact?.message ? (
-              <p className="text-xs text-destructive" data-testid="service-provider-contact-error">
-                {t(errors.provider_contact.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="service-provider-contact-error"
+              testId="service-provider-contact-error"
+              message={errors.provider_contact?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -177,14 +183,16 @@ export function SendForServiceDialog({
               data-testid="service-reason"
               placeholder={t("services:dialog.reasonPlaceholder")}
               autoComplete="off"
+              aria-invalid={!!errors.reason}
+              aria-describedby={errors.reason ? "service-reason-error" : undefined}
               {...register("reason")}
             />
             <p className="text-xs text-muted-foreground">{t("services:dialog.reasonHint")}</p>
-            {errors.reason?.message ? (
-              <p className="text-xs text-destructive" data-testid="service-reason-error">
-                {t(errors.reason.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="service-reason-error"
+              testId="service-reason-error"
+              message={errors.reason?.message}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -194,13 +202,15 @@ export function SendForServiceDialog({
                 id="service-sent-at"
                 type="date"
                 data-testid="service-sent-at"
+                aria-invalid={!!errors.sent_at}
+                aria-describedby={errors.sent_at ? "service-sent-at-error" : undefined}
                 {...register("sent_at")}
               />
-              {errors.sent_at?.message ? (
-                <p className="text-xs text-destructive" data-testid="service-sent-at-error">
-                  {t(errors.sent_at.message)}
-                </p>
-              ) : null}
+              <FieldError
+                id="service-sent-at-error"
+                testId="service-sent-at-error"
+                message={errors.sent_at?.message}
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="service-expected-return-at">
@@ -210,16 +220,17 @@ export function SendForServiceDialog({
                 id="service-expected-return-at"
                 type="date"
                 data-testid="service-expected-return-at"
+                aria-invalid={!!errors.expected_return_at}
+                aria-describedby={
+                  errors.expected_return_at ? "service-expected-return-at-error" : undefined
+                }
                 {...register("expected_return_at")}
               />
-              {errors.expected_return_at?.message ? (
-                <p
-                  className="text-xs text-destructive"
-                  data-testid="service-expected-return-at-error"
-                >
-                  {t(errors.expected_return_at.message)}
-                </p>
-              ) : null}
+              <FieldError
+                id="service-expected-return-at-error"
+                testId="service-expected-return-at-error"
+                message={errors.expected_return_at?.message}
+              />
             </div>
           </div>
 

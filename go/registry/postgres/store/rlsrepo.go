@@ -108,7 +108,7 @@ func (r *RLSRepository[T, P]) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
+func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (_ T, err error) {
 	var zero T
 	tx, err := r.beginTx(ctx)
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *RLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn fu
 	return entity, nil
 }
 
-func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx, T) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -204,7 +204,7 @@ func (r *RLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn fu
 	return nil
 }
 
-func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -237,7 +237,7 @@ func (r *RLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn f
 	return nil
 }
 
-func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operationFn func(context.Context, *sqlx.Tx) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -265,7 +265,7 @@ func (r *RLSRepository[T, P]) DoWithEntity(ctx context.Context, entity T, operat
 	return nil
 }
 
-func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -293,7 +293,7 @@ func (r *RLSRepository[T, P]) DoWithEntityID(ctx context.Context, entityID strin
 	return nil
 }
 
-func (r *RLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)

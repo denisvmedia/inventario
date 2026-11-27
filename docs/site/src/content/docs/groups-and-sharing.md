@@ -36,14 +36,20 @@ Every group has one **group currency** — the currency all of its item prices a
 The group currency is fixed when you create the group. To change it later you'd use the currency-migration tool in **Group settings → Info**, which reprices every item in the group at an exchange rate you provide. That tool is only available if your server operator has enabled it; if it's switched off you'll see a note saying so.
 :::
 
+While a migration runs, the group's items can't be changed. Adding, editing or deleting an item, restoring one from Trash, editing or deleting an item tag and starting a restore all show **Locked while a currency migration is running.** Try again once the migration has finished. File tags and files are not affected.
+
+Once a currency migration of the group has started, **Group settings → Info** has a link to the group's migrations: the latest ten, newest first, each with its currencies, rate and status. A migration drops off that list 90 days after it ended, unless your server operator set another period.
+
 ## Switch the active group
 
 The active group decides what the whole app shows you.
 
-1. Open the group selector at the top of the sidebar.
+1. Open the group selector at the top of the sidebar, or the one with the group's name in the top bar.
 2. Pick the group you want from the list. A check mark shows which one is currently active.
 
-The app switches to that group immediately.
+The app switches to that group immediately, and the group becomes your default group: the next time you sign in, on any device, you land in it. You can also pick a default group on your [profile](../settings-and-account/#your-profile).
+
+Next to the top bar selector, a badge shows your role in the active group (Viewer, User, Administrator or Owner), the same badge the **Members** page shows. [Members and roles](#members-and-roles) explains what each role can do.
 
 :::tip
 You can keep two browser tabs open on two different groups — they stay independent of each other. The same dropdown also has shortcuts to **Group settings** (for the current group) and **Create new group**.
@@ -123,7 +129,7 @@ Some work runs in the background after you start it: an export or a restore, a t
 2. The **Failed background jobs** card lists the jobs that stopped, newest first, each with its kind, its name, when it failed, how many attempts it made, and why it failed.
 3. Click **Retry** to put a job back in its queue. It leaves the list; if it fails again, it comes back. Retrying a scan from its batch in the Inbox (**Retry unfinished**) does the same.
 
-A restore and a currency migration can't be retried: a restore may have written part of the backup already, and a migration ran at the exchange rate you confirmed then. Their row tells you to start a new [restore](../backup-and-restore/) or currency migration instead, and that your server operator can remove the failed one from the list. A job that fails again and again usually needs your server operator, who sees the failed jobs of every group.
+A restore and a currency migration can't be retried: a restore may have written part of the backup already, and a migration ran at the exchange rate you confirmed then. Their row tells you to start a new [restore](../backup-and-restore/) or currency migration instead, and that your server operator can remove the failed one from the list. A failed currency migration leaves the list on its own 90 days after it failed, unless your server operator set another period. A job that fails again and again usually needs your server operator, who sees the failed jobs of every group.
 
 A photo whose thumbnail failed for good keeps its placeholder: opening it again does not start another try while the job is on the list. Thumbnail jobs are cleaned up after a day; after that, the next time the photo is shown it is tried again.
 
@@ -220,6 +226,8 @@ Deleting a group is permanent and removes **all** of its locations, items, files
 3. In the confirmation dialog, type the **group name** and your **current password**, then click **Delete permanently**.
 
 The group name guards against an accidental click; your password protects against someone using a hijacked session.
+
+Deletion starts as soon as you confirm. If another member saves the group settings at the same moment, their change is refused and the deletion goes ahead.
 
 :::caution[No undo]
 There's no way to recover a deleted group. If you might want the data later, create a [backup](../backup-and-restore/) first.

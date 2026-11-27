@@ -137,6 +137,49 @@ func TestService_UpdateTenant_SlugAndDomain(t *testing.T) {
 	c.Assert(cleared.Domain, qt.IsNil)
 }
 
+// staleDomainLookup is a tenant registry whose domain lookup finds nothing.
+// That is what the lookup of a write sees while another write of the same
+// domain has not committed yet, so both pass checkTenantDomainFree and the
+// registry is the one to refuse the second.
+type staleDomainLookup struct {
+	registry.TenantRegistry
+}
+
+func (staleDomainLookup) GetByDomain(context.Context, string) (*models.Tenant, error) {
+	return nil, registry.ErrNotFound
+}
+
+func newRacingDomainService(c *qt.C) *admin.Service {
+	c.Helper()
+	fs := memory.NewFactorySet()
+	fs.TenantRegistry = staleDomainLookup{TenantRegistry: fs.TenantRegistry}
+	svc := admin.NewServiceWithFactorySet(fs)
+	_, err := svc.CreateTenant(context.Background(), admin.TenantCreateRequest{Name: "Acme", Slug: "acme", Domain: new("inventory.acme.test")})
+	c.Assert(err, qt.IsNil)
+	return svc
+}
+
+// A create that races another one for the same domain gets the 409 the check
+// gives, not a 500.
+func TestService_CreateTenant_RacingForADomainIsRefusedAsTaken(t *testing.T) {
+	c := qt.New(t)
+	svc := newRacingDomainService(c)
+
+	_, err := svc.CreateTenant(context.Background(), admin.TenantCreateRequest{Name: "Squatter", Slug: "squatter", Domain: new("inventory.acme.test")})
+	c.Assert(err, qt.ErrorIs, admin.ErrTenantDomainTaken)
+}
+
+func TestService_UpdateTenant_RacingForADomainIsRefusedAsTaken(t *testing.T) {
+	c := qt.New(t)
+	svc := newRacingDomainService(c)
+	ctx := context.Background()
+	other, err := svc.CreateTenant(ctx, admin.TenantCreateRequest{Name: "Other", Slug: "other"})
+	c.Assert(err, qt.IsNil)
+
+	_, err = svc.UpdateTenant(ctx, other.ID, admin.TenantUpdateRequest{Domain: new("inventory.acme.test")})
+	c.Assert(err, qt.ErrorIs, admin.ErrTenantDomainTaken)
+}
+
 // sessionEnv is a tenant with two users and a user in another tenant, each
 // holding a refresh token and a personal API token.
 type sessionEnv struct {

@@ -22,6 +22,7 @@ import (
 // tests spells them.
 var testCommodityTables = commodityTables{
 	commodities:       "commodities",
+	areas:             "areas",
 	loans:             "commodity_loans",
 	fileLinks:         "file_links",
 	files:             "files",
@@ -185,6 +186,15 @@ func TestCommodityListSQL(t *testing.T) {
 			opts: registry.CommodityListOptions{Unassigned: true},
 			want: selectPrefix + "draft = $1 AND status = $2 AND area_id IS NULL ORDER BY LOWER(name) ASC, id ASC LIMIT $3 OFFSET $4",
 			args: []any{false, "in_use", 24, 0},
+		},
+		{
+			// The areas of the location come from a subquery, so the filter
+			// stays one query; row-level security keeps it to the group.
+			name: "a location keeps the items in its areas, together with an area",
+			opts: registry.CommodityListOptions{AreaID: "area-1", LocationID: "loc-1"},
+			want: selectPrefix + "draft = $1 AND status = $2 AND area_id = $3 AND " +
+				"area_id IN (SELECT id FROM areas WHERE location_id = $4) ORDER BY LOWER(name) ASC, id ASC LIMIT $5 OFFSET $6",
+			args: []any{false, "in_use", "area-1", "loc-1", 24, 0},
 		},
 		{
 			// Every non-none branch guards against the empty string, which

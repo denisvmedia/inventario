@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -112,7 +113,7 @@ func (s *LoanReminderService) RemindOnce(ctx context.Context, now time.Time) (Lo
 	if s.factorySet == nil {
 		return stats, errxtrace.Wrap("loan reminder service: factorySet is required", registry.ErrFieldRequired)
 	}
-	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}, sections: newSectionGate(s.factorySet)}
+	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}, gate: newReminderGate(s.factorySet)}
 	for _, kind := range []registry.LoanReminderKind{
 		registry.LoanReminderKindOverdue,
 		registry.LoanReminderKindDueSoon,
@@ -146,20 +147,21 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		return 0, 0, errxtrace.Wrap("loan reminder: list pending", err)
 	}
 	for _, l := range loans {
-		hidden, hideErr := sweep.sections.hides(ctx, l.GroupID, models.GroupSectionLoans)
-		if hideErr != nil {
+		skipped, skipErr := sweep.gate.skips(ctx, l.TenantID, l.GroupID, models.GroupSectionLoans)
+		if skipErr != nil {
 			failed++
 			slog.ErrorContext(ctx, "loan reminder failed",
 				"loan_id", l.ID,
 				"commodity_id", l.CommodityID,
 				"kind", string(kind),
-				"error", hideErr,
+				"error", skipErr,
 			)
 			continue
 		}
-		if hidden {
-			// The flag stays unset, so the reminder goes out if the
-			// section is shown again while the loan is still due.
+		if skipped {
+			// The tenant is not active or the group hides loans. The flag
+			// stays unset, so the reminder goes out if that changes while
+			// the loan is still due.
 			continue
 		}
 		ok, processErr := s.processOne(ctx, loanReg, l, kind, now, sweep)
@@ -183,7 +185,9 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 // processOne handles one (loan, kind) pair. Order is fixed:
 //
 //  0. A due-soon loan that is not yet inside the lender's lead time
-//     (leadTimeFor) is left alone, flag unset, for a later sweep.
+//     (leadTimeFor) is left alone, flag unset, for a later sweep. So
+//     is a loan whose item the group no longer has (ReminderTargetActive):
+//     it gets the reminder if the item is back in use while it is due.
 //  1. Resolve the lender + recipient email. If the lender has no email
 //     on file or no user record at all, treat the loan as "no recipient"
 //     and flip the flag anyway (no point re-evaluating it every tick).
@@ -202,11 +206,11 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 //
 // Returns:
 //   - (true,  nil) — email enqueued AND flag flipped by us.
-//   - (false, nil) — not inside the lead time yet (flag NOT flipped) OR
-//     no recipient (flag still flipped) OR opted out (flag NOT flipped)
-//     OR concurrent worker won the flip.
-//   - (false, err) — lender lookup, enqueue or flip-side failure that
-//     should retry.
+//   - (false, nil) — not inside the lead time yet or the item is not
+//     active (flag NOT flipped) OR no recipient (flag still flipped) OR
+//     opted out (flag NOT flipped) OR concurrent worker won the flip.
+//   - (false, err) — lender or item lookup, enqueue or flip-side failure
+//     that should retry.
 func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.CommodityLoanRegistry, l *models.CommodityLoan, kind registry.LoanReminderKind, now time.Time, sweep *loanSweep) (bool, error) {
 	prefsCache := sweep.prefs
 	found, err := s.cachedLender(ctx, l, sweep)
@@ -216,10 +220,14 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 		return false, errxtrace.Wrap("loan reminder: look up lender", err)
 	}
 	lender, recipientEmail, recipientName := found.user, found.email, found.name
-	if kind == registry.LoanReminderKindDueSoon && computeDaysDelta(l.DueBackAt, now) > s.leadTimeFor(ctx, lender, prefsCache) {
-		// Not inside the lender's lead time yet. The flag stays false,
-		// so a later sweep sends the reminder once the date is close
-		// enough.
+	commodity, err := s.dueItem(ctx, l, kind, now, lender, prefsCache)
+	if err != nil {
+		return false, err
+	}
+	if commodity == nil {
+		// Not inside the lender's lead time yet, or the group no longer
+		// has the item. The flag stays false, so a later sweep sends the
+		// reminder once it is due.
 		return false, nil
 	}
 	if recipientEmail == "" {
@@ -287,7 +295,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 	}
 
 	url := s.buildCommodityURL(ctx, l)
-	commodityName := s.lookupCommodityName(ctx, l.CommodityID)
+	commodityName := commodity.Name
 	daysDelta := computeDaysDelta(l.DueBackAt, now)
 	sendErr := s.emailSvc.SendLoanReminderEmail(
 		// Localize to the lender's chosen UI language (#2090).
@@ -327,6 +335,24 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 	return true, nil
 }
 
+// dueItem returns the loan's item when the reminder is due now, and nil
+// while the loan waits: a due-soon loan not yet inside the lender's lead
+// time, or an item the group no longer has (ReminderTargetActive), which gets
+// the reminder if it is back in use while the loan is still due.
+func (s *LoanReminderService) dueItem(ctx context.Context, l *models.CommodityLoan, kind registry.LoanReminderKind, now time.Time, lender *models.User, prefsCache *notifications.Cache) (*models.Commodity, error) {
+	if kind == registry.LoanReminderKindDueSoon && computeDaysDelta(l.DueBackAt, now) > s.leadTimeFor(ctx, lender, prefsCache) {
+		return nil, nil
+	}
+	commodity, err := s.lookupCommodity(ctx, l.CommodityID)
+	if err != nil {
+		return nil, errxtrace.Wrap("loan reminder: look up item", err)
+	}
+	if !ReminderTargetActive(commodity) {
+		return nil, nil
+	}
+	return commodity, nil
+}
+
 // loanSweep holds what one sweep reuses across loans and both kinds: the
 // preferences cache and the lenders already looked up. The due-soon query
 // reaches up to models.LoanReminderMaxLeadDays ahead, so most of its loans
@@ -335,8 +361,9 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 type loanSweep struct {
 	prefs   *notifications.Cache
 	lenders map[string]loanLender
-	// sections skips the loans of groups that hide the loans section.
-	sections *sectionGate
+	// gate skips the loans of a tenant that is not active and of groups
+	// that hide the loans section.
+	gate *reminderGate
 }
 
 type loanLender struct {
@@ -421,21 +448,23 @@ func (s *LoanReminderService) emitAuditEvent(ctx context.Context, l *models.Comm
 	return nil
 }
 
-// lookupCommodityName resolves the commodity name for the subject line.
-// Returns the empty string when the registry isn't wired or the
-// commodity row was hard-deleted between the loan list and the send —
-// the renderer falls back to "your item" in that case, so the email
-// is still useful.
-func (s *LoanReminderService) lookupCommodityName(ctx context.Context, commodityID string) string {
-	if s.factorySet.CommodityRegistryFactory == nil || commodityID == "" {
-		return ""
+// lookupCommodity resolves the loan's item through the service registry.
+// It returns (nil, nil) when the item is gone, which ReminderTargetActive
+// reads as not active. Any other error is returned, so the loan is retried
+// on the next sweep instead of being reminded about an item whose status is
+// unknown.
+func (s *LoanReminderService) lookupCommodity(ctx context.Context, commodityID string) (*models.Commodity, error) {
+	if s.factorySet.CommodityRegistryFactory == nil {
+		return nil, errxtrace.Wrap("loan reminder: missing CommodityRegistryFactory", registry.ErrFieldRequired)
 	}
-	reg := s.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
-	c, err := reg.Get(ctx, commodityID)
-	if err != nil || c == nil {
-		return ""
+	c, err := s.factorySet.CommodityRegistryFactory.CreateServiceRegistry().Get(ctx, commodityID)
+	if errors.Is(err, registry.ErrNotFound) {
+		return nil, nil
 	}
-	return c.Name
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // buildCommodityURL composes the deep-link printed in the reminder email.

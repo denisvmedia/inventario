@@ -218,7 +218,6 @@ export function CustomFieldFormDialog({
               id="custom-field-name"
               placeholder={t("customFields:dialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={CUSTOM_FIELD_NAME_MAX}
               disabled={isPending}
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? "custom-field-name-error" : undefined}
@@ -311,7 +310,6 @@ export function CustomFieldFormDialog({
                         placeholder={t("customFields:dialog.optionPlaceholder", {
                           index: index + 1,
                         })}
-                        maxLength={CUSTOM_FIELD_OPTION_LABEL_MAX}
                         disabled={isPending}
                         aria-invalid={!!error}
                         data-testid={`custom-field-option-input-${index}`}

@@ -16,6 +16,7 @@ import {
   customFieldHandlers,
   groupHandlers,
   itemTypeHandlers,
+  locationHandlers,
   savedViewHandlers,
   sellerHandlers,
   tagHandlers,
@@ -139,6 +140,29 @@ describe("<SavedViewsPage />", () => {
       expect(within(row).getByText("Deleted seller")).toHaveAttribute("data-stale", "true")
     )
     expect(within(row).getByText("Seller Hardware shop")).not.toHaveAttribute("data-stale")
+  })
+
+  it("names the location of a view and marks a deleted one in words (#2897)", async () => {
+    server.use(
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Cottage" } },
+      ]),
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv8", name: "At the cottage", query: "location_id=l1" },
+        { id: "sv9", name: "Sold house", query: "location_id=gone" },
+      ]),
+      ...savedViewHandlers.counts(SLUG)
+    )
+    renderPage()
+
+    const rows = await screen.findAllByTestId("saved-view-row")
+    await waitFor(() =>
+      expect(within(rows[1]).getByText("Deleted location")).toHaveAttribute("data-stale", "true")
+    )
+    expect(within(rows[0]).getByText("Cottage")).not.toHaveAttribute("data-stale")
+    expect(within(rows[0]).getByTestId("saved-view-open").getAttribute("href")).toContain(
+      "location=l1"
+    )
   })
 
   it("names each item type of a view by the group's name and marks a deleted one in words", async () => {
