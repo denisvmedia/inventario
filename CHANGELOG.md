@@ -812,6 +812,12 @@ when to add an entry and where it goes.
   now opens the new group. Before, the page stayed on the filled-in form, so
   it looked as if nothing had happened and a second click created another
   group ([#2815](https://github.com/denisvmedia/inventario/issues/2815)).
+- The storage card in **Group settings → Data & storage** says what its
+  number counts: each file at the size it was uploaded. The thumbnails made
+  for photos are stored apart and are not counted, there or in the storage
+  quota reminders, so a group of many small photos uses more space than the
+  card shows
+  ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it
