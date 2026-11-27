@@ -4,7 +4,7 @@
 // values are the item form as entered, stored without validation; its files
 // are ordinary files attached with entity type "draft". Promoting a draft
 // creates the item and moves the files to it.
-import { http } from "@/lib/http"
+import { http, type InGroup } from "@/lib/http"
 import { getServerErrorCode, getServerErrorMeta } from "@/lib/server-error"
 import { listFiles, type ListedFile } from "@/features/files/api"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
@@ -88,31 +88,47 @@ function fromEnvelope(body: DraftEnvelope): Draft {
   return toDraft(body.data?.id, body.data?.attributes)
 }
 
-export async function getDraft(id: string, signal?: AbortSignal): Promise<Draft> {
-  const body = await http.get<DraftEnvelope>(`/drafts/${encodeURIComponent(id)}`, { signal })
+// The options of a read: its abort signal, and the group to read from.
+export type ReadOptions = { signal?: AbortSignal } & InGroup
+
+export async function getDraft(id: string, opts: ReadOptions = {}): Promise<Draft> {
+  const body = await http.get<DraftEnvelope>(`/drafts/${encodeURIComponent(id)}`, opts)
   return fromEnvelope(body)
 }
 
 // createDraft stores a new draft. A key the group already has returns that
 // draft unchanged, so repeating the call after a lost response is safe.
-export async function createDraft(clientKey: string, values: DraftValues): Promise<Draft> {
-  const body = await http.post<DraftEnvelope>("/drafts", {
-    data: { type: "commodity_drafts", attributes: { client_key: clientKey, values } },
-  })
+export async function createDraft(
+  clientKey: string,
+  values: DraftValues,
+  opts: InGroup = {}
+): Promise<Draft> {
+  const body = await http.post<DraftEnvelope>(
+    "/drafts",
+    { data: { type: "commodity_drafts", attributes: { client_key: clientKey, values } } },
+    { group: opts.group }
+  )
   return fromEnvelope(body)
 }
 
 // saveDraft replaces the values. revision is the one the values were based
 // on; a stale one fails with DRAFT_REVISION_CONFLICT.
-export async function saveDraft(id: string, revision: number, values: DraftValues): Promise<Draft> {
-  const body = await http.put<DraftEnvelope>(`/drafts/${encodeURIComponent(id)}`, {
-    data: { type: "commodity_drafts", attributes: { revision, values } },
-  })
+export async function saveDraft(
+  id: string,
+  revision: number,
+  values: DraftValues,
+  opts: InGroup = {}
+): Promise<Draft> {
+  const body = await http.put<DraftEnvelope>(
+    `/drafts/${encodeURIComponent(id)}`,
+    { data: { type: "commodity_drafts", attributes: { revision, values } } },
+    { group: opts.group }
+  )
   return fromEnvelope(body)
 }
 
-export async function discardDraft(id: string): Promise<void> {
-  await http.del(`/drafts/${encodeURIComponent(id)}`)
+export async function discardDraft(id: string, opts: InGroup = {}): Promise<void> {
+  await http.del(`/drafts/${encodeURIComponent(id)}`, { group: opts.group })
 }
 
 type CommodityEnvelope = Schema<"jsonapi.CommodityResponse">
@@ -125,12 +141,17 @@ export async function promoteDraft(
   id: string,
   revision: number,
   promotionKey: string,
-  values: CreateCommodityRequest
+  values: CreateCommodityRequest,
+  opts: InGroup = {}
 ): Promise<Commodity & { id: string }> {
-  const body = await http.post<CommodityEnvelope>(`/drafts/${encodeURIComponent(id)}/promote`, {
-    data: { type: "commodities", attributes: values },
-    meta: { revision, promotion_key: promotionKey },
-  })
+  const body = await http.post<CommodityEnvelope>(
+    `/drafts/${encodeURIComponent(id)}/promote`,
+    {
+      data: { type: "commodities", attributes: values },
+      meta: { revision, promotion_key: promotionKey },
+    },
+    { group: opts.group }
+  )
   if (!body.data?.id || !body.data.attributes) {
     throw new Error(`Malformed POST /drafts/${id}/promote response: missing id or attributes`)
   }
@@ -138,12 +159,13 @@ export async function promoteDraft(
 }
 
 // listDraftFiles returns the live files attached to the draft.
-export async function listDraftFiles(id: string, signal?: AbortSignal): Promise<ListedFile[]> {
+export async function listDraftFiles(id: string, opts: ReadOptions = {}): Promise<ListedFile[]> {
   const { files } = await listFiles({
     linkedEntityType: "draft",
     linkedEntityId: id,
     perPage: 100,
-    signal,
+    signal: opts.signal,
+    group: opts.group,
   })
   return files
 }

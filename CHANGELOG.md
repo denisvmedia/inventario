@@ -671,6 +671,15 @@ when to add an entry and where it goes.
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
 
+- The Add item form keeps unsaved input for one user. What it kept in the
+  browser (the values, the files and the draft it saves to) is filed under the
+  user and the group, so the next person to sign in on the same browser starts
+  with an empty form, and signing out removes it. A save still running when
+  the member leaves the form with browser Back and switches group goes on in
+  the group the form opened in; before, its remaining requests went to the
+  other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+
 - An item's history keeps every edit of a save. A save that changed the
   status, the area, a price or the cover recorded only that change, and the
   name, type, tags or any other field changed in the same save were missing
