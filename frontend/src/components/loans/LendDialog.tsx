@@ -125,7 +125,9 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               placeholder={t("loans:dialog.borrowerNamePlaceholder")}
               autoComplete="off"
               aria-invalid={!!errors.borrower_name}
-              aria-describedby={errors.borrower_name?.message ? "lend-borrower-name-error" : undefined}
+              aria-describedby={
+                errors.borrower_name?.message ? "lend-borrower-name-error" : undefined
+              }
               {...register("borrower_name")}
             />
             <FieldError
@@ -143,7 +145,9 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               placeholder={t("loans:dialog.borrowerContactPlaceholder")}
               autoComplete="off"
               aria-invalid={!!errors.borrower_contact}
-              aria-describedby={errors.borrower_contact?.message ? "lend-borrower-contact-error" : undefined}
+              aria-describedby={
+                errors.borrower_contact?.message ? "lend-borrower-contact-error" : undefined
+              }
               {...register("borrower_contact")}
             />
             <p className="text-xs text-muted-foreground">{t("loans:dialog.borrowerContactHint")}</p>
@@ -178,7 +182,9 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
                 type="date"
                 data-testid="lend-due-back-at"
                 aria-invalid={!!errors.due_back_at}
-                aria-describedby={errors.due_back_at?.message ? "lend-due-back-at-error" : undefined}
+                aria-describedby={
+                  errors.due_back_at?.message ? "lend-due-back-at-error" : undefined
+                }
                 {...register("due_back_at")}
               />
               <FieldError
@@ -197,7 +203,9 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               placeholder={t("loans:dialog.borrowerNotePlaceholder")}
               autoComplete="off"
               aria-invalid={!!errors.borrower_note}
-              aria-describedby={errors.borrower_note?.message ? "lend-borrower-note-error" : undefined}
+              aria-describedby={
+                errors.borrower_note?.message ? "lend-borrower-note-error" : undefined
+              }
               {...register("borrower_note")}
             />
             <FieldError

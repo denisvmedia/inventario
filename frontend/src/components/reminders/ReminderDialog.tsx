@@ -225,7 +225,9 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
               inputMode="numeric"
               data-testid="reminder-interval-input"
               aria-invalid={!!errors.repeat_interval}
-              aria-describedby={errors.repeat_interval?.message ? "reminder-interval-error" : undefined}
+              aria-describedby={
+                errors.repeat_interval?.message ? "reminder-interval-error" : undefined
+              }
               {...register("repeat_interval")}
             />
             <FieldError id="reminder-interval-error" message={errors.repeat_interval?.message} />

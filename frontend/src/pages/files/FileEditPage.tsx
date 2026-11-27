@@ -421,9 +421,7 @@ function FileReview({
                         id="file-path"
                         data-testid="file-edit-path"
                         aria-invalid={pathError ? true : undefined}
-                        aria-describedby={
-                          pathError?.message ? "file-path-error" : "file-path-hint"
-                        }
+                        aria-describedby={pathError?.message ? "file-path-error" : "file-path-hint"}
                         {...form.register("path")}
                       />
                       <p id="file-path-hint" className="text-xs text-muted-foreground">

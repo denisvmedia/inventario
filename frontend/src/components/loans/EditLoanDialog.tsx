@@ -170,7 +170,9 @@ export function EditLoanDialog({
               data-testid="edit-loan-borrower-name"
               autoComplete="off"
               aria-invalid={!!errors.borrower_name}
-              aria-describedby={errors.borrower_name?.message ? "edit-loan-borrower-name-error" : undefined}
+              aria-describedby={
+                errors.borrower_name?.message ? "edit-loan-borrower-name-error" : undefined
+              }
               {...register("borrower_name")}
             />
             <FieldError
@@ -250,7 +252,9 @@ export function EditLoanDialog({
                   type="date"
                   data-testid="edit-loan-due-back-at"
                   aria-invalid={!!errors.due_back_at}
-                  aria-describedby={errors.due_back_at?.message ? "edit-loan-due-back-at-error" : undefined}
+                  aria-describedby={
+                    errors.due_back_at?.message ? "edit-loan-due-back-at-error" : undefined
+                  }
                   {...register("due_back_at")}
                 />
               )}
@@ -286,7 +290,9 @@ export function EditLoanDialog({
               data-testid="edit-loan-borrower-note"
               autoComplete="off"
               aria-invalid={!!errors.borrower_note}
-              aria-describedby={errors.borrower_note?.message ? "edit-loan-borrower-note-error" : undefined}
+              aria-describedby={
+                errors.borrower_note?.message ? "edit-loan-borrower-note-error" : undefined
+              }
               {...register("borrower_note")}
             />
             <FieldError

@@ -204,7 +204,9 @@ export function RegisterPage() {
                 disabled={isPending}
                 aria-invalid={!!form.formState.errors.name}
                 data-testid="name"
-                aria-describedby={form.formState.errors.name?.message ? "register-name-error" : undefined}
+                aria-describedby={
+                  form.formState.errors.name?.message ? "register-name-error" : undefined
+                }
                 {...form.register("name")}
               />
             </div>
@@ -232,7 +234,9 @@ export function RegisterPage() {
                 disabled={isPending}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
-                aria-describedby={form.formState.errors.email?.message ? "register-email-error" : undefined}
+                aria-describedby={
+                  form.formState.errors.email?.message ? "register-email-error" : undefined
+                }
                 {...form.register("email")}
               />
             </div>

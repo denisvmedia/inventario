@@ -227,7 +227,9 @@ export function AreaFormDialog({
                       className="w-full"
                       aria-invalid={!!form.formState.errors.location_id}
                       aria-describedby={
-                        form.formState.errors.location_id?.message ? "area-location-error" : undefined
+                        form.formState.errors.location_id?.message
+                          ? "area-location-error"
+                          : undefined
                       }
                       data-testid="area-location-select"
                     >

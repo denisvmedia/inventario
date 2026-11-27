@@ -183,7 +183,9 @@ export function LocationFormDialog({
               autoComplete="off"
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
-              aria-describedby={form.formState.errors.name?.message ? "location-name-error" : undefined}
+              aria-describedby={
+                form.formState.errors.name?.message ? "location-name-error" : undefined
+              }
               data-testid="location-name-input"
               {...form.register("name")}
             />
@@ -204,7 +206,9 @@ export function LocationFormDialog({
               disabled={isPending}
               aria-invalid={!!form.formState.errors.description}
               aria-describedby={
-                form.formState.errors.description?.message ? "location-description-error" : undefined
+                form.formState.errors.description?.message
+                  ? "location-description-error"
+                  : undefined
               }
               data-testid="location-description-input"
               className="resize-none"

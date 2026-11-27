@@ -144,7 +144,9 @@ export function SetPasswordForm() {
               disabled={changePasswordMutation.isPending}
               aria-invalid={!!form.formState.errors.confirmPassword}
               aria-describedby={
-                form.formState.errors.confirmPassword?.message ? "set-confirm-password-error" : undefined
+                form.formState.errors.confirmPassword?.message
+                  ? "set-confirm-password-error"
+                  : undefined
               }
               data-testid="set-confirm-password"
               {...form.register("confirmPassword")}

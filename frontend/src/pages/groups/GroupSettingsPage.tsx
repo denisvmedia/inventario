@@ -421,7 +421,9 @@ function InfoSection({
             disabled={updateMutation.isPending}
             aria-invalid={!!form.formState.errors.name}
             data-testid="settings-name-input"
-            aria-describedby={form.formState.errors.name?.message ? "settings-group-name-error" : undefined}
+            aria-describedby={
+              form.formState.errors.name?.message ? "settings-group-name-error" : undefined
+            }
             {...form.register("name")}
           />
           <FieldError

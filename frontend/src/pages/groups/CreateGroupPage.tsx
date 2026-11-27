@@ -145,7 +145,9 @@ export function CreateGroupPage() {
               autoComplete="off"
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.name}
-              aria-describedby={form.formState.errors.name?.message ? "group-name-error" : undefined}
+              aria-describedby={
+                form.formState.errors.name?.message ? "group-name-error" : undefined
+              }
               data-testid="group-name-input"
               {...form.register("name")}
             />

@@ -186,7 +186,9 @@ function MaintenanceScheduleForm({
             inputMode="numeric"
             data-testid="maintenance-interval-input"
             aria-invalid={!!errors.interval_days}
-            aria-describedby={errors.interval_days?.message ? "maintenance-interval-error" : undefined}
+            aria-describedby={
+              errors.interval_days?.message ? "maintenance-interval-error" : undefined
+            }
             {...register("interval_days")}
           />
           <FieldError
@@ -204,7 +206,9 @@ function MaintenanceScheduleForm({
             type="date"
             data-testid="maintenance-next-due-input"
             aria-invalid={!!errors.next_due_at}
-            aria-describedby={errors.next_due_at?.message ? "maintenance-next-due-error" : undefined}
+            aria-describedby={
+              errors.next_due_at?.message ? "maintenance-next-due-error" : undefined
+            }
             {...register("next_due_at")}
           />
           <FieldError

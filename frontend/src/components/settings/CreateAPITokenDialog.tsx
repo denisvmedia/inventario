@@ -321,7 +321,9 @@ function CreateForm({
                 disabled={pending}
                 data-testid="api-token-password"
                 aria-invalid={!!errors.currentPassword}
-                aria-describedby={errors.currentPassword?.message ? `${formId}-password-error` : undefined}
+                aria-describedby={
+                  errors.currentPassword?.message ? `${formId}-password-error` : undefined
+                }
                 {...register("currentPassword")}
               />
               <FieldError
