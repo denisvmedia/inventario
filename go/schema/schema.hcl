@@ -2191,6 +2191,10 @@ table "files" {
     type = TEXT
     default = ""
   }
+  column "thumbnails_oriented" {
+    type = BOOLEAN
+    default = "false"
+  }
   primary_key {
     columns = [column.id]
   }
