@@ -408,8 +408,9 @@ func TestCommodityCoverService_ResolveMany_LogsAFailedRead(t *testing.T) {
 				return &coverReadFailure{FileRegistry: reg, getMany: errors.New("connection reset")}
 			},
 			read: "named covers",
-			// The item that names a cover falls back to its first photo.
-			want: map[string]string{"commodity-A": "a-first", "commodity-B": "b-first"},
+			// The item that names a cover shows none rather than its first
+			// photo, which the user did not pick (#3049).
+			want: map[string]string{"commodity-B": "b-first"},
 		},
 	}
 	for _, tt := range tests {

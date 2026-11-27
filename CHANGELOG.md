@@ -368,8 +368,11 @@ when to add an entry and where it goes.
   remembered on the device. On the item page the cover sits beside the details
   and opens the full-screen viewer, which goes through the item's photos.
   Thumbnails gain a `large` size (600 px) for these surfaces; a photo uploaded
-  earlier gets it the first time a card shows it
-  ([#2797](https://github.com/denisvmedia/inventario/issues/2797)).
+  earlier gets it the first time a card shows it. Each card loads the
+  thumbnail that fits its width at every screen size, and a photo in Trash is
+  never an item's cover
+  ([#2797](https://github.com/denisvmedia/inventario/issues/2797),
+  [#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 
 - A search field in the top bar of every page, an icon button on phones,
   opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
@@ -1009,13 +1012,6 @@ when to add an entry and where it goes.
   quota reminders, so a group of many small photos uses more space than the
   card shows
   ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
-- Photo cards on the Items list load the thumbnail that fits the card. The
-  size they announced to the browser was wrong at phone widths and at several
-  tablet and desktop widths, so the browser loaded a larger thumbnail than
-  the card shows. A photo moved to Trash while the list loads is no longer
-  shown as an item's cover, and a failed cover lookup is logged as a warning
-  instead of passing unnoticed; the items still list, without those covers
-  ([#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it
@@ -1385,6 +1381,14 @@ when to add an entry and where it goes.
   logged a second time as `Failed to finish stopped draft discards`, which
   now means only that the pass itself could not run
   ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
+- A failed cover lookup on the items list or an item page is logged as a
+  warning, `cover lookup failed; the items are listed without these covers`,
+  with `read` (`named covers` or `first photos`), `count`, `group_id` and
+  `error`. The items still list. An item the failed read was for shows its
+  type icon; an item with a cover chosen by hand does not show its first
+  photo in its place
+  ([#2900](https://github.com/denisvmedia/inventario/issues/2900),
+  [#3049](https://github.com/denisvmedia/inventario/issues/3049)).
 
 ## [0.2.2] - 2026-11-23
 
