@@ -11185,7 +11185,7 @@ const docTemplate = `{
                         }
                     },
                     "423": {
-                        "description": "An item tag, while a currency migration runs in the group",
+                        "description": "A new slug for an item tag, while a currency migration runs in the group",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

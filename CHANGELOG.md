@@ -979,12 +979,19 @@ when to add an entry and where it goes.
   kept the whole value in an index whose entries have a size limit. That
   index served no search or filter and is removed
   ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
-- Editing or deleting an item tag while a currency migration runs in the
-  group is refused at once with "Locked while a currency migration is
-  running.", as an item change is. Before, the request waited for the
-  migration and ended in a timeout or a server error when the migration
-  took longer than a minute. File tags are not affected
-  ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+- Changing the slug of an item tag or deleting one while a currency
+  migration runs in the group is refused at once with "Locked while a
+  currency migration is running.", as an item change is. Before, the request
+  waited for the migration and ended in a timeout or a server error when
+  the migration took longer than a minute. A new label or color still saves,
+  and file tags are not affected
+  ([#2982](https://github.com/denisvmedia/inventario/issues/2982),
+  [#3011](https://github.com/denisvmedia/inventario/issues/3011)).
+- Creating, saving or deleting a tag that failed with a server or network
+  error showed two error toasts on the Tags page, one of them with the raw
+  request address. It shows one, and a change the server refuses shows the
+  server's reason
+  ([#3011](https://github.com/denisvmedia/inventario/issues/3011)).
 
 ### Security
 
