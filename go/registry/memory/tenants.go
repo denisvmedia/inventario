@@ -57,6 +57,9 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 	if err := r.checkSlugFree(ctx, tenant); err != nil {
 		return nil, err
 	}
+	if err := r.checkDomainFree(ctx, tenant); err != nil {
+		return nil, err
+	}
 	return r.baseTenantRegistry.Create(ctx, tenant)
 }
 
@@ -71,6 +74,9 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 		tenant.PlanID = models.PlanUnlimited.ID
 	}
 	if err := r.checkSlugFree(ctx, tenant); err != nil {
+		return nil, err
+	}
+	if err := r.checkDomainFree(ctx, tenant); err != nil {
 		return nil, err
 	}
 	return r.baseTenantRegistry.Update(ctx, tenant)
@@ -95,6 +101,25 @@ func (r *TenantRegistry) checkSlugFree(ctx context.Context, tenant models.Tenant
 	default:
 		return nil
 	}
+}
+
+// checkDomainFree refuses a domain another tenant already has, as the unique
+// index on tenants.domain does in postgres. A tenant without a domain is let
+// through, as the index lets NULL through.
+func (r *TenantRegistry) checkDomainFree(ctx context.Context, tenant models.Tenant) error {
+	if tenant.Domain == nil {
+		return nil
+	}
+	tenants, err := r.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, other := range tenants {
+		if other.ID != tenant.ID && other.Domain != nil && *other.Domain == *tenant.Domain {
+			return errxtrace.Classify(registry.ErrDomainAlreadyExists, errx.Attrs("domain", *tenant.Domain))
+		}
+	}
+	return nil
 }
 
 // GetDefault returns the tenant marked as default (IsDefault == true).
