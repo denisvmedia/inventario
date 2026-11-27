@@ -7166,7 +7166,7 @@ export type paths = {
         };
         /**
          * List custom fields
-         * @description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+         * @description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;
          *     each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
          */
         get: {
@@ -7296,15 +7296,15 @@ export type paths = {
         post?: never;
         /**
          * Delete a custom field
-         * @description Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
-         *     unless delete_values=true; then its values are deleted with it, in the same transaction.
+         * @description Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,
+         *     unless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.
          */
         delete: {
             parameters: {
                 query?: {
                     /** @description Delete the field's values along with it */
                     delete_values?: boolean;
-                    /** @description With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta */
+                    /** @description With delete_values=true: how many items and drafts together the member confirmed to lose a value. When another number has one, the delete is refused with 409 custom_field.in_use and the counts */
                     expected_values?: number;
                 };
                 header?: never;
@@ -7318,7 +7318,7 @@ export type paths = {
             };
             requestBody?: never;
             responses: {
-                /** @description Deleted; meta.deleted_values counts the values removed */
+                /** @description Deleted; meta.deleted_values counts the values removed, those of drafts included */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -7336,7 +7336,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Items have a value of the field and delete_values was not true, or expected_values is not how many items have one */
+                /** @description Items or drafts have a value of the field and delete_values was not true, or expected_values is not how many have one */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -8889,10 +8889,21 @@ export type paths = {
          * @description Move the file to Trash. It keeps its links, so restoring it
          *     puts it back where it was. An export bundle is deleted for
          *     good.
+         *
+         *     With unless_linked=true the file goes to Trash only when
+         *     nothing holds it: no link, or only links to items in Trash
+         *     (it then goes with the item linked first). The links are
+         *     checked and the file trashed in one transaction. A file that a
+         *     link holds, an export bundle included, stays and the answer is
+         *     409 file.linked; a file that is gone or in Trash already is a
+         *     404.
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Keep the file when a link holds it */
+                    unless_linked?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -8911,8 +8922,26 @@ export type paths = {
                     };
                     content?: never;
                 };
-                /** @description File not found */
+                /** @description File not found, or in Trash already */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description file.linked: with unless_linked=true, a link holds the file, so it stays */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description unless_linked is not a boolean */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -10164,7 +10193,7 @@ export type paths = {
         /**
          * List item types
          * @description The item types of the group: the built-in ones first in their fixed order, then the others by name.
-         *     Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+         *     Each carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.
          */
         get: {
             parameters: {
@@ -10294,8 +10323,9 @@ export type paths = {
         post?: never;
         /**
          * Delete an item type
-         * @description Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
-         *     then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+         * @description Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta
+         *     unless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,
+         *     and each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).
          */
         delete: {
             parameters: {
@@ -10332,7 +10362,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description The type is in use and no reassign_to was given, or it is the group's last type */
+                /** @description Items or drafts have the type and no reassign_to was given, or it is the group's last type */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -17477,10 +17507,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
@@ -17794,6 +17824,13 @@ export type components = {
         };
         "jsonapi.CustomFieldView": {
             created_at?: string;
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with a value of the
+             *     field. Deleting the field takes the value out of them too.
+             * @example 0
+             */
+            draft_count?: number;
             /**
              * Format: int64
              * @description ItemCount and TrashedItemCount are the items with a value of the
@@ -18619,6 +18656,13 @@ export type components = {
              */
             custom_field_id?: string;
             /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with a value of the
+             *     field.
+             * @example 0
+             */
+            draft_count?: number;
+            /**
              * @description FieldType is the type of the group's field, or the set's type for a
              *     missing one.
              * @example select
@@ -18633,8 +18677,8 @@ export type components = {
             item_count?: number;
             /**
              * @description KeepReason says why removing the set keeps a field the group has:
-             *     own or in_use (items have a value of it). Absent when the field is
-             *     removable or missing.
+             *     own or in_use (items or drafts have a value of it). Absent when the
+             *     field is removable or missing.
              * @example in_use
              * @enum {string}
              */
@@ -18682,6 +18726,12 @@ export type components = {
             trashed_item_count?: number;
         };
         "jsonapi.ItemSetItemTypeView": {
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts that have the type.
+             * @example 0
+             */
+            draft_count?: number;
             /** @example coins */
             icon?: string;
             /**
@@ -18697,9 +18747,9 @@ export type components = {
             item_type_id?: string;
             /**
              * @description KeepReason says why removing the set keeps a type the group has:
-             *     own (a member made it), in_use (items have it, in Trash or not) or
-             *     last_type (a group keeps at least one type). Absent when the type is
-             *     removable or missing.
+             *     own (a member made it), in_use (items, in Trash or not, or drafts have
+             *     it) or last_type (a group keeps at least one type). Absent when the
+             *     type is removable or missing.
              * @example in_use
              * @enum {string}
              */
@@ -18879,6 +18929,13 @@ export type components = {
             /** @example true */
             builtin?: boolean;
             created_at?: string;
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with this type.
+             *     Deleting the type moves them along with the items.
+             * @example 0
+             */
+            draft_count?: number;
             /** @example laptop */
             icon?: string;
             /**
@@ -20256,10 +20313,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**

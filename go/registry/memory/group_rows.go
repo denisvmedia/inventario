@@ -64,6 +64,45 @@ func (s creatorStore[T, P]) reattributeCreator(tenantID, userID string, heirs ma
 	return moved
 }
 
+// createdGroupStore hands over the groups the user created. A group's own id
+// is its group, so the member who takes it is a member of that group.
+type createdGroupStore struct {
+	base *baseLocationGroupRegistry
+}
+
+func (s createdGroupStore) groupsCreatedBy(tenantID, userID string) []string {
+	s.base.lock.RLock()
+	defer s.base.lock.RUnlock()
+	var out []string
+	for pair := s.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		if g := pair.Value; g.TenantID == tenantID && g.CreatedBy == userID {
+			out = append(out, g.ID)
+		}
+	}
+	return out
+}
+
+// reattributeCreator gives the groups userID created in tenantID to
+// heirs[groupID]. A group without an heir keeps its creator. Each changed
+// group is a copy, so a reader holding the stored one sees no change.
+func (s createdGroupStore) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
+	s.base.lock.Lock()
+	defer s.base.lock.Unlock()
+	moved := map[string]int{}
+	for pair := s.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		g := pair.Value
+		heir := heirs[g.ID]
+		if g.TenantID != tenantID || g.CreatedBy != userID || heir == "" {
+			continue
+		}
+		cp := copyOut(g)
+		cp.CreatedBy = heir
+		pair.Value = cp
+		moved[g.ID]++
+	}
+	return moved
+}
+
 // currencyMigrationAuditStore hands over the audit rows of currency changes,
 // which the memory backend keeps in a slice beside the migrations.
 type currencyMigrationAuditStore struct {
@@ -116,6 +155,9 @@ func groupRowStores(fs *registry.FactorySet) []groupRowStore {
 	var stores []groupRowStore
 	add := func(table string, store groupConfiguration) {
 		stores = append(stores, groupRowStore{table: table, store: store})
+	}
+	if r, ok := fs.LocationGroupRegistry.(*LocationGroupRegistry); ok {
+		add("location_groups", createdGroupStore{base: r.baseLocationGroupRegistry})
 	}
 	if f, ok := fs.TagRegistryFactory.(*TagRegistryFactory); ok {
 		add("tags", handOverStore(f.base))

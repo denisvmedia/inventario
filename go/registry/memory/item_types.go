@@ -19,10 +19,12 @@ import (
 // it creates share one backing map and the commodity factory whose items
 // name the types: DeleteReassigning moves and counts those items and
 // ItemCounts counts them, standing in for the UPDATE and the GROUP BY of
-// the postgres registry.
+// the postgres registry. The open drafts of the draft factory, when one is
+// attached, are moved and counted the same way.
 type ItemTypeRegistryFactory struct {
 	base        *Registry[models.ItemType, *models.ItemType]
 	commodities *CommodityRegistryFactory
+	drafts      *CommodityDraftRegistryFactory
 	groups      registry.LocationGroupRegistry
 	// mu serializes the writes of item types (Lock) against each other and
 	// against the item writes that check a type (RLock), as the postgres
@@ -55,6 +57,11 @@ func NewItemTypeRegistryFactory(commodities *CommodityRegistryFactory) *ItemType
 		commodities.itemTypes = f
 	}
 	return f
+}
+
+// SetDraftFactory attaches the drafts whose values name the types.
+func (f *ItemTypeRegistryFactory) SetDraftFactory(drafts *CommodityDraftRegistryFactory) {
+	f.drafts = drafts
 }
 
 // SetLocationGroupRegistry gives the factory the groups it reads a group's
@@ -307,6 +314,8 @@ func (r *ItemTypeRegistry) Delete(ctx context.Context, id string) error {
 }
 
 func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error) {
+	unlockDrafts := r.factory.drafts.lockWrites()
+	defer unlockDrafts()
 	r.factory.mu.Lock()
 	defer r.factory.mu.Unlock()
 
@@ -326,36 +335,61 @@ func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo
 		target = t
 	}
 
-	moved := 0
-	if r.factory.commodities != nil {
-		base := r.factory.commodities.baseCommodityRegistry
-		base.lock.Lock()
-		used := 0
-		for pair := base.items.Oldest(); pair != nil; pair = pair.Next() {
-			if c := pair.Value; c.GroupID == src.GroupID && c.Type == src.Slug {
-				used++
+	hasType := func(v models.CommodityDraftValues) bool { return v.DraftItemType() == src.Slug }
+	drafts := r.factory.drafts.countOpen(src.GroupID, hasType)
+	if drafts > 0 && target == nil {
+		return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", id, "drafts", drafts))
+	}
+	moved, err := r.moveItemsOfType(src, target)
+	if err != nil {
+		return 0, err
+	}
+	if drafts > 0 {
+		r.factory.drafts.rewriteOpen(src.GroupID, func(v models.CommodityDraftValues) bool {
+			if !hasType(v) {
+				return false
 			}
-		}
-		if used > 0 && target == nil {
-			base.lock.Unlock()
-			return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", id, "items", used))
-		}
-		// Each moved item is a changed copy: Registry.Get copies the stored
-		// item after it releases the lock, so the stored one is never
-		// written in place.
-		for pair := base.items.Oldest(); pair != nil; pair = pair.Next() {
-			if c := pair.Value; c.GroupID == src.GroupID && c.Type == src.Slug {
-				cp := *c
-				cp.Type = target.Slug
-				pair.Value = &cp
-				moved++
-			}
-		}
-		base.lock.Unlock()
+			v["type"] = string(target.Slug)
+			return true
+		})
 	}
 
 	if err := r.Registry.Delete(ctx, id); err != nil {
 		return 0, errxtrace.Wrap("failed to delete item type", err)
+	}
+	return moved, nil
+}
+
+// moveItemsOfType gives the group's items of src, Trash included, the type
+// target and returns how many it moved. With no target, an item of src
+// refuses the delete. The caller holds the factory's mutex.
+func (r *ItemTypeRegistry) moveItemsOfType(src, target *models.ItemType) (int, error) {
+	if r.factory.commodities == nil {
+		return 0, nil
+	}
+	base := r.factory.commodities.baseCommodityRegistry
+	base.lock.Lock()
+	defer base.lock.Unlock()
+	used := 0
+	for pair := base.items.Oldest(); pair != nil; pair = pair.Next() {
+		if c := pair.Value; c.GroupID == src.GroupID && c.Type == src.Slug {
+			used++
+		}
+	}
+	if used > 0 && target == nil {
+		return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", src.ID, "items", used))
+	}
+	// Each moved item is a changed copy: Registry.Get copies the stored
+	// item after it releases the lock, so the stored one is never written
+	// in place.
+	moved := 0
+	for pair := base.items.Oldest(); pair != nil; pair = pair.Next() {
+		if c := pair.Value; c.GroupID == src.GroupID && c.Type == src.Slug {
+			cp := *c
+			cp.Type = target.Slug
+			pair.Value = &cp
+			moved++
+		}
 	}
 	return moved, nil
 }
@@ -408,6 +442,13 @@ func (r *ItemTypeRegistry) ItemCounts(_ context.Context) (map[models.CommodityTy
 		}
 		counts[c.Type] = usage
 	}
+	r.factory.drafts.eachOpen(r.groupID, func(v models.CommodityDraftValues) {
+		if slug := v.DraftItemType(); slug != "" {
+			usage := counts[slug]
+			usage.Drafts++
+			counts[slug] = usage
+		}
+	})
 	return counts, nil
 }
 

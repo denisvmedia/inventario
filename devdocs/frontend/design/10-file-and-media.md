@@ -189,9 +189,14 @@ phone camera may have written. Only profile photos are re-encoded, which
 drops their EXIF block and applies the orientation tag to the pixels
 (`go/services/avatar_service.go`). Browsers apply the EXIF orientation when
 they draw a full-size photo, so the frontend has no rotation logic. The
-item thumbnails are rendered from the stored pixels without applying the
-tag, so a photo whose camera stored it rotated can get a thumbnail on its
-side.
+server applies the tag when it renders item thumbnails
+(`GenerateThumbnails` in `go/services/file_service.go`) and marks the file
+`thumbnails_oriented`. At startup, `BackfillThumbnailOrientation`
+(`go/services/thumbnail_orientation_backfill.go`) reads the tag of every
+unmarked JPEG: an upright photo is marked, and a turned one with thumbnails
+gets them made again. A turned photo without thumbnails stays unmarked until
+its thumbnails are made, so thumbnails an older server writes unturned
+during a rolling deploy are fixed on the next start.
 
 ## Empty / loading / error
 

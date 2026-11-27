@@ -135,10 +135,12 @@ func ApplyCustomFieldWritePlan(stored models.CustomFieldValues, plan CustomField
 
 // CheckCustomFieldValueCount is the check of CustomFieldRegistry.Delete
 // (expected 0) and DeleteWithValues: it fails with ErrCustomFieldInUse when
-// items, not expected of them, have a value of the field.
-func CheckCustomFieldValueCount(id string, items, expected int) error {
-	if expected == AnyValueCount || items == expected {
+// another number of items and open drafts than expected have a value of the
+// field.
+func CheckCustomFieldValueCount(id string, items, drafts, expected int) error {
+	if expected == AnyValueCount || items+drafts == expected {
 		return nil
 	}
-	return errxtrace.Classify(ErrCustomFieldInUse, errx.Attrs("custom_field_id", id, "items", items, "expected", expected))
+	return errxtrace.Classify(ErrCustomFieldInUse,
+		errx.Attrs("custom_field_id", id, "items", items, "drafts", drafts, "expected", expected))
 }

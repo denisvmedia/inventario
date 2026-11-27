@@ -195,7 +195,7 @@ func TestItemTypes_DeleteBlocksOrReassigns(t *testing.T) {
 	}
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &conflict), qt.IsNil)
 	c.Assert(conflict.Errors, qt.HasLen, 1)
-	c.Check(conflict.Errors[0].Meta, qt.DeepEquals, map[string]int{"item_count": 1, "trashed_item_count": 1})
+	c.Check(conflict.Errors[0].Meta, qt.DeepEquals, map[string]int{"item_count": 1, "trashed_item_count": 1, "draft_count": 0})
 
 	rr = env.do(http.MethodDelete, "/item-types/"+furniture.ID+"?reassign_to="+furniture.ID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
@@ -228,6 +228,50 @@ func TestItemTypes_DeleteBlocksOrReassigns(t *testing.T) {
 	rr = env.do(http.MethodDelete, "/item-types/"+keep.ID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), qt.Contains, "item_type.last")
+}
+
+func TestItemTypes_DeleteCountsAndMovesDrafts(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regSet := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+
+	list := listItemTypes(c, env)
+	clothes := itemTypeBySlug(c, list, "clothes")
+	equipment := itemTypeBySlug(c, list, "equipment")
+	draft, created, err := regSet.CommodityDraftRegistry.CreateOrGet(ctx, models.CommodityDraft{
+		ClientKey: "draft-clothes",
+		Values:    models.CommodityDraftValues{"type": "clothes", "name": "Coat"},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+	c.Check(itemTypeBySlug(c, listItemTypes(c, env), "clothes").Attributes.DraftCount, qt.Equals, 1)
+
+	// No item has the type, and the draft alone keeps it from going
+	// without a target.
+	rr := env.do(http.MethodDelete, "/item-types/"+clothes.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	var conflict struct {
+		Errors []struct {
+			Meta map[string]int `json:"meta"`
+		} `json:"errors"`
+	}
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &conflict), qt.IsNil)
+	c.Assert(conflict.Errors, qt.HasLen, 1)
+	c.Check(conflict.Errors[0].Meta, qt.DeepEquals, map[string]int{"item_count": 0, "trashed_item_count": 0, "draft_count": 1})
+
+	rr = env.do(http.MethodDelete, "/item-types/"+clothes.ID+"?reassign_to="+equipment.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	var deleted jsonapi.ItemTypeDeleteResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &deleted), qt.IsNil)
+	c.Check(deleted.Meta.ReassignedItems, qt.Equals, 0)
+
+	got, err := regSet.CommodityDraftRegistry.Get(ctx, draft.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(got.Values.DraftItemType(), qt.Equals, models.CommodityTypeEquipment)
+	c.Check(got.Values["name"], qt.Equals, "Coat")
+	c.Check(got.Revision, qt.Equals, draft.Revision+1)
+	c.Check(itemTypeBySlug(c, listItemTypes(c, env), "equipment").Attributes.DraftCount, qt.Equals, 1)
 }
 
 func TestItemTypes_ViewerCanReadButNotWrite(t *testing.T) {

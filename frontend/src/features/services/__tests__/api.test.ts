@@ -112,11 +112,20 @@ describe("service display helpers", () => {
         hasCost({ cost_amount: undefined, cost_currency: "EUR" as unknown as undefined })
       ).toBe(false)
     })
-    it("returns false for a recorded zero cost", () => {
+    it("returns true for a recorded cost of 0", () => {
+      // A free repair, under warranty for example.
       expect(
         hasCost({
           cost_amount: "0" as unknown as undefined,
           cost_currency: "EUR" as unknown as undefined,
+        })
+      ).toBe(true)
+    })
+    it("returns false for an amount of 0 without a currency", () => {
+      expect(
+        hasCost({
+          cost_amount: "0" as unknown as undefined,
+          cost_currency: "" as unknown as undefined,
         })
       ).toBe(false)
     })

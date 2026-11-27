@@ -24,6 +24,8 @@ interface Row {
   name: string
   state: State
   item_count: number
+  // The open drafts that have the type or a value of the field.
+  draft_count?: number
   icon?: string
   field_type?: string
   taken_by?: string
@@ -153,7 +155,11 @@ function setBackend(
   let failGets = false
   const has = (r: Row) => r.state === "added" || r.state === "own"
   const keep = (r: Row) =>
-    r.state === "own" ? "own" : r.state === "added" && r.item_count > 0 ? "in_use" : undefined
+    r.state === "own"
+      ? "own"
+      : r.state === "added" && r.item_count + (r.draft_count ?? 0) > 0
+        ? "in_use"
+        : undefined
   const removable = (r: Row) => r.state === "added" && !keep(r)
   // change changes a row as another member would, between two reads.
   const change = (key: string, patch: Partial<Row>) => {
@@ -175,6 +181,7 @@ function setBackend(
       item_type_id: has(r) ? `type-${r.key}` : undefined,
       item_count: r.item_count,
       trashed_item_count: 0,
+      draft_count: r.draft_count ?? 0,
       removable: removable(r),
       keep_reason: has(r) ? keep(r) : undefined,
     })),
@@ -188,6 +195,7 @@ function setBackend(
       missing_templates: r.missing_templates ?? 0,
       item_count: r.item_count,
       trashed_item_count: 0,
+      draft_count: r.draft_count ?? 0,
       removable: removable(r),
       keep_reason: has(r) ? keep(r) : undefined,
     })),
@@ -509,6 +517,40 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
       "data-state",
       "added"
     )
+  })
+
+  it("keeps the rows that drafts use and says how many drafts use them", async () => {
+    const backend = setBackend("admin", {
+      ...everythingAdded,
+      coins: { state: "added", item_count: 2, draft_count: 3 },
+      stamps: { state: "added", item_count: 0, draft_count: 1 },
+      condition: { state: "added", item_count: 0, draft_count: 2 },
+    })
+    server.use(...backend.handlers)
+    const user = userEvent.setup()
+    renderSettings()
+
+    const card = await screen.findByTestId("collection-set-card")
+    await user.click(await within(card).findByTestId("collection-set-remove"))
+    const dialog = await screen.findByTestId("collection-set-remove-dialog")
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeEnabled()
+    )
+    const stays = within(dialog).getByTestId("collection-set-remove-stays")
+    expect(within(stays).getByTestId("collection-set-stays-type-coins")).toHaveTextContent(
+      "2 items have this type, Trash included. 3 drafts have this type."
+    )
+    expect(within(stays).getByTestId("collection-set-stays-type-stamps")).toHaveTextContent(
+      "1 draft has this type."
+    )
+    expect(within(stays).getByTestId("collection-set-stays-type-stamps")).not.toHaveTextContent(
+      "items"
+    )
+    expect(within(stays).getByTestId("collection-set-stays-field-condition")).toHaveTextContent(
+      "2 drafts have a value of this field."
+    )
+    const goes = within(dialog).getByTestId("collection-set-remove-goes")
+    expect(goes).not.toHaveTextContent("Stamps")
   })
 
   it("says nothing can be deleted when every row of the set stays", async () => {

@@ -685,9 +685,10 @@ func restoreInbWithOptions(c *qt.C, f *inbFixture, signer *backupsign.Signer, bl
 
 	roReg := f.fs.RestoreOperationRegistryFactory.CreateServiceRegistry()
 	restoreOp := must.Must(roReg.Create(f.ctx, models.RestoreOperation{
-		ExportID: exportRow.ID,
-		Status:   models.RestoreStatusPending,
-		Options:  opts,
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: exportRow.TenantID, GroupID: exportRow.GroupID, CreatedByUserID: exportRow.CreatedByUserID},
+		ExportID:                 exportRow.ID,
+		Status:                   models.RestoreStatusPending,
+		Options:                  opts,
 	}))
 
 	err := svc.ProcessRestoreOperation(f.ctx, restoreOp.ID, inbUploadLocation)

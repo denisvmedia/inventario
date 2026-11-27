@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -306,6 +307,77 @@ func TestPersonalDataExport_HoldsOnlyTheSubjectsData(t *testing.T) {
 			c.Assert(string(data), qt.Not(qt.Contains), leak, qt.Commentf("%s holds %q", name, leak))
 		}
 	}
+}
+
+// TestPersonalDataExport_ItemsInTrashKeepTheirRecords: an item in Trash is
+// exported with what belongs to it (#3035): the file that went to Trash with
+// it, with its bytes and its link to the item, and its loan, maintenance
+// schedule and service record.
+func TestPersonalDataExport_ItemsInTrashKeepTheirRecords(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	ctx := f.as(f.alice)
+	blender := f.createItem(c, ctx, "Alice's blender", *f.aliceItem.AreaID)
+	manual := f.createFile(c, ctx, f.alice, "blender-manual", "blender-bytes", blender.ID)
+	f.createLoan(c, ctx, blender.ID, "Neighbor Erin")
+	schedules, err := f.fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = schedules.Create(ctx, models.MaintenanceSchedule{
+		CommodityID: blender.ID, Title: "Descale", IntervalDays: 60, NextDueAt: "2027-01-10", Enabled: true,
+	})
+	c.Assert(err, qt.IsNil)
+	services, err := f.fs.CommodityServiceRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = services.Create(ctx, models.CommodityService{
+		CommodityID: blender.ID, ProviderName: "Blender repair", Reason: "Motor", SentAt: "2026-06-01", CostCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+
+	now := time.Now()
+	items, err := f.fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = items.Trash(ctx, blender.ID, f.alice.ID, now)
+	c.Assert(err, qt.IsNil)
+	files, err := f.fs.FileRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(files.Trash(ctx, manual.ID, f.alice.ID, blender.ID, now), qt.IsNil)
+
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+	_, _, members := buildExport(c, f, svc, f.alice)
+	var doc export.PersonalGroupDocument
+	c.Assert(json.Unmarshal(members["groups/"+f.group.UUID+"/group.json"], &doc), qt.IsNil)
+
+	var item *export.PersonalItem
+	for i := range doc.Items {
+		if doc.Items[i].ID == blender.UUID {
+			item = &doc.Items[i]
+		}
+	}
+	c.Assert(item, qt.IsNotNil)
+	c.Assert(item.InTrash, qt.IsTrue)
+
+	var file *export.PersonalFile
+	for i := range doc.Files {
+		if doc.Files[i].ID == manual.UUID {
+			file = &doc.Files[i]
+		}
+	}
+	c.Assert(file, qt.IsNotNil, qt.Commentf("the file that went to Trash with the item"))
+	c.Assert(file.InTrash, qt.IsTrue)
+	c.Assert(file.Links, qt.HasLen, 1)
+	c.Assert(file.Links[0].EntityID, qt.Equals, blender.UUID)
+	c.Assert(string(members[file.Path]), qt.Equals, "blender-bytes")
+
+	ofItem := func(ref export.PersonalItemRef) bool { return ref.ItemID == blender.UUID }
+	c.Assert(slices.ContainsFunc(doc.Loans, func(l export.PersonalLoan) bool {
+		return ofItem(l.PersonalItemRef) && l.BorrowerName == "Neighbor Erin"
+	}), qt.IsTrue, qt.Commentf("loans: %+v", doc.Loans))
+	c.Assert(slices.ContainsFunc(doc.MaintenanceSchedules, func(m export.PersonalMaintenanceSchedule) bool {
+		return ofItem(m.PersonalItemRef) && m.Title == "Descale"
+	}), qt.IsTrue, qt.Commentf("schedules: %+v", doc.MaintenanceSchedules))
+	c.Assert(slices.ContainsFunc(doc.ServiceRecords, func(r export.PersonalServiceRecord) bool {
+		return ofItem(r.PersonalItemRef) && r.ProviderName == "Blender repair"
+	}), qt.IsTrue, qt.Commentf("service records: %+v", doc.ServiceRecords))
 }
 
 func TestPersonalDataExport_OneRequestPerDay(t *testing.T) {

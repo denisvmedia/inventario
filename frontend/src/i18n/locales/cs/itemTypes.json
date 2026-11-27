@@ -92,7 +92,7 @@
   "removal": {
     "confirm": "Smazat typ",
     "confirmMove": "Přesunout položky a smazat",
-    "gotItems": "Po načtení stránky dostaly tento typ další položky. Vyberte typ, do kterého se přesunou.",
+    "gotItems": "Po načtení stránky dostaly tento typ další položky nebo koncepty. Vyberte typ, do kterého se přesunou.",
     "inUse_few": "Typ {{name}} mají {{count}} položky. Vyberte typ, do kterého se přesunou; potom se {{name}} smaže.",
     "inUse_many": "Typ {{name}} má {{count}} položky. Vyberte typ, do kterého se přesunou; potom se {{name}} smaže.",
     "inUse_one": "Typ {{name}} má {{count}} položka. Vyberte typ, do kterého se přesune; potom se {{name}} smaže.",
@@ -105,7 +105,17 @@
     "targetLabel": "Přesunout položky do",
     "targetPlaceholder": "Vyberte typ",
     "title": "Smazat {{name}}?",
-    "unused": "Typ {{name}} nemá žádná položka. Typ bude ze skupiny odstraněn."
+    "unused": "Typ {{name}} nemá žádná položka. Typ bude ze skupiny odstraněn.",
+    "confirmMoveDrafts": "Přesunout koncepty a smazat",
+    "drafts_one": "Má ho i {{count}} koncept, který se přesune s nimi.",
+    "drafts_few": "Mají ho i {{count}} koncepty, které se přesunou s nimi.",
+    "drafts_many": "Má ho i {{count}} konceptu, které se přesunou s nimi.",
+    "drafts_other": "Má ho i {{count}} konceptů, které se přesunou s nimi.",
+    "draftsOnly_one": "Typ {{name}} nemá žádná položka, ale má ho {{count}} koncept. Vyberte typ, do kterého se přesune; potom se {{name}} smaže.",
+    "draftsOnly_few": "Typ {{name}} nemá žádná položka, ale mají ho {{count}} koncepty. Vyberte typ, do kterého se přesunou; potom se {{name}} smaže.",
+    "draftsOnly_many": "Typ {{name}} nemá žádná položka, ale má ho {{count}} konceptu. Vyberte typ, do kterého se přesunou; potom se {{name}} smaže.",
+    "draftsOnly_other": "Typ {{name}} nemá žádná položka, ale má ho {{count}} konceptů. Vyberte typ, do kterého se přesunou; potom se {{name}} smaže.",
+    "targetLabelDrafts": "Přesunout koncepty do"
   },
   "search": {
     "clear": "Vymazat hledání",

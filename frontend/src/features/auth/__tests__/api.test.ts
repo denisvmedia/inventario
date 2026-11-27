@@ -5,8 +5,8 @@ import { http, HttpResponse } from "msw"
 
 import { server } from "@/test/server"
 import { apiUrl } from "@/test/handlers"
-import { login, logout } from "@/features/auth/api"
-import { clearAuth, getAccessToken, getCsrfToken } from "@/lib/auth-storage"
+import { getCurrentUser, login, logout } from "@/features/auth/api"
+import { clearAuth, getAccessToken, getCsrfToken, setAccessToken } from "@/lib/auth-storage"
 import { loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -80,6 +80,40 @@ describe("logout", () => {
     await logout()
     expect(logoutCalls).toBe(1)
     expect(getAccessToken()).toBeNull()
+  })
+
+  // #3026: the logout blacklists the access token before it revokes the
+  // refresh token. /auth/me sent with the old token in between got a 401,
+  // the client refreshed, and the user was signed in again.
+  it("does not refresh the session back when a request gets a 401 during the logout", async () => {
+    setAccessToken("old")
+    let refreshCalls = 0
+    let meAnswered!: () => void
+    const meDone = new Promise<void>((resolve) => {
+      meAnswered = resolve
+    })
+    server.use(
+      http.post(apiUrl("/auth/logout"), async () => {
+        await meDone
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.get(apiUrl("/auth/me"), () => {
+        meAnswered()
+        return HttpResponse.json({ error: "revoked" }, { status: 401 })
+      }),
+      http.post(apiUrl("/auth/refresh"), () => {
+        refreshCalls++
+        return HttpResponse.json({ access_token: "new", csrf_token: "new-csrf" })
+      })
+    )
+
+    const signingOut = logout()
+    await expect(getCurrentUser()).rejects.toMatchObject({ status: 401 })
+    await signingOut
+
+    expect(refreshCalls).toBe(0)
+    expect(getAccessToken()).toBeNull()
+    expect(getCsrfToken()).toBeNull()
   })
 
   it("wipes local credentials even when the server errors", async () => {

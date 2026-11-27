@@ -26,10 +26,6 @@ import (
 	"go.5x5.cz/inventario/registry"
 )
 
-// trashPageSize is the page size of the Trash listings a personal data export
-// reads.
-const trashPageSize = 500
-
 // personalBuilder collects one user's data across the groups they belong to
 // and writes it as a personal data export. Like the group backup it plans
 // everything first, metadata only, so the manifest with its statistics is the
@@ -279,23 +275,29 @@ func (b *personalBuilder) planNotificationPrefs(ctx context.Context, group *mode
 }
 
 // groupLookups resolves the ids a group's rows hold to the names and UUIDs
-// the archive carries.
+// the archive carries. The names cover the whole group, since the user's rows
+// may point at what other members created; the rows themselves are the
+// user's only (#2934).
 type groupLookups struct {
-	locations  map[string]*models.Location
-	areas      map[string]*models.Area
+	locations  map[string]registry.EntityRef
+	areas      map[string]registry.AreaRef
 	sellerName map[string]string
 	typeName   map[models.CommodityType]string
 	tagLabel   map[models.TagKind]map[string]string
 	fields     map[string]*models.CustomFieldDefinition
-	items      map[string]*models.Commodity
-	drafts     map[string]*models.CommodityDraft
-	// live and trashed are the group's items, sorted by name.
+	// items names every item of the group, live or in Trash.
+	items map[string]registry.EntityRef
+	// draftUUID holds the UUID of every draft of the group.
+	draftUUID map[string]string
+	// drafts are the user's drafts.
+	drafts []*models.CommodityDraft
+	// live and trashed are the user's items, sorted by name.
 	live, trashed []*models.Commodity
 }
 
 func (l *groupLookups) itemRef(id string) PersonalItemRef {
-	item := l.items[id]
-	if item == nil {
+	item, ok := l.items[id]
+	if !ok {
 		return PersonalItemRef{}
 	}
 	return PersonalItemRef{ItemID: item.UUID, ItemName: item.Name}
@@ -306,11 +308,11 @@ func (l *groupLookups) place(areaID *string) (location, area string) {
 	if areaID == nil {
 		return "", ""
 	}
-	a := l.areas[*areaID]
-	if a == nil {
+	a, ok := l.areas[*areaID]
+	if !ok {
 		return "", ""
 	}
-	if loc := l.locations[a.LocationID]; loc != nil {
+	if loc, ok := l.locations[a.LocationID]; ok {
 		return loc.Name, a.Name
 	}
 	return "", a.Name
@@ -345,16 +347,12 @@ func (b *personalBuilder) planGroup(ctx context.Context, group *models.LocationG
 	}
 
 	for _, item := range lookups.live {
-		if item.CreatedByUserID == b.user.ID {
-			planned.doc.Items = append(planned.doc.Items, lookups.personalItem(item))
-		}
+		planned.doc.Items = append(planned.doc.Items, lookups.personalItem(item))
 	}
 	for _, item := range lookups.trashed {
-		if item.CreatedByUserID == b.user.ID {
-			pi := lookups.personalItem(item)
-			pi.InTrash = true
-			planned.doc.Items = append(planned.doc.Items, pi)
-		}
+		pi := lookups.personalItem(item)
+		pi.InTrash = true
+		planned.doc.Items = append(planned.doc.Items, pi)
 	}
 	b.stats.ItemCount += len(planned.doc.Items)
 
@@ -459,7 +457,10 @@ func (l *groupLookups) customValues(values map[string]json.RawMessage) []Persona
 			}
 		case models.CustomFieldTypeItemLink:
 			var target string
-			if json.Unmarshal(raw, &target) != nil || l.items[target] == nil {
+			if json.Unmarshal(raw, &target) != nil {
+				continue
+			}
+			if _, ok := l.items[target]; !ok {
 				continue
 			}
 			encoded, err := json.Marshal(l.items[target].UUID)
@@ -479,14 +480,14 @@ func (l *groupLookups) customValues(values map[string]json.RawMessage) []Persona
 
 func (b *personalBuilder) loadGroupLookups(ctx context.Context) (*groupLookups, error) {
 	lookups := &groupLookups{
-		locations:  map[string]*models.Location{},
-		areas:      map[string]*models.Area{},
+		locations:  map[string]registry.EntityRef{},
+		areas:      map[string]registry.AreaRef{},
 		sellerName: map[string]string{},
 		typeName:   map[models.CommodityType]string{},
 		tagLabel:   map[models.TagKind]map[string]string{},
 		fields:     map[string]*models.CustomFieldDefinition{},
-		items:      map[string]*models.Commodity{},
-		drafts:     map[string]*models.CommodityDraft{},
+		items:      map[string]registry.EntityRef{},
+		draftUUID:  map[string]string{},
 	}
 
 	if err := b.loadStructure(ctx, lookups); err != nil {
@@ -497,21 +498,20 @@ func (b *personalBuilder) loadGroupLookups(ctx context.Context) (*groupLookups, 
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create commodity registry", err)
 	}
-	items, err := comReg.List(ctx)
+	refs, err := comReg.ListRefs(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list item names", err)
+	}
+	for _, ref := range refs {
+		lookups.items[ref.ID] = ref
+	}
+	items, err := comReg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list items", err)
 	}
-	trashed, err := listAllPages(func(offset int) ([]*models.Commodity, int, error) {
-		return comReg.ListTrashed(ctx, offset, trashPageSize)
-	})
+	trashed, err := comReg.ListTrashedCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list items in Trash", err)
-	}
-	for _, item := range items {
-		lookups.items[item.ID] = item
-	}
-	for _, item := range trashed {
-		lookups.items[item.ID] = item
 	}
 	sortItems(items)
 	sortItems(trashed)
@@ -525,18 +525,22 @@ func (b *personalBuilder) loadGroupLookups(ctx context.Context) (*groupLookups, 
 		if err != nil {
 			return nil, errxtrace.Wrap("failed to create draft registry", err)
 		}
-		drafts, err := reg.List(ctx)
+		refs, err := reg.ListRefs(ctx)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to list draft ids", err)
+		}
+		for _, ref := range refs {
+			lookups.draftUUID[ref.ID] = ref.UUID
+		}
+		lookups.drafts, err = reg.ListCreatedBy(ctx, b.user.ID)
 		if err != nil {
 			return nil, errxtrace.Wrap("failed to list drafts", err)
-		}
-		for _, d := range drafts {
-			lookups.drafts[d.ID] = d
 		}
 	}
 	return lookups, nil
 }
 
-// loadTypeNames resolves the names of the item types the group's items have.
+// loadTypeNames resolves the names of the item types the user's items have.
 // It reads the types one by one, since listing them seeds the built-in ones
 // into a group that has none.
 func (b *personalBuilder) loadTypeNames(ctx context.Context, lookups *groupLookups) error {
@@ -547,7 +551,7 @@ func (b *personalBuilder) loadTypeNames(ctx context.Context, lookups *groupLooku
 	if err != nil {
 		return errxtrace.Wrap("failed to create item type registry", err)
 	}
-	for _, item := range lookups.items {
+	for _, item := range slices.Concat(lookups.live, lookups.trashed) {
 		if item.Type == "" {
 			continue
 		}
@@ -604,7 +608,7 @@ func (b *personalBuilder) loadStructure(ctx context.Context, lookups *groupLooku
 	if err != nil {
 		return errxtrace.Wrap("failed to create location registry", err)
 	}
-	locations, err := locReg.List(ctx)
+	locations, err := locReg.ListRefs(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to list locations", err)
 	}
@@ -616,7 +620,7 @@ func (b *personalBuilder) loadStructure(ctx context.Context, lookups *groupLooku
 	if err != nil {
 		return errxtrace.Wrap("failed to create area registry", err)
 	}
-	areas, err := areaReg.List(ctx)
+	areas, err := areaReg.ListRefs(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to list areas", err)
 	}
@@ -678,33 +682,16 @@ func sortItems(items []*models.Commodity) {
 	})
 }
 
-// listAllPages reads a paged listing to its end.
-func listAllPages[T any](page func(offset int) ([]T, int, error)) ([]T, error) {
-	var out []T
-	for {
-		rows, total, err := page(len(out))
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, rows...)
-		if len(rows) == 0 || len(out) >= total {
-			return out, nil
-		}
-	}
-}
-
 func (b *personalBuilder) planFiles(ctx context.Context, l *groupLookups, planned *plannedPersonalGroup) error {
 	fileReg, err := b.fs.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create file registry", err)
 	}
-	files, err := fileReg.List(ctx)
+	files, err := fileReg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list files", err)
 	}
-	trashed, err := listAllPages(func(offset int) ([]*models.FileEntity, int, error) {
-		return fileReg.ListTrashed(ctx, offset, trashPageSize)
-	})
+	trashed, err := fileReg.ListTrashedCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list files in Trash", err)
 	}
@@ -720,7 +707,7 @@ func (b *personalBuilder) planFiles(ctx context.Context, l *groupLookups, planne
 
 	for _, file := range all {
 		// A group backup is a copy of everybody's data, not the user's.
-		if file == nil || file.CreatedByUserID != b.user.ID || file.IsExportOwned() {
+		if file == nil || file.IsExportOwned() {
 			continue
 		}
 		pf := PersonalFile{
@@ -775,23 +762,23 @@ func (l *groupLookups) fileLinks(links []models.FileLink) []PersonalFileLink {
 			}
 			pl.EntityID, pl.EntityName = ref.ItemID, ref.ItemName
 		case models.FileLinkArea:
-			a := l.areas[link.EntityID]
-			if a == nil {
+			a, ok := l.areas[link.EntityID]
+			if !ok {
 				continue
 			}
 			pl.EntityID, pl.EntityName = a.UUID, a.Name
 		case models.FileLinkLocation:
-			loc := l.locations[link.EntityID]
-			if loc == nil {
+			loc, ok := l.locations[link.EntityID]
+			if !ok {
 				continue
 			}
 			pl.EntityID, pl.EntityName = loc.UUID, loc.Name
 		case models.FileLinkDraft:
-			d := l.drafts[link.EntityID]
-			if d == nil {
+			uuid, ok := l.draftUUID[link.EntityID]
+			if !ok {
 				continue
 			}
-			pl.EntityID = d.UUID
+			pl.EntityID = uuid
 		default:
 			continue
 		}
