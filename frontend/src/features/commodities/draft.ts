@@ -20,7 +20,8 @@ import {
   type FileLinkEntityType,
 } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
-import { HttpError } from "@/lib/http"
+import { HttpError, type InGroup } from "@/lib/http"
+import { clearPendingFilesWhere } from "@/lib/pending-files-store"
 import type { CommodityStatusValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
 import { formValueToPrice, priceToFormValue } from "@/features/commodities/price"
@@ -100,15 +101,20 @@ export function pendingFileTitle(entry: PendingFile): string {
 export async function placePendingFile(
   entry: PendingFile,
   fileId: string,
-  target: { entityType: FileLinkEntityType; entityId: string }
+  target: { entityType: FileLinkEntityType; entityId: string },
+  opts: InGroup = {}
 ): Promise<void> {
-  await updateFile(fileId, { title: pendingFileTitle(entry), tags: entry.tags })
+  await updateFile(fileId, { title: pendingFileTitle(entry), tags: entry.tags }, opts)
   const category = categoryFromMime(entry.file.type)
-  await attachFile(fileId, {
-    ...target,
-    // "other" names no bucket, so the file keeps its category.
-    meta: category === "other" ? undefined : category,
-  })
+  await attachFile(
+    fileId,
+    {
+      ...target,
+      // "other" names no bucket, so the file keeps its category.
+      meta: category === "other" ? undefined : category,
+    },
+    opts
+  )
 }
 
 // newPendingId mints a stable id for a staged file row. Prefers
@@ -153,6 +159,51 @@ export function mergePendingFiles(existing: PendingFile[], incoming: File[]): Pe
 }
 
 // ---- Draft persistence helpers ------------------------------------------
+
+// Every local recovery slot of the item form starts with SLOT_PREFIX. The
+// draft session keys (features/drafts/save.ts) and the staged files
+// (lib/pending-files-store.ts) are kept under the slot's key as well.
+const SLOT_PREFIX = "commodity-draft:"
+
+// ANON_ITEM_SLOT is the slot of the form a visitor fills before they have
+// an account (#1988). It names no user: the sign-in that follows adds its
+// item, and clears it.
+export const ANON_ITEM_SLOT = `${SLOT_PREFIX}anon:create`
+const ANON_PREFIX = `${SLOT_PREFIX}anon:`
+
+// addItemSlot is the slot of the Add item form of a user in a group. It
+// names the user, so the next person to sign in on this browser starts
+// with a form of their own (#2920).
+export function addItemSlot(userId: string, slug: string): string {
+  return `${SLOT_PREFIX}${userId}:${slug}:create`
+}
+
+function isUserSlotKey(key: string): boolean {
+  return key.startsWith(SLOT_PREFIX) && !key.startsWith(ANON_PREFIX)
+}
+
+// clearItemFormRecovery removes what the item form kept on this browser
+// for any signed-in user: the unsaved values, the draft session keys and
+// the staged files. Signing out calls it. The visitor's slot stays for the
+// sign-in that adds its item.
+export async function clearItemFormRecovery(): Promise<void> {
+  if (typeof window !== "undefined") {
+    for (const area of ["localStorage", "sessionStorage"] as const) {
+      try {
+        const store = window[area]
+        const keys: string[] = []
+        for (let i = 0; i < store.length; i++) {
+          const key = store.key(i)
+          if (key !== null && isUserSlotKey(key)) keys.push(key)
+        }
+        for (const key of keys) store.removeItem(key)
+      } catch {
+        // Disabled storage holds nothing to clear.
+      }
+    }
+  }
+  await clearPendingFilesWhere(isUserSlotKey)
+}
 
 // readDraft pulls the previously-saved form values for `key` (per
 // #1383). Returns undefined when nothing is stored or the JSON has
@@ -372,14 +423,16 @@ export async function attachPendingFiles(
 // attaches it to the freshly-created commodity (POST /uploads/file, PUT
 // /files/:id, POST /files/:id/links). Per-file failures are reported via
 // `onError`; the commodity itself is already persisted, so a failed attach
-// is non-fatal (the user can retry from the detail page).
+// is non-fatal (the user can retry from the detail page). Every request goes
+// to the group named in opts, the commodity's, when it is set.
 export async function uploadPendingFiles(
   pending: PendingFile[],
   commodityId: string,
-  onError: (entry: PendingFile, err: unknown) => void
+  onError: (entry: PendingFile, err: unknown) => void,
+  opts: InGroup = {}
 ): Promise<void> {
   const place = (entry: PendingFile, fileId: string) =>
-    placePendingFile(entry, fileId, { entityType: "commodity", entityId: commodityId })
+    placePendingFile(entry, fileId, { entityType: "commodity", entityId: commodityId }, opts)
   const work = pending.map(async (entry) => {
     try {
       // A file a draft save already uploaded is attached as it is, unless
@@ -392,7 +445,7 @@ export async function uploadPendingFiles(
           if (!(err instanceof HttpError && err.status === 404)) throw err
         }
       }
-      const result = await uploadFile(entry.file)
+      const result = await uploadFile(entry.file, opts)
       await place(entry, result.file.id)
     } catch (err) {
       onError(entry, err)

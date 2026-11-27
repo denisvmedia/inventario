@@ -26,7 +26,7 @@ export function useDraft(id: string | null | undefined) {
   const slug = useSlug()
   return useQuery<Draft>({
     queryKey: draftKeys.detail(slug, id ?? ""),
-    queryFn: ({ signal }) => getDraft(id ?? "", signal),
+    queryFn: ({ signal }) => getDraft(id ?? "", { signal }),
     enabled: !!slug && !!id,
     staleTime: 0,
     gcTime: 0,
@@ -38,7 +38,7 @@ export function useDraftFiles(id: string | null | undefined) {
   const slug = useSlug()
   return useQuery<ListedFile[]>({
     queryKey: draftKeys.files(slug, id ?? ""),
-    queryFn: ({ signal }) => listDraftFiles(id ?? "", signal),
+    queryFn: ({ signal }) => listDraftFiles(id ?? "", { signal }),
     enabled: !!slug && !!id,
     staleTime: 0,
   })
@@ -73,6 +73,8 @@ export interface PromoteDraftInput {
   revision: number
   promotionKey: string
   values: CreateCommodityRequest
+  // The group the draft is in; unset, the current group.
+  group?: string
 }
 
 export function usePromoteDraft() {
@@ -80,8 +82,8 @@ export function usePromoteDraft() {
   const slug = useSlug()
   const invalidateDrafts = useInvalidateDrafts()
   return useMutation<Commodity & { id: string }, Error, PromoteDraftInput>({
-    mutationFn: ({ id, revision, promotionKey, values }) =>
-      promoteDraft(id, revision, promotionKey, values),
+    mutationFn: ({ id, revision, promotionKey, values, group }) =>
+      promoteDraft(id, revision, promotionKey, values, { group }),
     onSuccess: () =>
       Promise.all([
         invalidateDrafts(),
@@ -99,6 +101,9 @@ export interface DraftRef {
   id: string
   revision: number
   promotionKey?: string
+  // The group the draft is in. The promotion goes there even when the
+  // member has moved to another group since the form opened.
+  group?: string
 }
 
 // newPromotionKey stands in for a caller that keeps no key: its attempts
@@ -123,6 +128,7 @@ export function useSubmitNewItem() {
             revision: draft.revision,
             promotionKey: draft.promotionKey ?? newPromotionKey(),
             values,
+            group: draft.group,
           })
         : create.mutateAsync(values),
   }

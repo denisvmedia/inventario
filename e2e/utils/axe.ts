@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 interface AxeAuditOptions {
   /**
@@ -63,6 +63,30 @@ async function waitForAnimations(page: Page, timeoutMs = 1000): Promise<void> {
 }
 
 /**
+ * Firefox does not run the scan. When an element's
+ * `ariaLabelledByElements` has been read both in the page's main world,
+ * where axe runs, and in Playwright's isolated world, which reads it to
+ * compute an accessible name, the Firefox content process segfaults
+ * (Mozilla bug 2090055, microsoft/playwright#43967). Radix dialogs, menus
+ * and listboxes all carry aria-labelledby, so a scan followed by a role or
+ * label lookup crashes the page on whatever the test does next (#2943).
+ * Disabling the axe rules the upstream issue names is not enough here.
+ * Chromium and WebKit scan the same markup. Remove this once the
+ * Playwright release in use ships a Firefox without the bug: 1.65.1 ships
+ * build 1572, which has it.
+ */
+function skipsScan(page: Page): boolean {
+  if (page.context().browser()?.browserType().name() !== 'firefox') {
+    return false;
+  }
+  test.info().annotations.push({
+    type: 'axe skipped',
+    description: 'Firefox crashes after an axe scan: microsoft/playwright#43967',
+  });
+  return true;
+}
+
+/**
  * Run an axe audit against the current page and assert no violations of
  * the configured severity. Wire this into every page-level spec — `@axe`
  * is part of the issue #1419 acceptance criteria. The default severity
@@ -71,6 +95,9 @@ async function waitForAnimations(page: Page, timeoutMs = 1000): Promise<void> {
  * style regressions.
  */
 export async function axeAudit(page: Page, options: AxeAuditOptions = {}): Promise<void> {
+  if (skipsScan(page)) {
+    return;
+  }
   const failOnImpact = options.failOnImpact ?? ['serious', 'critical'];
 
   // Settle CSS animations / transitions before sampling colors — see

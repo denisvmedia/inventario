@@ -698,8 +698,8 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	}
 
 	fields = append(fields,
-		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
-		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 40)),
+		validation.Field(&a.Name, rules.NotEmpty, validation.RuneLength(1, 255)),
+		validation.Field(&a.ShortName, rules.NotEmpty, validation.RuneLength(1, 40)),
 		validation.Field(&a.Brand, validation.RuneLength(0, MaxCommodityBrandRunes)),
 		validation.Field(&a.Model, validation.RuneLength(0, MaxCommodityModelRunes)),
 		validation.Field(&a.Type, rules.NotEmpty),
@@ -743,7 +743,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		// updateCommodity handler (it needs the previous status,
 		// which the model layer doesn't carry); these rules cover the
 		// per-row invariants that hold on every write.
-		validation.Field(&a.StatusNote, validation.Length(0, 1024)),
+		validation.Field(&a.StatusNote, validation.RuneLength(0, 1024)),
 		validation.Field(&a.SalePrice, validation.By(func(any) error {
 			if a.SalePrice == nil {
 				return nil
