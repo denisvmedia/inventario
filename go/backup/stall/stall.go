@@ -27,8 +27,9 @@ const (
 	Threshold = 10 * time.Minute
 	// UnbeatenThreshold applies to a run that has no heartbeat at all,
 	// because a version that records none claimed it: such a run is taken
-	// for dead once its job is this old. It is long, so a rolling upgrade
-	// does not touch the runs the old version is still working on.
+	// for dead once its job is this old. Upgrading from such a version stops
+	// its pods first, so no worker is left on the run; the job's creation is
+	// the only time the run carries, and a day is a margin wider than a run.
 	UnbeatenThreshold = 24 * time.Hour
 	// SweepInterval is how often a worker sweeps for dead runs.
 	SweepInterval = time.Minute

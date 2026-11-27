@@ -54,16 +54,35 @@ func TestExportService_RecoverStalled_RequeuesWhileRunsAreLeft(t *testing.T) {
 	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, float64(0))
 }
 
-// The export worker sweeps for dead runs on its own: an export that used its
-// runs fails with an error that says the worker stopped, counts once as
-// dead-lettered and shows among the failed jobs.
-func TestExportWorker_FailsAnExportWhoseWorkerStopped(t *testing.T) {
+// An export whose worker died during its last run fails for good and counts
+// once as dead-lettered.
+func TestExportService_RecoverStalled_FailsAfterTheLastRun(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 	fs := memory.NewFactorySet()
 	stalled := stalledExport(c, fs, "stalled-export", stall.MaxRuns)
 
 	counter := metrics.JobsDeadLetteredFor(string(models.WorkerTypeExport))
 	before := testutil.ToFloat64(counter)
+
+	out, err := export.NewExportService(fs, "nowhere://bucket", nil).RecoverStalled(ctx, time.Now())
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, registry.StalledJobs{Failed: 1})
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, float64(1))
+
+	got, err := fs.ExportRegistryFactory.CreateServiceRegistry().Get(ctx, stalled.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.ExportStatusFailed)
+}
+
+// The export worker sweeps for dead runs on its own: an export that used its
+// runs fails with an error that says the worker stopped and shows among the
+// failed jobs. The service test above counts the metric: the worker records
+// it after the row, and a worker of another test may still be running.
+func TestExportWorker_FailsAnExportWhoseWorkerStopped(t *testing.T) {
+	c := qt.New(t)
+	fs := memory.NewFactorySet()
+	stalled := stalledExport(c, fs, "stalled-export", stall.MaxRuns)
 
 	worker := export.NewExportWorker(export.NewExportService(fs, "nowhere://bucket", nil), fs, 1,
 		export.WithPollInterval(5*time.Millisecond))
@@ -85,7 +104,6 @@ func TestExportWorker_FailsAnExportWhoseWorkerStopped(t *testing.T) {
 	c.Assert(got.Status, qt.Equals, models.ExportStatusFailed)
 	c.Assert(got.ErrorMessage, qt.Equals, export.StalledExportError)
 	c.Assert(got.CompletedDate, qt.IsNotNil)
-	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, float64(1))
 
 	failed, err := fs.FailedJobRegistry.ListFailed(context.Background(), models.WorkerTypeExport, registry.FailedJobScope{}, 0)
 	c.Assert(err, qt.IsNil)

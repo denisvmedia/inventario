@@ -502,10 +502,12 @@ never evaluated the gate (paused worker, `mode=off`, or a gate-build failure)
 resets it to `0` rather than leaving the previous tick's value standing and
 faking a pinned tenant forever.
 
-There is no heartbeat on exports/restores, so a **crashed** operation stays
-`running` / `in_progress` forever and pins its tenant permanently. That is
-the correct direction (under-collecting forever beats one wrong delete),
-but it needs manual attention: investigate and resolve the stuck operation.
+An export or restore whose worker crashed pins its tenant until the sweep
+in §10 takes the worker for dead, ten minutes after its last heartbeat,
+and fails the job or queues it again (a queued export pins the tenant
+until it has run). That is the correct direction (under-collecting beats
+one wrong delete). A blocker that stays in progress longer is one of the
+cases §10 lists that the sweep does not catch: investigate and resolve it.
 **Do not add a "stale after N hours → ignore it" escape hatch** — that
 re-opens exactly the race the gate closes.
 
@@ -633,9 +635,22 @@ alive:
 Each of these failures is listed here and counts once in
 `inventario_jobs_dead_lettered_total`. The sweeps run while a worker type is
 paused, too. A job in progress without any heartbeat was claimed by a
-version that recorded none; it is taken for dead only once the job is a
-day old, so a rolling upgrade does not touch the runs that pods of the old
-version are still working on.
+version that recorded none. Upgrading from such a version stops its pods
+first (`PRODUCTION.md`, Appendix C), so no worker is left on the job; it is
+taken for dead once the job is a day old, since the job's creation is the
+only time it carries.
+
+The sweep does not catch two cases:
+
+- An export or import worker that waits for a free slot to start a queued
+  job does not sweep until it gets one: the sweep runs in the same loop.
+  On a replica whose slots are all taken by long runs, a dead run waits
+  for one of them to end, or for the sweep of another replica. The restore
+  worker does not wait for a slot, so it always sweeps.
+- A run that hangs while its process stays up keeps its heartbeat, which
+  is recorded apart from the run, and is never taken for dead. It stays in
+  progress until the process is restarted; the job then has no heartbeat
+  younger than ten minutes, and the sweep moves it on.
 
 Only the newest thumbnail job of a file counts. While that job is failed and
 nobody has retried or discarded it, viewing the file starts no new job, so a

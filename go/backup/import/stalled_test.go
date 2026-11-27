@@ -58,16 +58,35 @@ func TestImportService_RecoverStalled_RequeuesWhileRunsAreLeft(t *testing.T) {
 	c.Assert(got.Status, qt.Equals, models.ExportStatusInProgress)
 }
 
-// The import worker sweeps for dead runs on its own: an import that used its
-// runs fails with an error that says the worker stopped, counts once as
-// dead-lettered and shows among the failed jobs.
-func TestImportWorker_FailsAnImportWhoseWorkerStopped(t *testing.T) {
+// An import whose worker died during its last run fails for good and counts
+// once as dead-lettered.
+func TestImportService_RecoverStalled_FailsAfterTheLastRun(t *testing.T) {
 	c := qt.New(t)
+	ctx := context.Background()
 	fs := memory.NewFactorySet()
 	imported, _ := stalledImport(c, fs, stall.MaxRuns)
 
 	counter := metrics.JobsDeadLetteredFor(string(models.WorkerTypeImport))
 	before := testutil.ToFloat64(counter)
+
+	out, err := importpkg.NewImportService(fs, "nowhere://bucket", nil).RecoverStalled(ctx, time.Now())
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, registry.StalledJobs{Failed: 1})
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, float64(1))
+
+	got, err := fs.ExportRegistryFactory.CreateServiceRegistry().Get(ctx, imported.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.ExportStatusFailed)
+}
+
+// The import worker sweeps for dead runs on its own: an import that used its
+// runs fails with an error that says the worker stopped and shows among the
+// failed jobs. The service test above counts the metric: the worker records
+// it after the row, and a worker of another test may still be running.
+func TestImportWorker_FailsAnImportWhoseWorkerStopped(t *testing.T) {
+	c := qt.New(t)
+	fs := memory.NewFactorySet()
+	imported, _ := stalledImport(c, fs, stall.MaxRuns)
 
 	worker := importpkg.NewImportWorker(importpkg.NewImportService(fs, "nowhere://bucket", nil), fs, 1,
 		importpkg.WithPollInterval(5*time.Millisecond))
@@ -88,7 +107,6 @@ func TestImportWorker_FailsAnImportWhoseWorkerStopped(t *testing.T) {
 	}
 	c.Assert(got.Status, qt.Equals, models.ExportStatusFailed)
 	c.Assert(got.ErrorMessage, qt.Equals, importpkg.StalledImportError)
-	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, float64(1))
 
 	failed, err := fs.FailedJobRegistry.ListFailed(context.Background(), models.WorkerTypeImport, registry.FailedJobScope{}, 0)
 	c.Assert(err, qt.IsNil)
