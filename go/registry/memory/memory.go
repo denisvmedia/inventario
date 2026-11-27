@@ -252,6 +252,13 @@ func NewFactorySet() *registry.FactorySet {
 	// after every fs.* field too.
 	fs.UserTenantMover = NewUserTenantMover(fs, userReg, membershipReg, userPurger)
 
+	// The group rows the user purge hands over live in stores read off the
+	// FactorySet, so they are wired after every fs.* field too.
+	userPurger.setGroupRowStores(groupRowStores(fs))
+	if invites, ok := fs.GroupInviteRegistry.(*GroupInviteRegistry); ok {
+		userPurger.setGroupInviteRegistry(invites)
+	}
+
 	return fs
 }
 
