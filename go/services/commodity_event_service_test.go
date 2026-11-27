@@ -631,6 +631,24 @@ func TestCommodityEventService_EmitServiceStarted_IncludesCostWhenSet(t *testing
 	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
 }
 
+func TestCommodityEventService_EmitServiceStarted_IncludesCostOfZero(t *testing.T) {
+	// A free repair records a cost of 0 with its currency; the payload
+	// carries it like any other cost.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	row := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.CostCurrency = "EUR"
+	})
+	svc.EmitServiceStarted(ctx, row)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].After["cost_amount"], qt.Equals, "0")
+	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
+}
+
 func TestCommodityEventService_EmitServiceReturned(t *testing.T) {
 	c := qt.New(t)
 	ctx, svc, reg := newEventTestContext(c)

@@ -163,7 +163,7 @@ export function ImageViewer(props: ImageViewerProps) {
       <DialogContent
         aria-label={alt}
         data-testid="file-image-viewer"
-        className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black/90 p-0 text-white [&>button]:hidden sm:max-w-none"
+        className="flex h-screen max-h-none w-screen max-w-none flex-col gap-0 overflow-visible rounded-none border-0 bg-black/90 p-0 text-white [&>button]:hidden sm:max-w-none"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{alt || t("files:detail.metadataTitle")}</DialogTitle>

@@ -81,11 +81,23 @@ type PersonalDataExport struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	// StartedAt is when a worker claimed the export and began the build. A
 	// build that started long ago and recorded no result died with its
-	// process, and the worker queues it again.
+	// process, and the worker queues it again or, after its last allowed
+	// build, fails it.
 	//ptah:schema:field name="started_at" type="TIMESTAMP"
 	StartedAt *time.Time `json:"-" db:"started_at"`
+	// CompletedAt is when the build ended, with an archive or with a
+	// failure.
 	//ptah:schema:field name="completed_at" type="TIMESTAMP"
 	CompletedAt *time.Time `json:"completed_at,omitempty" db:"completed_at"`
+	// AttemptCount counts the builds the worker started: each claim adds
+	// one. A retry of the failed export does not reset it, so it also tells
+	// how many times the export has been tried in total.
+	//ptah:schema:field name="attempt_count" type="INTEGER" not_null="true" default="0"
+	AttemptCount int `json:"-" db:"attempt_count"`
+	// DiscardedAt is when an operator discarded the failed export. The row
+	// stays, with its error, until it expires.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt *time.Time `json:"-" db:"discarded_at"`
 	// ExpiresAt is when the export worker deletes the row and its archive.
 	//ptah:schema:field name="expires_at" type="TIMESTAMP" not_null="true"
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`

@@ -66,7 +66,17 @@ describe("<DialogContent variant>", () => {
     const content = screen.getByTestId("content")
     expect(content).toHaveAttribute("data-variant", "default")
     expect(classesOf("content")).toEqual(
-      expect.arrayContaining(["top-[50%]", "left-[50%]", "rounded-lg", "border", "sm:max-w-lg"])
+      expect.arrayContaining([
+        "top-[50%]",
+        "left-[50%]",
+        "rounded-lg",
+        "border",
+        "sm:max-w-lg",
+        // Never taller than the screen; a tall card scrolls as a whole, so
+        // its buttons stay reachable.
+        "max-h-[calc(100dvh-2rem)]",
+        "overflow-y-auto",
+      ])
     )
     expect(content.className).not.toContain("max-sm:")
     expect(classesOf("header")).toContain("text-center")
@@ -93,7 +103,7 @@ describe("<DialogContent variant>", () => {
         "max-sm:rounded-none",
         "max-sm:border-0",
         "max-sm:shadow-none",
-        "max-sm:overflow-y-auto",
+        "overflow-y-auto",
         // A focused field stays clear of the sticky header and footer.
         "max-sm:scroll-pt-36",
         "max-sm:scroll-pb-28",
@@ -111,8 +121,7 @@ describe("<DialogContent variant>", () => {
         "sm:max-w-lg",
         "data-[state=open]:zoom-in-95",
         // A card on a phone held sideways is never taller than the screen.
-        "sm:max-h-[calc(100dvh-2rem)]",
-        "sm:overflow-y-auto",
+        "max-h-[calc(100dvh-2rem)]",
       ])
     )
     expect(classesOf("header")).toEqual(
@@ -139,6 +148,24 @@ describe("<DialogContent variant>", () => {
       ])
     )
     expect(classesOf("footer")).not.toContain("flex-col-reverse")
+  })
+
+  it("lets a call site that fills the screen drop the height limit", () => {
+    render(
+      <Dialog open>
+        <DialogContent
+          className="h-screen max-h-none w-screen max-w-none overflow-visible"
+          data-testid="viewer"
+        >
+          <DialogTitle>photo.jpg</DialogTitle>
+          <DialogDescription>Image</DialogDescription>
+        </DialogContent>
+      </Dialog>
+    )
+    const classes = classesOf("viewer")
+    expect(classes).toEqual(expect.arrayContaining(["h-screen", "max-h-none", "overflow-visible"]))
+    expect(classes).not.toContain("max-h-[calc(100dvh-2rem)]")
+    expect(classes).not.toContain("overflow-y-auto")
   })
 
   it("puts the close button in the header below sm and keeps the corner one from sm up", () => {

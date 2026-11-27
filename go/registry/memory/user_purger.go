@@ -75,10 +75,11 @@ type UserPurger struct {
 	auditLogs registry.AuditLogRegistry
 }
 
-// setGroupRowStores wires the stores of tags, sellers, item history, loans,
-// service records, supply links, maintenance, reminder send records,
-// currency changes and restores. The rows the user created there belong to
-// the group and go to another member of it, as on postgres.
+// setGroupRowStores wires the stores of the groups themselves, tags,
+// sellers, item history, loans, service records, supply links, maintenance,
+// reminder send records, currency changes and restores. The rows the user
+// created there belong to the group and go to another member of it, as on
+// postgres.
 func (r *UserPurger) setGroupRowStores(stores []groupRowStore) {
 	r.groupRows = stores
 }

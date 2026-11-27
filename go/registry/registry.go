@@ -68,6 +68,31 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
+// CreatorLister lists the rows one user created (#2934). The personal data
+// export reads each group through it, so its work grows with what the user
+// created rather than with the size of the group.
+type CreatorLister[T any] interface {
+	// ListCreatedBy returns the live rows of the scope whose creator is
+	// userID, in no particular order. A row that belongs to an item in
+	// Trash, such as a loan, is listed too, also where List leaves it out;
+	// an item or a file in Trash is listed by ListTrashedCreatedBy.
+	ListCreatedBy(ctx context.Context, userID string) ([]*T, error)
+}
+
+// EntityRef names a row without reading the rest of it: its id, its UUID and
+// its name. Name is empty for a row that has none.
+type EntityRef struct {
+	ID   string `db:"id"`
+	UUID string `db:"uuid"`
+	Name string `db:"name"`
+}
+
+// AreaRef is the EntityRef of an area with the location it belongs to.
+type AreaRef struct {
+	EntityRef
+	LocationID string `db:"location_id"`
+}
+
 // Factory interfaces for creating context-aware registries
 // These replace the unsafe UserAwareRegistry and ServiceAwareRegistry patterns
 
@@ -89,6 +114,9 @@ type ServiceRegistryFactory[T any, P Registry[T]] interface {
 // items come back unassigned when restored.
 type AreaRegistry interface {
 	Registry[models.Area]
+
+	// ListRefs names every area of the scope, in no particular order.
+	ListRefs(ctx context.Context) ([]AreaRef, error)
 
 	// GetCommodities returns the ids of the live items filed under the area.
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
@@ -278,6 +306,7 @@ type CommodityEventListOptions struct {
 // page's history rail.
 type CommodityEventRegistry interface {
 	Registry[models.CommodityEvent]
+	CreatorLister[models.CommodityEvent]
 
 	// ListByCommodity returns paginated events for the given commodity,
 	// newest first. Total reflects the filtered count (post-Kinds, pre-LIMIT).
@@ -406,6 +435,15 @@ type CommodityName struct {
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
 type CommodityRegistry interface {
 	Registry[models.Commodity]
+	CreatorLister[models.Commodity]
+
+	// ListTrashedCreatedBy returns every item in Trash whose creator is
+	// userID, the rows ListTrashed pages through, in no particular order.
+	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.Commodity, error)
+
+	// ListRefs names every item of the scope, live or in Trash, in no
+	// particular order.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
 
 	// GetTrashed returns a trashed item by id; ErrNotFound when it does not
 	// exist or is live.
@@ -587,6 +625,9 @@ type NativePhotoFilterer interface {
 type LocationRegistry interface {
 	Registry[models.Location]
 
+	// ListRefs names every location of the scope, in no particular order.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
+
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
 
 	// ListPaginated returns a paginated list of locations along with the total count.
@@ -674,6 +715,12 @@ type StalledJobs struct {
 // see trashed files only. Update refuses a trashed file with ErrNotFound.
 type FileRegistry interface {
 	Registry[models.FileEntity]
+	CreatorLister[models.FileEntity]
+
+	// ListTrashedCreatedBy returns every file in Trash whose creator is
+	// userID, those deleted with their item included, with their links, in
+	// no particular order.
+	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.FileEntity, error)
 
 	// GetTrashed returns a trashed file by id; ErrNotFound when it does not
 	// exist or is live.
@@ -818,6 +865,18 @@ type FileRegistry interface {
 	// column, so it cannot overwrite a concurrent metadata edit. Service mode
 	// only.
 	SetChecksum(ctx context.Context, id, sha256 string) error
+
+	// ListPendingThumbnailOrientation returns up to limit JPEG files that have
+	// a blob and are not marked ThumbnailsOriented, ordered by id and starting
+	// after afterID, for the startup thumbnail orientation pass. Trashed files
+	// are included. Service mode only.
+	ListPendingThumbnailOrientation(ctx context.Context, afterID string, limit int) ([]*models.FileEntity, error)
+
+	// SetThumbnailsOriented marks a file's thumbnails as made from the photo
+	// turned the way its EXIF orientation says. It writes only that column, so
+	// it cannot overwrite a concurrent metadata edit; an unknown id is not an
+	// error. Service mode only.
+	SetThumbnailsOriented(ctx context.Context, id string) error
 
 	// MoveLegacyLinks moves the single link that up to limit files still carry
 	// in their legacy linked_entity_* columns into file_links, and empties those
@@ -1241,6 +1300,7 @@ type LoanListOptions struct {
 // ids they are given.
 type CommodityLoanRegistry interface {
 	Registry[models.CommodityLoan]
+	CreatorLister[models.CommodityLoan]
 
 	// ListByCommodity returns all loans (open + closed) for a single
 	// commodity, ordered most-recent-first. Used by the per-item Lend
@@ -1365,6 +1425,7 @@ type ServiceListOptions struct {
 // (List, Count, ListPaginated) leave them out.
 type CommodityServiceRegistry interface {
 	Registry[models.CommodityService]
+	CreatorLister[models.CommodityService]
 
 	// ListByCommodity returns all service rows (open + completed) for a
 	// single commodity, ordered most-recent-first. Used by the per-item
@@ -1392,6 +1453,7 @@ type CommodityServiceRegistry interface {
 // and a per-commodity bulk reorder.
 type SupplyLinkRegistry interface {
 	Registry[models.SupplyLink]
+	CreatorLister[models.SupplyLink]
 
 	// ListByCommodity returns all supply links for one commodity, ordered
 	// by sort_order ASC, created_at ASC. Drives the per-item Supplies card
@@ -1515,6 +1577,7 @@ type MaintenanceListOptions struct {
 // maintenance reminder worker quiet about them.
 type MaintenanceScheduleRegistry interface {
 	Registry[models.MaintenanceSchedule]
+	CreatorLister[models.MaintenanceSchedule]
 
 	// ListByCommodity returns all schedules for a single commodity,
 	// ordered by next_due_at ascending. Used by the per-item
@@ -1578,6 +1641,7 @@ type MaintenanceReminderRegistry interface {
 // worker reads it that way.
 type CommodityReminderRegistry interface {
 	Registry[models.CommodityReminder]
+	CreatorLister[models.CommodityReminder]
 
 	// ListByCommodity returns the reminders of one item, ordered by
 	// due_on ascending.
@@ -1593,6 +1657,11 @@ type CommodityReminderRegistry interface {
 // repeated create with its client key or a repeated promotion finds it.
 type CommodityDraftRegistry interface {
 	Registry[models.CommodityDraft]
+	CreatorLister[models.CommodityDraft]
+
+	// ListRefs gives the id and the UUID of every draft List returns, in no
+	// particular order. A draft has no name.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
 
 	// CreateOrGet stores a new open draft unless the group already has a
 	// draft with the same ClientKey, which is returned unchanged with
@@ -1714,6 +1783,25 @@ type IntakeScan struct {
 	// Selected, AcceptedFields and Quantity are stored as given.
 	Candidates []models.IntakeCandidate
 	Warnings   []models.IntakeWarning
+	// Files are the changes the scan makes to the source's files (#1626).
+	// They are written with the scan, so a source reads scanned only once
+	// its files carry them, and a scan that is not stored changes no file.
+	Files []IntakeFileUpdate
+}
+
+// IntakeFileUpdate is the change a scan makes to one file of its source.
+type IntakeFileUpdate struct {
+	FileID string
+	// Tags are the file tags Apply may add. The caller creates them in the
+	// group beforehand; the registry locks them before the file, the order
+	// every file write takes, so a tag deleted meanwhile is created again
+	// rather than left referenced by the file.
+	Tags []string
+	// Apply returns the file with the change made and whether it changed.
+	// It gets the file as stored, read under the file's lock. The registry
+	// writes back the title, the tags and the update time. A file that is
+	// gone, in the trash or in another group is left out.
+	Apply func(models.FileEntity) (models.FileEntity, bool)
 }
 
 // IntakeCandidateReview is a member's review of a detected product. A nil
@@ -1849,7 +1937,9 @@ type IntakeRegistry interface {
 	// get the same source. ErrNotFound when nothing is due.
 	ClaimNextSource(ctx context.Context, now time.Time) (*models.IntakeSource, error)
 
-	// StoreScan stores the outcome of a scan and marks the source scanned.
+	// StoreScan stores the outcome of a scan, writes its file updates and
+	// marks the source scanned, all at once. An error from a file update
+	// stores nothing.
 	// attempt is the source's Attempts as ClaimNextSource returned it; when
 	// the source is no longer that scan (neither scanning nor canceled with
 	// that attempt), nothing is stored and ErrIntakeSourceChanged is
@@ -3029,6 +3119,13 @@ type GroupMembershipRegistry interface {
 	// for `LeaveGroup` and the admin-initiated remove-member API;
 	// callers that bypass the invariants (e.g. group deletion) keep
 	// using the plain `Delete`.
+	//
+	// With the membership go the rows that were personal to the member
+	// in the group (#2892): their saved view placements and personal
+	// views, notification overrides, item reminders, drafts other than
+	// the ones made for delivered documents, Add item sessions and the
+	// invites they created that nobody used; their API tokens limited to
+	// the group are revoked. Postgres does it in the same transaction.
 	DeleteWithMemberInvariants(ctx context.Context, membershipID string) error
 
 	// UpdateRoleWithMemberInvariants atomically swaps the row's role
@@ -3344,6 +3441,16 @@ type RefreshTokenRegistry interface {
 // no caller can rewrite a token's scope, group or owner after creation.
 type APITokenRegistry interface {
 	// Create inserts a token. ID, UUID and CreatedAt are assigned here.
+	//
+	// A token limited to a group is inserted only while its user is a
+	// member of that group. The check and the insert are serialized with
+	// GroupMembershipRegistry.DeleteWithMemberInvariants: postgres takes
+	// the same per-group lock, memory checks under the token store lock
+	// that the removal's revocation takes after the membership is gone.
+	// A removal therefore either finds the new token and revokes it, or
+	// the insert finds the membership gone and returns
+	// ErrNotAGroupMember, so no token limited to the group outlives the
+	// membership.
 	Create(ctx context.Context, token models.APIToken) (*models.APIToken, error)
 
 	// GetByTokenHash returns the token whose digest matches, revoked or not.
@@ -3400,16 +3507,19 @@ type PersonalDataExportRegistry interface {
 	ListPending(ctx context.Context) ([]*models.PersonalDataExport, error)
 
 	// ClaimPending moves an export from pending to in_progress, records
-	// startedAt as the start of its build, and reports whether this caller
-	// is the one that moved it. The condition is part of the write, so two
-	// workers racing for one row get one true.
+	// startedAt as the start of its build, counts the build in
+	// AttemptCount, and reports whether this caller is the one that moved
+	// it. The condition is part of the write, so two workers racing for one
+	// row get one true.
 	ClaimPending(ctx context.Context, id string, startedAt time.Time) (bool, error)
 
-	// RequeueStalled moves the exports whose build started before
-	// startedBefore and is still in_progress back to pending, and returns how
-	// many it moved. A build whose process dies records no result, and its
-	// row would otherwise stay in_progress until it expires.
-	RequeueStalled(ctx context.Context, startedBefore time.Time) (int, error)
+	// RecoverStalled handles the exports whose build started before
+	// sweep.StartedBefore and is still in_progress. A build whose process
+	// dies records no result, and its row would otherwise stay in_progress
+	// until it expires. An export that has started sweep.MaxBuilds builds
+	// fails with sweep.ErrorMessage at sweep.Now; the others go back to
+	// pending, for the next claim to build them again.
+	RecoverStalled(ctx context.Context, sweep PersonalDataExportStalledSweep) (requeued, failed int, err error)
 
 	// Update writes the status, start, archive and statistics columns of an
 	// existing export. The owner, tenant and creation time never change.
@@ -3422,6 +3532,22 @@ type PersonalDataExportRegistry interface {
 	// Delete removes one export row. Deleting a row that is gone is not an
 	// error.
 	Delete(ctx context.Context, id string) error
+}
+
+// PersonalDataExportStalledSweep says which builds of personal data exports
+// RecoverStalled takes for dead, and what it records on the exports it
+// fails.
+type PersonalDataExportStalledSweep struct {
+	// StartedBefore: a build still in_progress that started before this
+	// is dead.
+	StartedBefore time.Time
+	// Now is when an export the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxBuilds is how many builds an export gets before a dead build
+	// fails it instead of queuing it again.
+	MaxBuilds int
+	// ErrorMessage is stored on each export the sweep fails.
+	ErrorMessage string
 }
 
 // LoginEventRegistry stores the append-only login_events audit trail
@@ -3735,18 +3861,19 @@ const AuditActionAccountDeletionHandOver = "account_deletion_handover"
 // half-erased account).
 //
 // "Owned content" means a row that carries a NOT NULL FK to users(id) and that
-// UserPurger neither deletes nor hands over:
-//   - content authored by the user (created_by_user_id) in a group that is NOT
-//     being purged (items, files, file links, places, exports), and
-//   - location_groups the user created (created_by) that are NOT being purged.
+// UserPurger can neither delete nor hand over, in a group that is NOT being
+// purged:
+//   - content authored by the user (created_by_user_id): items, files, file
+//     links, places, exports, and
+//   - a row UserPurger hands over (a group the user created, tags, item
+//     history, …) whose group has no member other than the user to take it.
 //
 // purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale
 // (the user's content there disappears with the group, so it does not count).
 // The check is tenant-scoped as defense-in-depth.
 type UserContentOwnershipChecker interface {
-	// HasRetainedOwnedContent reports whether the user owns any content (or
-	// created any location group) that would survive deleting only the
-	// purgedGroupIDs groups. It performs no writes. A true result means the
+	// HasRetainedOwnedContent reports whether the user owns any content that
+	// would survive deleting only the purgedGroupIDs groups. It performs no writes. A true result means the
 	// account cannot be erased unilaterally; false means the purge sequence is
 	// safe to run.
 	HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error)

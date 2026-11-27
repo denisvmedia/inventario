@@ -107,6 +107,57 @@ func TestIntakeWorker_AppliesFileSuggestions(t *testing.T) {
 	}
 }
 
+// storeWatchingIntake is the intake registry factory whose service registry
+// runs stored right after each scan it stores, before the worker goes on.
+type storeWatchingIntake struct {
+	registry.IntakeRegistryFactory
+	stored func()
+}
+
+func (f storeWatchingIntake) CreateServiceRegistry() registry.IntakeRegistry {
+	return storeWatchingRegistry{IntakeRegistry: f.IntakeRegistryFactory.CreateServiceRegistry(), stored: f.stored}
+}
+
+type storeWatchingRegistry struct {
+	registry.IntakeRegistry
+	stored func()
+}
+
+func (r storeWatchingRegistry) StoreScan(ctx context.Context, sourceID string, attempt int, scan registry.IntakeScan, now time.Time) error {
+	err := r.IntakeRegistry.StoreScan(ctx, sourceID, attempt, scan, now)
+	if err == nil {
+		r.stored()
+	}
+	return err
+}
+
+// TestIntakeWorker_FilesChangeWithTheStoredScan: the files carry the
+// suggestions as soon as the scan is stored (#2940), so a read that finds
+// the source scanned finds its files changed too.
+func TestIntakeWorker_FilesChangeWithTheStoredScan(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	receipt := f.pdf(c, "receipt-coffee")
+	session := f.create(c, "together", source(receipt))
+	var (
+		status models.IntakeSourceStatus
+		seen   *models.FileEntity
+	)
+	f.factorySet.IntakeRegistryFactory = storeWatchingIntake{
+		IntakeRegistryFactory: f.factorySet.IntakeRegistryFactory,
+		stored: func() {
+			status = f.get(c, f.ctx, session.Session.ID).Sources[0].Source.Status
+			seen = f.file(c, receipt.ID)
+		},
+	}
+
+	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
+	c.Assert(seen, qt.IsNotNil)
+	c.Check(status, qt.Equals, models.IntakeSourceScanned)
+	c.Check(seen.Title, qt.Equals, "Sample Store receipt, March 2024")
+	c.Check([]string(seen.Tags), qt.DeepEquals, []string{models.FileTagInvoice})
+}
+
 // TestIntakeWorker_FileSuggestionsKeepWhatTheMemberSet: a file the member
 // renamed or classified before the scan gets no suggestion at all. A tag of
 // the member's own that says nothing about the kind of file does not count.

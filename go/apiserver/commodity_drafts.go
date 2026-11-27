@@ -336,8 +336,9 @@ type staleDiscards struct {
 }
 
 // finish finishes the stopped discards of the request's group when the
-// member may discard drafts (user and up). A failure is logged and the
-// request is served anyway.
+// member may discard drafts (user and up). The service logs each draft it
+// cannot finish; a failure of the whole call is logged here. The request is
+// served either way.
 func (s staleDiscards) finish(r *http.Request) {
 	group := groupFromContext(r.Context())
 	user := GetUserFromRequest(r)

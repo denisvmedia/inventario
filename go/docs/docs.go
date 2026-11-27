@@ -85,7 +85,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs": {
             "get": {
-                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. ` + "`" + `meta.job_types` + "`" + ` lists the job\ntypes with whether each can be retried.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n` + "`" + `failed_job.invalid_failed_before` + "`" + `.",
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. ` + "`" + `meta.job_types` + "`" + ` lists the job\ntypes with whether each can be retried. A personal data export\nbelongs to a user, not to a group; its title is the user's email\naddress.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n` + "`" + `failed_job.invalid_failed_before` + "`" + `.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -101,7 +101,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -188,7 +189,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -251,7 +253,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -294,7 +297,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs/{jobType}/{jobID}/retry": {
             "post": {
-                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
+                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once, a personal\ndata export is built again from the start and kept until 7 days after\nthe build finishes; it does not count as a new request. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
                 "tags": [
                     "admin"
                 ],
@@ -307,7 +310,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -17174,7 +17178,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {
@@ -22374,7 +22378,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {

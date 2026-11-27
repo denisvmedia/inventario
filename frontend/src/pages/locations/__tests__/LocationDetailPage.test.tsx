@@ -17,6 +17,7 @@ import {
   fileHandlers,
   groupHandlers,
   locationHandlers,
+  tagHandlers,
 } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -226,6 +227,9 @@ describe("<LocationDetailPage />", () => {
       ...areaHandlers.list(SLUG, []),
       ...commodityHandlers.list(SLUG, []),
       ...fileHandlers.list(SLUG, []),
+      // The file sheet loads the file tag catalog. Without it the request
+      // fails as a network error, whose toast would race the one asserted.
+      ...tagHandlers.list(SLUG, []),
       http.delete(apiUrl(`/g/${SLUG}/locations/loc2`), deleteResponse)
     )
   }

@@ -56,24 +56,32 @@ when to add an entry and where it goes.
   overwrites what the form holds: the review shows the user's value next to
   the scan's and leaves that field unticked, and ticked scanned tags are
   added to the form's tags. The files saved with a draft show their title
-  and tags on the **Files** step and can be changed there, and a batch of
-  files is read again once its scans finish, so the tags and titles the
-  scan gave its files show without a reload (#1626).
+  and tags on the **Files** step and can be changed there. In a batch of
+  files, a file gets the tag and the title its scan suggests in the same
+  step that marks it scanned, so the batch page, the batch list and the
+  inbox show them as soon as the scan is done, without a reload (#1626,
+  #2940).
 - Personal data export (GDPR Art. 20). `POST /users/me/data-exports` asks for
   a copy of the caller's own data: their profile, settings and group
   memberships, and in each group the items, files with their bytes, loans,
   maintenance schedules, service records, reminders, supply links, open
-  drafts, saved views and history entries they created. A history entry
-  holds only the fields it changed, with the values it set. An item's
-  location, area, seller, type and tags are given by name; other members
+  drafts, saved views and history entries they created. Items and files in
+  Trash are included, a file that went to Trash with its item too, and so
+  are the loans, maintenance schedules and service records of an item in
+  Trash ([#3035](https://github.com/denisvmedia/inventario/issues/3035)). A
+  history entry holds only the fields it changed, with the values it set. An
+  item's location, area, seller, type and tags are given by name; other members
   appear only as ids, never by name or email. A file whose bytes are no
   longer in storage is listed as missing. The archive is a plain `tar.gz` of
   JSON documents and files whose manifest has kind `personal_data_export`; it
   is not a group backup, and the restore upload refuses one with 422
   `restore.personal_data_export`. The export worker builds it in the
   background and emails the user when it is ready; a build cut short by a
-  restart is queued again and built once more. One request is allowed per
-  day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
+  restart is queued again, three builds in all, and a build whose worker
+  stops during the third fails the export with "the worker stopped before
+  the personal data export finished"
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)). One
+  request is allowed per day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
   archive is deleted after 7 days or with the account, only its owner can
   list and download it, an impersonation session can neither request nor
   download one, and each request and download is recorded in the audit log.
@@ -501,6 +509,19 @@ when to add an entry and where it goes.
   tokens for scripts" page of the user guide lists the endpoints worth
   scripting against
   ([#2808](https://github.com/denisvmedia/inventario/issues/2808)).
+- Backups carry each item's loans, service records, maintenance schedules,
+  supply links and reminders, as INB format 3.9, so a full replace no longer
+  deletes them for good. A selection carries the records of the items it
+  names. A restore brings them back with an item it creates and leaves the
+  records of an item the group already has as they are. A record keeps the
+  member who made it when that person is a member of the group, and is
+  recorded as the member restoring otherwise, so loan and item reminder
+  emails never go to someone outside the group. A loan's and a service
+  record's sent reminders are kept; a maintenance schedule or an item
+  reminder that is close to its date can send its closest email once more
+  after a restore. Item history and saved views stay out of backups. Older
+  backups restore as before, without these records
+  ([#2884](https://github.com/denisvmedia/inventario/issues/2884)).
 - One file can be attached to several items, locations and areas, so a receipt
   for three items is uploaded once. "Attach an existing file" on an item's
   Files tab (and "Attach existing" on a location or area) attaches a file the
@@ -566,6 +587,17 @@ when to add an entry and where it goes.
   `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
   `failed_before` filter
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
+- Failed personal data exports are failed jobs too. The back office
+  **Failed jobs** page and `inventario jobs failed` list them as
+  `personal-data-export`, with the user's email address as the title and no
+  group, and retry and discard them like the other types; the group card
+  does not show them, since the copy belongs to a user. A retry builds the
+  copy again from the start, and the copy is kept 7 days from when that
+  build finishes. A retry is not a new request, so the user's daily limit
+  still counts from the request they made. Failed builds count in
+  `inventario_jobs_dead_lettered_total` and
+  `inventario_jobs_dead_letter_depth`
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)).
 
 ### Changed
 
@@ -677,6 +709,16 @@ when to add an entry and where it goes.
   runs in an impersonation session
   ([#2883](https://github.com/denisvmedia/inventario/issues/2883)).
 
+- Leaving a group, or being removed from it, deletes what was personal to the
+  member there in the same transaction as the membership: their personal saved
+  views and placements, notification settings, item reminders, drafts, Add
+  items from files batches and the invites they sent that nobody accepted.
+  Their API tokens limited to the group are revoked. Before, these rows stayed
+  where nobody could see or remove them, and came back if the member was
+  invited again. Shared views, the drafts of delivered documents and the
+  group's data the member added stay
+  ([#2892](https://github.com/denisvmedia/inventario/issues/2892)).
+
 ### Fixed
 
 - Reminder emails go out only for items in use. An item marked Sold, Lost,
@@ -705,10 +747,11 @@ when to add an entry and where it goes.
 - The Add item form keeps unsaved input for one user. What it kept in the
   browser (the values, the files and the draft it saves to) is filed under the
   user and the group, so the next person to sign in on the same browser starts
-  with an empty form, and signing out removes it. A save still running when
-  the member leaves the form with browser Back and switches group goes on in
-  the group the form opened in; before, its remaining requests went to the
-  other group's paths
+  with an empty form, and signing out removes it. The form keeps its draft in
+  the group it opened in: a save still running when the member leaves the
+  form with browser Back and switches group goes on there, and a form still
+  open when the page moves to another group keeps showing the draft and its
+  files. Before, the remaining requests went to the other group's paths
   ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
 
 - An item's history keeps every edit of a save. A save that changed the
@@ -765,6 +808,12 @@ when to add an entry and where it goes.
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
+- The service cost currency in the Send for service dialog is the currency
+  picker next to the amount, as on the item form, instead of a text field
+  that refused a code typed in lower case. It starts on the group currency,
+  and the cost is saved only when an amount is entered
+  ([#2909](https://github.com/denisvmedia/inventario/issues/2909)).
 
 - A file title may have 255 characters in any language. The server counted
   the limit in UTF-8 bytes, so a Czech or Russian title of more than about
@@ -834,6 +883,19 @@ when to add an entry and where it goes.
   took the last file off it), moves to the last page with files instead of an
   empty page without pagination
   ([#2825](https://github.com/denisvmedia/inventario/pull/2825)).
+- Files added while editing an item are no longer lost or left without the
+  item. **Save changes** in the **All fields** dialog uploads them first, one
+  at a time, attaches each to the item, and saves the changes only once all
+  of them are on it, with the dialog open and each file's state shown, as Add
+  item does. A failed file keeps the dialog open and the changes unsaved, and
+  **Retry** goes on with the files still missing; a file whose upload worked
+  but whose attach failed is attached on Retry without sending it again, and
+  goes to the Trash if the dialog is closed instead. A file still being sent
+  when the user leaves the dialog is not attached and goes to the Trash once
+  its upload ends. Before, the dialog closed
+  at once, the files uploaded in the background, a failure only showed a
+  toast, and a failed attach left the file in the group without an item
+  ([#2916](https://github.com/denisvmedia/inventario/issues/2916)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
@@ -914,10 +976,13 @@ when to add an entry and where it goes.
   delivery stopped before it recorded the draft and was never sent again. A
   delivery refused with `intake.document_conflict` keeps neither its record
   nor its file, also when the conflicting batch appeared while it was being
-  stored. A second batch that a delivery made and could not delete is
-  deleted by the next delivery of the document, and running a merge restore
-  again records the item on a delivered document that the first restore left
-  without it ([#2879](https://github.com/denisvmedia/inventario/issues/2879)).
+  stored, or the conflicting draft became an item meanwhile: that item is not
+  linked to the refused delivery's record. A second batch that a delivery
+  made and could not delete is deleted by the next delivery of the document,
+  and running a merge restore again records the item on a delivered document
+  that the first restore left without it
+  ([#2879](https://github.com/denisvmedia/inventario/issues/2879),
+  [#3008](https://github.com/denisvmedia/inventario/issues/3008)).
 - A group with more than 50 locations or more than 50 areas showed only the
   first 50 in the location and area pickers of the item form, on the
   Locations page, in the backup item picker and wherever an item's location
@@ -951,6 +1016,38 @@ when to add an entry and where it goes.
   save because it had no tenant or group, so the log of every restore stayed
   empty, failed restores included
   ([#3022](https://github.com/denisvmedia/inventario/issues/3022)).
+- A service visit with a cost of 0, a repair done for free under warranty for
+  example, saves with that cost, and the item's Service tab shows "Cost: 0
+  EUR". Before, the server refused an amount of 0 with a currency as a
+  currency without an amount. The currency marks a recorded cost: an amount
+  of 0 without one still means no cost, and marking a service received back
+  with a currency but no amount is refused
+  ([#2997](https://github.com/denisvmedia/inventario/issues/2997)).
+- `inventario users delete` refuses a user who still owns items, files,
+  places, exports or a group they created, before it changes anything.
+  Before, it removed the user from every group, deleted their invites and
+  handed over their group rows, and only then failed, which left the user in
+  no group with all of their content still in place
+  ([#3010](https://github.com/denisvmedia/inventario/issues/3010)).
+- A dialog taller than the window stays inside it and scrolls, so its buttons
+  can be reached. With about 25 tags in a group the bulk tags dialog was
+  taller than a 1280x720 window and its Apply button was off-screen
+  ([#2988](https://github.com/denisvmedia/inventario/issues/2988)).
+- You can delete your account after you hand a group you created to someone
+  else, whether you stay in it or leave. The group passes to its owner, and
+  the audit log records the hand-over. Before, the deletion was refused with
+  "You still own content shared with other people" for as long as the group
+  existed, and so it was for a co-owner who had created the group
+  ([#3009](https://github.com/denisvmedia/inventario/issues/3009)).
+
+- Item thumbnails of a photo taken in portrait on a phone are upright. A
+  phone stores such a photo sideways with a tag that says how to turn it;
+  browsers turn the full photo, but the thumbnails in the item list, on the
+  item page and on the Files page were made from the stored pixels and lay
+  on their side. Thumbnails are now turned first. When the server first starts
+  after the upgrade it reads the start of every JPEG photo once, in the
+  background, and makes the thumbnails of the turned ones again
+  ([#2980](https://github.com/denisvmedia/inventario/issues/2980)).
 
 ### Security
 
@@ -960,6 +1057,14 @@ when to add an entry and where it goes.
   `approval` creates the account inactive until an administrator activates it,
   and `open` creates an active one as before
   ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+- Signing out now clears everything the app loaded for that account. Before,
+  the next person to sign in on the same browser tab could see the previous
+  account's groups, item lists and saved views until the app reloaded them,
+  and a sign-out or a change of account in another tab left the previous
+  account's data on screen in this one. The same now holds when a session
+  ends because it could not be renewed, and a change the previous account
+  saved that finishes after the switch no longer shows up for the next one
+  ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
 
 ### Operators
 
@@ -1164,6 +1269,12 @@ when to add an entry and where it goes.
   upgrade deletes the older migrations kept so far, so set a longer period
   before the upgrade to keep them. See the admin runbook §10
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
+- A stopped draft discard that fails again when the drafts list or the inbox
+  tries to finish it is logged once, as `Failed to finish a stopped draft
+  discard` with its `draft_id`. The first such draft of a pass was also
+  logged a second time as `Failed to finish stopped draft discards`, which
+  now means only that the pass itself could not run
+  ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
 
 ## [0.2.2] - 2026-11-23
 

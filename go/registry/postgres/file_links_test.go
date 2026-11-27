@@ -208,6 +208,45 @@ func TestFileRegistry_Postgres_Links(t *testing.T) {
 		c.Assert(pgLinkKeys(updated), qt.DeepEquals, []string{"commodity/lamp/images"})
 	})
 
+	t.Run("the thumbnail orientation pass lists unmarked JPEG files and an edit keeps the mark", func(t *testing.T) {
+		c := qt.New(t)
+		fx := newFileLinkPGFixture(t)
+		svc := fx.factorySet.FileRegistryFactory.CreateServiceRegistry()
+
+		fx.file(c, "manual", 1)
+		jpegFile := func(name string) *models.FileEntity {
+			file, err := fx.set.FileRegistry.Create(fx.ctx, models.FileEntity{
+				Title: name, Type: models.FileTypeImage, Category: models.FileCategoryImages,
+				File: &models.File{Path: name, OriginalPath: "files/" + name, Ext: ".jpg", MIMEType: "image/jpeg"},
+			})
+			c.Assert(err, qt.IsNil)
+			return file
+		}
+		first, second := jpegFile("first"), jpegFile("second")
+		if second.ID < first.ID {
+			first, second = second, first
+		}
+
+		pending, err := svc.ListPendingThumbnailOrientation(fx.ctx, "", 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(pgFileIDs(pending), qt.DeepEquals, []string{first.ID, second.ID})
+		pending, err = svc.ListPendingThumbnailOrientation(fx.ctx, first.ID, 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(pgFileIDs(pending), qt.DeepEquals, []string{second.ID})
+
+		c.Assert(svc.SetThumbnailsOriented(fx.ctx, first.ID), qt.IsNil)
+		c.Assert(svc.SetThumbnailsOriented(fx.ctx, "no-such-file"), qt.IsNil)
+		pending, err = svc.ListPendingThumbnailOrientation(fx.ctx, "", 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(pgFileIDs(pending), qt.DeepEquals, []string{second.ID})
+
+		edit := *first
+		edit.Title = "Renamed"
+		updated, err := fx.set.FileRegistry.Update(fx.ctx, edit)
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.ThumbnailsOriented, qt.IsTrue)
+	})
+
 	t.Run("checksums stay within the group", func(t *testing.T) {
 		c := qt.New(t)
 		fx := newFileLinkPGFixture(t)
@@ -413,4 +452,12 @@ func TestFileLinks_Postgres_OneReceiptThreeItems(t *testing.T) {
 	files, err := fx.set.FileRegistry.List(fx.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files, qt.HasLen, 1)
+}
+
+func pgFileIDs(files []*models.FileEntity) []string {
+	ids := make([]string, 0, len(files))
+	for _, f := range files {
+		ids = append(ids, f.ID)
+	}
+	return ids
 }
