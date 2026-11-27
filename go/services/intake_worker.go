@@ -266,6 +266,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		Photos:                files.photos,
 		PreferredCurrencyCode: string(author.group.GroupCurrency),
 		ItemTypes:             w.itemTypes(author.ctx, log),
+		CustomFields:          w.customFields(author.ctx, log),
 	}
 	if src.OneItem {
 		input.HintFromUser = intakeOneItemHint
@@ -353,6 +354,21 @@ func (w *IntakeWorker) itemTypes(ctx context.Context, log *slog.Logger) []ScanIt
 		}
 	}
 	log.WarnContext(ctx, "Intake worker: item types unavailable, offering the built-in ones", "error", err)
+	return nil
+}
+
+// customFields lists the group's custom fields for the scan to fill, as the
+// single-item scan offers them. When the list cannot be read the scan goes
+// on without them.
+func (w *IntakeWorker) customFields(ctx context.Context, log *slog.Logger) []ScanCustomField {
+	reg, err := w.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(ctx)
+	if err == nil {
+		var defs []*models.CustomFieldDefinition
+		if defs, err = reg.List(ctx); err == nil {
+			return ScanCustomFields(defs)
+		}
+	}
+	log.WarnContext(ctx, "Intake worker: custom fields unavailable, scanning without them", "error", err)
 	return nil
 }
 

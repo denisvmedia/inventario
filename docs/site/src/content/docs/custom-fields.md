@@ -192,6 +192,12 @@ custom fields. **Money** and **Link to an item** fields are not filled in. The
 values it read appear in the review list under the field's name, and only the
 ones you keep ticked are filled in.
 
+A batch of [files added for the AI scan](../items/#add-items-from-files) reads
+the same fields for each product. The values are listed after the item fields
+under **N fields used** on the review page, and each draft gets the ones you
+keep ticked. A value of a field deleted after the scan is left out, and so is
+one the field cannot hold, such as a date that is not a real date.
+
 ## Custom fields in reports and backups
 
 The single-item [insurance report](../reports/) lists the custom fields the

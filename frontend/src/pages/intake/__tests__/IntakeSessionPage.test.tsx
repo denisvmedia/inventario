@@ -12,7 +12,13 @@ import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-co
 import { __resetHttpForTests } from "@/lib/http"
 import { IntakeSessionPage } from "@/pages/intake/IntakeSessionPage"
 import { toastSpies } from "@/test/global-mocks"
-import { apiUrl, authHandlers, groupHandlers, intakeHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  authHandlers,
+  customFieldHandlers,
+  groupHandlers,
+  intakeHandlers,
+} from "@/test/handlers"
 import { receiptSession } from "@/test/handlers/intake"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -220,6 +226,66 @@ describe("<IntakeSessionPage />", () => {
     await waitFor(() =>
       expect(fake.reviews).toEqual([
         { id: machine, attributes: { accepted_fields: ["name", "original_price_currency"] } },
+      ])
+    )
+  })
+
+  it("shows the custom field values the scan read and saves which ones a draft takes", async () => {
+    const session = receiptSession()
+    const machine = session.candidates[0]
+    machine.custom_fields = {
+      "cf-card": { value: "WC-123", confidence: 0.9 },
+      "cf-condition": { value: "opt-used", confidence: 0.6 },
+      "cf-gift": { value: true, confidence: 0.2 },
+      // A field deleted since the scan is not shown.
+      "cf-gone": { value: "x", confidence: 0.9 },
+    }
+    machine.accepted_custom_fields = ["cf-card", "cf-condition", "cf-gone"]
+    const fake = intakeHandlers.backend(SLUG, [session])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({ id: "cf-card", name: "Warranty card number" }),
+        customFieldHandlers.field({
+          id: "cf-condition",
+          name: "Condition",
+          type: "select",
+          options: [
+            { id: "opt-mint", label: "Mint" },
+            { id: "opt-used", label: "Used" },
+          ],
+        }),
+        customFieldHandlers.field({ id: "cf-gift", name: "Gift", type: "boolean" }),
+        customFieldHandlers.field({ id: "cf-unread", name: "Weight", type: "number" }),
+      ]),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage(session.id)
+    const toggle = await screen.findByTestId(`intake-fields-toggle-${machine.id}`)
+    // Three item fields and the two custom fields that are shown.
+    await waitFor(() => expect(toggle).toHaveTextContent("5 fields used"))
+    await user.click(toggle)
+
+    const list = screen.getByTestId(`intake-fields-${machine.id}`)
+    expect(within(list).getByText("Warranty card number:")).toBeInTheDocument()
+    expect(within(list).getByText("WC-123")).toBeInTheDocument()
+    expect(within(list).getByText("Used")).toBeInTheDocument()
+    expect(within(list).getByText("Yes")).toBeInTheDocument()
+    expect(within(list).queryByText("Weight:")).not.toBeInTheDocument()
+    const gift = screen.getByTestId(`intake-custom-field-${machine.id}-cf-gift`)
+    expect(gift).not.toBeChecked()
+    expect(screen.getByTestId(`intake-custom-field-${machine.id}-cf-card`)).toBeChecked()
+
+    await user.click(gift)
+    await waitFor(() =>
+      expect(fake.reviews).toEqual([
+        {
+          id: machine.id,
+          attributes: { accepted_custom_fields: ["cf-card", "cf-condition", "cf-gift"] },
+        },
       ])
     )
   })

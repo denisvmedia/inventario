@@ -3697,6 +3697,13 @@ definitions:
     type: object
   jsonapi.IntakeCandidateReviewAttrs:
     properties:
+      accepted_custom_fields:
+        description: |-
+          AcceptedCustomFields are the IDs of the custom fields whose scanned
+          value goes into the draft; each must be one the scan read a value for.
+        items:
+          type: string
+        type: array
       accepted_fields:
         items:
           type: string
@@ -6991,12 +6998,25 @@ definitions:
     - GroupSectionUpcoming
   models.IntakeCandidate:
     properties:
+      accepted_custom_fields:
+        description: |-
+          AcceptedCustomFields are the IDs of the custom fields whose scanned
+          value goes into the draft.
+        items:
+          type: string
+        type: array
       accepted_fields:
         items:
           type: string
         type: array
       created_at:
         type: string
+      custom_fields:
+        allOf:
+        - $ref: '#/definitions/models.IntakeFields'
+        description: |-
+          CustomFields is what the scan read for the group's custom fields, by
+          field ID, a select field's value as its option ID.
       draft_id:
         description: |-
           DraftID is the draft made for the candidate. The draft can be

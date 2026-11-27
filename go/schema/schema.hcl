@@ -2600,6 +2600,14 @@ table "intake_candidates" {
     type = JSONB
     null = true
   }
+  column "custom_fields" {
+    type = JSONB
+    default = sql("'{}'")
+  }
+  column "accepted_custom_fields" {
+    type = JSONB
+    null = true
+  }
   column "quantity" {
     type = INTEGER
     default = "1"

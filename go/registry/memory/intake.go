@@ -153,8 +153,11 @@ func copyIntakeSource(s *models.IntakeSource) *models.IntakeSource {
 func copyIntakeCandidate(cand *models.IntakeCandidate) *models.IntakeCandidate {
 	c := *cand
 	c.AcceptedFields = slices.Clone(cand.AcceptedFields)
+	c.AcceptedCustomFields = slices.Clone(cand.AcceptedCustomFields)
 	c.Fields = make(models.IntakeFields, len(cand.Fields))
 	maps.Copy(c.Fields, cand.Fields)
+	c.CustomFields = make(models.IntakeFields, len(cand.CustomFields))
+	maps.Copy(c.CustomFields, cand.CustomFields)
 	if cand.DraftID != nil {
 		c.DraftID = new(*cand.DraftID)
 	}
@@ -477,6 +480,9 @@ func (r *IntakeRegistry) ReviewCandidate(_ context.Context, id string, review re
 	if review.AcceptedFields != nil {
 		cand.AcceptedFields = slices.Clone(*review.AcceptedFields)
 	}
+	if review.AcceptedCustomFields != nil {
+		cand.AcceptedCustomFields = slices.Clone(*review.AcceptedCustomFields)
+	}
 	if review.Quantity != nil {
 		cand.Quantity = *review.Quantity
 	}
@@ -735,6 +741,10 @@ func (st *intakeState) storeCandidates(src *models.IntakeSource, candidates []mo
 		if err != nil {
 			return errxtrace.Wrap("failed to copy candidate fields", err)
 		}
+		custom, err := cloneIntakeFields(cand.CustomFields)
+		if err != nil {
+			return errxtrace.Wrap("failed to copy candidate custom fields", err)
+		}
 		cand.TenantGroupAwareEntityID = models.TenantGroupAwareEntityID{
 			EntityID:        models.EntityID{ID: uuid.NewString(), UUID: uuid.NewString()},
 			TenantID:        src.TenantID,
@@ -745,7 +755,9 @@ func (st *intakeState) storeCandidates(src *models.IntakeSource, candidates []mo
 		cand.SourceID = src.ID
 		cand.SortOrder = i
 		cand.Fields = fields
+		cand.CustomFields = custom
 		cand.AcceptedFields = slices.Clone(cand.AcceptedFields)
+		cand.AcceptedCustomFields = slices.Clone(cand.AcceptedCustomFields)
 		if cand.Quantity < 1 {
 			cand.Quantity = 1
 		}

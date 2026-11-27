@@ -548,6 +548,16 @@ when to add an entry and where it goes.
   admins, and `GET /admin/failed-jobs` with `retry` and `discard` under
   `/admin/failed-jobs/{jobType}/{jobID}/` for the back office
   ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
+- Custom field values from a batch scan. **Add from files** offers the
+  group's custom fields to the AI scan, as **Fill with AI** does, and the
+  review page lists the values it read for each product after the item
+  fields, with their confidence. A value read with a confidence of 30% or
+  more starts ticked, and each draft gets the ticked values. A value of a
+  field deleted after the scan, or one the field cannot hold, is left out
+  of the draft. In the API, an intake candidate carries `custom_fields` and
+  `accepted_custom_fields`, and a candidate review takes
+  `accepted_custom_fields`
+  ([#2880](https://github.com/denisvmedia/inventario/issues/2880)).
 
 ### Changed
 

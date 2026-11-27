@@ -265,7 +265,14 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 
 	err = env.Service.StoreScan(env.Ctx, first.ID, first.Attempts, registry.IntakeScan{
 		Candidates: []models.IntakeCandidate{
-			{Fields: models.IntakeFields{"name": {Value: "Kettle", Confidence: 0.9}, "original_price": {Value: 39.9, Confidence: 0.8}}, Selected: true, AcceptedFields: []string{"name", "original_price"}, Quantity: 1},
+			{
+				Fields:               models.IntakeFields{"name": {Value: "Kettle", Confidence: 0.9}, "original_price": {Value: 39.9, Confidence: 0.8}},
+				CustomFields:         models.IntakeFields{"field-card": {Value: "WC-1", Confidence: 0.8}, "field-gift": {Value: true, Confidence: 0.2}},
+				Selected:             true,
+				AcceptedFields:       []string{"name", "original_price"},
+				AcceptedCustomFields: []string{"field-card"},
+				Quantity:             1,
+			},
 			{Fields: models.IntakeFields{"name": {Value: "Toaster", Confidence: 0.7}}, Selected: true, AcceptedFields: []string{"name"}, Quantity: 2},
 		},
 		Warnings: []models.IntakeWarning{{Code: "low_confidence", Field: "serial_number"}},
@@ -285,6 +292,12 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 	c.Assert(candidates, qt.HasLen, 2)
 	c.Assert(candidates[0].Fields["name"].Value, qt.Equals, "Kettle")
 	c.Assert(candidates[0].Fields["original_price"].Value, qt.Equals, 39.9)
+	c.Assert(candidates[0].CustomFields, qt.DeepEquals, models.IntakeFields{
+		"field-card": {Value: "WC-1", Confidence: 0.8},
+		"field-gift": {Value: true, Confidence: 0.2},
+	})
+	c.Assert([]string(candidates[0].AcceptedCustomFields), qt.DeepEquals, []string{"field-card"})
+	c.Assert(candidates[1].CustomFields, qt.HasLen, 0, qt.Commentf("a product without custom field guesses has none"))
 	c.Assert(candidates[0].Outcome, qt.Equals, models.IntakeCandidatePending)
 	c.Assert(candidates[1].Quantity, qt.Equals, 2)
 	c.Assert(candidates[1].SessionID, qt.Equals, session.ID)
@@ -526,6 +539,18 @@ func intakeContractReviewOutcomes(t *testing.T, env IntakeEnv) {
 	c.Assert(reviewed.Selected, qt.IsFalse)
 	c.Assert([]string(reviewed.AcceptedFields), qt.DeepEquals, []string{"name"})
 	c.Assert(reviewed.Quantity, qt.Equals, 3)
+
+	// The custom fields are reviewed on their own; the other choices stay.
+	reviewed, err = env.Intake.ReviewCandidate(env.Ctx, candidates[1].ID, registry.IntakeCandidateReview{
+		AcceptedCustomFields: &[]string{"field-card"},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert([]string(reviewed.AcceptedCustomFields), qt.DeepEquals, []string{"field-card"})
+	c.Assert([]string(reviewed.AcceptedFields), qt.DeepEquals, []string{"name"})
+	c.Assert(reviewed.Quantity, qt.Equals, 3)
+	reviewed, err = env.Intake.ReviewCandidate(env.Ctx, candidates[1].ID, registry.IntakeCandidateReview{AcceptedCustomFields: &[]string{}})
+	c.Assert(err, qt.IsNil)
+	c.Assert(reviewed.AcceptedCustomFields, qt.HasLen, 0)
 
 	skipped, err := env.Intake.SetCandidateOutcome(env.Ctx, candidates[1].ID, models.IntakeCandidateSkipped, nil, "")
 	c.Assert(err, qt.IsNil)
