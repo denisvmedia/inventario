@@ -182,9 +182,12 @@ function typeKeepReason(t: TFn, row: ItemSetItemTypeView): string {
       return t("groups:settings.collectionSet.removal.keepLastType")
     case "in_use":
     default:
-      return t("groups:settings.collectionSet.removal.keepTypeInUse", {
-        count: (row.item_count ?? 0) + (row.trashed_item_count ?? 0),
-      })
+      return inUseReason(
+        (row.item_count ?? 0) + (row.trashed_item_count ?? 0),
+        row.draft_count ?? 0,
+        (count) => t("groups:settings.collectionSet.removal.keepTypeInUse", { count }),
+        (count) => t("groups:settings.collectionSet.removal.keepTypeDrafts", { count })
+      )
   }
 }
 
@@ -194,8 +197,25 @@ function fieldKeepReason(t: TFn, row: ItemSetFieldView): string {
       return t("groups:settings.collectionSet.removal.keepOwnField")
     case "in_use":
     default:
-      return t("groups:settings.collectionSet.removal.keepFieldInUse", {
-        count: (row.item_count ?? 0) + (row.trashed_item_count ?? 0),
-      })
+      return inUseReason(
+        (row.item_count ?? 0) + (row.trashed_item_count ?? 0),
+        row.draft_count ?? 0,
+        (count) => t("groups:settings.collectionSet.removal.keepFieldInUse", { count }),
+        (count) => t("groups:settings.collectionSet.removal.keepFieldDrafts", { count })
+      )
   }
+}
+
+// inUseReason names the items and the drafts that keep a row: the items
+// with their count, the drafts with theirs, or both.
+function inUseReason(
+  items: number,
+  drafts: number,
+  itemsText: (count: number) => string,
+  draftsText: (count: number) => string
+): string {
+  const parts: string[] = []
+  if (items > 0 || drafts === 0) parts.push(itemsText(items))
+  if (drafts > 0) parts.push(draftsText(drafts))
+  return parts.join(" ")
 }

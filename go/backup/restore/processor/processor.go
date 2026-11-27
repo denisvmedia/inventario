@@ -968,7 +968,7 @@ func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, lin
 		// there is nothing to attach.
 		return nil
 	}
-	if err := w.ensureLinks(fileDBID, []types.INBFileLink{{Type: link.linkedType, DBID: dbID, Meta: link.meta}}); err != nil {
+	if err := w.ensureLinks(fileUUID, fileDBID, []types.INBFileLink{{Type: link.linkedType, DBID: dbID, Meta: link.meta}}); err != nil {
 		return err
 	}
 	if live && w.parked[fileUUID] {
@@ -981,8 +981,11 @@ func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, lin
 
 // ensureLinks attaches the file to every given entity it is not attached to
 // yet. Used when the file row already existed (merge strategies) and for
-// references that arrive after the bytes.
-func (w *inbWalker) ensureLinks(fileDBID string, links []types.INBFileLink) error {
+// references that arrive after the bytes. A file this restore parked in Trash
+// takes the links in Trash; any other file takes them only while it is live,
+// and one that went to Trash or was deleted since the restore read it fails
+// the restore.
+func (w *inbWalker) ensureLinks(fileUUID, fileDBID string, links []types.INBFileLink) error {
 	if len(links) == 0 || w.options.DryRun {
 		return nil
 	}
@@ -990,11 +993,15 @@ func (w *inbWalker) ensureLinks(fileDBID string, links []types.INBFileLink) erro
 	if err != nil {
 		return errxtrace.Wrap("failed to create user file registry", err)
 	}
+	addLink := fileReg.AddLink
+	if w.parked[fileUUID] {
+		addLink = fileReg.AddLinkIncludingTrashed
+	}
 	for _, l := range links {
 		if l.Type == "" {
 			continue
 		}
-		if _, _, err := fileReg.AddLink(w.ctx, models.FileLink{FileID: fileDBID, EntityType: l.Type, EntityID: l.DBID, Meta: l.Meta}); err != nil {
+		if _, _, err := addLink(w.ctx, models.FileLink{FileID: fileDBID, EntityType: l.Type, EntityID: l.DBID, Meta: l.Meta}); err != nil {
 			return errxtrace.Wrap("failed to restore file link", err, errx.Attrs("file_id", fileDBID))
 		}
 	}
@@ -1259,7 +1266,7 @@ func (w *inbWalker) restoreFile(name string, pending *inbPendingFile, r io.Reade
 		// The file is already here; a merge still brings over the links the
 		// archive has and the database lacks.
 		if existingFile := w.existing.Files[pending.ref.ID]; existingFile != nil {
-			if err := w.ensureLinks(existingFile.ID, links); err != nil {
+			if err := w.ensureLinks(pending.ref.ID, existingFile.ID, links); err != nil {
 				return err
 			}
 		}
@@ -1312,7 +1319,7 @@ func (w *inbWalker) restoreFile(name string, pending *inbPendingFile, r io.Reade
 func (w *inbWalker) finishFileRow(action fileAction, fileUUID, fileID string, links []types.INBFileLink, holderID string) error {
 	switch action {
 	case fileActionUpdate:
-		return w.ensureLinks(fileID, links)
+		return w.ensureLinks(fileUUID, fileID, links)
 	case fileActionCreate:
 		fileDBID := w.idMapping.Files[fileUUID]
 		if holderID == "" || fileDBID == "" {

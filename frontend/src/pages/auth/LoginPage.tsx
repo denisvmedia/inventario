@@ -377,7 +377,9 @@ export function LoginPage() {
                 disabled={isBusy}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
-                aria-describedby={form.formState.errors.email ? "login-email-error" : undefined}
+                aria-describedby={
+                  form.formState.errors.email?.message ? "login-email-error" : undefined
+                }
                 {...form.register("email")}
               />
             </div>
@@ -405,7 +407,9 @@ export function LoginPage() {
               disabled={isBusy}
               aria-invalid={!!form.formState.errors.password}
               data-testid="password"
-              aria-describedby={form.formState.errors.password ? "login-password-error" : undefined}
+              aria-describedby={
+                form.formState.errors.password?.message ? "login-password-error" : undefined
+              }
               {...form.register("password")}
             />
             <FieldError

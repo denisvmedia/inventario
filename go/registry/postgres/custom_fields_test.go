@@ -19,6 +19,7 @@ func TestCustomFieldContract_Postgres(t *testing.T) {
 			FieldsB:      fx.groupBSet.CustomFieldRegistry,
 			TypesA:       fx.groupASet.ItemTypeRegistry,
 			CommoditiesA: fx.groupASet.CommodityRegistry,
+			DraftsA:      fx.groupASet.CommodityDraftRegistry,
 			CommoditiesB: fx.groupBSet.CommodityRegistry,
 			AreaA:        fx.areaAID,
 			AreaB:        fx.areaBID,

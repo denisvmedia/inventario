@@ -13,8 +13,10 @@ export interface ItemTypeRowProps {
   itemType: ItemType
   // The items list of every item of the type.
   href?: string
-  onEdit: () => void
-  onDelete: () => void
+  // Left out for a member who may not change it; the row then has no
+  // edit button. The same holds for onDelete.
+  onEdit?: () => void
+  onDelete?: () => void
   // The group's last type cannot be deleted.
   canDelete: boolean
   className?: string
@@ -76,32 +78,38 @@ export function ItemTypeRow({
         </p>
       </div>
 
-      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7"
-          onClick={onEdit}
-          aria-label={t("itemTypes:list.edit", { name })}
-          data-testid={`item-type-row-${itemType.slug}-edit`}
-        >
-          <Pencil aria-hidden="true" className="size-3.5" />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={onDelete}
-          disabled={!canDelete}
-          title={canDelete ? undefined : t("itemTypes:list.lastType")}
-          aria-label={t("itemTypes:list.delete", { name })}
-          data-testid={`item-type-row-${itemType.slug}-delete`}
-        >
-          <Trash2 aria-hidden="true" className="size-3.5" />
-        </Button>
-      </div>
+      {onEdit || onDelete ? (
+        <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {onEdit ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={onEdit}
+              aria-label={t("itemTypes:list.edit", { name })}
+              data-testid={`item-type-row-${itemType.slug}-edit`}
+            >
+              <Pencil aria-hidden="true" className="size-3.5" />
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              disabled={!canDelete}
+              title={canDelete ? undefined : t("itemTypes:list.lastType")}
+              aria-label={t("itemTypes:list.delete", { name })}
+              data-testid={`item-type-row-${itemType.slug}-delete`}
+            >
+              <Trash2 aria-hidden="true" className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -2195,6 +2195,10 @@ table "files" {
     type = TEXT
     default = ""
   }
+  column "thumbnails_oriented" {
+    type = BOOLEAN
+    default = "false"
+  }
   primary_key {
     columns = [column.id]
   }
@@ -2598,6 +2602,14 @@ table "intake_candidates" {
     default = "true"
   }
   column "accepted_fields" {
+    type = JSONB
+    null = true
+  }
+  column "custom_fields" {
+    type = JSONB
+    default = sql("'{}'")
+  }
+  column "accepted_custom_fields" {
     type = JSONB
     null = true
   }

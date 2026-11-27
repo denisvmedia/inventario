@@ -62,6 +62,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { categoryFromMime, FILE_TAG_PILLS } from "@/features/files/constants"
 import { useTagPillLabel } from "@/features/files/labels"
 import {
+  attachPendingFiles,
   buildDefaults,
   capFileTitle,
   clearDraft,
@@ -151,6 +152,7 @@ import {
 import {
   clearDraftSession,
   clientKeyFor,
+  filesNotSaved,
   forgetBaseRevision,
   forgetItemDraft,
   itemDraftOf,
@@ -861,6 +863,38 @@ export function CommodityFormDialog({
     void savePendingFiles(localKey, pendingFiles)
   }, [open, persistDrafts, localKey, pendingFiles, pendingFilesLoaded])
 
+  // A file an edit save uploaded but could not attach goes to Trash when the
+  // dialog closes without it, however it closes (#2916). The file being sent
+  // when the dialog closes is left to the save, which stops after its upload
+  // and sends it to Trash, or trashes it when its attach fails. Trash takes
+  // only a file nothing links, so one whose attach went through stays. The
+  // files are in the group the form opened in (#2920), which the form keeps
+  // after it closes; the cleanup reads it through a ref because it runs
+  // without the render's values.
+  const formSlugRef = useRef(formSlug)
+  useEffect(() => {
+    formSlugRef.current = formSlug
+  }, [formSlug])
+  const editLeftoversRef = useRef<string[]>([])
+  useEffect(() => {
+    editLeftoversRef.current =
+      mode === "edit"
+        ? uploadedLeftovers(pendingFiles.filter((entry) => fileStatus[entry.id] !== "uploading"))
+        : []
+  }, [mode, pendingFiles, fileStatus])
+  useEffect(() => {
+    if (!open || mode !== "edit") return
+    return () => {
+      const ids = editLeftoversRef.current
+      if (ids.length === 0) return
+      const group = formSlugRef.current ?? undefined
+      void Promise.allSettled(ids.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
+        void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+        void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+      })
+    }
+  }, [open, mode, queryClient])
+
   async function nextStep() {
     // A server draft takes the form as it is, so draft mode walks the
     // steps without checking them.
@@ -1027,6 +1061,66 @@ export function CommodityFormDialog({
     setFileStatus((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([id]) => !done.has(id)))
     )
+  }
+
+  // attachEditFiles uploads the staged files of the item the form edits, one
+  // at a time, and attaches each to it (#2916). It resolves true once every
+  // file is on the item. The files that made it leave the list, as they are
+  // the item's now; the ones that failed stay with their status, the alert
+  // names them and Retry goes on with them. A file whose attach failed keeps
+  // its upload, so the retry attaches it without sending it again.
+  async function attachEditFiles(itemId: string, opening: number): Promise<boolean> {
+    const over = () => openingRef.current !== opening
+    const mark = (id: string, status: FileUploadStatus) => {
+      if (!over()) setFileStatus((prev) => ({ ...prev, [id]: status }))
+    }
+    setDraftSave({ kind: "idle" })
+    setFileStatus({})
+    const attached = new Set<string>()
+    const group = formGroup()
+    const result = await attachPendingFiles(pendingFiles, itemId, {
+      group,
+      shouldStop: over,
+      onFileStart: (entry) => mark(entry.id, "uploading"),
+      onFileUploaded: (entry, fileId) =>
+        setPendingFiles((prev) =>
+          prev.map((pending) =>
+            pending.id === entry.id ? { ...pending, uploadedFileId: fileId } : pending
+          )
+        ),
+      onFileAttached: (entry) => {
+        attached.add(entry.id)
+        mark(entry.id, "uploaded")
+      },
+    })
+    if (attached.size > 0) void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+    if (over()) {
+      // Nobody is left to retry: the uploads of the files that failed go to
+      // Trash, as the dialog's close does with the ones it knows of.
+      const left = result.failed.flatMap((failure) => failure.fileId ?? [])
+      if (left.length > 0) {
+        void Promise.allSettled(left.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
+          void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+          void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+        })
+      }
+      return false
+    }
+    setPendingFiles((prev) => prev.filter((pending) => !attached.has(pending.id)))
+    setFileStatus((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => !attached.has(id)))
+    )
+    if (result.failed.length === 0) return true
+    for (const failure of result.failed) mark(failure.entry.id, "failed")
+    setDraftSave({
+      kind: "error",
+      message: classifyServerError(result.failed[0].error, t("commodities:form.editFailed"))
+        .message,
+      failedFiles: result.failed.map((failure) => failure.entry.file.name),
+      forEdit: true,
+    })
+    setStep("files")
+    return false
   }
 
   // saveToServer stores the form and its staged files as a server draft
@@ -1359,6 +1453,13 @@ export function CommodityFormDialog({
         // The promotion is not sent once the opening is over.
         if (!saved || openingRef.current !== opening) return
       }
+      // An existing item gets its new files before its changes (#2916): the
+      // dialog stays open while they upload, and a file that fails stops the
+      // save here, with the alert naming it and Retry going on from there.
+      if (mode === "edit" && initialValues?.id && pendingFiles.length > 0) {
+        const attached = await attachEditFiles(initialValues.id, opening)
+        if (!attached || openingRef.current !== opening) return
+      }
       const target = saved ?? serverDraft
       // A promotion carries the slot's promotion key, the same for every
       // attempt until one succeeds.
@@ -1396,18 +1497,17 @@ export function CommodityFormDialog({
         // The promotion moved the draft's files to the item.
         setPendingFiles([])
         setFileStatus({})
-      } else {
-        // Without a server draft (edit mode, or a draft that was an item
-        // before this save), the staged files are uploaded and linked once
-        // the caller has saved the item: POST /uploads/file, PUT /files/:id,
-        // POST /files/:id/links. Fire-and-forget so the caller's close +
-        // navigate path doesn't wait on the upload loop; files-list
-        // invalidation surfaces the uploads on whatever page the user lands
-        // on. Per-file failures are toasted; the item is already saved, and
-        // the file can be attached from the item's Files tab. In create mode
-        // the caller returns the new item; in edit mode the existing record
-        // is the link target.
-        const linkTargetId = created?.id ?? initialValues?.id
+      } else if (mode === "create") {
+        // Without a server draft (a form that keeps no drafts, or a draft
+        // that was an item before this save), the staged files are uploaded
+        // and linked once the caller has created the item: POST
+        // /uploads/file, PUT /files/:id, POST /files/:id/links.
+        // Fire-and-forget so the caller's close + navigate path doesn't wait
+        // on the upload loop; files-list invalidation surfaces the uploads on
+        // whatever page the user lands on. Per-file failures are toasted; the
+        // item is already saved, and the file can be attached from the
+        // item's Files tab.
+        const linkTargetId = created?.id
         const filesToUpload = pendingFiles
         if (linkTargetId) {
           if (filesToUpload.length > 0) {
@@ -1652,12 +1752,27 @@ export function CommodityFormDialog({
     // user can still drop any of them from the Files step before saving.
     // Each file then gets the tag and the title the scan suggests for it
     // (#1626), unless the user set them; a file already staged gets them too.
-    if (sourceFiles.length > 0) {
-      setPendingFiles((prev) =>
-        applyFileSuggestions(mergePendingFiles(prev, sourceFiles), fileSuggestions)
-      )
-    }
+    if (sourceFiles.length > 0) stageFiles(sourceFiles, fileSuggestions)
     setStep("basics")
+  }
+
+  // stageFiles adds files to the staged list, with the scan's suggestions
+  // for them. A file the server draft holds already is left out (#2941): it
+  // stays under "Saved with this draft" with the title and tags it was saved
+  // with, so the next save does not send it again.
+  function stageFiles(files: File[], suggestions: readonly FileSuggestion[] = []) {
+    const stage = (fresh: File[]) =>
+      setPendingFiles((prev) => applyFileSuggestions(mergePendingFiles(prev, fresh), suggestions))
+    const saved = serverMode && serverDraft ? (draftFilesQuery.data ?? []) : []
+    if (saved.length === 0) {
+      stage(files)
+      return
+    }
+    // Matching reads the files. An opening that ends meanwhile stages nothing.
+    const opening = openingRef.current
+    void filesNotSaved(files, saved).then((fresh) => {
+      if (openingRef.current === opening) stage(fresh)
+    })
   }
 
   // The numbered stepper + Back/Next gating only know about FORM_STEPS.
@@ -1678,8 +1793,8 @@ export function CommodityFormDialog({
   // are until it ends.
   const busy = draftSaving || submitting || discarding
   // How far the save that runs is with the staged files (#1626), for the
-  // busy button and screen readers.
-  const uploadTotal = draftSaving ? pendingFiles.length : 0
+  // busy button and screen readers. An edit save uploads them first (#2916).
+  const uploadTotal = draftSaving || (adding && mode === "edit") ? pendingFiles.length : 0
   const uploadDone = pendingFiles.filter((entry) => fileStatus[entry.id] === "uploaded").length
   const uploadProgress =
     uploadTotal > 0 && uploadDone < uploadTotal
@@ -2028,6 +2143,7 @@ export function CommodityFormDialog({
               <FilesStep
                 pendingFiles={pendingFiles}
                 setPendingFiles={setPendingFiles}
+                onAddFiles={stageFiles}
                 onRemovePending={removePendingFile}
                 statuses={fileStatus}
                 busy={busy}
@@ -2041,9 +2157,10 @@ export function CommodityFormDialog({
           <DraftSaveAlert
             state={draftSave}
             // A failed Add item retries Add item: the save picks up where it
-            // stopped, and the promotion follows.
+            // stopped, and the promotion follows. A failed edit save goes on
+            // with the files still missing, then saves the changes.
             onRetry={() =>
-              draftSave.kind === "error" && draftSave.forItem
+              draftSave.kind === "error" && (draftSave.forItem || draftSave.forEdit)
                 ? submitForm()
                 : void saveDraftAndClose()
             }
@@ -2936,6 +3053,8 @@ function ExtrasStep(props: any) {
 interface FilesStepProps {
   pendingFiles: PendingFile[]
   setPendingFiles: (next: PendingFile[] | ((prev: PendingFile[]) => PendingFile[])) => void
+  // Stages the files the user picked.
+  onAddFiles: (files: File[]) => void
   // Takes a staged file off the form; defaults to dropping it from the list.
   onRemovePending?: (entry: PendingFile) => void
   // The status of each staged file in the save that runs or last ran.
@@ -2959,6 +3078,7 @@ interface FilesStepProps {
 function FilesStep({
   pendingFiles,
   setPendingFiles,
+  onAddFiles,
   onRemovePending,
   statuses = {},
   busy = false,
@@ -2974,10 +3094,10 @@ function FilesStep({
   const [dragging, setDragging] = useState(false)
   function add(files: File[]) {
     if (files.length === 0 || busy) return
-    // mergePendingFiles de-dupes by file signature, so re-picking a file
-    // that's already staged (incl. one carried over from the AI scan,
-    // #1983) is a no-op rather than a double-attach.
-    setPendingFiles((prev) => mergePendingFiles(prev, files))
+    // Re-picking a file that's already staged (incl. one carried over from
+    // the AI scan, #1983) or saved with the draft is a no-op rather than a
+    // double-attach.
+    onAddFiles(files)
   }
   function remove(entry: PendingFile) {
     if (onRemovePending) onRemovePending(entry)
@@ -3507,6 +3627,7 @@ interface ChipInputProps {
 }
 
 function ChipInput({ label, helper, placeholder, values, onChange, testId }: ChipInputProps) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState("")
   function commit() {
     const trimmed = draft.trim()
@@ -3533,7 +3654,7 @@ function ChipInput({ label, helper, placeholder, values, onChange, testId }: Chi
             <button
               type="button"
               className="ml-0.5 inline-flex items-center"
-              aria-label={`remove ${v}`}
+              aria-label={t("common:chipInput.remove", { value: v })}
               onClick={() => onChange(values.filter((x) => x !== v))}
             >
               <X className="size-3" aria-hidden="true" />
@@ -3560,7 +3681,7 @@ function ChipInput({ label, helper, placeholder, values, onChange, testId }: Chi
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground"
-            aria-label="add"
+            aria-label={t("common:chipInput.add", { value: draft.trim() })}
             onClick={commit}
           >
             <Plus className="size-3.5" aria-hidden="true" />

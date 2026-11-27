@@ -109,7 +109,7 @@ When you hand an item to a workshop or service center, record it on the item. Th
    - **Reason** — optional, what's being fixed.
    - **Sent on** — defaults to today.
    - **Expected back** — optional.
-   - **Cost (optional)** — the amount, with its currency in the picker next to it. The picker starts on the group currency; pick another one when the bill is in a different currency. The cost is saved only when you enter an amount.
+   - **Cost (optional)** — the amount, with its currency in the picker next to it. The picker starts on the group currency; pick another one when the bill is in a different currency. The cost is saved only when you enter an amount. Enter `0` for a repair that cost nothing, one under warranty for example: the card then shows a cost of 0.
 4. Click **Send for service**. The Service tab now shows a card with the provider, the dates, and the cost.
 
 An item that is lent out can't be sent for service: mark the loan returned first.

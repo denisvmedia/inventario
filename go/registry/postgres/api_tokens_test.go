@@ -191,9 +191,20 @@ func TestAPITokenRegistryPostgres_DeletingTheGroupDeletesItsTokens(t *testing.T)
 		GroupCurrency:       models.Currency("USD"),
 	})
 	c.Assert(err, qt.IsNil)
+	// A token limited to a group needs its user to be a member.
+	_, err = env.set.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: env.user.TenantID},
+		GroupID:             group.ID,
+		MemberUserID:        env.user.ID,
+		Role:                models.GroupRoleOwner,
+	})
+	c.Assert(err, qt.IsNil)
 
 	_, secret := env.create(c, func(tk *models.APIToken) { tk.GroupID = new(group.ID) })
 
+	// The group purge removes the memberships before the group row.
+	_, err = env.dbx.ExecContext(ctx, `DELETE FROM group_memberships WHERE group_id = $1`, group.ID)
+	c.Assert(err, qt.IsNil)
 	_, err = env.dbx.ExecContext(ctx, `DELETE FROM location_groups WHERE id = $1`, group.ID)
 	c.Assert(err, qt.IsNil)
 

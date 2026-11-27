@@ -86,7 +86,7 @@ func (s *EntityService) PurgeLocationRecursive(ctx context.Context, id string) e
 
 // EmptyTrash deletes every item and file in the group's Trash for good.
 func (s *EntityService) EmptyTrash(ctx context.Context) error {
-	_, _, err := s.trash.EmptyTrash(ctx)
+	_, err := s.trash.EmptyTrash(ctx)
 	return err
 }
 

@@ -187,7 +187,7 @@ function CreateForm({
           disabled={pending}
           aria-invalid={errors.name ? true : undefined}
           data-testid="api-token-name"
-          aria-describedby={errors.name ? `${formId}-name-error` : undefined}
+          aria-describedby={errors.name?.message ? `${formId}-name-error` : undefined}
           {...register("name")}
         />
         <FieldError
@@ -321,7 +321,9 @@ function CreateForm({
                 disabled={pending}
                 data-testid="api-token-password"
                 aria-invalid={!!errors.currentPassword}
-                aria-describedby={errors.currentPassword ? `${formId}-password-error` : undefined}
+                aria-describedby={
+                  errors.currentPassword?.message ? `${formId}-password-error` : undefined
+                }
                 {...register("currentPassword")}
               />
               <FieldError
@@ -345,7 +347,7 @@ function CreateForm({
                 disabled={pending}
                 data-testid="api-token-code"
                 aria-invalid={!!errors.code}
-                aria-describedby={errors.code ? `${formId}-code-error` : undefined}
+                aria-describedby={errors.code?.message ? `${formId}-code-error` : undefined}
                 {...register("code")}
               />
               <FieldError

@@ -144,6 +144,10 @@ func (s *APITokenService) Create(ctx context.Context, owner *models.User, in Cre
 		GroupID:     n.groupID,
 		ExpiresAt:   n.expiresAt,
 	})
+	if errors.Is(err, registry.ErrNotAGroupMember) {
+		// The member was removed after normalize checked the membership.
+		return nil, "", ErrAPITokenGroupNotAllowed
+	}
 	if err != nil {
 		return nil, "", errxtrace.Wrap("failed to store api token", err)
 	}

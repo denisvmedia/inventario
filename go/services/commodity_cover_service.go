@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -58,9 +61,10 @@ func NewCommodityCoverService(signing *FileSigningService) *CommodityCoverServic
 
 // ResolveMany returns the cover image for each commodity in the input
 // slice. Commodities without a usable photo, and items in Trash, are absent
-// from the returned map (no zero-value entries). Read errors are swallowed
-// so the list endpoint never 500s on a partial failure — the FE already
-// handles the missing-cover fallback.
+// from the returned map (no zero-value entries). A failed read is logged and
+// leaves the items it was for without that cover, so the list endpoint never
+// 500s on a partial failure; the FE already handles the missing-cover
+// fallback.
 //
 // Resolution order per commodity (issue #1451):
 //
@@ -117,6 +121,7 @@ func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registr
 
 	first, err := fileReg.FirstPhotos(ctx, needFirst)
 	if err != nil {
+		logCoverReadFailure(ctx, "first photos", len(needFirst), err)
 		return out
 	}
 	for _, id := range needFirst {
@@ -197,6 +202,7 @@ func fetchExplicitCovers(ctx context.Context, fileReg registry.FileRegistry, fil
 	}
 	files, err := fileReg.GetMany(ctx, fileIDs)
 	if err != nil {
+		logCoverReadFailure(ctx, "named covers", len(fileIDs), err)
 		return out
 	}
 	for _, f := range files {
@@ -205,6 +211,17 @@ func fetchExplicitCovers(ctx context.Context, fileReg registry.FileRegistry, fil
 		}
 	}
 	return out
+}
+
+// logCoverReadFailure records a cover read that failed, so a list showing type
+// icons in place of photos can be explained from the log. A request the
+// client gave up on is not a failure.
+func logCoverReadFailure(ctx context.Context, read string, count int, err error) {
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+	slog.WarnContext(ctx, "cover lookup failed; the items are listed without these covers",
+		"read", read, "count", count, "group_id", appctx.GroupIDFromContext(ctx), "error", err)
 }
 
 // explicitCoverFor returns the file an item names as its cover only when it

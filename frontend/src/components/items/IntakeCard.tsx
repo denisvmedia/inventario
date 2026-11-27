@@ -17,7 +17,7 @@ import type { IntakeSession } from "@/features/intake/api"
 import { useDeleteIntakeSession, useIntakeSessions } from "@/features/intake/hooks"
 import { useIntakeSummaryText } from "@/features/intake/summary"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatRelative } from "@/lib/intl"
@@ -39,8 +39,7 @@ export function IntakeCard() {
   const summaryText = useIntakeSummaryText()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  const role = useMyGroupRole()
-  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const canWrite = useGroupPermissions().canEditContent
   const [expanded, setExpanded] = useState(false)
   const sessions = useIntakeSessions({ perPage: expanded ? MAX_PAGE : COLLAPSED_COUNT })
   const remove = useDeleteIntakeSession()

@@ -36,6 +36,10 @@ func NewFactorySet() *registry.FactorySet {
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
+	// The drafts name item types and hold custom field values; the two
+	// factories count them and rewrite them on a delete.
+	itemTypeFactory.SetDraftFactory(commodityDraftFactory)
+	customFieldFactory.SetDraftFactory(commodityDraftFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -261,6 +265,11 @@ func NewFactorySet() *registry.FactorySet {
 		userPurger.setGroupInviteRegistry(invites)
 	}
 	userPurger.setAuditLogRegistry(fs.AuditLogRegistry)
+
+	// What a member leaves behind in a group lives in stores read off the
+	// FactorySet, so it is wired after every fs.* field too.
+	membershipReg.setMemberDeparture(newMemberDeparture(fs, apiTokenReg))
+	apiTokenReg.setMemberships(membershipReg)
 
 	return fs
 }

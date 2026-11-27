@@ -235,6 +235,8 @@ func StartTrashPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) fun
 	opts := []services.TrashPurgeOption{
 		services.WithTrashRetention(rs.WorkerDurations.TrashRetention),
 		services.WithTrashPurgeInterval(rs.WorkerDurations.TrashPurgeInterval),
+		// One audit row per group a sweep deleted entries in (#2893).
+		services.WithTrashPurgeAudit(services.NewAuditService(rs.FactorySet.AuditLogRegistry)),
 	}
 	if rs.PauseController != nil {
 		opts = append(opts, services.WithTrashPurgePauseController(rs.PauseController))
@@ -788,6 +790,22 @@ func StartLegacyPriceBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		services.RunLegacyPriceBackfill(ctx, rs.FactorySet, legacyPriceBackfillRetryInterval)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
+
+// StartThumbnailOrientationBackfill makes again, in the background, the
+// thumbnails of JPEG photos their EXIF orientation turns (see
+// services.BackfillThumbnailOrientation) and returns a stop function that
+// cancels the pass and waits for it to return.
+func StartThumbnailOrientationBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.BackfillThumbnailOrientation(ctx, rs.FactorySet, rs.Params.UploadLocation)
 	})
 	return func() {
 		cancel()

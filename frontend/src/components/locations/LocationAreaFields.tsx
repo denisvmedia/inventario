@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select"
 import { useCreateArea } from "@/features/areas/hooks"
 import type { AreaFormInput } from "@/features/areas/schemas"
-import { canManageLocations, useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useCreateLocation } from "@/features/locations/hooks"
 import type { LocationFormInput } from "@/features/locations/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -75,7 +75,7 @@ export function LocationAreaFields({
   renderLabel = defaultLabel,
 }: LocationAreaFieldsProps) {
   const { t } = useTranslation()
-  const canCreate = canManageLocations(useMyGroupRole())
+  const canCreate = useGroupPermissions().canManageLocations
   // Entries created here, kept until the lists passed in include them.
   const [createdLocations, setCreatedLocations] = useState<LocationOption[]>([])
   const [createdAreas, setCreatedAreas] = useState<AreaOption[]>([])

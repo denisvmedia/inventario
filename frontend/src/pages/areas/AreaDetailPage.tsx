@@ -26,6 +26,7 @@ import { useArea, useDeleteArea, useUpdateArea } from "@/features/areas/hooks"
 import { useCommodities } from "@/features/commodities/hooks"
 import { useLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { labelsPageHref } from "@/features/labels/links"
 import { useAppToast } from "@/hooks/useAppToast"
 import { toastMutationError } from "@/lib/mutation-error-toast"
@@ -66,6 +67,10 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
     { enabled: !!currentGroup && !!id }
   )
   const itemCount = itemsInArea.data?.total ?? 0
+  // Editing the area needs admin or owner; attaching files needs the user
+  // role. Other members get the page without the actions the server would
+  // refuse.
+  const { canEditContent, canManageLocations } = useGroupPermissions()
   const updateArea = useUpdateArea(id)
   const deleteArea = useDeleteArea()
 
@@ -88,7 +93,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
       setPendingDropFiles(files)
       setUploadOpen(true)
     },
-    disabled: uploadOpen,
+    disabled: uploadOpen || !canEditContent,
   })
 
   const editMatch = useMatch({ path: "/g/:groupSlug/areas/:id/edit", end: true })
@@ -274,26 +279,30 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditOpen(true)}
-                data-testid="area-detail-edit"
-                className="gap-2"
-              >
-                <Pencil className="size-4" aria-hidden="true" />
-                {t("locations:detail.edit")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDelete}
-                data-testid="area-detail-delete"
-                className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-                {t("common:actions.delete")}
-              </Button>
+              {canManageLocations ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEditOpen(true)}
+                    data-testid="area-detail-edit"
+                    className="gap-2"
+                  >
+                    <Pencil className="size-4" aria-hidden="true" />
+                    {t("locations:detail.edit")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleDelete}
+                    data-testid="area-detail-delete"
+                    className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    {t("common:actions.delete")}
+                  </Button>
+                </>
+              ) : null}
             </div>
           </header>
         ) : null}
@@ -305,17 +314,22 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
               linkedEntityType="area"
               linkedEntityId={id}
               entityName={area.data?.name}
-              onAttachClick={() => {
-                setPendingDropFiles([])
-                setUploadOpen(true)
-              }}
+              canEdit={canEditContent}
+              onAttachClick={
+                canEditContent
+                  ? () => {
+                      setPendingDropFiles([])
+                      setUploadOpen(true)
+                    }
+                  : undefined
+              }
             />
           </>
         ) : null}
       </Page>
 
       <AreaFormDialog
-        open={editOpen}
+        open={canManageLocations && editOpen}
         onOpenChange={(open) => (open ? null : closeDialog())}
         area={area.data}
         locations={allLocations.data ?? []}
@@ -324,7 +338,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
       />
 
       <DeleteWithItemsDialog
-        open={deleteWithItemsOpen}
+        open={canManageLocations && deleteWithItemsOpen}
         kind="area"
         name={area.data?.name ?? ""}
         itemCount={itemCount}
@@ -336,7 +350,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
       />
 
       <UploadFilesDialog
-        open={uploadOpen}
+        open={canEditContent && uploadOpen}
         onOpenChange={(open) => {
           setUploadOpen(open)
           if (!open) setPendingDropFiles([])

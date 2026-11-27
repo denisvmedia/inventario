@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 )
@@ -62,6 +63,24 @@ func TestItemTagWrites_DuringCurrencyMigration_Return423(t *testing.T) {
 
 	rr = tagsRequest(c, handler, http.MethodGet, tagURL, testUser.ID, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("reads are not locked"))
+}
+
+// A new label or color of an item tag writes the tag row alone, so a
+// running currency migration does not hold it up; only a new slug rewrites
+// the items (#3011).
+func TestItemTagRelabel_DuringCurrencyMigration_Succeeds(t *testing.T) {
+	c := qt.New(t)
+	testUser, testGroup, tag, handler := migratingTagFixture(c, models.TagKindCommodity)
+	tagURL := "/api/v1/g/" + testGroup.Slug + "/tags/" + tag.ID
+	body := &jsonapi.TagUpdateRequest{Data: &jsonapi.TagUpdateRequestDataWrapper{
+		ID:         tag.ID,
+		Type:       "tags",
+		Attributes: jsonapi.TagUpdateRequestData{Label: "Kitchenware", Slug: tag.Slug, Color: models.TagColorGreen},
+	}}
+
+	rr := tagsRequest(c, handler, http.MethodPatch, tagURL, testUser.ID, body)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.attributes.label"), "Kitchenware")
 }
 
 // A file tag touches no item, so a running currency migration does not hold

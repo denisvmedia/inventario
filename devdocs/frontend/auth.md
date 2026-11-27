@@ -57,6 +57,24 @@ Three credentials, three homes:
 goes through it (it also degrades gracefully when storage is unavailable, e.g.
 SSR or a locked-down browser).
 
+### Changing the signed-in user clears the query cache
+
+`onAuthIdentityChange` (`src/lib/auth-storage.ts`) reports every change of the
+signed-in tenant user: a sign-in, a sign-out, a forced sign-out after a failed
+refresh, and the same events in another tab, which reach this one as `storage`
+events on the access-token key. The identity is the access token's `user_id`
+claim, so a refresh for the same user is not a change. `AuthProvider` answers
+each change with `queryClient.clear()`, which drops every query and mutation
+before the next user's first render. Starting and ending an impersonation
+session reload the page, which rebuilds the cache as well.
+
+A mutation that is still running at the change finishes into nothing: the
+mutation cache drops its callbacks and never settles its promise (see
+"Signed-in user changes" in [data.md](data.md)). The mutations that make the
+change themselves (`useLogin`, `useCompleteLoginMFA`, `useMagicLinkVerify`,
+`useLogout`, `useStartImpersonation`, `useEndImpersonation`) carry
+`meta: { changesIdentity: true }` and run their callbacks as usual.
+
 ### Boot sequence
 
 On startup `AuthProvider` resolves who is signed in:
@@ -111,6 +129,22 @@ an invalid refresh token — not session expiry. The wrapper lists these in
 `NON_REFRESHABLE_AUTH_PATHS` and surfaces the real error body instead of firing
 a doomed refresh loop. This is why a wrong-password login shows an inline error
 rather than silently retrying.
+
+### Sign-out
+
+`logout()` and `backofficeLogout()` send their request inside
+`withSignOut(plane, …)`. Both logout handlers put the access token on the
+blacklist before they revoke the refresh token, so a request that carried the
+old token can get a 401 while the refresh cookie still works. A refresh at that
+moment signed the user back in (#3026). While a sign-out runs:
+
+- a 401 on that plane ends in the error, with no refresh, no impersonation
+  recovery and no redirect. The sign-out clears the credentials itself;
+- a refresh that was already running finishes first, so the logout carries the
+  newest tokens, and those are what the server revokes.
+
+The other plane is not affected. Any new call that ends a session should run
+inside `withSignOut` too.
 
 ### Plane awareness (tenant vs back-office)
 

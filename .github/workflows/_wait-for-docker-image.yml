@@ -125,6 +125,18 @@ jobs:
             CONCLUSION="$(echo "$RUN_JSON" | jq -r '.conclusion // empty')"
             RUN_ID="$(echo "$RUN_JSON" | jq -r '.id // empty')"
 
+            # On a push, docker.yml never cancels a run that has started, so a
+            # cancelled run is one a newer push replaced while it was still
+            # waiting for the group. Nothing will build this commit's image;
+            # the newer push's run tests the code that includes it.
+            if [ "$EVENT_NAME" = "push" ] && [ "${GH_REF#refs/heads/}" != "$GH_REF" ] \
+              && [ "$STATUS" = "completed" ] && [ "$CONCLUSION" = "cancelled" ]; then
+              echo "::notice::docker.yml run $RUN_ID for $COMMIT_SHA was replaced by a newer push to $REF_NAME before it built anything; the run for that push tests this commit too"
+              echo "built=false" >> "$GITHUB_OUTPUT"
+              echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
             case "${STATUS:-none}" in
               none | queued | waiting | pending | requested)
                 echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... (poll $i)"

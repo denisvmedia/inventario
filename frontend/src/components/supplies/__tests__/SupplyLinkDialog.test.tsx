@@ -51,7 +51,9 @@ describe("<SupplyLinkDialog />", () => {
     await user.type(screen.getByTestId("supply-link-url-input"), "example.com/no-scheme")
     await user.click(screen.getByTestId("supply-link-submit"))
 
-    expect(await screen.findByTestId("supply-link-url-error")).toBeInTheDocument()
+    const message = "Enter a full URL that starts with http:// or https://."
+    expect(await screen.findByTestId("supply-link-url-error")).toHaveTextContent(message)
+    expect(screen.getByTestId("supply-link-url-input")).toHaveAccessibleDescription(message)
     expect(onSubmit).not.toHaveBeenCalled()
   })
 

@@ -147,7 +147,9 @@ export function ForgotPasswordPage() {
                 disabled={mutation.isPending}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
-                aria-describedby={form.formState.errors.email ? "forgot-email-error" : undefined}
+                aria-describedby={
+                  form.formState.errors.email?.message ? "forgot-email-error" : undefined
+                }
                 {...form.register("email")}
               />
             </div>

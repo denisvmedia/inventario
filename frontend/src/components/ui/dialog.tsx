@@ -6,12 +6,15 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
-// "default" is the centered card at every width. "fullscreen-mobile" is for
-// long forms: below `sm` (640px) the dialog fills the screen, the header
-// (title and close button) sticks to the top, the footer (the actions) sticks
-// to the bottom above the safe-area inset, and the content between them
-// scrolls; it slides up on open and down on close. From `sm` up it is the
-// same centered card as "default".
+// "default" is the centered card at every width. It is never taller than the
+// screen minus 2rem and scrolls as a whole when its content is taller, so its
+// buttons stay reachable. A call site that fills the screen itself (a file
+// viewer) passes `max-h-none`. "fullscreen-mobile" is for long forms: below
+// `sm` (640px) the dialog fills the screen, the header (title and close
+// button) sticks to the top, the footer (the actions) sticks to the bottom
+// above the safe-area inset, and the content between them scrolls; it slides
+// up on open and down on close. From `sm` up it is the same centered card as
+// "default".
 type DialogContentVariant = "default" | "fullscreen-mobile"
 
 // DialogHeader and DialogFooter read the variant from here, so a dialog opts
@@ -32,12 +35,11 @@ const closeButtonClassName =
 // the footer (usually the form) grows to fill the screen and drops its bottom
 // padding, so the footer (`mt-auto`) sits on the bottom edge even when the
 // content is short. Under reduced motion the slide becomes the default fade.
-// From `sm` up the card is never taller than the screen (a phone held
-// sideways) and scrolls as a whole.
+// From `sm` up the default card's height limit applies (a phone held
+// sideways).
 const fullscreenMobileContentClassName = cn(
   "max-sm:top-0 max-sm:left-0 max-sm:flex max-sm:h-dvh max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:translate-none max-sm:flex-col",
-  "max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:scroll-pt-36 max-sm:scroll-pb-28 max-sm:rounded-none max-sm:border-0 max-sm:px-4 max-sm:py-0 max-sm:shadow-none",
-  "sm:max-h-[calc(100dvh-2rem)] sm:overflow-y-auto",
+  "max-sm:overscroll-contain max-sm:scroll-pt-36 max-sm:scroll-pb-28 max-sm:rounded-none max-sm:border-0 max-sm:px-4 max-sm:py-0 max-sm:shadow-none",
   "max-sm:*:shrink-0",
   "max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex-1 max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex-col max-sm:[&>*:has(>[data-slot=dialog-footer])]:pb-0",
   "max-sm:duration-300 max-sm:data-[state=closed]:ease-in max-sm:data-[state=open]:ease-out",
@@ -110,7 +112,7 @@ function DialogContent({
         data-slot="dialog-content"
         data-variant={variant}
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           fullscreenMobile && fullscreenMobileContentClassName,
           className
         )}

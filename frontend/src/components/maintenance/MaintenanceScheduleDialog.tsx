@@ -164,7 +164,7 @@ function MaintenanceScheduleForm({
           })}
           data-testid="maintenance-title-input"
           aria-invalid={!!errors.title}
-          aria-describedby={errors.title ? "maintenance-title-error" : undefined}
+          aria-describedby={errors.title?.message ? "maintenance-title-error" : undefined}
           {...register("title")}
         />
         <FieldError
@@ -186,7 +186,9 @@ function MaintenanceScheduleForm({
             inputMode="numeric"
             data-testid="maintenance-interval-input"
             aria-invalid={!!errors.interval_days}
-            aria-describedby={errors.interval_days ? "maintenance-interval-error" : undefined}
+            aria-describedby={
+              errors.interval_days?.message ? "maintenance-interval-error" : undefined
+            }
             {...register("interval_days")}
           />
           <FieldError
@@ -204,7 +206,9 @@ function MaintenanceScheduleForm({
             type="date"
             data-testid="maintenance-next-due-input"
             aria-invalid={!!errors.next_due_at}
-            aria-describedby={errors.next_due_at ? "maintenance-next-due-error" : undefined}
+            aria-describedby={
+              errors.next_due_at?.message ? "maintenance-next-due-error" : undefined
+            }
             {...register("next_due_at")}
           />
           <FieldError
@@ -225,7 +229,7 @@ function MaintenanceScheduleForm({
             defaultValue: "Use NSF-53 filter, comes in 2-packs",
           })}
           aria-invalid={!!errors.notes}
-          aria-describedby={errors.notes ? "maintenance-notes-error" : undefined}
+          aria-describedby={errors.notes?.message ? "maintenance-notes-error" : undefined}
           {...register("notes")}
         />
         <FieldError

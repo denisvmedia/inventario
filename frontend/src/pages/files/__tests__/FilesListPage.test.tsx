@@ -11,8 +11,9 @@ import { FilesListPage } from "@/pages/files/FilesListPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
-import { apiUrl, fileHandlers, groupHandlers, tagHandlers } from "@/test/handlers"
+import { apiUrl, fileHandlers, groupHandlers, memberHandlers, tagHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -55,6 +56,7 @@ function Where() {
 function renderPage(initialPath = `/g/${SLUG}/files`) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <>
@@ -63,7 +65,9 @@ function renderPage(initialPath = `/g/${SLUG}/files`) {
           element={
             <GroupProvider>
               <ConfirmProvider>
-                <FilesListPage />
+                <WhenRoleKnown>
+                  <FilesListPage />
+                </WhenRoleKnown>
               </ConfirmProvider>
             </GroupProvider>
           }
@@ -73,7 +77,9 @@ function renderPage(initialPath = `/g/${SLUG}/files`) {
           element={
             <GroupProvider>
               <ConfirmProvider>
-                <FilesListPage />
+                <WhenRoleKnown>
+                  <FilesListPage />
+                </WhenRoleKnown>
                 <Where />
               </ConfirmProvider>
             </GroupProvider>
@@ -89,6 +95,12 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+})
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
 })
 
 describe("<FilesListPage />", () => {
@@ -611,5 +623,52 @@ describe("<FilesListPage />", () => {
     expect(where.searchParams.get("from")).toBe(
       `/g/${SLUG}/files?category=documents&page=1&view=grid`
     )
+  })
+})
+
+describe("<FilesListPage /> by role (#2886)", () => {
+  // Files take writes from users, admins and owners; a viewer browses,
+  // opens and downloads.
+  it("offers a viewer no upload, selection, Edit or Delete", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1", { category: "documents" })]),
+      ...fileHandlers.counts(SLUG, { all: 1 }),
+      ...fileHandlers.detail(SLUG, "f1", { id: "f1", title: "Manual", path: "manual" })
+    )
+    renderPage(`/g/${SLUG}/files/f1`)
+    expect(await screen.findByTestId("file-detail-filename")).toHaveTextContent("manual")
+    expect(screen.queryByTestId("file-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("file-detail-delete")).not.toBeInTheDocument()
+    expect(screen.getByTestId("file-row-f1")).toBeInTheDocument()
+    expect(screen.queryByTestId("file-row-checkbox-f1")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("files-list-select-all")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("files-upload-cta")).not.toBeInTheDocument()
+  })
+
+  it("offers a viewer no upload in the empty state", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, { all: 0 })
+    )
+    renderPage()
+    const empty = await screen.findByTestId("files-empty")
+    expect(within(empty).queryByRole("button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("files-upload-cta")).not.toBeInTheDocument()
+  })
+
+  it("offers a user upload and selection", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "user"),
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1")]),
+      ...fileHandlers.counts(SLUG, { all: 1 })
+    )
+    renderPage()
+    expect(await screen.findByTestId("file-row-checkbox-f1")).toBeInTheDocument()
+    expect(screen.getByTestId("files-upload-cta")).toBeInTheDocument()
   })
 })

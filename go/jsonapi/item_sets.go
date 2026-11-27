@@ -34,12 +34,14 @@ type ItemSetItemTypeView struct {
 	ItemTypeID       string `json:"item_type_id,omitempty" example:"8f1c..."`
 	ItemCount        int    `json:"item_count" example:"0" format:"int64"`
 	TrashedItemCount int    `json:"trashed_item_count" example:"0" format:"int64"`
+	// DraftCount is the number of unfinished drafts that have the type.
+	DraftCount int `json:"draft_count" example:"0" format:"int64"`
 	// Removable is true when removing the set deletes the type.
 	Removable bool `json:"removable" example:"true"`
 	// KeepReason says why removing the set keeps a type the group has:
-	// own (a member made it), in_use (items have it, in Trash or not) or
-	// last_type (a group keeps at least one type). Absent when the type is
-	// removable or missing.
+	// own (a member made it), in_use (items, in Trash or not, or drafts have
+	// it) or last_type (a group keeps at least one type). Absent when the
+	// type is removable or missing.
 	KeepReason string `json:"keep_reason,omitempty" example:"in_use" enums:"own,in_use,last_type"`
 }
 
@@ -70,11 +72,14 @@ type ItemSetFieldView struct {
 	// field, outside Trash and in it.
 	ItemCount        int `json:"item_count" example:"0" format:"int64"`
 	TrashedItemCount int `json:"trashed_item_count" example:"0" format:"int64"`
+	// DraftCount is the number of unfinished drafts with a value of the
+	// field.
+	DraftCount int `json:"draft_count" example:"0" format:"int64"`
 	// Removable is true when removing the set deletes the field.
 	Removable bool `json:"removable" example:"true"`
 	// KeepReason says why removing the set keeps a field the group has:
-	// own or in_use (items have a value of it). Absent when the field is
-	// removable or missing.
+	// own or in_use (items or drafts have a value of it). Absent when the
+	// field is removable or missing.
 	KeepReason string `json:"keep_reason,omitempty" example:"in_use" enums:"own,in_use"`
 }
 
@@ -109,6 +114,7 @@ func newItemSetView(st *services.ItemSetStatus) ItemSetView {
 			row.ItemTypeID = t.ItemType.ID
 			row.ItemCount = t.Usage.Live
 			row.TrashedItemCount = t.Usage.Trashed
+			row.DraftCount = t.Usage.Drafts
 			row.Removable = t.Removable()
 			row.KeepReason = string(t.KeepReason)
 		}
@@ -129,6 +135,7 @@ func newItemSetView(st *services.ItemSetStatus) ItemSetView {
 			row.MissingTemplates = f.MissingTemplates
 			row.ItemCount = f.Usage.Live
 			row.TrashedItemCount = f.Usage.Trashed
+			row.DraftCount = f.Usage.Drafts
 			row.Removable = f.Removable()
 			row.KeepReason = string(f.KeepReason)
 		}

@@ -16,6 +16,8 @@ export interface FakeIntakeCandidate {
   sort_order: number
   fields: Record<string, { value: unknown; confidence: number }>
   accepted_fields: string[]
+  custom_fields?: Record<string, { value: unknown; confidence: number }>
+  accepted_custom_fields?: string[]
   quantity: number
   selected: boolean
   outcome: "pending" | "created" | "skipped" | "failed"
@@ -239,9 +241,18 @@ export function backend(
         attributes: { id, path: id, ext: ".jpg", links: linksOf(id) },
       })
     }),
-    http.delete(apiUrl(`${base}/files/:id`), ({ params }) => {
+    http.delete(apiUrl(`${base}/files/:id`), ({ params, request }) => {
       const id = String(params.id)
-      if (!uploaded.delete(id)) return notFound()
+      if (!uploaded.has(id)) return notFound()
+      // With unless_linked=true the server keeps a file a link holds (#2930).
+      const unlessLinked = new URL(request.url).searchParams.get("unless_linked") === "true"
+      if (unlessLinked && linksOf(id).length > 0) {
+        return HttpResponse.json(
+          { errors: [{ status: "409", code: "file.linked" }] },
+          { status: 409 }
+        )
+      }
+      uploaded.delete(id)
       state.trashed.push(id)
       return new HttpResponse(null, { status: 204 })
     }),
@@ -303,6 +314,9 @@ export function backend(
           if (a.selected && c.outcome === "skipped") c.outcome = "pending"
         }
         if (Array.isArray(a.accepted_fields)) c.accepted_fields = a.accepted_fields as string[]
+        if (Array.isArray(a.accepted_custom_fields)) {
+          c.accepted_custom_fields = a.accepted_custom_fields as string[]
+        }
         if (typeof a.quantity === "number") c.quantity = a.quantity
         state.events.push(`review ${c.id}`)
         return HttpResponse.json({

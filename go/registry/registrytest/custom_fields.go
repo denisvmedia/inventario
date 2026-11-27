@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ type CustomFieldEnv struct {
 	FieldsA, FieldsB           registry.CustomFieldRegistry
 	TypesA                     registry.ItemTypeRegistry
 	CommoditiesA, CommoditiesB registry.CommodityRegistry
+	DraftsA                    registry.CommodityDraftRegistry
 	AreaA, AreaB               string
 }
 
@@ -376,6 +378,117 @@ func runCustomFieldDeleteContract(t *testing.T, newEnv func(t *testing.T) Custom
 		gotTrashed, err := env.CommoditiesA.GetTrashed(env.CtxA, trashed.ID)
 		c.Assert(err, qt.IsNil)
 		c.Check(gotTrashed.CustomFields, qt.HasLen, 0)
+	})
+
+	t.Run("an open draft holds a value only when its entry is not empty", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		field := mustField(c, env.FieldsA, env.CtxA, "Serial", models.CustomFieldTypeText)
+
+		cases := []struct {
+			name  string
+			entry any
+			value bool
+		}{
+			{"form text", map[string]any{"value": "SN-1", "currency": ""}, true},
+			{"form blank text", map[string]any{"value": " \t ", "currency": ""}, false},
+			{"form empty money", map[string]any{"value": "", "currency": "USD"}, false},
+			{"form number", map[string]any{"value": 0.0}, true},
+			{"form null", map[string]any{"value": nil}, false},
+			{"stored text", "plain", true},
+			{"stored empty text", "", false},
+			{"stored number", 0.0, true},
+			{"stored no", false, true},
+			{"stored money", map[string]any{"amount": 12.5, "currency": "EUR"}, true},
+			{"money without amount", map[string]any{"amount": nil, "currency": "EUR"}, false},
+			{"null", nil, false},
+			{"list", []any{"x"}, false},
+			{"empty object", map[string]any{}, false},
+		}
+		for i, tc := range cases {
+			c.Run(tc.name, func(c *qt.C) {
+				c.Check(models.DraftCustomFieldHasValue(tc.entry), qt.Equals, tc.value, qt.Commentf("the model's rule"))
+				d := mustDraft(c, env.DraftsA, env.CtxA, fmt.Sprintf("value-%d", i),
+					models.CommodityDraftValues{"custom_fields": map[string]any{field.ID: tc.entry}})
+				usage, err := env.FieldsA.Usage(env.CtxA)
+				c.Assert(err, qt.IsNil)
+				want := 0
+				if tc.value {
+					want = 1
+				}
+				c.Check(usage[field.ID].Drafts, qt.Equals, want, qt.Commentf("the registry's count"))
+				_, err = env.DraftsA.MarkDiscarding(env.CtxA, d.ID)
+				c.Assert(err, qt.IsNil)
+			})
+		}
+		usage, err := env.FieldsA.Usage(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(usage[field.ID].Drafts, qt.Equals, 0, qt.Commentf("drafts being discarded are not counted"))
+	})
+
+	t.Run("open drafts with a value keep a field in use and lose the value with it", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		serial := mustField(c, env.FieldsA, env.CtxA, "Serial", models.CustomFieldTypeText)
+		note := mustField(c, env.FieldsA, env.CtxA, "Note", models.CustomFieldTypeText)
+		mustCustomFieldItem(c, env, "Live", models.CustomFieldValues{serial.ID: rawJSON(`"1"`)})
+		filled := mustDraft(c, env.DraftsA, env.CtxA, "filled", models.CommodityDraftValues{
+			"name": "Van",
+			"custom_fields": map[string]any{
+				serial.ID: map[string]any{"value": "SN-2", "currency": ""},
+				note.ID:   map[string]any{"value": "keep", "currency": ""},
+			},
+		})
+		empty := mustDraft(c, env.DraftsA, env.CtxA, "empty", models.CommodityDraftValues{
+			"custom_fields": map[string]any{serial.ID: map[string]any{"value": "", "currency": ""}},
+		})
+		other := mustDraft(c, env.DraftsA, env.CtxA, "other", models.CommodityDraftValues{
+			"custom_fields": map[string]any{note.ID: "only note"},
+		})
+
+		usage, err := env.FieldsA.Usage(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(usage[serial.ID].Live, qt.Equals, 1)
+		c.Check(usage[serial.ID].Drafts, qt.Equals, 1, qt.Commentf("the empty entry is no value"))
+		c.Check(usage[note.ID].Total(), qt.Equals, 0)
+		c.Check(usage[note.ID].Drafts, qt.Equals, 2)
+		c.Check(usage[note.ID].InUse(), qt.IsTrue)
+		usageB, err := env.FieldsB.Usage(env.CtxB)
+		c.Assert(err, qt.IsNil)
+		c.Check(usageB, qt.HasLen, 0)
+
+		err = env.FieldsA.Delete(env.CtxA, note.ID)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse, qt.Commentf("drafts alone keep the field in use"))
+		err = env.FieldsA.Delete(env.CtxA, serial.ID)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse)
+		_, err = env.FieldsA.DeleteWithValues(env.CtxA, serial.ID, 1)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse, qt.Commentf("the confirmed count leaves out the draft"))
+
+		n, err := env.FieldsA.DeleteWithValues(env.CtxA, serial.ID, 2)
+		c.Assert(err, qt.IsNil)
+		c.Check(n, qt.Equals, 2)
+
+		got, err := env.DraftsA.Get(env.CtxA, filled.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Values.DraftCustomFields(), qt.DeepEquals, map[string]any{note.ID: map[string]any{"value": "keep", "currency": ""}})
+		c.Check(got.Values["name"], qt.Equals, "Van")
+		c.Check(got.Revision, qt.Equals, filled.Revision+1)
+		_, err = env.DraftsA.SaveValues(env.CtxA, filled.ID, filled.Revision, filled.Values)
+		c.Check(err, qt.ErrorIs, registry.ErrDraftRevisionConflict,
+			qt.Commentf("a tab that loaded the draft before the delete cannot put the value back"))
+
+		gotEmpty, err := env.DraftsA.Get(env.CtxA, empty.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(gotEmpty.Values.DraftCustomFields(), qt.HasLen, 0, qt.Commentf("an empty entry goes too"))
+		c.Check(gotEmpty.Revision, qt.Equals, empty.Revision+1)
+		gotOther, err := env.DraftsA.Get(env.CtxA, other.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(gotOther.Revision, qt.Equals, other.Revision, qt.Commentf("a draft without the field is left alone"))
+
+		n, err = env.FieldsA.DeleteWithValues(env.CtxA, note.ID, 2)
+		c.Assert(err, qt.IsNil)
+		c.Check(n, qt.Equals, 2)
 	})
 }
 

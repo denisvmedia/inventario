@@ -53,6 +53,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2915 by the 2026-11-27 goal to work through the backlog
 - **Reversion plan**: Drop the disabled select and keep the mock's form without a status once the edit form shows the status.
 
+#### 2026-11-27 — Item edit dialog: new files upload before Save changes
+
+- **Issue/PR**: #2916 / PR #2967
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) is for adding an item and has no upload states; editing is the mock's `ItemEditForm`, which has no files.
+- **Reality**: In edit mode (**All fields**), **Save changes** in `frontend/src/components/items/CommodityFormDialog.tsx` uploads the staged files one at a time and attaches each to the item before it sends the changes, with the per-file icons and the "Uploading 1 of 3…" button of the Add item entry below. A failure shows the same destructive `Alert` (`DraftSaveAlert`) titled "Changes not saved", naming the files not uploaded, saying that the files that made it are on the item, and offering **Retry**; the dialog opens the Files step. The attached files leave the list.
+- **Why**: The issue asks that files added while editing are uploaded before the dialog closes or kept for a retry; reusing the Add item states keeps one look for the same work.
+- **Approved by**: user (explicit) — pre-approved for #2916 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Permanent while the dialog stays the editor behind All fields.
+
 #### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
 
 - **Issue/PR**: #1626 / #2905
@@ -160,6 +169,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reality**: `frontend/src/pages/intake/IntakeSessionPage.tsx` is a narrow `Page` with a detail `PageHeader`: a back link to Items, "Review files" with the state `Badge`, "Added {date} · summary" as the subtitle, and for members who can edit an outline **Stop scanning** (while scanning), an outline **Retry unfinished** (when files failed or were stopped) and a ghost `Trash2` remove button. While files are scanned a default `Alert` with a spinning `Loader2` says the scan runs on the server. Each purchase is a `Card`: a 40px thumbnail or `FileText` tile, the file name (or "name and N more files"), a **One item** outline `Badge`, a status line (queued, waiting for the hourly scan limit, retried shortly, scanning, stopped, N products found, or why it failed in destructive text) and a ghost small **Rescan** in `CardAction` while the file is not queued or scanned and none of its products has a draft; when the server still refuses (a draft the page did not know of, or a scan still running after Stop scanning), an error toast says why and the page reads the batch again. Each product is a row with a `Checkbox` (make a draft), the name (italic muted "Unnamed product" without one), brand, model and the line amount, a quantity `Input` (`h-8 w-20`), a ghost toggle "N fields used" that lists every field the scan read with a `Checkbox`, its value and the confidence, and an outcome `Badge` (Draft created / Left out / Draft failed) with an outline **Continue** button that opens the draft in the item form. A sticky footer with a top border says how many products become drafts and holds the primary **Create N drafts** (or **Leave all out**) button while something is undecided; a click first waits for the product choices still being saved (the button stays enabled meanwhile, since the quantity field saves on the blur that the press on the button causes, and a button disabled between press and release loses the click), and the button and every **Rescan** stay disabled until the drafts are made.
 - **Why**: not present in mock. The issue asks for a durable review where the member keeps some detected products, accepts or rejects fields, and sees per-product and per-file outcomes on any device. The sticky footer and the per-field confidence are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the sticky footer and the confidence column agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
+
+#### 2026-11-27 — Batch review page: custom field values
+
+- **Issue/PR**: #2880
+- **Mock**: No such page in [`design-mocks/src/views/`](../../design-mocks/src/views/); the rows follow the field list of the 2026-11-25 Batch review page entry.
+- **Reality**: The "N fields used" list of a product shows, after the item fields, one row per group custom field the scan read a value for, in the group's field order: the same `Checkbox`, the field's name as the label, the value (a select option by its label, yes/no in words) and the confidence. A field deleted since the scan has no row. "N fields used" counts the ticked custom fields too.
+- **Why**: not present in mock. The issue asks for the custom field guesses as review rows with their confidence, as the single-item scan review shows them.
+- **Approved by**: user (explicit) — pre-approved for #2880 by the 2026-11-27 goal to work through the backlog
 - **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
 
 #### 2026-11-25 — Views control on the items list toolbar
@@ -882,6 +900,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Item types
 
+#### 2026-11-27 — Item type delete and Collection set removal: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has item types or the Collection set; the dialogs follow the confirm dialog, as the 2026-11-25 Item types page and 2026-11-26 Collection set card entries record.
+- **Reality**: `ItemTypeDeleteDialog` counts the drafts saved on the server (`draft_count`) with the items. With items and drafts, the description adds "N drafts have it too and move with them."; with drafts only, it reads "No item has the type X, but N drafts do. Pick the type they move to; then X is deleted.", the picker is labeled **Move the drafts to** and the button **Move drafts and delete**. A 409 refusal reads the draft count from its meta. In `CollectionSetRemoveDialog`, a type or field that stays because drafts use it names them after the items ("3 drafts have this type."), or alone when no item uses it.
+- **Why**: not present in mock. Drafts name a type and hold field values, so a delete that ignored them left drafts that could not be saved or finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws these dialogs; otherwise permanent.
+
 #### 2026-11-26 — Four more item type icons for the Collection set
 
 - **Issue/PR**: #1607
@@ -901,6 +928,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 ### Custom fields
+
+#### 2026-11-27 — Custom field delete: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has custom fields; the dialog follows `ItemTypeDeleteDialog`, as the 2026-11-25 Custom fields page entry records.
+- **Reality**: `CustomFieldDeleteDialog` counts the drafts with a value of the field (`draft_count`). With items and drafts, the description adds "N drafts have a value too; it is taken out of them."; with drafts only, it reads "No item has a value for this field, but N drafts do. Deleting the field takes the values out of them." The **Delete the values too** checkbox is required in both cases, and the confirmed count sent as `expected_values` includes the drafts.
+- **Why**: not present in mock. A draft's value of a deleted field was lost unseen when the draft was finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws this dialog; otherwise permanent.
 
 #### 2026-11-25 — Custom fields page
 
@@ -939,6 +975,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` adds templates to its item type or field views.
 
 ### Forms & Validation
+
+#### 2026-11-27 — Icon pickers: an invalid state
+
+- **Issue/PR**: #2983
+- **Mock**: The icon grids of [`design-mocks/src/components/LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) (L102–L122) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) (L62–L82) have no error state. The mock has no group icon picker.
+- **Reality**: When the server refuses the icon, the group icon picker (`frontend/src/components/groups/IconPicker.tsx`, on the create group and group settings pages) points its trigger's `aria-describedby` at the field's `FieldError`, and the trigger gets the destructive border and ring that an invalid `Input` has. The location and area picker (`frontend/src/components/locations/IconPicker.tsx`) puts `aria-describedby` on its tile row, now a `role="group"`; its look does not change.
+- **Why**: not present in mock. `devdocs/frontend/forms.md` asks every control that failed to point at its error and to look invalid. `aria-invalid` is not valid ARIA on a button or a group, so the border comes from a class with the colors of the `aria-invalid` classes of `Input`.
+- **Approved by**: user (explicit) — pre-approved for #2983 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws an error state for an icon picker; otherwise permanent.
 
 #### 2026-11-26 — Create group page: what the group is for
 
@@ -1686,6 +1731,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
 - **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-27 — Write actions left out for a role the server refuses
+
+- **Issue/PR**: #2886
+- **Mock**: Every view draws every action for one all-powerful member: [`AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) and [`DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) (Add item), [`ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) (Add item, the bulk bar), [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (Edit, Delete, Change status), [`FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) (Upload, selection), [`LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) (add location and area, edit, delete) and [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) (create, rename, delete). The mock has no read-only or role-limited state.
+- **Reality**: A page offers a write action only when `useGroupPermissions()` (`frontend/src/features/group/roles.ts`) says the caller's role passes the server's gate for it. A viewer gets no Add item (sidebar, Dashboard, Items list), no bulk move, edit or delete (Print labels stays), no Edit, Delete, Change status, quick edit, upload or attach on an item's page, no upload, selection, Edit, Delete or Remove attachment on the Files page and in the file sheet wherever it opens, no create, rename or delete on the Tags, Sellers, Item types and Custom fields pages, no attach or drop zone on the location and area pages, and no add location, add area, edit or delete. The item page's Lend, Service, Supplies, Maintenance and reminder sections keep their buttons for now. A member with the user role gets everything except the location and area writes. The actions are left out, not shown disabled: a card or row whose only actions are refused loses its menu, and an empty state loses its create button. A link to a create or edit route (`/locations/new`, `/locations/:id/edit`, `/areas/:id/edit`, `/commodities/new`, `/commodities/:id/edit`) opens no dialog or form. While the role is unknown (the member list loading or failed) the actions stay hidden.
+- **Why**: not present in mock. The server refuses these writes with 403 (`structuralWriteGate` and `contentWriteGate` in `go/apiserver/apiserver.go`), so an offered action ends in an error after the member has filled in a form. Leaving the action out follows the app's existing role-limited surfaces (the Drafts card, the Inbox, Trash, the Failed jobs card); a disabled button with a reason would need a tooltip per action and still invites the click.
+- **Approved by**: user (explicit) — pre-approved for #2886 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a read-only state for viewers.
+
+#### 2026-11-27 — Every dialog card is never taller than the screen
+
+- **Issue/PR**: #2988
+- **Mock**: `design-mocks/src/components/ui/dialog.tsx` gives `DialogContent` no maximum height; the mock's `AddItemDialog.tsx` adds `max-h-[90vh] overflow-y-auto` at its call site.
+- **Reality**: `DialogContent` is never taller than the screen minus 2rem (`max-h-[calc(100dvh-2rem)]`) and scrolls as a whole (`overflow-y-auto`) in both variants; below `sm` the `fullscreen-mobile` variant still fills the screen. A dialog whose content fits looks as in the mock. The full-screen file viewers (the image viewer, the PDF preview, and the PDF readers of the file panel and the file review page) pass `max-h-none overflow-visible`, as they pass `max-w-none`.
+- **Why**: A dialog taller than the window is centered with `translate-y-[-50%]`, so without a limit its top and bottom are off-screen and cannot be scrolled to; the bulk tags dialog loses its Apply button with about 25 tags at 1280x720. The limit in the primitive covers every dialog instead of one call site at a time.
+- **Approved by**: user (explicit) — pre-approved for #2988 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: permanent; the limit belongs in the mock's primitive upstream.
 
 ### Backup & Restore
 

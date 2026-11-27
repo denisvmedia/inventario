@@ -254,7 +254,7 @@ describe("<IntakeUploadDialog /> uploads left behind", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
     )
-    // The dialog looked at the file, found the batch holding it, and left it.
+    // The dialog asked to trash the file; the batch holds it, so it stays.
     await waitFor(trashRead)
     expect(fake.trashed).toEqual([])
   })

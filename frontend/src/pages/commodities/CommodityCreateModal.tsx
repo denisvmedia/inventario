@@ -9,6 +9,7 @@ import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
 import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { addItemSlot } from "@/features/commodities/draft"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useLocations } from "@/features/locations/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 
@@ -43,6 +44,10 @@ export function CommodityCreateModalRoute() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
   const userId = useOptionalAuth()?.user?.id
+  // The entry points (sidebar, Dashboard) are offered only to a role that
+  // adds items; a viewer who still lands here, through history, gets no
+  // form, as on the list page's /commodities/new.
+  const canWrite = useGroupPermissions().canEditContent
   const areas = useAreas()
   const locationsQuery = useLocations()
   const create = useSubmitNewItem()
@@ -126,7 +131,7 @@ export function CommodityCreateModalRoute() {
   return (
     <CommodityFormDialog
       key={resumeDraftId ?? "new"}
-      open={open}
+      open={canWrite && open}
       onOpenChange={(o) => {
         if (!o) close()
       }}
