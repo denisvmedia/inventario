@@ -579,6 +579,35 @@ describe("<CommodityDetailPage />", () => {
     expect(within(dialog).getByTestId("commodity-form-submit")).toBeInTheDocument()
   })
 
+  it("keeps the status date, note and sale price when All fields saves (#2915)", async () => {
+    const user = userEvent.setup()
+    const row = itemRow(ID, "MacBook Pro 16")
+    row.attributes = {
+      ...row.attributes,
+      status: "sold",
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+    }
+    const puts = serveItems([row])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    await screen.findByLabelText(/^name/i)
+    await user.click(screen.getByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    const name = within(dialog).getByRole("textbox", { name: /^name/i })
+    await user.clear(name)
+    await user.type(name, "MacBook Air")
+    await user.click(within(dialog).getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes).toMatchObject({
+      name: "MacBook Air",
+      status: "sold",
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+    })
+  })
+
   it("deletes the commodity from the detail page", async () => {
     const user = userEvent.setup()
     server.use(

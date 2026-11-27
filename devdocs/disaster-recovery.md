@@ -153,7 +153,7 @@ dropdb inventario_drill
 | Situation | Action |
 | --- | --- |
 | Bad release, no schema change | Roll the image back. Do not restore. |
-| Bad release with a migration | Roll the image back first — if you followed expand-contract the old image runs against the new schema. Restore only if that fails. |
+| Bad release with a migration | Roll the image back first — if you followed expand-contract the old image runs against the new schema. A v0.2.x image does not: it cannot read a table that gained a column. Restore only if that fails. |
 | Accidental deletion by a user | Restore a scratch copy, extract what was lost, put it back. Do **not** restore over production — you would undo everyone else's work since the backup. |
 | Database lost or corrupted | Full restore, below. |
 | Cluster lost | Velero restore of the namespace, then the database restore, then §4's verification. |

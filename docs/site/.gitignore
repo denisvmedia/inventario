@@ -22,5 +22,5 @@ pnpm-debug.log*
 
 # Assembled by scripts/build-api-reference.mjs (the spec comes from
 # go/docs/swagger.yaml, the bundle from node_modules) — not committed.
-public/api/swagger.yaml
-public/api/redoc.standalone.js
+public/api/reference/swagger.yaml
+public/api/reference/redoc.standalone.js

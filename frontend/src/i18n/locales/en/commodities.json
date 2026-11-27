@@ -439,6 +439,8 @@
     "leftoverFilesFailed_one": "{{count}} uploaded file could not be moved to the trash. You can find it on the Files page.",
     "leftoverFilesFailed_other": "{{count}} uploaded files could not be moved to the trash. You can find them on the Files page.",
     "serverError": "Something went wrong. Please try again.",
+    "statusChanged": "The item's status changed after you opened this form, so nothing was saved. Open the item again to see its status.",
+    "statusHelp": "To change the status, use Change Status on the item page. It also records the date and a note.",
     "step": {
       "ai": {
         "choose": {
