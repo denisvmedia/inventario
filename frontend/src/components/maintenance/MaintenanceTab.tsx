@@ -346,7 +346,13 @@ function ScheduleCard({
               <Pencil className="size-4" />
               {t("common:actions.edit", { defaultValue: "Edit" })}
             </Button>
-            <Button variant="ghost" size="sm" onClick={onDelete}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              data-testid={`schedule-${schedule.id}-delete`}
+            >
               <Trash2 className="size-4" />
               {t("common:actions.delete", { defaultValue: "Delete" })}
             </Button>

@@ -289,9 +289,9 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
                 variant="outline"
                 onClick={handleDelete}
                 data-testid="area-detail-delete"
-                className="gap-2"
+                className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
-                <Trash2 className="size-4 text-destructive" aria-hidden="true" />
+                <Trash2 className="size-4" aria-hidden="true" />
                 {t("common:actions.delete")}
               </Button>
             </div>

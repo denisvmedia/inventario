@@ -114,6 +114,8 @@ export interface ListCommoditiesOptions {
   types?: string[]
   statuses?: string[]
   areaId?: string
+  // Items in any area of the location.
+  locationId?: string
   search?: string
   // Default false. true surfaces drafts and non-`in_use` commodities;
   // the FE wires this to the "Show inactive" toggle in the toolbar.

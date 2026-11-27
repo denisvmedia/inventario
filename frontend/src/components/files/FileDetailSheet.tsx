@@ -273,8 +273,9 @@ export function FileDetailSheet({
             ) : null}
             {file ? (
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={onDelete}
                 disabled={deleteMutation.isPending}
                 data-testid="file-detail-delete"

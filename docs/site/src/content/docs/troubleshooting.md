@@ -64,9 +64,12 @@ controller or reverse proxy.
 The sign-in page says "The Inventario site this account belongs to is
 suspended". The server's operator has suspended the tenant your account belongs
 to. While it is suspended, everyone in it is signed out, and nobody can sign in,
-use an API token or download a personal data export. Your items and files are
-kept. Ask the server's administrator; once they reactivate the tenant, sign in
-again and create new API tokens, because the suspension revoked the old ones.
+use an API token or download a personal data export. Inventario sends no
+reminder, storage, weekly digest or export emails while it is suspended. Your
+items and files are kept. Ask the server's administrator; once they reactivate
+the tenant, sign in again and create new API tokens, because the suspension
+revoked the old ones. Reminders that are still due are sent after the
+reactivation.
 
 An operator also suspends a tenant when they delete it: the tenant stays
 suspended until the deletion finishes, and then the accounts in it are gone.

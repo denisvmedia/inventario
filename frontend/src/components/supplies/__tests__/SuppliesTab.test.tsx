@@ -92,6 +92,14 @@ describe("<SuppliesTab />", () => {
     expect(rows).toHaveLength(2)
     const labels = await screen.findAllByTestId("supplies-row-label")
     expect(labels.map((el) => el.textContent)).toEqual(["Filter A", "Filter B"])
+    // Delete is the red ghost icon trigger of a row (#2914).
+    const deleteTrigger = screen.getAllByTestId("supplies-delete")[0]
+    expect(deleteTrigger).toHaveAttribute("data-variant", "ghost")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("opens the add dialog when the add button is clicked", async () => {

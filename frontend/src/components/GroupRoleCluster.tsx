@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
+import { RoleBadge } from "@/components/RoleBadge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,77 +11,36 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useOptionalAuth } from "@/features/auth/AuthContext"
-import { useUpdateProfile } from "@/features/auth/hooks"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { useMembers } from "@/features/group/hooks"
+import { useSwitchGroup } from "@/features/group/useSwitchGroup"
 import { cn } from "@/lib/utils"
 
 // GroupRoleCluster lives in the TopBar header. It pairs the active-group
 // switcher trigger (`.group-selector__trigger`) with the caller's role badge
 // (`[data-testid="current-role"]`) inside a single `.group-role-cluster` flex
-// row. Switching groups (a) navigates to /g/<new-slug>/ and (b) fires the
-// debounced PUT /auth/me with `default_group_id` so the choice survives a
-// fresh login on a new device — both halves of the #1262 / #1300 contract.
+// row. The mock has no group control in its header; the cluster is a logged
+// deviation (#1258). Switching goes through useSwitchGroup, the handler the
+// sidebar GroupSelector uses too, and the badge is the shared RoleBadge.
 export function GroupRoleCluster() {
   const { t } = useTranslation()
   const groupCtx = useOptionalCurrentGroup()
   const groups = groupCtx?.groups
   const currentGroup = groupCtx?.currentGroup
   const params = useParams<{ groupSlug?: string }>()
-  const navigate = useNavigate()
   const auth = useOptionalAuth()
   const user = auth?.user
-  const updateProfile = useUpdateProfile()
+  const switchGroup = useSwitchGroup()
   const [open, setOpen] = useState(false)
 
   const activeSlug = currentGroup?.slug ?? params.groupSlug ?? null
 
+  // The React Compiler memoizes this derived value; members lists are small.
   const membersQuery = useMembers(currentGroup?.id)
-  // The React Compiler auto-memoises this derived value; an explicit
-  // useMemo here trips its "existing memoization could not be preserved"
-  // warning. Computing inline is fine — the lookup is O(members) and
-  // members lists are small. Role union covers the post-#1533 taxonomy
-  // (viewer / user / admin / owner); anything unexpected gets rendered
-  // with the generic indicator class.
-  const role: "viewer" | "user" | "admin" | "owner" | null =
+  const role =
     user?.id && membersQuery.data
-      ? ((membersQuery.data.find((m) => m.member_user_id === user.id)?.role ?? null) as
-          "viewer" | "user" | "admin" | "owner" | null)
+      ? (membersQuery.data.find((m) => m.member_user_id === user.id)?.role ?? null)
       : null
-
-  // Debounced PUT /auth/me — see #1262 / #1300. We hold the latest target
-  // group id in a ref so cascading clicks within the debounce window
-  // collapse into a single network call carrying the final selection.
-  const pendingDefaultGroupId = useRef<string | null>(null)
-  const debounceHandle = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(
-    () => () => {
-      if (debounceHandle.current) clearTimeout(debounceHandle.current)
-    },
-    []
-  )
-
-  function persistDefaultGroup(groupId: string) {
-    pendingDefaultGroupId.current = groupId
-    if (debounceHandle.current) clearTimeout(debounceHandle.current)
-    debounceHandle.current = setTimeout(() => {
-      const next = pendingDefaultGroupId.current
-      pendingDefaultGroupId.current = null
-      debounceHandle.current = null
-      if (!next) return
-      // The BE accepts both `name` and `default_group_id` on PUT /auth/me;
-      // pass the current name verbatim so we mutate only the group preference.
-      updateProfile.mutate({ name: user?.name ?? "", default_group_id: next })
-    }, 400)
-  }
-
-  function handleSwitch(group: { id?: string; slug?: string } | undefined) {
-    if (!group?.slug) return
-    setOpen(false)
-    if (group.slug === activeSlug) return
-    navigate(`/g/${encodeURIComponent(group.slug)}`)
-    if (group.id) persistDefaultGroup(group.id)
-  }
 
   if (!groups || groups.length === 0) return null
 
@@ -109,7 +69,10 @@ export function GroupRoleCluster() {
           {groups.map((group) => (
             <DropdownMenuItem
               key={group.id}
-              onSelect={() => handleSwitch(group)}
+              onSelect={() => {
+                setOpen(false)
+                switchGroup(group)
+              }}
               className="group-selector__item gap-2"
             >
               <span className="flex-1 truncate">{group.name}</span>
@@ -120,17 +83,14 @@ export function GroupRoleCluster() {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {/* The badge takes the trigger's height, radius and font size so the
+          pair reads as one unit (#1258). */}
       {role ? (
-        <span
-          data-testid="current-role"
-          className={cn(
-            "role-indicator inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium leading-none",
-            "border-border bg-muted/40 text-muted-foreground",
-            `role-indicator--${role}`
-          )}
-        >
-          {role}
-        </span>
+        <RoleBadge
+          role={role}
+          testId="current-role"
+          className={`role-indicator role-indicator--${role} h-7 rounded-md text-xs`}
+        />
       ) : null}
     </div>
   )

@@ -220,6 +220,7 @@ function ReminderRow({ reminder, onEdit, onDelete }: ReminderRowProps) {
           <Button
             variant="ghost"
             size="icon"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={onDelete}
             aria-label={t("reminders:row.deleteLabel", { title: reminder.title })}
             data-testid={`reminder-row-${reminder.id}-delete`}

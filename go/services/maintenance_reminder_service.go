@@ -95,22 +95,24 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 
 	prefsCache := s.prefsForSweep()
 	sweep := newMaintenanceSweep()
-	sections := newSectionGate(s.factorySet)
+	gate := newReminderGate(s.factorySet)
 
 	for _, m := range schedules {
 		if m == nil || !m.Enabled {
 			continue
 		}
-		hidden, hideErr := sections.hides(ctx, m.GroupID, models.GroupSectionMaintenance)
-		if hideErr != nil {
+		skipped, skipErr := gate.skips(ctx, m.TenantID, m.GroupID, models.GroupSectionMaintenance)
+		if skipErr != nil {
 			stats.Failed++
 			slog.ErrorContext(ctx, "maintenance reminder failed",
 				"schedule_id", m.ID,
-				"error", hideErr,
+				"error", skipErr,
 			)
 			continue
 		}
-		if hidden {
+		if skipped {
+			// The tenant is not active or the group hides the section:
+			// no row, so the reminder goes out once that changes.
 			continue
 		}
 		target, planErr := s.planSchedule(ctx, m, now, prefsCache, sweep)

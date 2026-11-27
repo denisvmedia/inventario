@@ -74,15 +74,14 @@ func newDigestFixture(c *qt.C) *digestFixture {
 
 	factorySet := memory.NewFactorySet()
 	ctx := context.Background()
-	const tenantID = "digest-tenant"
 
-	_, err := factorySet.TenantRegistry.Create(ctx, models.Tenant{
-		EntityID: models.EntityID{ID: tenantID},
-		Name:     "Digest Tenant",
-		Slug:     "digest-tenant",
-		Status:   models.TenantStatusActive,
+	tenant, err := factorySet.TenantRegistry.Create(ctx, models.Tenant{
+		Name:   "Digest Tenant",
+		Slug:   "digest-tenant",
+		Status: models.TenantStatusActive,
 	})
 	c.Assert(err, qt.IsNil)
+	tenantID := tenant.ID
 
 	user, err := factorySet.UserRegistry.Create(ctx, models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},

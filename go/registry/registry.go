@@ -160,6 +160,11 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
+	// LocationID, when non-empty, restricts the result to commodities in
+	// any area of that location (#2897). It is AND-ed with AreaID, so an
+	// area of another location matches nothing, and an item without an
+	// area is in no location. An unknown ID matches nothing.
+	LocationID string
 	// SellerIDs, when non-empty, restricts the result to commodities whose
 	// seller is one of the listed IDs (#2804). Empty = unrestricted.
 	SellerIDs []string
@@ -3648,6 +3653,9 @@ type FailedJobScope struct {
 	TenantID string
 	// GroupID limits the query to one group when set. It requires TenantID.
 	GroupID string
+	// FailedBefore, when set, limits the query to the jobs that failed
+	// before it. A job without a failure time counts from its creation.
+	FailedBefore time.Time
 }
 
 // FailedJobRegistry reads and acts on the jobs that failed for good, over
@@ -3681,6 +3689,12 @@ type FailedJobRegistry interface {
 	// Discard marks a failed job discarded at now. ErrNotFound when the
 	// type has no failed, undiscarded job with the id in the scope.
 	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// DiscardFailed marks every failed, undiscarded job of the type in the
+	// scope discarded at now and returns how many it marked. The scope
+	// must set FailedBefore (ErrFieldRequired otherwise), so a bulk discard
+	// always names the jobs it acts on by their failure time.
+	DiscardFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, now time.Time) (int, error)
 }
 
 // UserPurger clears what references a single user before the users row itself
@@ -3688,11 +3702,12 @@ type FailedJobRegistry interface {
 // rejected by the many NO ACTION child FKs pointing at users(id), so the purge
 // deletes the user's auth / identity and personal rows (memberships, invites,
 // reminders, drafts, saved views, ...) and hands the group rows the user
-// created (item history, loans, service records, maintenance, item types, ...)
-// to another member of their group.
+// created (tags, sellers, item history, loans, service records, maintenance,
+// item types, ...) to another member of their group. Each group whose rows
+// were handed over gets one audit row with AuditActionAccountDeletionHandOver.
 //
 // PRECONDITION: the user must no longer OWN shared content (items, files,
-// places, exports, groups, tags, sellers). Those rows carry a NOT NULL
+// places, exports, groups). Those rows carry a NOT NULL
 // created_by column and are the user's own, so this purger deliberately does
 // not touch them; the final DELETE FROM users will fail loudly with an FK
 // violation if any remain. The users row itself is
@@ -3706,6 +3721,12 @@ type UserPurger interface {
 	PurgeUserDependents(ctx context.Context, tenantID, userID string) error
 }
 
+// AuditActionAccountDeletionHandOver is the audit action of the row a user
+// purge writes for each group whose rows it handed to another member: the
+// deleted user is the actor, the group the entity, and the breadcrumb names
+// the member who received the rows and counts them per table.
+const AuditActionAccountDeletionHandOver = "account_deletion_handover"
+
 // UserContentOwnershipChecker answers, without mutating anything, whether a user
 // still OWNS content that survives a self-service account deletion (#2147). It
 // is the read-only pre-check the account-deletion orchestration runs BEFORE any
@@ -3716,8 +3737,7 @@ type UserPurger interface {
 // "Owned content" means a row that carries a NOT NULL FK to users(id) and that
 // UserPurger neither deletes nor hands over:
 //   - content authored by the user (created_by_user_id) in a group that is NOT
-//     being purged (items, files, file links, places, exports, tags, sellers),
-//     and
+//     being purged (items, files, file links, places, exports), and
 //   - location_groups the user created (created_by) that are NOT being purged.
 //
 // purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale

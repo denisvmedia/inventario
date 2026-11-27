@@ -619,6 +619,12 @@ describe("<CommodityDetailPage />", () => {
     )
     renderDetail()
     await screen.findByTestId("commodity-detail-delete")
+    // The red outline trigger of a detail surface stays red on hover (#2914).
+    expect(screen.getByTestId("commodity-detail-delete")).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
     await user.click(screen.getByTestId("commodity-detail-delete"))
     // Wait for the confirm dialog body-lock, then click its Delete CTA.
     await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))

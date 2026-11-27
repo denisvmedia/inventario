@@ -18,7 +18,10 @@ var _ render.Binder = (*UpdateProfileRequest)(nil)
 
 // UpdateProfileRequest is the body for PUT /auth/me.
 //
-// Name must always be supplied (the endpoint enforces a non-blank profile name).
+// Name is optional: NameSet records whether "name" appeared in the body. When
+// it did, the name must not be blank; when it did not, the stored name stays.
+// A client that changes only the default group sends no name, so it cannot
+// write back a name the user changed elsewhere since the client loaded it.
 //
 // DefaultGroupID (#1263) is tri-state: absent, null, or a UUID. The
 // DefaultGroupIDSet flag distinguishes "leave the stored value alone" (key
@@ -27,7 +30,10 @@ var _ render.Binder = (*UpdateProfileRequest)(nil)
 // preference every time the profile form is saved without touching the field —
 // hard to spot and hard to recover from.
 type UpdateProfileRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
+	// NameSet records whether "name" appeared in the JSON body. When false,
+	// the handler must leave the stored name untouched.
+	NameSet bool `json:"-"`
 
 	// DefaultGroupID is nil when the request wants to clear the preference.
 	// Non-nil holds the target group UUID.
@@ -55,6 +61,7 @@ func (req *UpdateProfileRequest) UnmarshalJSON(data []byte) error {
 	}
 
 	if nameRaw, ok := raw["name"]; ok {
+		req.NameSet = true
 		var s string
 		if err := json.Unmarshal(nameRaw, &s); err != nil {
 			return err
@@ -92,13 +99,15 @@ func (req *UpdateProfileRequest) Bind(r *http.Request) error {
 }
 
 // ValidateWithContext validates the UpdateProfileRequest using the established
-// validation pattern. Name must not be blank and must not exceed 100 characters.
+// validation pattern. A name that is present must not be blank and must not
+// exceed 100 characters.
 // When DefaultGroupID is provided (non-nil), it must look like a UUID so we fail
 // fast before hitting the DB; membership checks happen in the handler because
 // they need registry access.
 func (req *UpdateProfileRequest) ValidateWithContext(ctx context.Context) error {
-	fields := []*validation.FieldRules{
-		validation.Field(&req.Name, rules.NotEmpty, validation.RuneLength(1, 100)),
+	var fields []*validation.FieldRules
+	if req.NameSet {
+		fields = append(fields, validation.Field(&req.Name, rules.NotEmpty, validation.RuneLength(1, 100)))
 	}
 	if req.DefaultGroupIDSet && req.DefaultGroupID != nil {
 		fields = append(fields, validation.Field(&req.DefaultGroupID, validation.By(validateUUIDPointer)))

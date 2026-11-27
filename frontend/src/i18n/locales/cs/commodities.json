@@ -374,6 +374,8 @@
     "inactiveHidden": "Skrýt neaktivní",
     "inactiveShown": "Zobrazují se neaktivní",
     "lentOut": "Zapůjčeno",
+    "location": "Umístění",
+    "locationAll": "Všechna umístění",
     "missing": "Chybí",
     "missingOptions": {
       "noPhoto": "Bez fotografie",
@@ -631,6 +633,7 @@
     "conditions": {
       "ascending": "vzestupně",
       "deletedArea": "Smazaná oblast",
+      "deletedLocation": "Smazané umístění",
       "deletedTag": "{{condition}} (štítek smazán)",
       "deletedType": "{{type}} (typ smazán)",
       "descending": "sestupně",
@@ -737,6 +740,7 @@
     "stale": {
       "area": "Oblast tohoto pohledu byla smazána.",
       "hint": "Označené podmínky odkazují na něco, co bylo smazáno. Pohled je stále uplatňuje, takže zobrazuje to, co stále odpovídá.",
+      "location": "Umístění tohoto pohledu bylo smazáno.",
       "sellers_one": "Prodejce tohoto pohledu byl smazán.",
       "sellers_few": "{{count}} prodejci tohoto pohledu byli smazáni.",
       "sellers_many": "{{count}} prodejce tohoto pohledu bylo smazáno.",
