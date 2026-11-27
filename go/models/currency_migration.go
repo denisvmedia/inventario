@@ -203,7 +203,7 @@ func (m *CurrencyMigration) ValidateWithContext(ctx context.Context) error {
 			}
 			return nil
 		})),
-		validation.Field(&m.ErrorMessage, validation.Length(0, 2000)),
+		validation.Field(&m.ErrorMessage, validation.RuneLength(0, 2000)),
 	}
 
 	return validation.ValidateStructWithContext(ctx, m, fields...)

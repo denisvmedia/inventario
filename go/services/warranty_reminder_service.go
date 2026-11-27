@@ -131,7 +131,9 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 	sections := newSectionGate(s.factorySet)
 
 	for _, c := range commodities {
-		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
+		// An item the group no longer has writes no row, so its reminder
+		// goes out if it is back in use before the expiry.
+		if !ReminderTargetActive(c) || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
 			continue
 		}
 		// #1554: defence-in-depth — a Count > 1 row should not have a

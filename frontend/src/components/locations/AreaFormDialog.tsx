@@ -188,7 +188,6 @@ export function AreaFormDialog({
               id="area-name"
               placeholder={t("locations:areaDialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={200}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
               aria-describedby={form.formState.errors.name ? "area-name-error" : undefined}

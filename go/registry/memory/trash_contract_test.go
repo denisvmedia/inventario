@@ -31,8 +31,12 @@ func TestDraftMarkContract_Memory(t *testing.T) {
 	registrytest.RunDraftMarkContract(t, newMemoryTrashEnv)
 }
 
-// newMemoryTrashEnv returns registries scoped to one empty group, with one
-// area to place items in.
+func TestBulkPatchContract_Memory(t *testing.T) {
+	registrytest.RunBulkPatchContract(t, newMemoryTrashEnv)
+}
+
+// newMemoryTrashEnv returns registries scoped to one empty group, with two
+// areas to place items in.
 func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 	c := qt.New(t)
 
@@ -58,6 +62,8 @@ func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 	c.Assert(err, qt.IsNil)
 	area, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Shed", LocationID: loc.GetID()})
 	c.Assert(err, qt.IsNil)
+	other, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Attic", LocationID: loc.GetID()})
+	c.Assert(err, qt.IsNil)
 
 	return registrytest.TrashEnv{
 		Ctx:          ctx,
@@ -65,5 +71,6 @@ func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 		Files:        set.FileRegistry,
 		ServiceFiles: fs.FileRegistryFactory.CreateServiceRegistry(),
 		AreaID:       area.GetID(),
+		OtherAreaID:  other.GetID(),
 	}
 }

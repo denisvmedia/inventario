@@ -149,8 +149,8 @@ func (lg *LocationGroup) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&lg.Name, rules.NotEmpty, validation.Length(1, 100)),
-		validation.Field(&lg.Slug, rules.NotEmpty, validation.Length(22, 64)),
+		validation.Field(&lg.Name, rules.NotEmpty, validation.RuneLength(1, 100)),
+		validation.Field(&lg.Slug, rules.NotEmpty, validation.RuneLength(22, 64)),
 		validation.Field(&lg.Status, validation.Required),
 		validation.Field(&lg.TenantID, rules.NotEmpty),
 		validation.Field(&lg.CreatedBy, rules.NotEmpty),
@@ -158,7 +158,7 @@ func (lg *LocationGroup) ValidateWithContext(ctx context.Context) error {
 		// Mirrors the frontend cap on the matching field for Locations
 		// (frontend/src/features/locations/schemas.ts, 200 chars). Empty
 		// string is the unset value, so no NotEmpty.
-		validation.Field(&lg.Description, validation.Length(0, 200)),
+		validation.Field(&lg.Description, validation.RuneLength(0, 200)),
 		validation.Field(&lg.HiddenSections),
 	)
 

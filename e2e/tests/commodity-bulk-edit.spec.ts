@@ -7,13 +7,15 @@
  * `/commodities?q=<suffix>`, so the list holds exactly the seeded rows
  * whatever else the shared e2e database carries. Results are read back
  * through the API: the list hides items that leave in_use. Cleanup is
- * registered before seeding and purges the rows from Trash too.
+ * registered before seeding, purges the rows from Trash too, and deletes
+ * the tags the run created, which the dialog lists for the whole group.
  */
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 import { test } from '../fixtures/app-fixture.js'
 import {
   createCommodityViaAPI,
+  deleteCommodityTagsViaAPI,
   deleteCommodityViaAPI,
   ensureLocationAndArea,
   extractApiAuth,
@@ -63,11 +65,13 @@ async function cleanupItems(
   auth: ApiAuth,
   slug: string,
   ids: string[],
+  suffix: string,
 ): Promise<void> {
   for (const id of ids) {
     await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {})
     await purgeTrashedCommodityViaAPI(request, auth, slug, id).catch(() => {})
   }
+  await deleteCommodityTagsViaAPI(request, auth, slug, suffix).catch(() => {})
 }
 
 test.describe('Commodities — bulk edit', () => {
@@ -161,7 +165,7 @@ test.describe('Commodities — bulk edit', () => {
       await expect(page.locator(`[data-commodity-id="${ids[0]}"]`)).toHaveCount(0)
       await auditList(page)
     } finally {
-      await cleanupItems(request, auth, group.slug, ids)
+      await cleanupItems(request, auth, group.slug, ids, suffix)
     }
   })
 
@@ -239,7 +243,7 @@ test.describe('Commodities — bulk edit', () => {
       expect((await deleted).status()).toBe(200)
       await expect(page.getByTestId('commodities-empty-filtered')).toBeVisible({ timeout: 15000 })
     } finally {
-      await cleanupItems(request, auth, group.slug, ids)
+      await cleanupItems(request, auth, group.slug, ids, suffix)
     }
   })
 })

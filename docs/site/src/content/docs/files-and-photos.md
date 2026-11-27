@@ -108,9 +108,10 @@ change their **Tags…**, or **Delete selected**.
 
 **Tags…** opens two tag lists: under **Add tags**, pick tags or type a new one
 to put on every selected file; under **Remove tags**, pick tags to take off.
-Tags you pick in neither list stay on each file as they are. Files whose tags
-could not be changed stay selected, so you can open **Tags…** again to retry
-just those. When no file changed, a message says why: the files already had the
+Tags you pick in neither list stay on each file as they are, and so does a
+tag or title someone saves to one of the files while the change runs. Files
+whose tags could not be changed stay selected, so you can open **Tags…** again
+to retry just those. When no file changed, a message says why: the files already had the
 tags you added, or none of them had the tags you removed.
 
 Files are sent in batches of 100. If a batch gets no answer, or fails on the

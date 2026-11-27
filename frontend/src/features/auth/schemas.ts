@@ -22,7 +22,7 @@ export const loginSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>
 
 export const registerSchema = z.object({
-  name: z.string().min(1, "auth:validation.nameRequired").max(255, "auth:validation.nameTooLong"),
+  name: z.string().min(1, "auth:validation.nameRequired").max(100, "auth:validation.nameTooLong"),
   email: z.string().min(1, "auth:validation.emailRequired"),
   password: z.string().min(1, "auth:validation.passwordRequired"),
   // Boolean refined to "must be true" rather than `z.literal(true)` so the
@@ -69,7 +69,7 @@ export const profileEditSchema = z.object({
     .string()
     .trim()
     .min(1, "auth:validation.nameRequired")
-    .max(255, "auth:validation.nameTooLong"),
+    .max(100, "auth:validation.nameTooLong"),
   defaultGroupId: z.string(),
 })
 export type ProfileEditInput = z.infer<typeof profileEditSchema>
