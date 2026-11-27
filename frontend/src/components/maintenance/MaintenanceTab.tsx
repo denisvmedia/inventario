@@ -17,7 +17,7 @@ import {
   useUpdateMaintenanceSchedule,
 } from "@/features/maintenance/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
+import { useHoldItem, useHoldingConfirm } from "@/hooks/useItemHold"
 import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 
@@ -52,9 +52,10 @@ export function MaintenanceTab({
 }: MaintenanceTabProps) {
   const { t } = useTranslation(["maintenance", "common"])
   const toast = useAppToast()
-  const confirm = useConfirm()
+  const confirm = useHoldingConfirm()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<ScheduleRow | null>(null)
+  useHoldItem(dialogOpen)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useMaintenanceForCommodity(commodityId, { enabled: !!commodityId && !isBundle })
