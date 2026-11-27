@@ -122,7 +122,7 @@ async function fillChips(page: Page, testId: string, values: string[]) {
 }
 
 async function clearChips(page: Page, testId: string) {
-  // Each chip's X button has aria-label="remove <value>". We click them
+  // Each chip has one button, its X. We click them
   // back-to-front via the count to avoid index shift after each removal.
   while (true) {
     const chip = page.locator(`[data-testid="${testId}-chip"]`).first();

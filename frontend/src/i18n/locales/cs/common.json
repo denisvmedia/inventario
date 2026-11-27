@@ -11,6 +11,10 @@
     "save": "Uložit"
   },
   "brand": "Inventario",
+  "chipInput": {
+    "add": "Přidat {{value}}",
+    "remove": "Odebrat {{value}}"
+  },
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Něco se pokazilo"

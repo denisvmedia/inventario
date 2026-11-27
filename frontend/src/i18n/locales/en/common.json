@@ -11,6 +11,10 @@
     "save": "Save"
   },
   "brand": "Inventario",
+  "chipInput": {
+    "add": "Add {{value}}",
+    "remove": "Remove {{value}}"
+  },
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Something went wrong"

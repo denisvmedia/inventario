@@ -9,7 +9,14 @@ import type { Commodity } from "@/features/commodities/api"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
-import { apiUrl, commodityScanHandlers, customFieldHandlers, groupHandlers } from "@/test/handlers"
+import { __resetHttpForTests } from "@/lib/http"
+import {
+  apiUrl,
+  commodityScanHandlers,
+  customFieldHandlers,
+  draftHandlers,
+  groupHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -437,5 +444,122 @@ describe("<CommodityFormDialog /> scan while editing an item (#1626)", () => {
       original_price_currency: "USD",
       custom_fields: { "cf-plate": "ZZ" },
     })
+  })
+})
+
+describe("<CommodityFormDialog /> files the server draft holds (#2941)", () => {
+  const groups = [{ id: "g1", slug: SLUG, name: "Household", group_currency: "USD" }]
+  const label = new File([new Uint8Array([1, 2])], "label.png", {
+    type: "image/png",
+    lastModified: 1,
+  })
+
+  beforeEach(() => {
+    clearAuth()
+    __resetHttpForTests()
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    server.use(http.get(apiUrl(`/currencies`), () => HttpResponse.json(["USD", "EUR"])))
+  })
+
+  afterEach(() => {
+    __resetGroupContextForTests()
+  })
+
+  // A draft saved with the receipt, titled and tagged by an earlier scan.
+  function draftWithReceipt() {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", values: { name: "Bosch drill", short_name: "Drill", type: "furniture" } },
+    ])
+    fake.files.push({
+      id: "file-receipt",
+      title: "Hardware store receipt",
+      path: "scan-17",
+      ext: ".pdf",
+      size_bytes: receipt.size,
+      category: "documents",
+      tags: ["invoice"],
+      links: [{ id: "link-1", file_id: "file-receipt", entity_type: "draft", entity_id: "d1" }],
+    })
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    return fake
+  }
+
+  // openDraft opens draft d1; a draft that has a type opens on Purchase.
+  async function openDraft() {
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities/new`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/commodities/new"
+          element={
+            <GroupProvider>
+              <CommodityFormDialog
+                open
+                onOpenChange={() => {}}
+                mode="create"
+                areas={areas}
+                locations={locations}
+                defaultCurrency="USD"
+                onSubmit={async () => {}}
+                draftKey={`commodity-draft:${SLUG}:create`}
+                serverDrafts
+                resumeDraftId="d1"
+              />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    await screen.findByTestId("commodity-form-purchase-step")
+  }
+
+  // The names of the staged files, in their order.
+  function stagedNames() {
+    return screen
+      .queryAllByTestId("commodity-files-pending")
+      .map((row) =>
+        ["scan-17.pdf", "IMG_0001.jpg", "label.png"].find((n) => within(row).queryByText(n))
+      )
+  }
+
+  function savedRows() {
+    return within(screen.getByTestId("draft-saved-files")).getAllByRole("listitem")
+  }
+
+  it("does not stage again a scanned file the draft holds", async () => {
+    draftWithReceipt()
+    const user = userEvent.setup()
+    await openDraft()
+    // The scan sends the receipt again, with a new photo.
+    await backToScan(user)
+    await scan(user, [receipt, photo], {
+      fields: COMPLETE,
+      files: [{ index: 0, document_type: { value: "invoice", confidence: 0.9 } }],
+    })
+    await walkToFiles(user)
+
+    await waitFor(() => expect(stagedNames()).toContain("IMG_0001.jpg"))
+    expect(stagedNames()).toEqual(["IMG_0001.jpg"])
+    expect(savedRows()).toHaveLength(1)
+    expect(savedRows()[0]).toHaveTextContent("scan-17.pdf")
+  })
+
+  it("does not stage again a picked file the draft holds", async () => {
+    draftWithReceipt()
+    const user = userEvent.setup()
+    await openDraft()
+    for (let i = 0; i < 3; i++) await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-files-step")
+    await waitFor(() => expect(savedRows()).toHaveLength(1))
+
+    const input = screen
+      .getByTestId("commodity-files-dropzone")
+      .querySelector("input[type=file]") as HTMLInputElement
+    await user.upload(input, [receipt, label])
+    await waitFor(() => expect(stagedNames()).toContain("label.png"))
+    expect(stagedNames()).toEqual(["label.png"])
+    expect(savedRows()).toHaveLength(1)
   })
 })
