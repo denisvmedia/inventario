@@ -143,7 +143,6 @@ export function CreateGroupPage() {
               id="group-name"
               placeholder={t("groups:create.namePlaceholder")}
               autoComplete="off"
-              maxLength={100}
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.name}
               aria-describedby={form.formState.errors.name ? "group-name-error" : undefined}

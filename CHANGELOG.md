@@ -670,6 +670,15 @@ when to add an entry and where it goes.
   with the server's English text. It now shows the status without changing
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
+
+- An item's history keeps every edit of a save. A save that changed the
+  status, the area, a price or the cover recorded only that change, and the
+  name, type, tags or any other field changed in the same save were missing
+  from the history; a bulk edit that set the type and the status recorded
+  only the status. Such a save now also records an "updated" entry with the
+  other fields
+  ([#2899](https://github.com/denisvmedia/inventario/issues/2899)).
+
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
@@ -677,6 +686,19 @@ when to add an entry and where it goes.
   shows the server's reason instead of a fixed "Couldn't …" line. A server
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
+
+- Text length limits count characters in every language. The server counted
+  most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
+  borrower, supply link, maintenance title, file description and other text
+  was refused with 422 at about half the length the form allowed. Form fields
+  now also count an emoji as one character, as the server does, where they
+  stopped at half the limit. An account name has 100 characters at most, which
+  the server always required; the sign-up and profile forms said 255. Two
+  limits stay in bytes because they bound storage rather than text a person
+  reads: the query of a saved view and the external system, instance and
+  document identifiers of the intake API
+  ([#2919](https://github.com/denisvmedia/inventario/issues/2919)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
 import { RESTORE_STRATEGIES, type RestoreStrategy } from "@/features/export/api"
+import { capCodePoints } from "@/lib/text-length"
 import { cn } from "@/lib/utils"
 
 type Risk = "low" | "medium" | "high"
@@ -162,9 +163,8 @@ export function RestoreOptionsForm({
         <Input
           id="restore-description"
           value={value.description}
-          onChange={(e) => patch({ description: e.target.value })}
+          onChange={(e) => patch({ description: capCodePoints(e.target.value, 500) })}
           placeholder={t("exports:restore.descriptionPlaceholder")}
-          maxLength={500}
           minLength={1}
           required
           disabled={disabled}

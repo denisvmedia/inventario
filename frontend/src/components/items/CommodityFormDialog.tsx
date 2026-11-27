@@ -2274,7 +2274,6 @@ function BasicsStep(props: any) {
         </FieldLabel>
         <Input
           id="commodity-short-name"
-          maxLength={40}
           className="font-mono text-sm"
           aria-required
           placeholder={t("commodities:fields.shortNamePlaceholder")}

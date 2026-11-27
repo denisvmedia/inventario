@@ -114,8 +114,8 @@ func (*BackofficeUser) Validate() error {
 
 func (u *BackofficeUser) ValidateWithContext(ctx context.Context) error {
 	fields := []*validation.FieldRules{
-		validation.Field(&u.Email, rules.NotEmpty, validation.Length(1, 255), validation.Match(EmailPattern)),
-		validation.Field(&u.Name, rules.NotEmpty, validation.Length(1, 100)),
+		validation.Field(&u.Email, rules.NotEmpty, validation.RuneLength(1, 255), validation.Match(EmailPattern)),
+		validation.Field(&u.Name, rules.NotEmpty, validation.RuneLength(1, 100)),
 		validation.Field(&u.Role, validation.Required),
 	}
 

@@ -110,9 +110,9 @@ func (r *RestoreStep) ValidateWithContext(ctx context.Context) error {
 
 	fields = append(fields,
 		validation.Field(&r.RestoreOperationID, validation.Required),
-		validation.Field(&r.Name, validation.Required, validation.Length(1, 255)),
+		validation.Field(&r.Name, validation.Required, validation.RuneLength(1, 255)),
 		validation.Field(&r.Result, validation.Required),
-		validation.Field(&r.Reason, validation.Length(0, 1000)),
+		validation.Field(&r.Reason, validation.RuneLength(0, 1000)),
 	)
 
 	return validation.ValidateStructWithContext(ctx, r, fields...)

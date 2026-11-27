@@ -513,7 +513,9 @@ The header also has:
 
 A **History** section lists every change — who, when, and what — including
 status changes, price changes, moves, cover-photo changes, and a change of
-[seller](../sellers/).
+[seller](../sellers/). A save that changes several things shows one row for
+each status, price, area, or cover change, and one more row for the other
+fields it changed, such as the name or the type.
 
 :::note
 Lending, service, and supplies tracking are only available on single-unit

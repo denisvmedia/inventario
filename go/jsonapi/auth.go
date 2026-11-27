@@ -98,7 +98,7 @@ func (req *UpdateProfileRequest) Bind(r *http.Request) error {
 // they need registry access.
 func (req *UpdateProfileRequest) ValidateWithContext(ctx context.Context) error {
 	fields := []*validation.FieldRules{
-		validation.Field(&req.Name, rules.NotEmpty, validation.Length(1, 100)),
+		validation.Field(&req.Name, rules.NotEmpty, validation.RuneLength(1, 100)),
 	}
 	if req.DefaultGroupIDSet && req.DefaultGroupID != nil {
 		fields = append(fields, validation.Field(&req.DefaultGroupID, validation.By(validateUUIDPointer)))

@@ -132,7 +132,7 @@ func (gi *GroupInvite) ValidateWithContext(ctx context.Context) error {
 					email := *gi.InviteeEmail
 					return validation.Validate(email,
 						rules.NotEmpty,
-						validation.Length(1, 255),
+						validation.RuneLength(1, 255),
 						validation.Match(EmailPattern),
 					)
 				}),
