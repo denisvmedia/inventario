@@ -1130,10 +1130,12 @@ func Auth(params AuthParams) func(r chi.Router) {
 // handleUpdateCurrentUser allows an authenticated user to update their own profile.
 // Only safe fields (name, default_group_id) may be changed; email, role, tenant_id,
 // and is_active are always sourced from the authenticated session and cannot be
-// changed by this endpoint.
+// changed by this endpoint. A field left out of the body keeps its stored value.
 // @Summary Update current user profile
-// @Description Update the authenticated user's profile. The name field is required;
-// @Description default_group_id (#1263, #1592) is optional — send a group UUID the
+// @Description Update the authenticated user's profile. Both fields are optional and
+// @Description a field left out keeps its stored value. name, when sent, must not be
+// @Description blank (at most 100 characters).
+// @Description default_group_id (#1263, #1592): send a group UUID the
 // @Description user is a member of to set, or null to clear (only allowed when the
 // @Description user has zero memberships; otherwise rejected with 400). Email, role,
 // @Description tenant_id, and is_active are ignored even if submitted.
@@ -1158,8 +1160,11 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Only update the allowed field; all security-sensitive fields are preserved.
-	user.Name = req.Name
+	// Only the allowed fields are updated, and only when the body names them;
+	// all security-sensitive fields are preserved.
+	if req.NameSet {
+		user.Name = req.Name
+	}
 
 	if req.DefaultGroupIDSet {
 		if !api.applyDefaultGroupUpdate(w, r, user, &req) {

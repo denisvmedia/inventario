@@ -28,6 +28,7 @@ type WorkerDurations struct {
 	MaintenanceReminderInterval      time.Duration
 	ItemReminderInterval             time.Duration
 	CurrencyMigrationInterval        time.Duration
+	CurrencyMigrationRetention       time.Duration
 	BusinessMetricsInterval          time.Duration
 	WorkerControlRefreshInterval     time.Duration
 	OrphanFileGCInterval             time.Duration
@@ -80,6 +81,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"maintenance-reminder-interval", cfg.MaintenanceReminderInterval, &out.MaintenanceReminderInterval},
 		{"item-reminder-interval", cfg.ItemReminderInterval, &out.ItemReminderInterval},
 		{"currency-migration-interval", cfg.CurrencyMigrationInterval, &out.CurrencyMigrationInterval},
+		{"currency-migration-retention", cfg.CurrencyMigrationRetention, &out.CurrencyMigrationRetention},
 		{"business-metrics-interval", cfg.BusinessMetricsInterval, &out.BusinessMetricsInterval},
 		{"orphan-file-gc-interval", cfg.OrphanFileGCInterval, &out.OrphanFileGCInterval},
 		{"orphan-file-gc-min-age", cfg.OrphanFileGCMinAge, &out.OrphanFileGCMinAge},
@@ -109,6 +111,16 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		err := fmt.Errorf("invalid --orphan-file-gc-min-age %q: must be at least %s",
 			cfg.OrphanFileGCMinAge, services.MinOrphanFileGCMinAge)
 		slog.Error("Refusing to start the orphan-file GC with an unsafe min-age", "error", err)
+		return WorkerDurations{}, err
+	}
+
+	// The daily cap counts a group's completed currency migrations since UTC
+	// midnight, so a retention under a day would delete migrations it still
+	// counts.
+	if out.CurrencyMigrationRetention < services.MinCurrencyMigrationRetention {
+		err := fmt.Errorf("invalid --currency-migration-retention %q: must be at least %s",
+			cfg.CurrencyMigrationRetention, services.MinCurrencyMigrationRetention)
+		slog.Error("Refusing to start with a currency migration retention under a day", "error", err)
 		return WorkerDurations{}, err
 	}
 

@@ -348,7 +348,7 @@
       "placeholder": "Proč je tato akce prováděna?"
     },
     "roles": {
-      "admin": "Administrátor",
+      "admin": "Správce",
       "owner": "Vlastník",
       "user": "Uživatel",
       "viewer": "Pozorovatel"
@@ -408,6 +408,35 @@
       "body": "Úloha zmizí ze seznamu neúspěšných úloh i z metriky. Její záznam a chyba zůstanou, dokud je neodstraní běžný úklid. Tuto akci nelze vrátit.",
       "cancel": "Zrušit",
       "confirm": "Zahodit"
+    },
+    "bulk": {
+      "action": "Zahodit starší…",
+      "title": "Zahodit starší neúspěšné úlohy",
+      "body": "Všechny neúspěšné úlohy níže uvedeného druhu a tenanta, které selhaly před zvoleným dnem, zmizí ze seznamu neúspěšných úloh i z metriky. Jejich záznamy a chyby zůstanou, dokud je neodstraní běžný úklid. Tuto akci nelze vrátit.",
+      "scopeType": "Druh úlohy",
+      "scopeTenant": "Tenant",
+      "dateLabel": "Selhaly před",
+      "dateHint": "Úlohy, které selhaly před 00:00 UTC tohoto dne. Úloha bez času selhání se počítá od svého vytvoření.",
+      "pickDate": "Zvolte den a uvidíte, kolik úloh se zahodí.",
+      "counting": "Počítání neúspěšných úloh…",
+      "countError": "Neúspěšné úlohy se nepodařilo spočítat. Zkuste to později.",
+      "none": "Žádná neúspěšná úloha těchto filtrů neselhala před tímto dnem.",
+      "count_one": "Zahodí se {{count}} neúspěšná úloha.",
+      "count_few": "Zahodí se {{count}} neúspěšné úlohy.",
+      "count_many": "Zahodí se {{count}} neúspěšné úlohy.",
+      "count_other": "Zahodí se {{count}} neúspěšných úloh.",
+      "confirmIdle": "Zahodit",
+      "confirm_one": "Zahodit {{count}} úlohu",
+      "confirm_few": "Zahodit {{count}} úlohy",
+      "confirm_many": "Zahodit {{count}} úlohy",
+      "confirm_other": "Zahodit {{count}} úloh",
+      "cancel": "Zrušit",
+      "discarded_one": "{{count}} neúspěšná úloha je zahozena.",
+      "discarded_few": "{{count}} neúspěšné úlohy jsou zahozeny.",
+      "discarded_many": "{{count}} neúspěšné úlohy je zahozeno.",
+      "discarded_other": "{{count}} neúspěšných úloh je zahozeno.",
+      "future": "Den nesmí být pozdější než dnešek.",
+      "error": "Úlohy se nepodařilo zahodit. Zkuste to později."
     }
   }
 }

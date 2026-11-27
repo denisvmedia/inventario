@@ -63,6 +63,26 @@ beforeEach(() => {
   setAccessToken("good-token")
 })
 
+// The list endpoint pages its result (50 by default, at most 100). The hook
+// feeds pickers and the Locations page, so it must return every location.
+describe("useLocations paging", () => {
+  it("returns every location when the group has more than one page", async () => {
+    const all = Array.from({ length: 150 }, (_, i) =>
+      locationResource(`l${i + 1}`, { name: `Location ${i + 1}` })
+    )
+    const requests: string[] = []
+    server.use(...groupHandlers.list(groupFixture), ...locationHandlers.paged(SLUG, all, requests))
+    const { result } = renderHook(() => useLocations(), { wrapper: makeWrapper(newClient()) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(result.current.data).toHaveLength(150)
+    expect(result.current.data?.at(-1)).toMatchObject({ id: "l150", name: "Location 150" })
+    const asked = requests.map((url) => new URL(url).searchParams)
+    expect(asked.map((q) => q.get("page"))).toEqual(["1", "2"])
+    expect(asked.every((q) => q.get("per_page") === "100")).toBe(true)
+  })
+})
+
 describe("useLocations + mutations", () => {
   it("rolls the list back when an optimistic update fails", async () => {
     server.use(

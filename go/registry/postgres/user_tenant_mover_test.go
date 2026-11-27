@@ -201,7 +201,7 @@ func TestUserTenantMover_Postgres_RefusesAGroupMember(t *testing.T) {
 	c.Assert(f.sessions(c, f.admin), qt.Equals, 1)
 }
 
-// Loans and item history are not in the account-deletion pre-check (#2882),
+// Loans and item history pass to another member when an account is deleted,
 // but they tie the user to the tenant all the same, so the move counts them.
 func TestUserTenantMover_Postgres_RefusesALenderAndEditor(t *testing.T) {
 	c := qt.New(t)

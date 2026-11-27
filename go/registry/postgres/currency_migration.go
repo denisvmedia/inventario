@@ -601,6 +601,48 @@ func (r *CurrencyMigrationRegistry) SweepStuckRunning(ctx context.Context, now t
 	return swept, nil
 }
 
+// DeleteFinishedBefore deletes old completed and failed migrations. Their
+// audit rows go with them through ON DELETE CASCADE on
+// currency_migration_audit_rows.migration_id. SKIP LOCKED leaves a row
+// another transaction holds to the next call.
+func (r *CurrencyMigrationRegistry) DeleteFinishedBefore(ctx context.Context, before time.Time, limit int) (int, error) {
+	if !r.service {
+		return 0, errxtrace.Wrap("DeleteFinishedBefore requires a service registry", registry.ErrUserContextRequired)
+	}
+	limitClause := ""
+	args := []any{before.UTC()}
+	if limit > 0 {
+		limitClause = "LIMIT $2"
+		args = append(args, limit)
+	}
+	query := fmt.Sprintf(
+		`DELETE FROM %[1]s
+		  WHERE id IN (
+		    SELECT m.id FROM %[1]s m
+		     WHERE m.status IN ('completed', 'failed')
+		       AND COALESCE(m.completed_at, m.created_at) < $1
+		       AND NOT EXISTS (SELECT 1 FROM %[2]s g WHERE g.currency_migration_id = m.id)
+		     ORDER BY m.id
+		     %[3]s
+		     FOR UPDATE OF m SKIP LOCKED)`,
+		r.tableNames.CurrencyMigrations(), r.tableNames.LocationGroups(), limitClause,
+	)
+
+	var deleted int64
+	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		deleted, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to delete finished currency migrations", err)
+	}
+	return int(deleted), nil
+}
+
 // HMAC token signing.
 
 // IssuePreviewToken signs `inputs` and returns "<b64-payload>.<b64-mac>".

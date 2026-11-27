@@ -502,10 +502,12 @@ never evaluated the gate (paused worker, `mode=off`, or a gate-build failure)
 resets it to `0` rather than leaving the previous tick's value standing and
 faking a pinned tenant forever.
 
-There is no heartbeat on exports/restores, so a **crashed** operation stays
-`running` / `in_progress` forever and pins its tenant permanently. That is
-the correct direction (under-collecting forever beats one wrong delete),
-but it needs manual attention: investigate and resolve the stuck operation.
+An export or restore whose worker crashed pins its tenant until the sweep
+in §10 takes the worker for dead, ten minutes after its last heartbeat,
+and fails the job or queues it again (a queued export pins the tenant
+until it has run). That is the correct direction (under-collecting beats
+one wrong delete). A blocker that stays in progress longer is one of the
+cases §10 lists that the sweep does not catch: investigate and resolve it.
 **Do not add a "stale after N hours → ignore it" escape hatch** — that
 re-opens exactly the race the gate closes.
 
@@ -599,17 +601,56 @@ uses.
 
 | Type | Table | Failed when | Retry |
 | ---- | ----- | ----------- | ----- |
-| `export` | `exports` (`type <> 'imported'`) | the export run returns an error | yes: runs again from the start |
-| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated | yes: reads the uploaded file again |
-| `restore` | `restore_operations` | the restore run returns an error | no: it may have written part of the backup; start a new restore |
+| `export` | `exports` (`type <> 'imported'`) | the export run returns an error, or its worker stops during its third run | yes: runs again from the start |
+| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated, or its worker stops during its third run | yes: reads the uploaded file again |
+| `restore` | `restore_operations` | the restore run returns an error, or its worker stops while it runs | no: it may have written part of the backup; start a new restore |
 | `thumbnail` | `thumbnail_generation_jobs` | the last of its attempts fails | yes: gets a fresh set of attempts |
 | `intake` | `intake_sources` | the scan fails for good, or the sweep gives up on it | yes: due at once, with its attempt count kept |
 | `currency-migration` | `currency_migrations` | the recovery sweep finds it stuck | no: the rate was confirmed for that moment; start a new migration |
 
 The email queue, the reminder sweeps, group purge and the cleanup sweepers
-keep no failed jobs: they retry on their next run. An export, import or
-restore whose process died while it ran stays in progress and never shows
-up here ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
+keep no failed jobs: they retry on their next run.
+
+### Runs whose worker stopped
+
+An export, import or restore whose worker stops in the middle of the run,
+because the process crashed, was killed or was shut down, would otherwise
+stay in progress for good. While a job runs, its worker records a heartbeat
+on the job's row every minute (`heartbeat_at`). Every minute the export,
+import and restore workers each sweep their table for jobs in progress
+whose heartbeat is more than **10 minutes** old, and take their worker for
+dead. How long a job runs does not matter, only whether its worker is
+alive:
+
+- An export or an import goes back to the queue and the next worker runs
+  it again from the start. Each claim counts a run in the job's attempts
+  (the attempts column of `inventario jobs failed list`), a retry's too.
+  A job whose worker stops during its **third** run fails for good with
+  "the worker stopped before the export finished" (or "the import"), so a
+  job that kills its worker every time does not run forever.
+- A restore fails for good at once with "the worker stopped before the
+  restore finished": it may have written part of its backup, so it is not
+  run again.
+
+Each of these failures is listed here and counts once in
+`inventario_jobs_dead_lettered_total`. The sweeps run while a worker type is
+paused, too. A job in progress without any heartbeat was claimed by a
+version that recorded none. Upgrading from such a version stops its pods
+first (`PRODUCTION.md`, Appendix C), so no worker is left on the job; it is
+taken for dead once the job is a day old, since the job's creation is the
+only time it carries.
+
+The sweep does not catch two cases:
+
+- An export or import worker that waits for a free slot to start a queued
+  job does not sweep until it gets one: the sweep runs in the same loop.
+  On a replica whose slots are all taken by long runs, a dead run waits
+  for one of them to end, or for the sweep of another replica. The restore
+  worker does not wait for a slot, so it always sweeps.
+- A run that hangs while its process stays up keeps its heartbeat, which
+  is recorded apart from the run, and is never taken for dead. It stays in
+  progress until the process is restarted; the job then has no heartbeat
+  younger than ten minutes, and the sweep moves it on.
 
 Only the newest thumbnail job of a file counts. While that job is failed and
 nobody has retried or discarded it, viewing the file starts no new job, so a
@@ -638,15 +679,54 @@ it:
   next view of the file tries again.
 - `intake`: until the member deletes the intake session in the Inbox, or
   the group is deleted.
-- `currency-migration`: never. No cleanup removes currency migrations
-  today; the row stays until the group is deleted
+- `currency-migration`: the currency migration worker deletes completed and
+  failed migrations, discarded or not, once they ended more than
+  `--currency-migration-retention` ago
+  (`INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION`, `2160h` (90 days) by
+  default), with their per-item audit rows. It checks once an hour, also
+  while the worker is paused. A pending or running migration, and one a
+  group still points to (`location_groups.currency_migration_id`), is never
+  deleted. The period must be at least `24h`, because the daily limit of two
+  migrations per group counts the completed ones since UTC midnight; a
+  shorter value stops the server at startup. A deleted migration leaves the
+  group's migration history as well; the audit log keeps its
+  `currency_migration.start` and `currency_migration.complete` or
+  `currency_migration.fail` rows
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 
 Jobs that failed before the upgrade to this version are listed and counted
 like new ones, so an alert on a depth above zero fires from the first
-collection until they are retried or discarded one by one
-([#2946](https://github.com/denisvmedia/inventario/issues/2946) tracks a
-bulk discard).
+collection. Discard them in bulk by the time they failed before (see
+[Discarding in bulk](#discarding-in-bulk)), then alert on what fails after
+the upgrade.
+
+### Discarding in bulk
+
+A bulk discard (#2946) marks discarded every failed job that failed before a
+time, of one type or of every type, in one tenant or in every tenant. A job
+without a failure time counts from its creation. The time is a date, which
+stands for its midnight UTC, or an RFC 3339 time; a time in the future is
+refused, so a job that fails between the dry run and the discard is never
+taken without having been counted. Each job is discarded as a single
+discard does: its row and its error stay.
+
+```bash
+# Count the jobs, discard nothing
+inventario jobs failed discard --failed-before 2026-11-01 --dry-run --db-dsn postgres://...
+
+# See them: list takes the same filter
+inventario jobs failed list --failed-before 2026-11-01 --limit 0 --db-dsn postgres://...
+
+# Discard them, of one type and one tenant here
+inventario jobs failed discard --type export --tenant acme --failed-before 2026-11-01 --db-dsn postgres://...
+```
+
+The command prints how many jobs it discarded, per type, for example
+`Discarded 12 failed jobs that failed before 2026-11-01T00:00:00Z: export 10, thumbnail 2.`
+A job someone retried or discarded in the meantime is not counted. In the
+back office, **Discard older…** on the Failed jobs page does the same for
+the type and tenant the filters show, and asks with the count first. Both
+need the `platform_admin` role on the back office.
 
 ### Who sees what
 
@@ -676,6 +756,9 @@ inventario jobs failed retry --type thumbnail <job-id> --db-dsn postgres://...
 
 # Discard a job
 inventario jobs failed discard --type restore <job-id> --db-dsn postgres://...
+
+# Discard every job that failed before a time (see "Discarding in bulk")
+inventario jobs failed discard --failed-before 2026-11-01 --db-dsn postgres://...
 ```
 
 `list` prints the type, id, tenant, group, failure time, attempts, whether
@@ -687,16 +770,19 @@ that is no longer failed fails with "not found".
 
 | Method & path | Effect |
 | ------------- | ------ |
-| `GET /api/v1/admin/failed-jobs` | List failed jobs across tenants. `?type`, `?tenantID`, `?page`, `?per_page` (default 50, at most 100). `meta.job_types` lists every type with whether it can be retried. |
+| `GET /api/v1/admin/failed-jobs` | List failed jobs across tenants. `?type`, `?tenantID`, `?failed_before`, `?page`, `?per_page` (default 50, at most 100). `meta.job_types` lists every type with whether it can be retried. |
 | `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/retry` | Retry one job (204). |
 | `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/discard` | Discard one job (204). `platform_admin` only; a `support_agent` gets 403 `admin.role_required`. |
+| `POST /api/v1/admin/failed-jobs/bulk-discard` | Discard every job that failed before `?failed_before` (required), with the list's `?type` and `?tenantID`; `?dry_run=true` only counts. 200 with `meta.discarded` and `meta.by_type`. `platform_admin` only, the dry run too. |
 | `GET /api/v1/g/{groupSlug}/failed-jobs` | A group admin's list of the group's failed jobs. |
 | `POST /api/v1/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` | A group admin's retry. |
 
 Error codes: `failed_job.unknown_type` (404 on a path, 400 on the `?type`
 filter), `failed_job.not_found` (404: no such job, or it is no longer
-failed), `failed_job.not_retryable` (409). Members without the admin role
-get 403 on the group routes.
+failed), `failed_job.not_retryable` (409), `failed_job.invalid_failed_before`
+(400: `?failed_before` is not a date or an RFC 3339 time, or, on a bulk
+discard, is missing or in the future). Members without the admin role get
+403 on the group routes.
 
 ### Audit
 
@@ -706,8 +792,13 @@ unknown job type included: `admin.failed_job_retry` and
 actor, as for `workers pause`), and `failed_job_retry` from group settings.
 The entity type is the job type as sent and the entity id is the job id.
 Listing from the back office writes `admin.failed_job_list`, also for a
-refused `?type`. A discard that `RequirePlatformAdmin` turns away is not
-audited, as for impersonation.
+refused `?type`. A bulk discard writes one `admin.failed_job_bulk_discard`
+row, from the back office and the CLI, also when it is refused: the tenant
+of the filter, the job type of the filter as the entity type, and in the
+`user_agent` breadcrumb the filter (`failed_before`, `type`, the CLI's
+`tenant` as typed) with `discarded` and `by_type`. A dry run writes none. A
+discard that `RequirePlatformAdmin` turns away is not audited, as for
+impersonation.
 
 ### Observability
 
@@ -789,6 +880,25 @@ Suspend and reactivate:
   and magic-link sign-ins, token refresh and access tokens check the
   user's own tenant. Impersonating one of its users is refused with `422`
   and `tenant.not_active`.
+- While a tenant is not active, the background workers send its users no
+  email: no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. They write nothing for those rows either, so after reactivation a
+  reminder that is still due goes out on the next sweep (one email, for the
+  closest lead time reached), a storage warning goes out if the group is
+  still over the threshold, and a skipped weekly digest goes out if the
+  tenant is reactivated before the end of the week it was due in (the
+  worker sends from Monday at the send hour to Sunday, and no week is
+  claimed while the tenant is not active). A personal data export
+  requested before the suspension is still built and listed; only its
+  email is skipped. The workers that send no email (thumbnails, Trash
+  purge, orphan file cleanup) keep running.
+- When the tenant cannot be read (a database error), a reminder is retried
+  on the next sweep. The weekly digest of every member of the affected
+  group, and of a group whose members cannot be listed, waits for the next
+  sweep too, without claiming the week, so the digest that goes out covers
+  all of the member's groups. The export-ready email
+  is sent anyway: it goes out once and nothing retries it.
 - Reactivating makes the tenant active again. The sessions the suspension
   ended stay ended, and the revoked API tokens stay revoked: users sign in
   again and create new tokens.

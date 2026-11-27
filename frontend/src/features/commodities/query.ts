@@ -33,6 +33,9 @@ export interface CommodityQuery {
   types: string[]
   statuses: string[]
   areaId: string
+  // Items in any area of this location. Cannot be combined with
+  // unassigned: an item without an area is in no location.
+  locationId: string
   unassigned: boolean
   // Items bought from one of these sellers, by seller id.
   sellerIds: string[]
@@ -93,6 +96,7 @@ export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
   types: [],
   statuses: [],
   areaId: "",
+  locationId: "",
   unassigned: false,
   sellerIds: [],
   includeInactive: false,
@@ -116,6 +120,7 @@ const URL_PARAM = {
   type: "type",
   status: "status",
   area: "area",
+  location: "location",
   unassigned: "unassigned",
   seller: "seller",
   inactive: "inactive",
@@ -210,6 +215,7 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
     types: unique(params.getAll(URL_PARAM.type).filter(Boolean)),
     statuses: unique(params.getAll(URL_PARAM.status).filter(Boolean)),
     areaId: params.get(URL_PARAM.area) ?? "",
+    locationId: params.get(URL_PARAM.location) ?? "",
     unassigned: flag(params, URL_PARAM.unassigned, unreadable),
     sellerIds: unique(params.getAll(URL_PARAM.seller).filter(Boolean)),
     includeInactive: flag(params, URL_PARAM.inactive, unreadable),
@@ -250,6 +256,7 @@ export function writeCommodityQuery(
   for (const v of query.types) next.append(URL_PARAM.type, v)
   for (const v of query.statuses) next.append(URL_PARAM.status, v)
   if (query.areaId) next.set(URL_PARAM.area, query.areaId)
+  if (query.locationId) next.set(URL_PARAM.location, query.locationId)
   if (query.unassigned) next.set(URL_PARAM.unassigned, "1")
   for (const v of query.sellerIds) next.append(URL_PARAM.seller, v)
   if (query.includeInactive) next.set(URL_PARAM.inactive, "1")
@@ -353,6 +360,7 @@ export function hasCommodityFilters(query: CommodityQuery): boolean {
     query.types.length > 0 ||
     query.statuses.length > 0 ||
     query.areaId !== "" ||
+    query.locationId !== "" ||
     query.unassigned ||
     query.sellerIds.length > 0 ||
     query.includeInactive ||
@@ -377,6 +385,7 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     types: query.types,
     statuses: query.statuses,
     areaId: query.areaId || undefined,
+    locationId: query.locationId || undefined,
     unassigned: query.unassigned || undefined,
     sellerIds: query.sellerIds.length > 0 ? query.sellerIds : undefined,
     includeInactive: query.includeInactive,
@@ -441,6 +450,7 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   for (const t of sorted(opts.types)) params.append("type", t)
   for (const s of sorted(opts.statuses)) params.append("status", s)
   if (opts.areaId) params.set("area_id", opts.areaId)
+  if (opts.locationId) params.set("location_id", opts.locationId)
   if (opts.search?.trim()) params.set("q", opts.search.trim())
   // Absent means the server default (true, no filter); the list page
   // sends an explicit boolean.
@@ -500,6 +510,7 @@ export function commodityQueryToApiQuery(query: CommodityQuery): string {
 // parameters whose names differ.
 const API_TO_URL_PARAM: Record<string, string> = {
   area_id: URL_PARAM.area,
+  location_id: URL_PARAM.location,
   seller_id: URL_PARAM.seller,
   warranty_status: URL_PARAM.warranty,
 }

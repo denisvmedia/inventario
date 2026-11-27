@@ -230,6 +230,47 @@ describe("<CommandPalette /> from the TopBar", () => {
     expect(screen.queryByTestId("command-palette")).not.toBeInTheDocument()
   })
 
+  it("offers the items of a location (#2897)", async () => {
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    await typeQuery(user, palette, "garage")
+
+    const locationItems = await within(palette).findByTestId("palette-location-items-l1")
+    expect(locationItems).toHaveAccessibleName("Show items in Garage")
+    await user.click(locationItems)
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/g/household/commodities?location=l1"
+      )
+    )
+    expect(getRecent("household")).toEqual([])
+  })
+
+  // jsdom has no layout, so this guards the classes that keep a result
+  // title readable at 360 px (#2897): below sm the subtitle wraps under the
+  // title and the second action shows its icon only, named by aria-label.
+  it("keeps the title's width on a narrow screen", async () => {
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    await typeQuery(user, palette, "garage")
+
+    const row = await within(palette).findByTestId("palette-result-area-a1")
+    const title = within(row).getByText("Garage shelf")
+    expect(title.parentElement).toHaveClass("flex-col", "sm:flex-row")
+    expect(within(palette).getByTestId("palette-area-items-a1-label")).toHaveClass(
+      "hidden",
+      "sm:inline"
+    )
+    expect(within(palette).getByTestId("palette-area-items-a1")).toHaveAttribute(
+      "title",
+      "Show items in Garage shelf"
+    )
+  })
+
   it("offers the items of an area and of a tag", async () => {
     useHandlers()
     const user = userEvent.setup()
