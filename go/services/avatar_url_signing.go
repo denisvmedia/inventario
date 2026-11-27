@@ -19,8 +19,12 @@ const AvatarURLPrefix = "/api/v1/avatars/"
 type AvatarURLClaims struct {
 	// SubjectID is the user whose photo the URL shows.
 	SubjectID string
-	// ViewerID is the user the URL was minted for.
+	// ViewerID is the user the URL was minted for. Empty on a URL minted for
+	// a back-office operator.
 	ViewerID string
+	// OperatorID is the back-office operator the URL was minted for, see
+	// GenerateOperatorAvatarURL. Empty on a URL minted for a user.
+	OperatorID string
 	// GroupID is the group the viewer and the subject shared when the URL was
 	// minted. Empty when the viewer is the subject.
 	GroupID string
@@ -74,9 +78,41 @@ func (s *FileSigningService) GenerateAvatarURL(subjectID, avatarKey, viewerID, g
 	return AvatarURLPrefix + url.PathEscape(subjectID) + "?" + query.Encode(), nil
 }
 
+// GenerateOperatorAvatarURL mints a signed URL for a user's profile photo
+// that a back-office operator may load: the admin pages show the users and
+// group members of every tenant. The caller has checked that operatorID is
+// the authenticated operator. The URL names the operator in `op` instead of
+// a viewer in `uid`, and its HMAC covers a message of its own, so neither
+// kind of URL can be turned into the other. Expiry and caching work as for
+// GenerateAvatarURL.
+func (s *FileSigningService) GenerateOperatorAvatarURL(subjectID, avatarKey, operatorID string, binding SessionBinding) (string, error) {
+	if subjectID == "" || operatorID == "" {
+		return "", errors.New("subject and operator IDs are required")
+	}
+	if avatarKey == "" {
+		return "", errors.New("avatar key is required")
+	}
+
+	version := AvatarVersion(avatarKey)
+	exp := s.avatarURLExpiry(time.Now())
+	signature, err := s.generateSignature(operatorAvatarURLMessage(AvatarURLPrefix+subjectID, operatorID, version, exp, binding))
+	if err != nil {
+		return "", errxtrace.Wrap("failed to sign the avatar URL", err)
+	}
+
+	query := url.Values{}
+	query.Set("v", version)
+	query.Set("op", operatorID)
+	query.Set("exp", strconv.FormatInt(exp, 10))
+	query.Set("sig", signature)
+	return AvatarURLPrefix + url.PathEscape(subjectID) + "?" + query.Encode(), nil
+}
+
 // ValidateAvatarURL checks a signed avatar URL and returns what it grants.
 // urlPath is the decoded request path (r.URL.Path); binding comes from the
 // validating request, exactly as for file URLs (see ExtractSessionBinding).
+// A URL minted by GenerateOperatorAvatarURL returns claims with OperatorID
+// set and ViewerID empty.
 func (s *FileSigningService) ValidateAvatarURL(urlPath string, query url.Values, binding SessionBinding) (*AvatarURLClaims, error) {
 	subjectID, ok := strings.CutPrefix(urlPath, AvatarURLPrefix)
 	if !ok || subjectID == "" || strings.Contains(subjectID, "/") {
@@ -86,9 +122,13 @@ func (s *FileSigningService) ValidateAvatarURL(urlPath string, query url.Values,
 	signature := query.Get("sig")
 	version := query.Get("v")
 	viewerID := query.Get("uid")
+	operatorID := query.Get("op")
 	groupID := query.Get("gid")
-	if signature == "" || version == "" || viewerID == "" {
+	if signature == "" || version == "" || (viewerID == "") == (operatorID == "") {
 		return nil, errors.New("missing avatar URL parameter")
+	}
+	if operatorID != "" && groupID != "" {
+		return nil, errors.New("unexpected avatar URL parameter")
 	}
 	exp, err := strconv.ParseInt(query.Get("exp"), 10, 64)
 	if err != nil {
@@ -99,15 +139,20 @@ func (s *FileSigningService) ValidateAvatarURL(urlPath string, query url.Values,
 		return nil, errors.New("signed URL has expired")
 	}
 
-	if !s.validateSignature(avatarURLMessage(urlPath, viewerID, groupID, version, exp, binding), signature) {
+	message := avatarURLMessage(urlPath, viewerID, groupID, version, exp, binding)
+	if operatorID != "" {
+		message = operatorAvatarURLMessage(urlPath, operatorID, version, exp, binding)
+	}
+	if !s.validateSignature(message, signature) {
 		return nil, errors.New("invalid signature")
 	}
 	return &AvatarURLClaims{
-		SubjectID: subjectID,
-		ViewerID:  viewerID,
-		GroupID:   groupID,
-		Version:   version,
-		ExpiresAt: expiresAt,
+		SubjectID:  subjectID,
+		ViewerID:   viewerID,
+		OperatorID: operatorID,
+		GroupID:    groupID,
+		Version:    version,
+		ExpiresAt:  expiresAt,
 	}, nil
 }
 
@@ -116,6 +161,13 @@ func (s *FileSigningService) ValidateAvatarURL(urlPath string, query url.Values,
 // the method.
 func avatarURLMessage(urlPath, viewerID, groupID, version string, exp int64, binding SessionBinding) string {
 	return fmt.Sprintf("AVATAR|GET|%s|%s|%s|%s|%d|%s", urlPath, viewerID, groupID, version, exp, binding)
+}
+
+// operatorAvatarURLMessage is the string an operator avatar URL's HMAC
+// covers. The OPERATOR field keeps it from ever equaling a user URL's
+// message, so an operator ID cannot be passed off as a user ID or back.
+func operatorAvatarURLMessage(urlPath, operatorID, version string, exp int64, binding SessionBinding) string {
+	return fmt.Sprintf("AVATAR|OPERATOR|GET|%s|%s|%s|%d|%s", urlPath, operatorID, version, exp, binding)
 }
 
 // avatarURLExpiry returns the second period boundary after now: between one

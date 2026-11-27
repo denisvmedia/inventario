@@ -1,5 +1,28 @@
 {
   "failedJobs": {
+    "bulk": {
+      "action": "Discard older…",
+      "body": "Every failed job of the job type and tenant below that failed before the day you pick leaves the list of failed jobs and the failed-jobs gauge. The records and errors stay until the normal cleanup removes them. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm_one": "Discard {{count}} job",
+      "confirm_other": "Discard {{count}} jobs",
+      "confirmIdle": "Discard",
+      "count_one": "{{count}} failed job will be discarded.",
+      "count_other": "{{count}} failed jobs will be discarded.",
+      "countError": "Could not count the failed jobs. Try again later.",
+      "counting": "Counting the failed jobs…",
+      "dateHint": "Jobs that failed before 00:00 UTC on this day. A job without a failure time counts from when it was created.",
+      "dateLabel": "Failed before",
+      "discarded_one": "{{count}} failed job is discarded.",
+      "discarded_other": "{{count}} failed jobs are discarded.",
+      "error": "Could not discard the jobs. Try again later.",
+      "future": "The day must not be later than today.",
+      "none": "No failed job of these filters failed before this day.",
+      "pickDate": "Pick a day to see how many jobs this discards.",
+      "scopeTenant": "Tenant",
+      "scopeType": "Job type",
+      "title": "Discard older failed jobs"
+    },
     "discard": "Discard",
     "discardDialog": {
       "body": "The job leaves the list of failed jobs and the failed-jobs gauge. Its record and its error stay until the normal cleanup removes them. This cannot be undone.",

@@ -141,6 +141,9 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # "Hostnames and tenants".
 ./inventario tenants update acme --domain=inventory.acme.com
 
+# Remove the tenant's domain
+./inventario tenants update acme --domain=
+
 # Delete tenant with confirmation (type the tenant's slug to confirm)
 ./inventario tenants delete acme
 
@@ -212,6 +215,10 @@ out and keeps them out until it is reactivated; a status change made with
 > `--upload-location` (or `INVENTARIO_USERS_UPDATE_UPLOAD_LOCATION`) with the
 > server's upload location. Moving a user together with their content is not
 > supported.
+
+> **Deleting a user** also deletes their profile photo from storage, so pass
+> `--upload-location` (or `INVENTARIO_USERS_DELETE_UPLOAD_LOCATION`) with the
+> server's upload location, as for a move.
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 

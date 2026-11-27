@@ -394,6 +394,8 @@
     "inactiveHidden": "Hide inactive",
     "inactiveShown": "Showing inactive",
     "lentOut": "Lent out",
+    "location": "Location",
+    "locationAll": "All locations",
     "missing": "Missing",
     "missingOptions": {
       "noPhoto": "No photo",
@@ -791,6 +793,7 @@
     "conditions": {
       "ascending": "ascending",
       "deletedArea": "Deleted area",
+      "deletedLocation": "Deleted location",
       "deletedTag": "{{condition}} (deleted)",
       "deletedType": "{{type}} (deleted)",
       "descending": "descending",
@@ -897,6 +900,7 @@
       "customFields_one": "A custom field of this view was deleted.",
       "customFields_other": "{{count}} custom fields of this view were deleted.",
       "hint": "The marked conditions refer to something that was deleted. The view still applies them, so it shows what still matches.",
+      "location": "The location of this view was deleted.",
       "sellers_one": "A seller of this view was deleted.",
       "sellers_other": "{{count}} sellers of this view were deleted.",
       "tags_one": "Tag {{tags}} no longer exists.",

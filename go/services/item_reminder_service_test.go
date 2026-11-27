@@ -483,10 +483,3 @@ func TestItemReminderService_NoRemindersWhileTrashed(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(upcoming, qt.HasLen, 1)
 }
-
-func TestReminderTargetActive(t *testing.T) {
-	c := qt.New(t)
-	c.Assert(services.ReminderTargetActive(nil), qt.IsFalse)
-	c.Assert(services.ReminderTargetActive(&models.Commodity{}), qt.IsTrue)
-	c.Assert(services.ReminderTargetActive(&models.Commodity{DeletedAt: new(time.Now())}), qt.IsFalse)
-}

@@ -314,6 +314,7 @@ describe("<UploadFilesDialog />", () => {
     const checkbox = await screen.findByTestId(/^files-upload-meta-cover-/)
     expect((checkbox as HTMLInputElement).checked).toBe(true)
     const categorySelect = screen.getByTestId(/^files-upload-meta-category-/)
+    expect(categorySelect).toHaveAttribute("data-slot", "native-select")
     await user.selectOptions(categorySelect, "documents")
     // Switching category away from photos hides the checkbox entirely.
     expect(screen.queryByTestId(/^files-upload-meta-cover-/)).not.toBeInTheDocument()

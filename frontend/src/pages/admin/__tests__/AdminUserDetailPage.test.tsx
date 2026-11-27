@@ -19,6 +19,7 @@ import { __resetHttpForTests } from "@/lib/http"
 import { __resetNavigationForTests, setHardRedirect } from "@/lib/navigation"
 import { AdminUserDetailPage } from "@/pages/admin/AdminUserDetailPage"
 import { backofficeAuthHandlers } from "@/test/handlers"
+import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -73,6 +74,7 @@ beforeEach(() => {
 
 afterEach(() => {
   __resetNavigationForTests()
+  vi.unstubAllGlobals()
 })
 
 // Seeds /auth/me + the user-detail endpoint. `detail` overrides let a
@@ -123,6 +125,16 @@ describe("AdminUserDetailPage", () => {
     const groupRow = screen.getByTestId("admin-user-group-row")
     expect(within(groupRow).getByText("HQ Inventory")).toBeInTheDocument()
     expect(groupRow).toHaveAttribute("href", "/admin/groups/group-1")
+  })
+
+  it("shows the user's photo from the avatar_url the admin API signs", async () => {
+    stubImageLoading()
+    seedDetail({ avatar_url: "/api/v1/avatars/user-1?op=bo-1&sig=a" })
+    renderPage()
+
+    const identity = await screen.findByTestId("admin-user-identity")
+    const image = await within(identity).findByTestId("user-avatar-image")
+    expect(image).toHaveAttribute("src", "/api/v1/avatars/user-1?op=bo-1&sig=a")
   })
 
   it("blocks a user: optimistic badge flip, success toast, dialog closes", async () => {

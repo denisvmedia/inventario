@@ -314,6 +314,7 @@ func (v *SavedView) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&v.Name, rules.NotEmpty, validation.RuneLength(1, MaxSavedViewNameRunes)),
 		validation.Field(&v.Icon, validation.Required),
 		validation.Field(&v.Entity, validation.Required),
+		// Bytes: MaxSavedViewQueryBytes bounds the size of the stored query string, which members never read as text.
 		validation.Field(&v.Query, validation.Length(0, MaxSavedViewQueryBytes)),
 		validation.Field(&v.QueryVersion, validation.Required),
 		validation.Field(&v.Layout),

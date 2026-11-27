@@ -38,8 +38,9 @@ type Service struct {
 	// location they don't need.
 	fileService *services.FileService
 	// avatars is optional. When set (via SetAvatarService), a tenant move
-	// copies the user's profile photo into the new tenant's storage. A move
-	// of a user who has a photo is refused while it is nil.
+	// copies the user's profile photo into the new tenant's storage, and
+	// DeleteUser deletes the photo of the user it deletes. A move of a user
+	// who has a photo is refused while it is nil; a delete leaves the photo.
 	avatars *services.AvatarService
 	// blacklist is optional. When set (via SetTokenBlacklist), ending a
 	// tenant's sessions stamps it for every user of the tenant, for
@@ -56,8 +57,9 @@ func NewServiceWithFactorySet(factorySet *registry.FactorySet) *Service {
 }
 
 // SetAvatarService wires the avatar service a tenant move copies the user's
-// profile photo with. Callers that may move users (the users update CLI, which
-// builds it from the --upload-location flag) must call this.
+// profile photo with and DeleteUser deletes it with. Callers that may move or
+// delete users (the users update and delete CLIs, which build it from the
+// --upload-location flag) must call this.
 func (s *Service) SetAvatarService(avatars *services.AvatarService) {
 	s.avatars = avatars
 }
@@ -189,7 +191,7 @@ func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*m
 	// Create tenant using factory set
 	createdTenant, err := s.factorySet.TenantRegistry.Create(ctx, *tenant)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tenant: %w", err)
+		return nil, fmt.Errorf("failed to create tenant: %w", tenantDomainTaken(err, tenant.Domain))
 	}
 
 	return createdTenant, nil
@@ -291,8 +293,8 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	if err := tenant.ValidateWithContext(ctx); err != nil {
 		return nil, fmt.Errorf("tenant validation failed: %w", err)
 	}
-	// Only a domain the update changes is checked: a stored domain that
-	// another tenant also has must not block an edit of the name.
+	// Only a domain the update changes is checked. The unique index on
+	// tenants.domain keeps the stored one unique.
 	if !sameTenantDomain(previousDomain, tenant.Domain) {
 		if err := s.checkTenantDomainFree(ctx, tenant.ID, tenant.Domain); err != nil {
 			return nil, err
@@ -302,7 +304,7 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	// Update tenant
 	updatedTenant, err := s.factorySet.TenantRegistry.Update(ctx, *tenant)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update tenant: %w", err)
+		return nil, fmt.Errorf("failed to update tenant: %w", tenantDomainTaken(err, tenant.Domain))
 	}
 
 	if previousStatus == models.TenantStatusActive && updatedTenant.Status != models.TenantStatusActive {
@@ -738,6 +740,13 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 			),
 			err,
 		)
+	}
+
+	// (c) The account is gone, so a photo left behind would be a personal
+	// image nobody can see or remove. Best effort, as for self-service
+	// account deletion: the user is already deleted.
+	if s.avatars != nil && user.AvatarPath != nil {
+		s.avatars.DeleteStored(ctx, *user.AvatarPath)
 	}
 
 	return nil

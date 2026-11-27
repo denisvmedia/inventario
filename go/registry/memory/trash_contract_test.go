@@ -31,8 +31,16 @@ func TestDraftMarkContract_Memory(t *testing.T) {
 	registrytest.RunDraftMarkContract(t, newMemoryTrashEnv)
 }
 
-// newMemoryTrashEnv returns registries scoped to one empty group, with one
-// area to place items in.
+func TestBulkPatchContract_Memory(t *testing.T) {
+	registrytest.RunBulkPatchContract(t, newMemoryTrashEnv)
+}
+
+func TestLocationFilterContract_Memory(t *testing.T) {
+	registrytest.RunLocationFilterContract(t, newMemoryTrashEnv)
+}
+
+// newMemoryTrashEnv returns registries scoped to one empty group, with two
+// areas of one location to place items in and an area of a second location.
 func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 	c := qt.New(t)
 
@@ -58,6 +66,12 @@ func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 	c.Assert(err, qt.IsNil)
 	area, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Shed", LocationID: loc.GetID()})
 	c.Assert(err, qt.IsNil)
+	other, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Attic", LocationID: loc.GetID()})
+	c.Assert(err, qt.IsNil)
+	cottage, err := set.LocationRegistry.Create(ctx, models.Location{Name: "Cottage", Address: "lake"})
+	c.Assert(err, qt.IsNil)
+	boathouse, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Boathouse", LocationID: cottage.GetID()})
+	c.Assert(err, qt.IsNil)
 
 	return registrytest.TrashEnv{
 		Ctx:          ctx,
@@ -65,5 +79,10 @@ func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 		Files:        set.FileRegistry,
 		ServiceFiles: fs.FileRegistryFactory.CreateServiceRegistry(),
 		AreaID:       area.GetID(),
+		OtherAreaID:  other.GetID(),
+
+		LocationID:          loc.GetID(),
+		ElsewhereLocationID: cottage.GetID(),
+		ElsewhereAreaID:     boathouse.GetID(),
 	}
 }

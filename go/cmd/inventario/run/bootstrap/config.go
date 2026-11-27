@@ -57,6 +57,7 @@ type Config struct {
 	MaintenanceReminderInterval  string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
 	ItemReminderInterval         string `yaml:"item_reminder_interval" env:"ITEM_REMINDER_INTERVAL" env-default:""`
 	CurrencyMigrationInterval    string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
+	CurrencyMigrationRetention   string `yaml:"currency_migration_retention" env:"CURRENCY_MIGRATION_RETENTION" env-default:""`
 	BusinessMetricsInterval      string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
 	WorkerControlRefreshInterval string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
 	// Orphan-file GC (#2237). Mode is off | report | delete and is validated
@@ -489,6 +490,9 @@ func (c *Config) setWorkerDefaults() {
 	c.setWeeklyDigestDefaults()
 	if c.CurrencyMigrationInterval == "" {
 		c.CurrencyMigrationInterval = defaults.GetCurrencyMigrationInterval()
+	}
+	if c.CurrencyMigrationRetention == "" {
+		c.CurrencyMigrationRetention = defaults.GetCurrencyMigrationRetention()
 	}
 	if c.BusinessMetricsInterval == "" {
 		c.BusinessMetricsInterval = defaults.GetBusinessMetricsInterval()

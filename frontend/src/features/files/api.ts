@@ -4,7 +4,7 @@
 // single endpoint regardless of whether a row originated as an image,
 // invoice, or manual on the legacy split-table side.
 import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
-import { http, HttpError } from "@/lib/http"
+import { http, HttpError, type InGroup } from "@/lib/http"
 import type { Schema } from "@/types"
 
 export type FileEntity = Schema<"models.FileEntity">
@@ -81,6 +81,7 @@ export interface ListFilesOptions {
   linkedEntityType?: string
   linkedEntityId?: string
   signal?: AbortSignal
+  group?: string
 }
 
 // Listed file rows carry their signed URL + thumbnails inline so the
@@ -106,7 +107,10 @@ export async function listFiles(
   }
   const qs = params.toString()
   const path = qs ? `/files?${qs}` : "/files"
-  const body = await http.get<FilesListEnvelope>(path, { signal: options.signal })
+  const body = await http.get<FilesListEnvelope>(path, {
+    signal: options.signal,
+    group: options.group,
+  })
   const signed = body.meta?.signed_urls ?? {}
   return {
     files: (body.data ?? []).map((row) => ({
@@ -175,14 +179,19 @@ export interface AttachFileRequest {
 // no-op on the BE (200 instead of 201), so a retry is safe.
 export async function attachFile(
   fileId: string,
-  req: AttachFileRequest
+  req: AttachFileRequest,
+  opts: InGroup = {}
 ): Promise<FileEntity & { id: string }> {
-  const body = await http.post<FileDetailEnvelope>(`/files/${encodeURIComponent(fileId)}/links`, {
-    data: {
-      type: "file-links",
-      attributes: { entity_type: req.entityType, entity_id: req.entityId, meta: req.meta },
+  const body = await http.post<FileDetailEnvelope>(
+    `/files/${encodeURIComponent(fileId)}/links`,
+    {
+      data: {
+        type: "file-links",
+        attributes: { entity_type: req.entityType, entity_id: req.entityId, meta: req.meta },
+      },
     },
-  })
+    { group: opts.group }
+  )
   if (!body.attributes) {
     throw new Error(`Malformed POST /files/${fileId}/links response: missing attributes`)
   }
@@ -193,10 +202,12 @@ export async function attachFile(
 // attachment it is a standalone file afterwards.
 export async function detachFile(
   fileId: string,
-  linkId: string
+  linkId: string,
+  opts: InGroup = {}
 ): Promise<FileEntity & { id: string }> {
   const body = await http.del<FileDetailEnvelope>(
-    `/files/${encodeURIComponent(fileId)}/links/${encodeURIComponent(linkId)}`
+    `/files/${encodeURIComponent(fileId)}/links/${encodeURIComponent(linkId)}`,
+    { group: opts.group }
   )
   if (!body?.attributes) {
     throw new Error(
@@ -231,11 +242,14 @@ export function ordinaryLinks(file: Pick<FileEntity, "links">): FileLink[] {
 // first attachment (POST /files/{id}/links).
 export async function updateFile(
   id: string,
-  req: UpdateFileRequest
+  req: UpdateFileRequest,
+  opts: InGroup = {}
 ): Promise<FileEntity & { id: string }> {
-  const body = await http.put<FileDetailEnvelope>(`/files/${encodeURIComponent(id)}`, {
-    data: { id, type: "files", attributes: req },
-  })
+  const body = await http.put<FileDetailEnvelope>(
+    `/files/${encodeURIComponent(id)}`,
+    { data: { id, type: "files", attributes: req } },
+    { group: opts.group }
+  )
   if (!body.attributes) {
     throw new Error(`Malformed PUT /files/${id} response: missing attributes`)
   }
@@ -243,20 +257,24 @@ export async function updateFile(
 }
 
 // deleteFile moves the file to the group's Trash (#2799).
-export async function deleteFile(id: string): Promise<void> {
-  await http.del<void>(`/files/${encodeURIComponent(id)}`)
+export async function deleteFile(id: string, opts: InGroup = {}): Promise<void> {
+  await http.del<void>(`/files/${encodeURIComponent(id)}`, { group: opts.group })
 }
 
 // trashUnlinkedFile moves a file a form uploaded to Trash when nothing links
 // it (#1626): an upload whose attach failed, left behind when the form is
 // cancelled. A file that something links after all (an attach whose answer
-// was lost) stays, and so does one already gone. filesPath is the group's
-// files path read before the uploads started (see groupScopedPath); without
-// it the request goes to the current group. Resolves whether the file went
-// to Trash.
-export async function trashUnlinkedFile(id: string, filesPath?: string): Promise<boolean> {
+// was lost) stays, and so does one already gone. The file is looked up in
+// filesPath, the group's files path read before the uploads started (see
+// groupScopedPath), or in the group named by group; without either, in the
+// current group. Resolves whether the file went to Trash.
+export async function trashUnlinkedFile(
+  id: string,
+  where: { filesPath?: string } & InGroup = {}
+): Promise<boolean> {
+  const { filesPath, group } = where
   const path = `${filesPath ?? "/files"}/${encodeURIComponent(id)}`
-  const init = { skipGroupRewrite: !!filesPath }
+  const init = filesPath ? { skipGroupRewrite: true } : { group }
   let file: FileDetailEnvelope
   try {
     file = await http.get<FileDetailEnvelope>(path, init)
@@ -422,10 +440,10 @@ export interface UploadResult {
 // `/uploads/file` derives `Category` from MIME server-side; the caller
 // can override it with a follow-up updateFile() if the user picked a
 // different bucket in the upload metadata step.
-export async function uploadFile(file: File): Promise<UploadResult> {
+export async function uploadFile(file: File, opts: InGroup = {}): Promise<UploadResult> {
   const form = new FormData()
   form.append("file", file)
-  const body = await http.post<FileDetailEnvelope>(`/uploads/file`, form)
+  const body = await http.post<FileDetailEnvelope>(`/uploads/file`, form, { group: opts.group })
   // Strict envelope: a missing id or attributes here would otherwise
   // propagate as empty strings into cache keys, navigation URLs, and
   // follow-up updateFile() calls.
