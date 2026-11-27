@@ -680,6 +680,13 @@ when to add an entry and where it goes.
   notification toggles showed their defaults, and the saved language and
   default items view were not applied
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+
+- Delete buttons look the same everywhere: red text with a red hover. The
+  location and area pages showed only the icon in red, the file detail panel
+  used a solid red button, and the maintenance, supplies and reminder rows
+  had no red at all. The solid red button is the one that confirms the delete
+  ([#2914](https://github.com/denisvmedia/inventario/issues/2914)).
+
 - A warranty, maintenance or loan reminder is no longer dropped when a
   recipient's account cannot be read for a moment, for example during a
   database restart. The reminder is retried on the next sweep instead of

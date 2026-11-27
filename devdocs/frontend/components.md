@@ -132,6 +132,38 @@ for a className override at the call site first:
 When the override repeats 3+ times, extract a thin wrapper (still in
 `components/`) — never duplicate primitive markup.
 
+## Delete triggers
+
+A delete trigger opens a confirmation; the solid red button is the action
+that confirms it. The trigger's text and icon are red in every place, and
+the variant depends on where it sits:
+
+| Where | Trigger | Mock |
+| --- | --- | --- |
+| Detail surface: the header of the item, location and area pages, the file detail sheet's footer | `variant="outline"`, the size of the buttons next to it | `ItemDetail.tsx` L705, `FileDetail.tsx` L302 |
+| List row or card row: tags, sellers, supplies, reminders, maintenance schedules | `variant="ghost"`; `size="icon"` (or `size-7`) with an `aria-label`, or `size="sm"` with a label when the row's other actions have labels | `TagsView.tsx` L314, `FilePreviewDialog.tsx` L153 |
+| Confirmation dialog, and a danger-zone action such as Delete group | `variant="destructive"` | `LocationPickerView.tsx` L731, `GroupSettingsView.tsx` L165 |
+| Dropdown menu | `<DropdownMenuItem variant="destructive">` | `MembersView.tsx` L400 writes the same red text as a className |
+
+The outline and ghost triggers take the same className:
+
+```tsx
+<Button
+  variant="outline"
+  size="sm"
+  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+  onClick={() => setDeleteOpen(true)}
+  aria-label={t("commodities:detail.delete")}
+>
+  <Trash2 className="size-3.5" aria-hidden="true" />
+</Button>
+```
+
+`hover:text-destructive` is needed: both variants set
+`hover:text-accent-foreground`, which turns the text dark on the red hover.
+The className is written at the call site, as the mock does, and is not a
+`Button` variant.
+
 ## Adding a new component — step by step
 
 1. **Decide the layer:**
