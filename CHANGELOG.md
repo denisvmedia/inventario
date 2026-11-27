@@ -1007,6 +1007,14 @@ when to add an entry and where it goes.
   `approval` creates the account inactive until an administrator activates it,
   and `open` creates an active one as before
   ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+- Signing out now clears everything the app loaded for that account. Before,
+  the next person to sign in on the same browser tab could see the previous
+  account's groups, item lists and saved views until the app reloaded them,
+  and a sign-out or a change of account in another tab left the previous
+  account's data on screen in this one. The same now holds when a session
+  ends because it could not be renewed, and a change the previous account
+  saved that finishes after the switch no longer shows up for the next one
+  ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
 
 ### Operators
 
