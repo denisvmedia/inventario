@@ -1371,6 +1371,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
 - **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
 
+#### 2026-11-27 — Group switcher and role badge in the top bar
+
+- **Issue/PR**: #1258 / #2910
+- **Mock**: The header in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) (L258–L302) holds the page title, search and the toggles, with no group or role control. The group switcher is only in the sidebar ([`design-mocks/src/components/LocationGroupSwitcher.tsx`](../../design-mocks/src/components/LocationGroupSwitcher.tsx)). A role is always the `RoleBadge` of [`design-mocks/src/views/MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx) (L410–L419).
+- **Reality**: `frontend/src/components/GroupRoleCluster.tsx` puts a compact group switcher (an `h-7` outline trigger with the group name and `ChevronsUpDown`) and the caller's role between the search and the toggles. The role is the shared `frontend/src/components/RoleBadge.tsx` that the Members page and the admin pages draw: the mock's icon, tint and translated `members:roles.*` label, here at the trigger's `h-7`, `rounded-md` and `text-xs` so the pair reads as one unit. Both switchers go through `useSwitchGroup` (`frontend/src/features/group/useSwitchGroup.ts`): a switch opens `/g/<slug>` and saves the group as the user's default group.
+- **Why**: Not present in mock. #1258 asks for the active group and the caller's role side by side in the header, so a member sees which group and which rights a page shows while the sidebar is collapsed to icons or closed on a phone. #2910 asks for one badge and one switch handler.
+- **Approved by**: user (explicit) — pre-approved for #2910 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the cluster if the owner decides the sidebar switcher is enough, or follow the mock if `inventario-design` draws a group control in its header.
+
 ### i18n & Formatting
 
 #### 2026-05-16 — Dashboard hero: K/M/B compact-notation fallback at ≥1e7

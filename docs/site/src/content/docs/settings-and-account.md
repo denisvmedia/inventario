@@ -29,8 +29,9 @@ and the **Account** section of Preferences). On the **Edit profile** page you
 can:
 
 1. Update your **Name**.
-2. Choose your **Default group** — the group you land in after signing in. You
-   can switch groups any time from the group selector.
+2. Choose your **Default group** — the group you land in after signing in.
+   Switching groups with a group selector also makes that group your default,
+   so you come back to the group you used last.
 3. Click **Save changes**.
 
 ### Profile photo

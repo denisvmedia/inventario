@@ -40,10 +40,12 @@ The group currency is fixed when you create the group. To change it later you'd 
 
 The active group decides what the whole app shows you.
 
-1. Open the group selector at the top of the sidebar.
+1. Open the group selector at the top of the sidebar, or the one with the group's name in the top bar.
 2. Pick the group you want from the list. A check mark shows which one is currently active.
 
-The app switches to that group immediately.
+The app switches to that group immediately, and the group becomes your default group: the next time you sign in, on any device, you land in it. You can also pick a default group on your [profile](../settings-and-account/#your-profile).
+
+Next to the top bar selector, a badge shows your role in the active group (Viewer, User, Administrator or Owner), the same badge the **Members** page shows. [Members and roles](#members-and-roles) explains what each role can do.
 
 :::tip
 You can keep two browser tabs open on two different groups — they stay independent of each other. The same dropdown also has shortcuts to **Group settings** (for the current group) and **Create new group**.
