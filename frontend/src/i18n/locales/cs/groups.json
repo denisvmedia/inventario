@@ -264,7 +264,15 @@
         "stays": "Zůstane ({{total}})",
         "title": "Odebrat sadu Sbírka?",
         "checking": "Ověřuji, co položky používají…",
-        "checkFailed": "Nepodařilo se ověřit, co položky používají. Zavřete okno a zkuste to znovu."
+        "checkFailed": "Nepodařilo se ověřit, co položky používají. Zavřete okno a zkuste to znovu.",
+        "keepTypeDrafts_one": "{{count}} koncept má tento typ.",
+        "keepTypeDrafts_few": "{{count}} koncepty mají tento typ.",
+        "keepTypeDrafts_many": "{{count}} konceptu má tento typ.",
+        "keepTypeDrafts_other": "{{count}} konceptů má tento typ.",
+        "keepFieldDrafts_one": "{{count}} koncept má hodnotu tohoto pole.",
+        "keepFieldDrafts_few": "{{count}} koncepty mají hodnotu tohoto pole.",
+        "keepFieldDrafts_many": "{{count}} konceptu má hodnotu tohoto pole.",
+        "keepFieldDrafts_other": "{{count}} konceptů má hodnotu tohoto pole."
       },
       "state": {
         "complete": "Přidáno",

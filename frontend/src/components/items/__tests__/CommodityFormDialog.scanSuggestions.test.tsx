@@ -9,7 +9,13 @@ import type { Commodity } from "@/features/commodities/api"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
-import { apiUrl, commodityScanHandlers, customFieldHandlers, groupHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  commodityScanHandlers,
+  customFieldHandlers,
+  draftHandlers,
+  groupHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -371,7 +377,11 @@ describe("<CommodityFormDialog /> scan while editing an item (#1626)", () => {
   it("counts the item's saved currency and a custom field at its type default as the user's", async () => {
     // The item form reads the group's fields from the group in context.
     setAccessToken("good-token")
+    // The scanned receipt joins the item's files; Save uploads and attaches
+    // it before it saves the changes (#2916).
+    const fake = draftHandlers.backend(SLUG)
     server.use(
+      ...fake.handlers,
       ...groupHandlers.list([{ id: "g1", slug: SLUG, name: "Household", group_currency: "USD" }]),
       ...customFieldHandlers.list(SLUG, [
         customFieldHandlers.field({
@@ -437,5 +447,6 @@ describe("<CommodityFormDialog /> scan while editing an item (#1626)", () => {
       original_price_currency: "USD",
       custom_fields: { "cf-plate": "ZZ" },
     })
+    expect(fake.files.map((f) => f.links.map((l) => l.entity_id))).toEqual([[existing.id]])
   })
 })

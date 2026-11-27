@@ -1016,6 +1016,90 @@ func TestIntakeDeliver_PromotedWhileAnswering(t *testing.T) {
 	c.Assert(*replay.Document.CommodityID, qt.Equals, item.ID)
 }
 
+// promoteOnFirstKeyGet promotes the draft the first GetByClientKey finds,
+// after the read, as another member who finishes the draft at that moment
+// would.
+type promoteOnFirstKeyGet struct {
+	registry.CommodityDraftRegistryFactory
+	armed   atomic.Bool
+	promote func(*models.CommodityDraft)
+}
+
+type promoteOnFirstKeyGetRegistry struct {
+	registry.CommodityDraftRegistry
+	f *promoteOnFirstKeyGet
+}
+
+func (p *promoteOnFirstKeyGet) CreateUserRegistry(ctx context.Context) (registry.CommodityDraftRegistry, error) {
+	reg, err := p.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	return &promoteOnFirstKeyGetRegistry{CommodityDraftRegistry: reg, f: p}, err
+}
+
+func (r *promoteOnFirstKeyGetRegistry) GetByClientKey(ctx context.Context, key string) (*models.CommodityDraft, error) {
+	draft, err := r.CommodityDraftRegistry.GetByClientKey(ctx, key)
+	if err == nil && r.f.armed.CompareAndSwap(true, false) {
+		r.f.promote(draft)
+	}
+	return draft, err
+}
+
+// TestIntakeDeliver_LostRecordPromotedDuringADelivery: the group lost the
+// record of the delivery that made a draft, and a delivery of the document
+// with other values makes a new record. A member promotes the old draft
+// while that delivery is between making the record and reading it again
+// (#3008). The promotion leaves the new record alone, and the delivery is
+// refused as a conflict and keeps no record, as it is without the promotion.
+// Later deliveries with either values are refused the same way, never told
+// the document changed.
+func TestIntakeDeliver_LostRecordPromotedDuringADelivery(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	first := f.deliver(c, paperlessDelivery("117"), nil)
+	// Only the draft is left: the record is gone, and so is the session.
+	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(docs.Delete(f.ctx, first.Document.ID), qt.IsNil)
+	c.Assert(f.intake.Delete(f.ctx, *first.Document.SessionID), qt.IsNil)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+	regs := must.Must(f.factorySet.CreateUserRegistrySet(f.ctx))
+	location := must.Must(regs.LocationRegistry.Create(f.ctx, models.Location{Name: "Home"}))
+	area := must.Must(regs.AreaRegistry.Create(f.ctx, models.Area{Name: "Office", LocationID: location.ID}))
+
+	orig := f.factorySet.CommodityDraftRegistryFactory
+	w := &promoteOnFirstKeyGet{CommodityDraftRegistryFactory: orig}
+	var item *models.Commodity
+	w.promote = func(draft *models.CommodityDraft) {
+		f.factorySet.CommodityDraftRegistryFactory = orig
+		defer func() { f.factorySet.CommodityDraftRegistryFactory = w }()
+		var err error
+		item, _, err = services.NewCommodityDraftService(f.factorySet).Promote(f.ctx, draft.ID, draft.Revision, "promotion-1", models.Commodity{
+			Name: "Invoice 117", ShortName: "Invoice 117", Type: models.CommodityTypeOther, AreaID: new(area.ID),
+			Count: 1, Status: models.CommodityStatusInUse, Tags: models.ValuerSlice[string]{},
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	f.factorySet.CommodityDraftRegistryFactory = w
+	w.armed.Store(true)
+
+	changed := paperlessDelivery("117")
+	changed.Title = "Another invoice"
+	result, err := f.intake.Deliver(f.ctx, changed, nil)
+	f.factorySet.CommodityDraftRegistryFactory = orig
+	c.Assert(item, qt.IsNotNil, qt.Commentf("the draft was promoted during the delivery"))
+	c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentConflict)
+	c.Assert(result.Document.DraftID, qt.IsNil)
+	c.Assert(result.Document.CommodityID, qt.IsNil)
+	c.Assert(must.Must(docs.List(f.ctx)), qt.HasLen, 0)
+	linked, err := f.intake.ListDocuments(f.ctx, nil, []string{item.ID})
+	c.Assert(err, qt.IsNil)
+	c.Assert(linked, qt.HasLen, 0)
+
+	for _, in := range []services.IntakeDelivery{paperlessDelivery("117"), changed} {
+		_, err := f.intake.Deliver(f.ctx, in, nil)
+		c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentConflict)
+		c.Assert(must.Must(docs.List(f.ctx)), qt.HasLen, 0)
+	}
+}
+
 // TestIntakeListDocuments_OldestFirst: documents found by their draft and by
 // their item come back as one list, oldest first.
 func TestIntakeListDocuments_OldestFirst(t *testing.T) {

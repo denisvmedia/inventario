@@ -541,7 +541,7 @@ function FileReview({
       {url && isPdfMime(file.mime_type) ? (
         <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
           <DialogContent
-            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+            className="flex h-screen max-h-none w-screen max-w-none flex-col gap-0 overflow-visible rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
             data-testid="file-review-pdf-fullscreen"
           >
             <DialogHeader className="sr-only">

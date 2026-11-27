@@ -85,7 +85,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs": {
             "get": {
-                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. ` + "`" + `meta.job_types` + "`" + ` lists the job\ntypes with whether each can be retried.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n` + "`" + `failed_job.invalid_failed_before` + "`" + `.",
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. ` + "`" + `meta.job_types` + "`" + ` lists the job\ntypes with whether each can be retried. A personal data export\nbelongs to a user, not to a group; its title is the user's email\naddress.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n` + "`" + `failed_job.invalid_failed_before` + "`" + `.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -101,7 +101,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -188,7 +189,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -251,7 +253,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -294,7 +297,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs/{jobType}/{jobID}/retry": {
             "post": {
-                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
+                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once, a personal\ndata export is built again from the start and kept until 7 days after\nthe build finishes; it does not count as a new request. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
                 "tags": [
                     "admin"
                 ],
@@ -307,7 +310,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -6050,7 +6054,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/custom-fields": {
             "get": {
-                "description": "The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;\neach option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.",
+                "description": "The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;\neach option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6175,7 +6179,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,\nunless delete_values=true; then its values are deleted with it, in the same transaction.",
+                "description": "Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,\nunless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6209,14 +6213,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta",
+                        "description": "With delete_values=true: how many items and drafts together the member confirmed to lose a value. When another number has one, the delete is refused with 409 custom_field.in_use and the counts",
                         "name": "expected_values",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Deleted; meta.deleted_values counts the values removed",
+                        "description": "Deleted; meta.deleted_values counts the values removed, those of drafts included",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.CustomFieldDeleteResponse"
                         }
@@ -6228,7 +6232,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one",
+                        "description": "Items or drafts have a value of the field and delete_values was not true, or expected_values is not how many have one",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7684,7 +7688,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.",
+                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.\n\nWith unless_linked=true the file goes to Trash only when\nnothing holds it: no link, or only links to items in Trash\n(it then goes with the item linked first). The links are\nchecked and the file trashed in one transaction. A file that a\nlink holds, an export bundle included, stays and the answer is\n409 file.linked; a file that is gone or in Trash already is a\n404.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7709,6 +7713,12 @@ const docTemplate = `{
                         "name": "fileID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Keep the file when a link holds it",
+                        "name": "unless_linked",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -7716,7 +7726,19 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "404": {
-                        "description": "File not found",
+                        "description": "File not found, or in Trash already",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "file.linked: with unless_linked=true, a link holds the file, so it stays",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "unless_linked is not a boolean",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -8684,7 +8706,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/item-types": {
             "get": {
-                "description": "The item types of the group: the built-in ones first in their fixed order, then the others by name.\nEach carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.",
+                "description": "The item types of the group: the built-in ones first in their fixed order, then the others by name.\nEach carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -8809,7 +8831,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;\nthen every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).",
+                "description": "Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta\nunless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,\nand each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -8856,7 +8878,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "The type is in use and no reassign_to was given, or it is the group's last type",
+                        "description": "Items or drafts have the type and no reassign_to was given, or it is the group's last type",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -17174,7 +17196,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {
@@ -17824,6 +17846,12 @@ const docTemplate = `{
             "properties": {
                 "created_at": {
                     "type": "string"
+                },
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts with a value of the\nfield. Deleting the field takes the value out of them too.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
                 },
                 "item_count": {
                     "description": "ItemCount and TrashedItemCount are the items with a value of the\nfield. Deleting the field deletes those values.",
@@ -19466,6 +19494,12 @@ const docTemplate = `{
                     "type": "string",
                     "example": "5d2e..."
                 },
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts with a value of the\nfield.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
                 "field_type": {
                     "description": "FieldType is the type of the group's field, or the set's type for a\nmissing one.",
                     "type": "string",
@@ -19478,7 +19512,7 @@ const docTemplate = `{
                     "example": 0
                 },
                 "keep_reason": {
-                    "description": "KeepReason says why removing the set keeps a field the group has:\nown or in_use (items have a value of it). Absent when the field is\nremovable or missing.",
+                    "description": "KeepReason says why removing the set keeps a field the group has:\nown or in_use (items or drafts have a value of it). Absent when the\nfield is removable or missing.",
                     "type": "string",
                     "enum": [
                         "own",
@@ -19533,6 +19567,12 @@ const docTemplate = `{
         "jsonapi.ItemSetItemTypeView": {
             "type": "object",
             "properties": {
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts that have the type.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
                 "icon": {
                     "type": "string",
                     "example": "coins"
@@ -19548,7 +19588,7 @@ const docTemplate = `{
                     "example": "8f1c..."
                 },
                 "keep_reason": {
-                    "description": "KeepReason says why removing the set keeps a type the group has:\nown (a member made it), in_use (items have it, in Trash or not) or\nlast_type (a group keeps at least one type). Absent when the type is\nremovable or missing.",
+                    "description": "KeepReason says why removing the set keeps a type the group has:\nown (a member made it), in_use (items, in Trash or not, or drafts have\nit) or last_type (a group keeps at least one type). Absent when the\ntype is removable or missing.",
                     "type": "string",
                     "enum": [
                         "own",
@@ -19865,6 +19905,12 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts with this type.\nDeleting the type moves them along with the items.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
                 },
                 "icon": {
                     "type": "string",
@@ -22374,7 +22420,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {

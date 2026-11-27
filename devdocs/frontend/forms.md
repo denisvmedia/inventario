@@ -332,10 +332,17 @@ import { Controller } from "react-hook-form"
       value={field.value}
       onChange={field.onChange}
       ariaInvalid={fieldState.invalid}
+      ariaDescribedBy={fieldState.invalid ? "currency-error" : undefined}
     />
   )}
 />
 ```
+
+A currency is always a `CurrencyCombobox`, never a text input. Next to an
+amount it is the `compact` variant on the same row, the amount showing the
+currency symbol inside, as in the mock's Add item purchase price
+(`design-mocks/src/components/AddItemDialog.tsx`). The currency of an amount
+starts on the group currency unless the record already has one.
 
 ### Dropdowns
 

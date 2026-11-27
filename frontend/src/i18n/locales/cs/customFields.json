@@ -20,7 +20,15 @@
     "trashed_few": "Z toho {{count}} položky jsou v koši.",
     "trashed_many": "Z toho {{count}} položky je v koši.",
     "trashed_one": "Z toho {{count}} položka je v koši.",
-    "trashed_other": "Z toho {{count}} položek je v koši."
+    "trashed_other": "Z toho {{count}} položek je v koši.",
+    "drafts_one": "Hodnotu má i {{count}} koncept; z konceptu se odebere.",
+    "drafts_few": "Hodnotu mají i {{count}} koncepty; z konceptů se odebere.",
+    "drafts_many": "Hodnotu má i {{count}} konceptu; z konceptů se odebere.",
+    "drafts_other": "Hodnotu má i {{count}} konceptů; z konceptů se odebere.",
+    "draftsOnly_one": "Žádná položka nemá hodnotu tohoto pole, ale má ji {{count}} koncept. Smazáním pole se hodnota z konceptu odebere.",
+    "draftsOnly_few": "Žádná položka nemá hodnotu tohoto pole, ale mají ji {{count}} koncepty. Smazáním pole se hodnoty z konceptů odeberou.",
+    "draftsOnly_many": "Žádná položka nemá hodnotu tohoto pole, ale má ji {{count}} konceptu. Smazáním pole se hodnoty z konceptů odeberou.",
+    "draftsOnly_other": "Žádná položka nemá hodnotu tohoto pole, ale má ji {{count}} konceptů. Smazáním pole se hodnoty z konceptů odeberou."
   },
   "description": "Pole, která skupina přidává ke svým položkám, například SPZ nebo bajonet objektivu. Typ pole se nikdy nemění, název a možnosti ano.",
   "detail": {

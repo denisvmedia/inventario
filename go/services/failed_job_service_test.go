@@ -154,6 +154,7 @@ func TestFailedJobService_DiscardAndDepths(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(depths, qt.DeepEquals, map[string]int{
 		"export": 2, "import": 0, "restore": 1, "thumbnail": 0, "intake": 0, "currency-migration": 0,
+		"personal-data-export": 0,
 	})
 
 	job, err := svc.Discard(context.Background(), models.WorkerTypeRestore, registry.FailedJobScope{}, restore)
@@ -266,4 +267,53 @@ func jobIDs(jobs []*models.FailedJob) []string {
 		ids = append(ids, j.ID)
 	}
 	return ids
+}
+
+// personalExport stores a personal data export of the fixture's user whose
+// build failed at failedAt.
+func (f *failedJobFixture) personalExport(c *qt.C, failedAt time.Time) string {
+	c.Helper()
+	reg := f.fs.PersonalDataExportRegistry
+	created, _, err := reg.CreateUnlessRequestedSince(f.ctx, models.PersonalDataExport{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: "tenant-1", UserID: "user-1"},
+		CreatedAt:               failedAt.Add(-time.Minute),
+		ExpiresAt:               failedAt.Add(models.PersonalDataExportRetention),
+	}, failedAt)
+	c.Assert(err, qt.IsNil)
+	created.Status = models.PersonalDataExportStatusFailed
+	created.ErrorMessage = "the account is not active"
+	created.CompletedAt = new(failedAt)
+	_, err = reg.Update(f.ctx, *created)
+	c.Assert(err, qt.IsNil)
+	return created.ID
+}
+
+// The installation-wide list holds personal data exports; a group's list,
+// and every call in a group, does not know their type.
+func TestFailedJobService_PersonalDataExportsAreNotInAGroup(t *testing.T) {
+	c := qt.New(t)
+	f := newFailedJobFixture(c)
+	base := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
+	export := f.export(c, models.ExportTypeFullDatabase, base)
+	personal := f.personalExport(c, base.Add(time.Hour))
+	svc := services.NewFailedJobService(f.fs.FailedJobRegistry)
+	group := registry.FailedJobScope{TenantID: "tenant-1", GroupID: "group-1"}
+
+	page, err := svc.List(context.Background(), services.FailedJobQuery{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobIDs(page.Jobs), qt.DeepEquals, []string{personal, export})
+
+	page, err = svc.List(context.Background(), services.FailedJobQuery{Scope: group})
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobIDs(page.Jobs), qt.DeepEquals, []string{export})
+	c.Assert(page.Total, qt.Equals, 1)
+
+	_, err = svc.List(context.Background(), services.FailedJobQuery{Type: models.FailedJobTypePersonalDataExport, Scope: group})
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	_, err = svc.Retry(context.Background(), models.FailedJobTypePersonalDataExport, group, personal)
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+
+	depths, err := svc.Depths(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(depths["personal-data-export"], qt.Equals, 1)
 }

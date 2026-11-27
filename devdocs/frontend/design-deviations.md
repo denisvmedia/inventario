@@ -44,6 +44,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2915 by the 2026-11-27 goal to work through the backlog
 - **Reversion plan**: Drop the disabled select and keep the mock's form without a status once the edit form shows the status.
 
+#### 2026-11-27 — Item edit dialog: new files upload before Save changes
+
+- **Issue/PR**: #2916 / PR #2967
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) is for adding an item and has no upload states; editing is the mock's `ItemEditForm`, which has no files.
+- **Reality**: In edit mode (**All fields**), **Save changes** in `frontend/src/components/items/CommodityFormDialog.tsx` uploads the staged files one at a time and attaches each to the item before it sends the changes, with the per-file icons and the "Uploading 1 of 3…" button of the Add item entry below. A failure shows the same destructive `Alert` (`DraftSaveAlert`) titled "Changes not saved", naming the files not uploaded, saying that the files that made it are on the item, and offering **Retry**; the dialog opens the Files step. The attached files leave the list.
+- **Why**: The issue asks that files added while editing are uploaded before the dialog closes or kept for a retry; reusing the Add item states keeps one look for the same work.
+- **Approved by**: user (explicit) — pre-approved for #2916 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Permanent while the dialog stays the editor behind All fields.
+
 #### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
 
 - **Issue/PR**: #1626 / #2905
@@ -873,6 +882,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Item types
 
+#### 2026-11-27 — Item type delete and Collection set removal: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has item types or the Collection set; the dialogs follow the confirm dialog, as the 2026-11-25 Item types page and 2026-11-26 Collection set card entries record.
+- **Reality**: `ItemTypeDeleteDialog` counts the drafts saved on the server (`draft_count`) with the items. With items and drafts, the description adds "N drafts have it too and move with them."; with drafts only, it reads "No item has the type X, but N drafts do. Pick the type they move to; then X is deleted.", the picker is labeled **Move the drafts to** and the button **Move drafts and delete**. A 409 refusal reads the draft count from its meta. In `CollectionSetRemoveDialog`, a type or field that stays because drafts use it names them after the items ("3 drafts have this type."), or alone when no item uses it.
+- **Why**: not present in mock. Drafts name a type and hold field values, so a delete that ignored them left drafts that could not be saved or finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws these dialogs; otherwise permanent.
+
 #### 2026-11-26 — Four more item type icons for the Collection set
 
 - **Issue/PR**: #1607
@@ -892,6 +910,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 ### Custom fields
+
+#### 2026-11-27 — Custom field delete: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has custom fields; the dialog follows `ItemTypeDeleteDialog`, as the 2026-11-25 Custom fields page entry records.
+- **Reality**: `CustomFieldDeleteDialog` counts the drafts with a value of the field (`draft_count`). With items and drafts, the description adds "N drafts have a value too; it is taken out of them."; with drafts only, it reads "No item has a value for this field, but N drafts do. Deleting the field takes the values out of them." The **Delete the values too** checkbox is required in both cases, and the confirmed count sent as `expected_values` includes the drafts.
+- **Why**: not present in mock. A draft's value of a deleted field was lost unseen when the draft was finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws this dialog; otherwise permanent.
 
 #### 2026-11-25 — Custom fields page
 
@@ -976,6 +1003,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: A reviewed item may have an unknown purchase date or price (a gift, an inherited object), and unknown is distinct from zero. The hints tell the user how to record each case.
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
+
+#### 2026-11-27 — Send for service dialog: cost amount and currency
+
+- **Issue/PR**: #2909
+- **Mock**: The mock has no service dialog. Its money field is the purchase price row of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1173–L1195): one label, the amount with the currency symbol inside, and the `compact` `CurrencyCombobox` beside it.
+- **Reality**: `frontend/src/components/services/SendForServiceDialog.tsx` draws the cost as that row: the "Cost (optional)" label, the amount with the symbol of the picked currency inside, and the `compact` `CurrencyCombobox` named "Currency". The picker starts on the group currency, and the currency is saved only with an amount. Each part shows its own `FieldError` under the row.
+- **Why**: Not present in mock. #2909 asks for the currency picker every other currency field uses; the row copies the mock's money field.
+- **Approved by**: user (explicit) — pre-approved for #2909 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a service dialog.
 
 ### Auth & Profile
 
@@ -1677,6 +1713,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
 - **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-27 — Every dialog card is never taller than the screen
+
+- **Issue/PR**: #2988
+- **Mock**: `design-mocks/src/components/ui/dialog.tsx` gives `DialogContent` no maximum height; the mock's `AddItemDialog.tsx` adds `max-h-[90vh] overflow-y-auto` at its call site.
+- **Reality**: `DialogContent` is never taller than the screen minus 2rem (`max-h-[calc(100dvh-2rem)]`) and scrolls as a whole (`overflow-y-auto`) in both variants; below `sm` the `fullscreen-mobile` variant still fills the screen. A dialog whose content fits looks as in the mock. The full-screen file viewers (the image viewer, the PDF preview, and the PDF readers of the file panel and the file review page) pass `max-h-none overflow-visible`, as they pass `max-w-none`.
+- **Why**: A dialog taller than the window is centered with `translate-y-[-50%]`, so without a limit its top and bottom are off-screen and cannot be scrolled to; the bulk tags dialog loses its Apply button with about 25 tags at 1280x720. The limit in the primitive covers every dialog instead of one call site at a time.
+- **Approved by**: user (explicit) — pre-approved for #2988 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: permanent; the limit belongs in the mock's primitive upstream.
 
 ### Backup & Restore
 

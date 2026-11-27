@@ -313,6 +313,50 @@ func runItemSetChangeContract(t *testing.T, newEnv func(t *testing.T) CustomFiel
 		c.Check(err, qt.IsNil)
 	})
 
+	t.Run("item set: removing keeps a type and a field that only open drafts use", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		svc := newService(env)
+
+		res, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		coins := res.Status.ItemTypes[2].ItemType
+		stamps := res.Status.ItemTypes[3].ItemType
+		c.Assert(stamps.Name, qt.Equals, "Stamps")
+		condition := res.Status.Fields[0].Field
+		draft := mustDraft(c, env.DraftsA, env.CtxA, "set-coin", models.CommodityDraftValues{
+			"type":          string(coins.Slug),
+			"custom_fields": map[string]any{condition.ID: map[string]any{"value": "mint", "currency": ""}},
+		})
+
+		st, err := svc.Status(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(st.ItemTypes[2].KeepReason, qt.Equals, services.ItemSetKeepInUse)
+		c.Check(st.ItemTypes[2].Usage.Drafts, qt.Equals, 1)
+		c.Check(st.Fields[0].KeepReason, qt.Equals, services.ItemSetKeepInUse)
+		c.Check(st.Fields[0].Usage.Drafts, qt.Equals, 1)
+		sel := st.Removal()
+		c.Check(sel.ItemTypeIDs, qt.Not(qt.Contains), coins.ID)
+		c.Check(sel.FieldIDs, qt.Not(qt.Contains), condition.ID)
+
+		// The confirmation listed Stamps; a draft gets the type before the
+		// remove runs.
+		mustDraft(c, env.DraftsA, env.CtxA, "set-stamp", models.CommodityDraftValues{"type": string(stamps.Slug)})
+		removed, err := svc.Remove(env.CtxA, sel)
+		c.Assert(err, qt.IsNil)
+		c.Check(removed.KeptItemTypes, qt.DeepEquals, []string{"Stamps"})
+		c.Check(removed.DeletedItemTypes, qt.Not(qt.Contains), "Coins")
+		c.Check(removed.DeletedItemTypes, qt.Not(qt.Contains), "Stamps")
+		c.Check(removed.DeletedFields, qt.Not(qt.Contains), "Condition")
+		_, err = env.TypesA.Get(env.CtxA, coins.ID)
+		c.Check(err, qt.IsNil)
+		_, err = env.FieldsA.Get(env.CtxA, condition.ID)
+		c.Check(err, qt.IsNil)
+		got, err := env.DraftsA.Get(env.CtxA, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Revision, qt.Equals, draft.Revision, qt.Commentf("the draft is left as it was"))
+	})
+
 	t.Run("item set: a set row renamed to another entry's name takes that entry", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)

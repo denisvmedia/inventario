@@ -127,7 +127,7 @@ func itemTypeSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 // listItemTypes lists the group's item types with their item counts.
 // @Summary List item types
 // @Description The item types of the group: the built-in ones first in their fixed order, then the others by name.
-// @Description Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+// @Description Each carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.
 // @Tags item-types
 // @Accept json-api
 // @Produce json-api
@@ -280,8 +280,9 @@ func (*itemTypesAPI) updateItemType(w http.ResponseWriter, r *http.Request) {
 // deleteItemType removes an item type, moving its items to another type
 // when told to.
 // @Summary Delete an item type
-// @Description Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
-// @Description then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+// @Description Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta
+// @Description unless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,
+// @Description and each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).
 // @Tags item-types
 // @Accept json-api
 // @Produce json-api
@@ -290,7 +291,7 @@ func (*itemTypesAPI) updateItemType(w http.ResponseWriter, r *http.Request) {
 // @Param reassign_to query string false "ID of the item type the deleted type's items move to"
 // @Success 200 {object} jsonapi.ItemTypeDeleteResponse "Deleted; meta.reassigned_items counts the items moved"
 // @Failure 404 {object} jsonapi.Errors "Item type not found"
-// @Failure 409 {object} jsonapi.Errors "The type is in use and no reassign_to was given, or it is the group's last type"
+// @Failure 409 {object} jsonapi.Errors "Items or drafts have the type and no reassign_to was given, or it is the group's last type"
 // @Failure 422 {object} jsonapi.Errors "reassign_to names no other type of the group"
 // @Router /g/{groupSlug}/item-types/{itemTypeID} [delete].
 func (*itemTypesAPI) deleteItemType(w http.ResponseWriter, r *http.Request) {
@@ -308,9 +309,9 @@ func (*itemTypesAPI) deleteItemType(w http.ResponseWriter, r *http.Request) {
 		var meta map[string]any
 		if counts, cerr := regSet.ItemTypeRegistry.ItemCounts(r.Context()); cerr == nil {
 			usage := counts[t.Slug]
-			meta = map[string]any{"item_count": usage.Live, "trashed_item_count": usage.Trashed}
+			meta = map[string]any{"item_count": usage.Live, "trashed_item_count": usage.Trashed, "draft_count": usage.Drafts}
 		}
-		codedConflictError(w, r, errors.New("items still have this type; choose a type to move them to"), itemTypeInUseCode, meta)
+		codedConflictError(w, r, errors.New("items or drafts still have this type; choose a type to move them to"), itemTypeInUseCode, meta)
 		return
 	case errors.Is(err, registry.ErrLastItemType):
 		codedConflictError(w, r, errors.New("a group needs at least one item type"), itemTypeLastCode, nil)

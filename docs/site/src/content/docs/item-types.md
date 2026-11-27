@@ -68,10 +68,17 @@ enter is shown as typed, in every language.
 
 Point at a row and click the bin.
 
-- When no item has the type, confirm and the type is removed.
+- When no item and no [draft](../items/#save-as-draft) has the type, confirm
+  and the type is removed.
 - When items have it, the dialog says how many, Trash included, and asks for
   the type they move to. Pick one and click **Move items and delete**: every
   one of those items gets the type you picked, then the type is deleted.
+  Drafts that have the type are counted too and move with the items.
+- When only drafts have it, the dialog says how many and the button reads
+  **Move drafts and delete**.
+
+A draft that is open in another window while its type moves cannot save over
+the change: that window says the draft changed elsewhere.
 
 To merge two types, delete one and move its items to the other.
 
