@@ -72,8 +72,11 @@ when to add an entry and where it goes.
   is not a group backup, and the restore upload refuses one with 422
   `restore.personal_data_export`. The export worker builds it in the
   background and emails the user when it is ready; a build cut short by a
-  restart is queued again and built once more. One request is allowed per
-  day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
+  restart is queued again, three builds in all, and a build whose worker
+  stops during the third fails the export with "the worker stopped before
+  the personal data export finished"
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)). One
+  request is allowed per day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
   archive is deleted after 7 days or with the account, only its owner can
   list and download it, an impersonation session can neither request nor
   download one, and each request and download is recorded in the audit log.
@@ -501,6 +504,19 @@ when to add an entry and where it goes.
   tokens for scripts" page of the user guide lists the endpoints worth
   scripting against
   ([#2808](https://github.com/denisvmedia/inventario/issues/2808)).
+- Backups carry each item's loans, service records, maintenance schedules,
+  supply links and reminders, as INB format 3.9, so a full replace no longer
+  deletes them for good. A selection carries the records of the items it
+  names. A restore brings them back with an item it creates and leaves the
+  records of an item the group already has as they are. A record keeps the
+  member who made it when that person is a member of the group, and is
+  recorded as the member restoring otherwise, so loan and item reminder
+  emails never go to someone outside the group. A loan's and a service
+  record's sent reminders are kept; a maintenance schedule or an item
+  reminder that is close to its date can send its closest email once more
+  after a restore. Item history and saved views stay out of backups. Older
+  backups restore as before, without these records
+  ([#2884](https://github.com/denisvmedia/inventario/issues/2884)).
 - One file can be attached to several items, locations and areas, so a receipt
   for three items is uploaded once. "Attach an existing file" on an item's
   Files tab (and "Attach existing" on a location or area) attaches a file the
@@ -566,6 +582,17 @@ when to add an entry and where it goes.
   `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
   `failed_before` filter
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
+- Failed personal data exports are failed jobs too. The back office
+  **Failed jobs** page and `inventario jobs failed` list them as
+  `personal-data-export`, with the user's email address as the title and no
+  group, and retry and discard them like the other types; the group card
+  does not show them, since the copy belongs to a user. A retry builds the
+  copy again from the start, and the copy is kept 7 days from when that
+  build finishes. A retry is not a new request, so the user's daily limit
+  still counts from the request they made. Failed builds count in
+  `inventario_jobs_dead_lettered_total` and
+  `inventario_jobs_dead_letter_depth`
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)).
 
 ### Changed
 
@@ -668,6 +695,15 @@ when to add an entry and where it goes.
   includes inactive items, as the search does
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
+- A tag or seller you created in a group someone else owns no longer blocks
+  deleting your account. It stays with the group, which other members may
+  rely on, and passes to the group's owner (or an administrator, or the
+  member who joined first). The server's audit log gets one
+  `account_deletion_handover` row per group, naming the member who received
+  the rows and counting them per table, with the operator when the deletion
+  runs in an impersonation session
+  ([#2883](https://github.com/denisvmedia/inventario/issues/2883)).
+
 ### Fixed
 
 - Reminder emails go out only for items in use. An item marked Sold, Lost,
@@ -756,6 +792,12 @@ when to add an entry and where it goes.
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
+- The service cost currency in the Send for service dialog is the currency
+  picker next to the amount, as on the item form, instead of a text field
+  that refused a code typed in lower case. It starts on the group currency,
+  and the cost is saved only when an amount is entered
+  ([#2909](https://github.com/denisvmedia/inventario/issues/2909)).
 
 - A file title may have 255 characters in any language. The server counted
   the limit in UTF-8 bytes, so a Czech or Russian title of more than about
@@ -924,6 +966,11 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+- In a batch of files, a file gets the tag and the title its scan suggests
+  in the same step that marks it scanned. The batch page, the batch list and
+  the inbox could stop reading for updates before the tags and titles were
+  written, and a slow write showed the files without them until a reload
+  ([#2940](https://github.com/denisvmedia/inventario/issues/2940)).
 
 - A web address custom field value of up to 2,048 characters saves whatever
   its alphabet. A long address written in Cyrillic or another script with

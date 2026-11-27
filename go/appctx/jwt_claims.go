@@ -37,3 +37,25 @@ func WithJWTClaims(ctx context.Context, claims jwt.MapClaims) context.Context {
 	}
 	return context.WithValue(ctx, jwtClaimsCtxKey, claims)
 }
+
+// ImpersonatorID returns the back-office operator acting through an
+// impersonation session, read from the `impersonator_id` claim (or the
+// earlier `impersonated_by`) when the `imp` claim is true, or "" when the
+// request is not impersonated. It is the value audit rows record as
+// impersonated_by.
+func ImpersonatorID(ctx context.Context) string {
+	claims := JWTClaimsFromContext(ctx)
+	if claims == nil {
+		return ""
+	}
+	if imp, _ := claims["imp"].(bool); !imp {
+		return ""
+	}
+	if by, ok := claims["impersonator_id"].(string); ok && by != "" {
+		return by
+	}
+	if by, ok := claims["impersonated_by"].(string); ok && by != "" {
+		return by
+	}
+	return ""
+}

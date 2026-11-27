@@ -16,6 +16,7 @@ import (
 	"gocloud.dev/gcerrors"
 
 	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -57,6 +58,16 @@ const personalOrphanGrace = time.Hour
 // the user's files from blob storage, so it is generous; a build still
 // running after it is built a second time to the same key.
 const personalStalledBuildAfter = time.Hour
+
+// personalMaxBuilds is how many builds a personal data export gets. A dead
+// build of an export that has used them fails it instead of queuing it
+// again, so an export whose build kills its worker every time does not run
+// forever.
+const personalMaxBuilds = 3
+
+// StalledPersonalDataExportError is stored on a personal data export whose
+// worker stopped during its last allowed build.
+const StalledPersonalDataExportError = "the worker stopped before the personal data export finished"
 
 // personalExpireBatch is how many expired exports one pass deletes.
 const personalExpireBatch = 100
@@ -344,16 +355,27 @@ func (s *PersonalDataExportService) Claim(ctx context.Context, id string) (bool,
 	return s.factorySet.PersonalDataExportRegistry.ClaimPending(ctx, id, s.clock())
 }
 
-// RequeueStalled queues again the exports whose build started more than
+// RecoverStalled handles the exports whose build started more than
 // personalStalledBuildAfter ago and recorded no result, which happens when
-// the process running it dies. The user still gets the copy they asked for,
-// and the daily limit stays used by that one request.
-func (s *PersonalDataExportService) RequeueStalled(ctx context.Context) (int, error) {
-	n, err := s.factorySet.PersonalDataExportRegistry.RequeueStalled(ctx, s.clock().Add(-personalStalledBuildAfter))
+// the process running it dies. An export with builds left is queued again:
+// the user still gets the copy they asked for, and the daily limit stays
+// used by that one request. One that has used its builds fails for good and
+// counts as dead-lettered.
+func (s *PersonalDataExportService) RecoverStalled(ctx context.Context) (requeued, failed int, err error) {
+	now := s.clock()
+	requeued, failed, err = s.factorySet.PersonalDataExportRegistry.RecoverStalled(ctx, registry.PersonalDataExportStalledSweep{
+		StartedBefore: now.Add(-personalStalledBuildAfter),
+		Now:           now,
+		MaxBuilds:     personalMaxBuilds,
+		ErrorMessage:  StalledPersonalDataExportError,
+	})
 	if err != nil {
-		return 0, errxtrace.Wrap("failed to queue stalled personal data exports again", err)
+		return 0, 0, errxtrace.Wrap("failed to recover stalled personal data exports", err)
 	}
-	return n, nil
+	for range failed {
+		metrics.RecordJobDeadLettered(string(models.FailedJobTypePersonalDataExport))
+	}
+	return requeued, failed, nil
 }
 
 // requeue returns an interrupted build to the queue. It writes with a
@@ -367,18 +389,21 @@ func (s *PersonalDataExportService) requeue(ctx context.Context, export *models.
 	return errxtrace.Wrap("personal data export interrupted, queued again", cause)
 }
 
-// fail records a failed build. It writes with a context the worker does not
-// cancel, so the row does not stay in_progress when the failure is the
-// worker stopping.
+// fail records a failed build, which lists the export among the failed
+// jobs, and counts it as dead-lettered. It writes with a context the worker
+// does not cancel, so the row does not stay in_progress when the failure is
+// the worker stopping.
 func (s *PersonalDataExportService) fail(ctx context.Context, export *models.PersonalDataExport, cause error) error {
 	ctx = context.WithoutCancel(ctx)
 	export.Status = models.PersonalDataExportStatusFailed
 	export.ErrorMessage = cause.Error()
 	export.BlobKey = ""
 	export.SizeBytes = 0
+	export.CompletedAt = new(s.clock())
 	if _, err := s.factorySet.PersonalDataExportRegistry.Update(ctx, *export); err != nil {
 		return errxtrace.Wrap("failed to build personal data export", errors.Join(cause, err))
 	}
+	metrics.RecordJobDeadLettered(string(models.FailedJobTypePersonalDataExport))
 	return errxtrace.Wrap("failed to build personal data export", cause)
 }
 

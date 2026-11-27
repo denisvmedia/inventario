@@ -968,6 +968,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
 
+#### 2026-11-27 — Send for service dialog: cost amount and currency
+
+- **Issue/PR**: #2909
+- **Mock**: The mock has no service dialog. Its money field is the purchase price row of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1173–L1195): one label, the amount with the currency symbol inside, and the `compact` `CurrencyCombobox` beside it.
+- **Reality**: `frontend/src/components/services/SendForServiceDialog.tsx` draws the cost as that row: the "Cost (optional)" label, the amount with the symbol of the picked currency inside, and the `compact` `CurrencyCombobox` named "Currency". The picker starts on the group currency, and the currency is saved only with an amount. Each part shows its own `FieldError` under the row.
+- **Why**: Not present in mock. #2909 asks for the currency picker every other currency field uses; the row copies the mock's money field.
+- **Approved by**: user (explicit) — pre-approved for #2909 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a service dialog.
+
 ### Auth & Profile
 
 #### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
