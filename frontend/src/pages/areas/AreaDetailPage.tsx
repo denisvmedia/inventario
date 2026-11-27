@@ -314,6 +314,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
               linkedEntityType="area"
               linkedEntityId={id}
               entityName={area.data?.name}
+              canEdit={canEditContent}
               onAttachClick={
                 canEditContent
                   ? () => {

@@ -46,14 +46,18 @@ function LinkIcon({ entityType }: { entityType?: string }) {
 
 export interface FileLinksListProps {
   file: FileEntity & { id: string }
+  // May the caller remove attachments (features/group/roles.ts)? Without
+  // it the list only names and links what the file is attached to.
+  canEdit: boolean
 }
 
 // FileLinksList is the "Linked to" list of the file detail sheet: every item,
 // location, area and open draft the file is attached to, each with a link to
-// its page (a draft's opens it in the Add item dialog) and a "Remove
-// attachment" action. Removing an attachment never deletes the file;
-// after the last one it stays as a standalone file on the Files page.
-export function FileLinksList({ file }: FileLinksListProps) {
+// its page (a draft's opens it in the Add item dialog) and, for a role that
+// may change files, a "Remove attachment" action. Removing an attachment
+// never deletes the file; after the last one it stays as a standalone file
+// on the Files page.
+export function FileLinksList({ file, canEdit }: FileLinksListProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const { currentGroup } = useCurrentGroup()
@@ -116,7 +120,7 @@ export function FileLinksList({ file }: FileLinksListProps) {
             )}
             {/* A batch of dropped files (#2810) holds its files until the
                 batch is removed; the link is not removed on its own. */}
-            {link.entity_type === "intake" ? null : (
+            {link.entity_type === "intake" || !canEdit ? null : (
               <Button
                 type="button"
                 variant="ghost"

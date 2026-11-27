@@ -13,6 +13,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/features/auth/AuthContext"
 import { ImpersonationProvider } from "@/features/admin/impersonation/ImpersonationContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useMyGroupRole } from "@/features/group/roles"
 import { LanguageSync } from "@/features/settings/LanguageSync"
 import { NumberFormatLocaleSync } from "@/features/settings/NumberFormatLocaleSync"
 import { KeyboardShortcutsProvider } from "@/features/shortcuts"
@@ -63,8 +64,16 @@ export function Shell() {
   // a screen wide enough for the sidebar to be on it (below the mobile
   // breakpoint it is a closed sheet). Without either it neither
   // auto-launches nor offers a restart (#2787).
+  //
+  // The tour picks its steps from the sidebar when it opens, and the Add
+  // item entry is there only for a role that adds items, so the first
+  // launch waits until the role is known.
   const hasGroup = Boolean(currentGroup?.slug)
-  const tour = useOnboardingTour(user?.id ?? null, { hasGroup, autoLaunch: !isMobile })
+  const roleKnown = useMyGroupRole() !== null
+  const tour = useOnboardingTour(user?.id ?? null, {
+    hasGroup,
+    autoLaunch: !isMobile && roleKnown,
+  })
   const tourBlocker: TourBlocker | null = !hasGroup ? "noGroup" : isMobile ? "narrowScreen" : null
   const tourControls = useMemo<OnboardingTourControls>(
     () => ({ restart: tour.restart, blocker: tourBlocker }),

@@ -160,7 +160,7 @@ Each member of a group has one **role** that controls what they can do. The **Me
 | **User** | Can add and remove items (not locations or areas). |
 | **Viewer** | Can view all items, but cannot make any changes. |
 
-Besides items, a **User** can manage the group's files, tags, sellers, item types, and custom fields. Inventario shows each member only the actions their role allows: a viewer sees no buttons that add, change, or delete anything (printing labels still works), and a user sees no buttons that add, change, or delete locations and areas.
+Besides items, a **User** can manage the group's files, tags, sellers, item types, and custom fields. Inventario hides the actions a role cannot use. A viewer sees no buttons that add, change, or delete items, files, locations, areas, tags, sellers, item types, or custom fields (printing labels still works). The tabs of an item page that record loans, services, supplies, maintenance, and reminders still show their buttons to a viewer, and saving there fails with an error. A user sees no buttons that add, change, or delete locations and areas.
 
 A group can have more than one owner. The **Members** page also shows quick stats at the top: total **Members**, **Admins & Owners**, and **Pending invites**.
 

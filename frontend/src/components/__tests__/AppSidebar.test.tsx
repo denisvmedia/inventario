@@ -13,11 +13,13 @@ import {
   authHandlers,
   groupHandlers,
   inboxHandlers,
+  memberHandlers,
   savedViewHandlers,
   settingsHandlers,
 } from "@/test/handlers"
 import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -26,8 +28,12 @@ import { __resetHttpForTests } from "@/lib/http"
 // Mount AppSidebar inside the same provider chain Shell uses at runtime
 // (AuthProvider -> GroupProvider -> SidebarProvider) so the test sees the
 // same currentGroup / groups wiring the production sidebar does.
-function renderSidebar(initialPath = "/no-group") {
+// With `waitForRole` the sidebar mounts once the caller's role in the group
+// is known (WhenRoleKnown), so a missing role-gated entry means the role
+// was read.
+function renderSidebar(initialPath = "/no-group", { waitForRole = false } = {}) {
   setAccessToken("good-token")
+  const sidebar = <AppSidebar />
   // The current cases only need the root /g/:slug shape — if a future
   // test passes /g/<slug>/<sub>, this mount will still resolve only
   // /g/:slug, won't match, and AppSidebar won't render. Widen the
@@ -42,7 +48,7 @@ function renderSidebar(initialPath = "/no-group") {
           <AuthProvider>
             <GroupProvider>
               <SidebarProvider>
-                <AppSidebar />
+                {waitForRole ? <WhenRoleKnown>{sidebar}</WhenRoleKnown> : sidebar}
               </SidebarProvider>
             </GroupProvider>
           </AuthProvider>
@@ -143,6 +149,22 @@ describe("<AppSidebar /> — group-section gating (#1886)", () => {
     renderSidebar("/no-group")
     const help = await screen.findByTestId("sidebar-help")
     expect(help.getAttribute("href")).toBe("/settings?section=help")
+  })
+})
+
+describe("<AppSidebar /> — Add item by role (#2886)", () => {
+  // The server takes item writes from users, admins and owners.
+  it("offers Add item to a user", async () => {
+    server.use(...groupHandlers.list(), ...memberHandlers.asRole("g1", "user"))
+    renderSidebar("/g/household", { waitForRole: true })
+    expect(await screen.findByTestId("sidebar-add-item")).toBeInTheDocument()
+  })
+
+  it("offers a viewer no Add item", async () => {
+    server.use(...groupHandlers.list(), ...memberHandlers.asRole("g1", "viewer"))
+    renderSidebar("/g/household", { waitForRole: true })
+    expect(await screen.findByTestId("sidebar-inventory-group")).toBeInTheDocument()
+    expect(screen.queryByTestId("sidebar-add-item")).not.toBeInTheDocument()
   })
 })
 

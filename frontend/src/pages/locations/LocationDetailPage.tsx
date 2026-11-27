@@ -502,6 +502,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
               linkedEntityType="location"
               linkedEntityId={id}
               entityName={location.data?.name}
+              canEdit={canEditContent}
               onAttachClick={
                 canEditContent
                   ? () => {
