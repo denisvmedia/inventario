@@ -217,6 +217,11 @@ Every restore — dry run or real — produces a step-by-step log. It opens auto
 
 The log walks through each step with a result marker so you can see what was created, updated, or skipped, and it flags anything that errored. For a dry run the header reminds you that **No changes were made**; for a real restore it confirms the operation finished.
 
+An item the restore cannot bring back, for example one edited by hand in the
+backup file, counts as an error, and the rest of the restore goes on. A file
+that item shared with other items still comes back with them. A file that only
+such items used is left out and counts as an error too.
+
 ## Manage and delete exports
 
 - Every export you create or import appears in the **Backup** list with its status, scope, and size.

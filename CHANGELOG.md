@@ -648,6 +648,15 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- A restore no longer fails with "backup archive is missing declared file
+  members" when an item it cannot bring back shares a file with items it
+  can. A backup stores a shared file once, with the first item that uses it;
+  when that item failed to restore, the file was dropped, the restore failed
+  after it had already replaced the group's data, and a dry run of the same
+  backup reported success. The file now comes back with the other items, and
+  the dry run and the restore end the same way. A file that only items the
+  restore could not bring back used is left out and counted as an error
+  ([#2876](https://github.com/denisvmedia/inventario/issues/2876)).
 - Reminder emails go out only for items in use. An item marked Sold, Lost,
   Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
   loan and item reminders, and its reminders, loans and maintenance stayed on
