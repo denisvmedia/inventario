@@ -53,6 +53,7 @@
     "showFilesTagged": "Show files tagged {{name}}",
     "showItems": "Show items",
     "showItemsInArea": "Show items in {{name}}",
+    "showItemsInLocation": "Show items in {{name}}",
     "showItemsTagged": "Show items tagged {{name}}"
   },
   "seeAll": "See all",

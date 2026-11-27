@@ -38,7 +38,7 @@ func NewUserContentOwnershipCheckerWithTableNames(dbx *sqlx.DB, tableNames store
 }
 
 // HasRetainedOwnedContent runs one read-only transaction with an EXISTS query
-// per userOwnedTables entry marked deletionPreCheck. It returns true on the
+// per userOwnedTables entry whose rows block a deletion. It returns true on the
 // FIRST match (short-circuit), so a user who owns nothing outside their private
 // groups pays the full set of cheap index-backed existence checks and a user
 // who owns something stops early.
@@ -61,7 +61,7 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 		// tables that tie a user to their tenant. location_groups is on it with
 		// its own id as the group column: a group's primary key IS the group id.
 		for _, t := range userOwnedTables {
-			if !t.deletionPreCheck {
+			if t.onDeletion != deletionBlocks {
 				continue
 			}
 			found, err := r.existsOwnedContent(ctx, tx, t, tenantID, userID, purgedGroupIDs)

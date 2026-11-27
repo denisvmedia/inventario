@@ -3,10 +3,13 @@ package services_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
+	"github.com/golang-jwt/jwt/v5"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -500,4 +503,184 @@ func TestAccountDeletionService_DeleteAccount_RemovesTheMembersDrafts(t *testing
 	kept, err := files.Get(stayingCtx, photo.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(kept.Links, qt.HasLen, 0)
+}
+
+// A member's records on another member's item in a shared group belong to
+// the group (#2882): the deletion hands them to the owner instead of
+// refusing, and the invites the member created or accepted go.
+func TestAccountDeletionService_DeleteAccount_HandsTheMembersItemRecordsToTheOwner(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "records-group-slug-00000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	authored := models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: leaving.ID}
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	event, err := fs.CommodityEventRegistryFactory.CreateServiceRegistry().Create(leavingCtx, models.CommodityEvent{
+		TenantGroupAwareEntityID: authored,
+		CommodityID:              "commodity-1",
+		Kind:                     models.CommodityEventKindUpdated,
+		OccurredAt:               time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+	loans := fs.CommodityLoanRegistryFactory.CreateServiceRegistry()
+	loan, err := loans.Create(leavingCtx, models.CommodityLoan{
+		TenantGroupAwareEntityID: authored,
+		CommodityID:              "commodity-1",
+		BorrowerName:             "Neighbor",
+		LentAt:                   models.Date("2026-05-01"),
+	})
+	c.Assert(err, qt.IsNil)
+	won, err := fs.WarrantyReminderRegistry.CreateOnce(ctx, models.WarrantyReminder{TenantGroupAwareEntityID: authored, CommodityID: "commodity-1", ThresholdDays: 30})
+	c.Assert(err, qt.IsNil)
+	c.Assert(won, qt.IsTrue)
+
+	sent, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "sent-by-leaving",
+		CreatedBy:           leaving.ID,
+		ExpiresAt:           time.Now().Add(time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+	usedAt := time.Now()
+	accepted, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "accepted-by-leaving",
+		CreatedBy:           staying.ID,
+		ExpiresAt:           time.Now().Add(time.Hour),
+		UsedBy:              &leaving.ID,
+		UsedAt:              &usedAt,
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	keptEvent, err := fs.CommodityEventRegistryFactory.CreateServiceRegistry().Get(ctx, event.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptEvent.CreatedByUserID, qt.Equals, staying.ID)
+	keptLoan, err := loans.Get(ctx, loan.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptLoan.CreatedByUserID, qt.Equals, staying.ID)
+	warranty, ok := fs.WarrantyReminderRegistry.(*memory.WarrantyReminderRegistry)
+	c.Assert(ok, qt.IsTrue)
+	reminders, err := warranty.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(reminders, qt.HasLen, 1)
+	c.Assert(reminders[0].CreatedByUserID, qt.Equals, staying.ID)
+
+	_, err = fs.GroupInviteRegistry.GetByToken(ctx, sent.Token)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.GroupInviteRegistry.GetByToken(ctx, accepted.Token)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// A tag or seller a member created in a shared group is the group's (#2883):
+// the deletion hands it to the owner instead of refusing, and records the
+// hand-over in the audit log, naming the operator when the deletion runs in
+// an impersonation session.
+func TestAccountDeletionService_DeleteAccount_HandsTheMembersTagsAndSellersToTheOwner(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "catalog-group-slug-00000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	tags := must.Must(fs.TagRegistryFactory.CreateUserRegistry(leavingCtx))
+	tag, err := tags.Create(leavingCtx, models.Tag{Kind: models.TagKindCommodity, Slug: "garage", Label: "Garage", Color: models.TagColorBlue})
+	c.Assert(err, qt.IsNil)
+	sellers := must.Must(fs.SellerRegistryFactory.CreateUserRegistry(leavingCtx))
+	seller, err := sellers.Create(leavingCtx, models.Seller{Name: "Hardware store"})
+	c.Assert(err, qt.IsNil)
+
+	deleteCtx := appctx.WithJWTClaims(ctx, jwt.MapClaims{"imp": true, "impersonator_id": "operator-1"})
+	c.Assert(svc.DeleteAccount(deleteCtx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	keptTag, err := fs.TagRegistryFactory.CreateServiceRegistry().Get(ctx, tag.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptTag.CreatedByUserID, qt.Equals, staying.ID)
+	keptSeller, err := fs.SellerRegistryFactory.CreateServiceRegistry().Get(ctx, seller.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptSeller.CreatedByUserID, qt.Equals, staying.ID)
+
+	entries, err := fs.AuditLogRegistry.ListByAction(ctx, registry.AuditActionAccountDeletionHandOver)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	entry := entries[0]
+	c.Assert(entry.UserID, qt.DeepEquals, &leaving.ID)
+	c.Assert(entry.EntityID, qt.DeepEquals, &group.ID)
+	c.Assert(entry.ImpersonatedBy, qt.DeepEquals, new("operator-1"))
+	var handOver struct {
+		ToUserID string         `json:"to_user_id"`
+		Rows     map[string]int `json:"rows"`
+	}
+	c.Assert(json.Unmarshal([]byte(entry.UserAgent), &handOver), qt.IsNil)
+	c.Assert(handOver.ToUserID, qt.Equals, staying.ID)
+	c.Assert(handOver.Rows, qt.DeepEquals, map[string]int{"tags": 1, "sellers": 1})
+}
+
+// A custom field a member created in a shared group goes to the owner with
+// its item type entries, and the audit row counts both tables, as the
+// postgres purger does.
+func TestAccountDeletionService_DeleteAccount_HandsTheMembersCustomFieldsToTheOwner(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "fields-group-slug-000000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	types := must.Must(fs.ItemTypeRegistryFactory.CreateUserRegistry(leavingCtx))
+	must.Must(types.EnsureBuiltins(leavingCtx))
+	other, err := types.GetBySlug(leavingCtx, models.CommodityTypeOther)
+	c.Assert(err, qt.IsNil)
+	fields := must.Must(fs.CustomFieldRegistryFactory.CreateUserRegistry(leavingCtx))
+	field, err := fields.Create(leavingCtx, models.CustomFieldDefinition{
+		Name: "Serial", Type: models.CustomFieldTypeText,
+		Templates: []models.CustomFieldTemplate{{ItemTypeID: other.ID}},
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	kept, err := fs.CustomFieldRegistryFactory.CreateServiceRegistry().Get(ctx, field.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(kept.CreatedByUserID, qt.Equals, staying.ID)
+	c.Assert(kept.Templates, qt.HasLen, 1)
+
+	entries, err := fs.AuditLogRegistry.ListByAction(ctx, registry.AuditActionAccountDeletionHandOver)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	var handOver struct {
+		Rows map[string]int `json:"rows"`
+	}
+	c.Assert(json.Unmarshal([]byte(entries[0].UserAgent), &handOver), qt.IsNil)
+	c.Assert(handOver.Rows, qt.DeepEquals, map[string]int{"custom_field_definitions": 1, "item_type_custom_fields": 1})
 }

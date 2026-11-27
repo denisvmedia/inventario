@@ -126,6 +126,14 @@ describe("<AreaDetailPage />", () => {
     // Stats strip + empty-state list.
     expect(await screen.findByTestId("area-detail-items-stats")).toBeInTheDocument()
     expect(screen.getByTestId("area-detail-items-empty")).toBeInTheDocument()
+    // Delete is the red outline trigger of a detail surface (#2914).
+    const deleteTrigger = screen.getByTestId("area-detail-delete")
+    expect(deleteTrigger).toHaveAttribute("data-variant", "outline")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("offers the area label and the area-plus-items label sheet (#2807)", async () => {

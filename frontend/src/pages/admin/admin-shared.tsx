@@ -1,6 +1,8 @@
-import { Building2, Crown, Eye, Shield, User } from "lucide-react"
+import type { ElementType } from "react"
+import { Building2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { ROLE_ICON } from "@/components/RoleBadge"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { Schema } from "@/types"
@@ -118,58 +120,12 @@ export function TenantChip({ tenantId }: { tenantId: string | undefined }) {
 // and shared rather than re-derived per call site.
 export const ROLE_ORDER: GroupRole[] = ["viewer", "user", "admin", "owner"]
 
-// Per-role badge config. Mirrors the design-mock ADMIN_ROLE_CONFIG (which
-// itself mirrors MembersView role styling): role-tinted, borderless
-// secondary badges. Literal labels are swapped for `admin` namespace i18n
-// keys so the chip translates. Exported so the membership editor's inline
-// role <Select> can reuse the same i18n key + icon per option rather than
-// duplicating the taxonomy.
-export const ROLE_CONFIG: Record<
-  GroupRole,
-  { i18nKey: string; icon: typeof Eye; badgeClass: string }
-> = {
-  viewer: {
-    i18nKey: "userDetail.roles.viewer",
-    icon: Eye,
-    badgeClass: "bg-muted text-muted-foreground border-0",
-  },
-  user: {
-    i18nKey: "userDetail.roles.user",
-    icon: User,
-    badgeClass: "bg-chart-3/10 text-chart-3 border-0",
-  },
-  admin: {
-    i18nKey: "userDetail.roles.admin",
-    icon: Shield,
-    badgeClass: "bg-primary/10 text-primary border-0",
-  },
-  owner: {
-    i18nKey: "userDetail.roles.owner",
-    icon: Crown,
-    badgeClass: "bg-accent text-accent-foreground border-0",
-  },
-}
-
-// Renders a group-membership role as a role-tinted secondary badge. An
-// unknown or missing role renders a neutral em-dash badge.
-export function RoleBadge({ role }: { role: GroupRole | undefined }) {
-  const { t } = useTranslation("admin")
-  if (!role || !ROLE_CONFIG[role]) {
-    return (
-      <Badge
-        variant="secondary"
-        className="h-5 text-xs gap-1 bg-muted text-muted-foreground border-0"
-      >
-        —
-      </Badge>
-    )
-  }
-  const cfg = ROLE_CONFIG[role]
-  const Icon = cfg.icon
-  return (
-    <Badge variant="secondary" className={cn("h-5 text-xs gap-1", cfg.badgeClass)}>
-      <Icon className="size-3" />
-      {t(cfg.i18nKey)}
-    </Badge>
-  )
+// Per-role label and icon for the admin role pickers. The icon comes from
+// @/components/RoleBadge, which also draws the role on the admin pages; the
+// label is an `admin` namespace key so the picker translates.
+export const ROLE_CONFIG: Record<GroupRole, { i18nKey: string; icon: ElementType }> = {
+  viewer: { i18nKey: "userDetail.roles.viewer", icon: ROLE_ICON.viewer },
+  user: { i18nKey: "userDetail.roles.user", icon: ROLE_ICON.user },
+  admin: { i18nKey: "userDetail.roles.admin", icon: ROLE_ICON.admin },
+  owner: { i18nKey: "userDetail.roles.owner", icon: ROLE_ICON.owner },
 }

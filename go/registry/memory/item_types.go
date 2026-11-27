@@ -517,13 +517,15 @@ func (f *ItemTypeRegistryFactory) groupsCreatedBy(tenantID, userID string) []str
 }
 
 // reattributeCreator gives the item types userID created in tenantID to
-// heirs[groupID]. A type whose group has no heir keeps its creator. Each
-// changed type is a copy, so a reader holding the stored one sees no change.
-func (f *ItemTypeRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// heirs[groupID] and returns how many each group handed over. A type whose
+// group has no heir keeps its creator. Each changed type is a copy, so a
+// reader holding the stored one sees no change.
+func (f *ItemTypeRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.base.lock.Lock()
 	defer f.base.lock.Unlock()
+	moved := map[string]int{}
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		t := pair.Value
 		heir := heirs[t.GroupID]
@@ -533,5 +535,7 @@ func (f *ItemTypeRegistryFactory) reattributeCreator(tenantID, userID string, he
 		cp := *t
 		cp.CreatedByUserID = heir
 		pair.Value = &cp
+		moved[t.GroupID]++
 	}
+	return moved
 }

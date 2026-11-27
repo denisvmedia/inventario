@@ -35,6 +35,9 @@ describe("<LendDialog />", () => {
     render(<LendDialog open onSubmit={onSubmit} onOpenChange={vi.fn()} />)
     await user.click(screen.getByTestId("lend-submit"))
     expect(await screen.findByTestId("lend-borrower-name-error")).toBeInTheDocument()
+    const name = screen.getByTestId("lend-borrower-name")
+    expect(name).toHaveAttribute("aria-invalid", "true")
+    expect(name).toHaveAccessibleDescription("Borrower name is required.")
     expect(onSubmit).not.toHaveBeenCalled()
   })
 

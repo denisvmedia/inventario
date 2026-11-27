@@ -119,6 +119,9 @@ type adminGroupMembersAPI struct {
 	factorySet   *registry.FactorySet
 	groupService *services.GroupService
 	auditService services.AuditLogger
+	// avatarSigner signs the members' photo URLs for the operator (#2894).
+	// Nil leaves every member without one.
+	avatarSigner *services.FileSigningService
 }
 
 // listMembers returns a group's memberships joined with each member
@@ -178,7 +181,9 @@ func (api *adminGroupMembersAPI) listMembers(w http.ResponseWriter, r *http.Requ
 	// Audit AFTER render so a JSON-encoding failure turns into a
 	// Success=false row instead of silently claiming the client got
 	// their data — see adminGroupsAPI.listGroups for the full rationale.
-	renderErr := render.Render(w, r, jsonapi.NewAdminGroupMembersResponse(rows))
+	renderErr := render.Render(w, r, jsonapi.NewAdminGroupMembersResponse(rows, func(u *models.User) string {
+		return operatorAvatarURL(r, api.avatarSigner, u)
+	}))
 	api.auditMemberList(r, group.TenantID, group.ID, renderErr)
 	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)

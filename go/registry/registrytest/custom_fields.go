@@ -165,6 +165,33 @@ func runCustomFieldValueContract(t *testing.T, newEnv func(t *testing.T) CustomF
 		c.Check(valueStrings(page[0].CustomFields), qt.DeepEquals, want, qt.Commentf("listed"))
 	})
 
+	t.Run("a URL value of the longest allowed length is stored in any script", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		link := mustField(c, env.FieldsA, env.CtxA, "Web", models.CustomFieldTypeURL)
+		// Two bytes per letter, and letters in no repeating order, so the
+		// value stays over 4000 bytes even compressed.
+		prefix := "https://example.com/"
+		long := prefix + cyrillicLetters(models.MaxCustomFieldURLRunes-len(prefix), 1)
+		item := mustCustomFieldItem(c, env, "Book", models.CustomFieldValues{link.ID: mustJSONString(c, long)})
+		got, err := env.CommoditiesA.Get(env.CtxA, item.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(string(got.CustomFields[link.ID]), qt.Equals, string(mustJSONString(c, long)))
+
+		other := prefix + cyrillicLetters(models.MaxCustomFieldURLRunes-len(prefix), 2)
+		got.CustomFields = models.CustomFieldValues{link.ID: mustJSONString(c, other)}
+		updated, err := env.CommoditiesA.Update(env.CtxA, *got)
+		c.Assert(err, qt.IsNil)
+		c.Check(string(updated.CustomFields[link.ID]), qt.Equals, string(mustJSONString(c, other)))
+
+		page, _, err := env.CommoditiesA.ListPaginated(env.CtxA, 0, 10, registry.CommodityListOptions{
+			CustomFields: []registry.CustomFieldFilter{{FieldID: link.ID, Type: models.CustomFieldTypeURL, Op: registry.CustomFieldOpEq, Text: other}},
+		})
+		c.Assert(err, qt.IsNil)
+		c.Check(page, qt.HasLen, 1, qt.Commentf("an equality filter finds the value"))
+	})
+
 	t.Run("a nil map keeps the values, a missing key keeps one, a null clears one", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -849,6 +876,29 @@ func mustSelectField(c *qt.C, env CustomFieldEnv, name string, labels ...string)
 
 func rawJSON(s string) json.RawMessage {
 	return json.RawMessage(s)
+}
+
+func mustJSONString(c *qt.C, s string) json.RawMessage {
+	c.Helper()
+	b, err := json.Marshal(s)
+	c.Assert(err, qt.IsNil)
+	return b
+}
+
+// cyrillicLetters returns n lowercase Cyrillic letters in an order a
+// xorshift generator started from seed picks, the same for every run.
+func cyrillicLetters(n int, seed uint64) string {
+	const alphabet = 32
+	letters := []rune("абвгдежзийклмнопрстуфхцчшщъыьэюя")
+	var b strings.Builder
+	x := seed*0x9E3779B97F4A7C15 + 1
+	for range n {
+		x ^= x << 13
+		x ^= x >> 7
+		x ^= x << 17
+		b.WriteRune(letters[x%alphabet])
+	}
+	return b.String()
 }
 
 func valueStrings(values models.CustomFieldValues) map[string]string {

@@ -53,6 +53,8 @@ func RunFailedJobContract(t *testing.T, newEnv func(t *testing.T) FailedJobEnv) 
 		{"an unknown type and a group without a tenant are refused", failedJobContractRefusals},
 		{"a discarded scan that is resumed or rescanned shows again when it fails", failedJobContractIntakeRequeue},
 		{"only the newest thumbnail job of a file counts", failedJobContractThumbnailNewest},
+		{"failed before limits the list and the count", failedJobContractFailedBefore},
+		{"a bulk discard marks the jobs that failed before the time", failedJobContractDiscardFailed},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -536,4 +538,92 @@ func failedJobContractThumbnailNewest(t *testing.T, env FailedJobEnv) {
 		c.Assert(env.Jobs.Retry(ctx, models.WorkerTypeThumbnail, scope, id, base), qt.ErrorIs, registry.ErrNotFound)
 		c.Assert(env.Jobs.Discard(ctx, models.WorkerTypeThumbnail, scope, id, base), qt.ErrorIs, registry.ErrNotFound)
 	}
+}
+
+// The seed backdates every failure but the intake scan's, which fails at
+// the wall clock: a cutoff a day ago leaves the scan out, one an hour ahead
+// takes it in.
+func failedJobContractFailedBefore(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	a := seedFailedJobs(c, env, env.A, now.Add(-48*time.Hour))
+	dayAgo := registry.FailedJobScope{FailedBefore: now.Add(-24 * time.Hour)}
+	ahead := registry.FailedJobScope{FailedBefore: now.Add(time.Hour)}
+
+	for _, jobType := range models.FailedJobTypes() {
+		want := []string{a[jobType]}
+		if jobType == models.WorkerTypeIntake {
+			want = []string{}
+		}
+		c.Assert(failedIDs(c, env, jobType, dayAgo), qt.DeepEquals, want, qt.Commentf("%s", jobType))
+		n, err := env.Jobs.CountFailed(ctx, jobType, dayAgo)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, len(want), qt.Commentf("%s", jobType))
+		c.Assert(failedIDs(c, env, jobType, ahead), qt.DeepEquals, []string{a[jobType]}, qt.Commentf("%s", jobType))
+	}
+
+	// An export that failed without a completion time counts from its
+	// creation, which the postgres registry sets to the time of Create.
+	g := env.A
+	undated, err := g.Set.ExportRegistry.Create(g.Ctx, models.Export{
+		Type:         models.ExportTypeFullDatabase,
+		Status:       models.ExportStatusFailed,
+		Description:  "Old backup",
+		ErrorMessage: "failed",
+		CreatedDate:  models.NewPTimestamp(now),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(failedIDs(c, env, models.WorkerTypeExport, dayAgo), qt.DeepEquals, []string{a[models.WorkerTypeExport]})
+	ids := failedIDs(c, env, models.WorkerTypeExport, ahead)
+	c.Assert(ids, qt.HasLen, 2)
+	c.Assert(ids, qt.Contains, undated.ID)
+}
+
+func failedJobContractDiscardFailed(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	a := seedFailedJobs(c, env, env.A, now.Add(-48*time.Hour))
+	b := seedFailedJobs(c, env, env.B, now.Add(-48*time.Hour))
+	dayAgoInA := groupScope(env, env.A)
+	dayAgoInA.FailedBefore = now.Add(-24 * time.Hour)
+
+	for _, jobType := range models.FailedJobTypes() {
+		_, err := env.Jobs.DiscardFailed(ctx, jobType, groupScope(env, env.A), now)
+		c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired, qt.Commentf("%s: a bulk discard needs a time", jobType))
+
+		want := 1
+		if jobType == models.WorkerTypeIntake {
+			want = 0
+		}
+		n, err := env.Jobs.DiscardFailed(ctx, jobType, dayAgoInA, now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, want, qt.Commentf("%s", jobType))
+		n, err = env.Jobs.DiscardFailed(ctx, jobType, dayAgoInA, now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, 0, qt.Commentf("%s: a job is discarded once", jobType))
+
+		c.Assert(failedIDs(c, env, jobType, groupScope(env, env.B)), qt.DeepEquals, []string{b[jobType]},
+			qt.Commentf("%s: the other group keeps its job", jobType))
+	}
+	c.Assert(failedIDs(c, env, models.WorkerTypeIntake, groupScope(env, env.A)), qt.DeepEquals, []string{a[models.WorkerTypeIntake]})
+
+	// Across the tenant, a cutoff ahead of now takes the rest.
+	ahead := registry.FailedJobScope{TenantID: env.TenantID, FailedBefore: now.Add(time.Hour)}
+	total := 0
+	for _, jobType := range models.FailedJobTypes() {
+		n, err := env.Jobs.DiscardFailed(ctx, jobType, ahead, now)
+		c.Assert(err, qt.IsNil)
+		total += n
+		c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.HasLen, 0, qt.Commentf("%s", jobType))
+	}
+	c.Assert(total, qt.Equals, len(models.FailedJobTypes())+1)
+
+	// The rows stay failed, with their errors.
+	export, err := env.A.Set.ExportRegistry.Get(env.A.Ctx, a[models.WorkerTypeExport])
+	c.Assert(err, qt.IsNil)
+	c.Assert(export.Status, qt.Equals, models.ExportStatusFailed)
+	c.Assert(export.ErrorMessage, qt.Equals, "disk full")
+	c.Assert(export.DiscardedAt, qt.IsNotNil)
 }

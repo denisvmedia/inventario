@@ -479,6 +479,41 @@ describe("<SettingsPage />", () => {
     expect(screen.getByTestId("preferred-currency-row")).toBeInTheDocument()
   })
 
+  it("saves only the default group, not the name this page loaded (#2910)", async () => {
+    const puts: unknown[] = []
+    server.use(...withGroupHandlers({}))
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "g1",
+              type: "groups",
+              attributes: { id: "g1", slug: "household", name: "Household" },
+            },
+            { id: "g2", type: "groups", attributes: { id: "g2", slug: "office", name: "Office" } },
+          ],
+        })
+      ),
+      msw.put(api("/auth/me"), async ({ request }) => {
+        puts.push(await request.json())
+        return HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: "Alex",
+          default_group_id: "g2",
+          created_at: "2024-01-15T00:00:00Z",
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    const trigger = await screen.findByTestId("settings-default-group-select")
+    await waitFor(() => expect(trigger).toHaveTextContent("Household"))
+    await pickRadixSelect(user, /^Default group$/i, { optionLabel: /Office/ })
+    await waitFor(() => expect(puts).toEqual([{ default_group_id: "g2" }]))
+  })
+
   it("changing Default view saves it and drops this device's toolbar layout (#2797)", async () => {
     localStorage.setItem("commodities:viewMode", "list")
     let lastPatch: { field: string; body: unknown } | null = null
