@@ -125,14 +125,16 @@ func (f *IntakeDocumentRegistryFactory) groupsCreatedBy(tenantID, userID string)
 }
 
 // reattributeCreator gives the documents userID created in tenantID to
-// heirs[groupID], as the user purge does with group configuration, and
-// deletes the ones whose group has no heir: that group leaves with the user.
-func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// heirs[groupID], as the user purge does with group configuration, returns
+// how many each group handed over, and deletes the ones whose group has no
+// heir: that group leaves with the user.
+func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	f.writes.Lock()
 	defer f.writes.Unlock()
 	f.base.lock.Lock()
 	defer f.base.lock.Unlock()
 	var gone []string
+	moved := map[string]int{}
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		doc := pair.Value
 		if doc.TenantID != tenantID || doc.CreatedByUserID != userID {
@@ -142,6 +144,7 @@ func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID stri
 			cp := *doc
 			cp.CreatedByUserID = heir
 			pair.Value = &cp
+			moved[doc.GroupID]++
 			continue
 		}
 		gone = append(gone, doc.ID)
@@ -149,6 +152,7 @@ func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID stri
 	for _, id := range gone {
 		f.base.items.Delete(id)
 	}
+	return moved
 }
 
 func (r *IntakeDocumentRegistry) requireGroup() error {
