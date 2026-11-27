@@ -91,10 +91,13 @@ Rules:
   is the current one, `history.pushState` replaces it instead, so a page
   the app opens as the dialog closes takes the entry's place and leaves
   no extra step back; `history.replaceState` keeps the entry and hands
-  its URL to the entry below when the dialog closes. Toasts shown while
-  it is open sit above its footer. The call site does nothing for any of
-  this; the hooks live in `src/components/ui/dialog-phone.ts`. From `sm`
-  up the card behaves as a default dialog: Back leaves the page.
+  its URL to the entry below when the dialog closes. A push that comes
+  while the dialog steps back over its entry is pushed once the step
+  lands; until then the entry being left shows the new URL. Toasts
+  shown while it is open sit above its footer. The call site does
+  nothing for any of this; the hooks live in
+  `src/components/ui/dialog-phone.ts`. From `sm` up the card behaves as
+  a default dialog: Back leaves the page.
 
 ## Color and contrast
 

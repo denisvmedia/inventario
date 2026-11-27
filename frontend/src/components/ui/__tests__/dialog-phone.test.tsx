@@ -1,7 +1,8 @@
 import { StrictMode, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -118,9 +119,13 @@ beforeEach(() => {
   window.history.pushState({ test: true }, "")
 })
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  // Unmount here and let a dialog's step back over its history entry land,
+  // so no test, and no later file in this worker, starts with one under way.
+  cleanup()
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
   window.history.replaceState(null, "", START_URL)
   Reflect.deleteProperty(window, "visualViewport")
   Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 })
@@ -226,6 +231,71 @@ describe("full-screen dialog and the back gesture", () => {
     await waitFor(() => expect(window.history.back).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(window.history.state).toEqual({ page: "item" }))
     expect(window.location.pathname).toBe("/item-2")
+  })
+
+  it("opens a page the app navigates to while the dialog steps back", async () => {
+    setWidth(true)
+    const user = userEvent.setup()
+    window.history.pushState(null, "", "/list")
+    function GoToItem() {
+      const navigate = useNavigate()
+      return (
+        <button type="button" hidden data-testid="go-to-item" onClick={() => navigate("/item-3")} />
+      )
+    }
+    function RouterPath() {
+      return <p data-testid="router-path">{useLocation().pathname}</p>
+    }
+    const back = window.history.back.bind(window.history)
+    // The app navigates after the dialog asked for its step back and before
+    // the step lands, as after a fast request that follows a close.
+    vi.spyOn(window.history, "back").mockImplementationOnce(() => {
+      back()
+      screen.getByTestId("go-to-item").click()
+    })
+    render(
+      <BrowserRouter>
+        <GoToItem />
+        <RouterPath />
+        <Routes>
+          <Route path="/list" element={<Harness />} />
+          <Route path="/item-3" element={<p>The item page</p>} />
+        </Routes>
+      </BrowserRouter>
+    )
+
+    await user.click(within(screen.getByTestId("header")).getByRole("button", { name: "Close" }))
+    await waitFor(() => expect(window.history.back).toHaveBeenCalledTimes(1))
+    // Let the step back land.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+
+    expect(screen.getByText("The item page")).toBeInTheDocument()
+    expect(screen.getByTestId("router-path")).toHaveTextContent("/item-3")
+    expect(window.location.pathname).toBe("/item-3")
+    expect(dialogEntries()).toEqual([])
+
+    // One step back returns to the list, in the browser and in the router.
+    act(() => window.history.back())
+    await waitFor(() => expect(screen.getByTestId("router-path")).toHaveTextContent("/list"))
+    expect(window.location.pathname).toBe("/list")
+  })
+
+  it("does not hold later pages back when its step back never lands", async () => {
+    setWidth(true)
+    const user = userEvent.setup()
+    // The browser drops the dialog's step back.
+    vi.spyOn(window.history, "back").mockImplementationOnce(() => {})
+    render(<Harness />)
+
+    await user.click(within(screen.getByTestId("header")).getByRole("button", { name: "Close" }))
+    await waitFor(() => expect(window.history.back).toHaveBeenCalledTimes(1))
+
+    const length = window.history.length
+    const now = performance.now()
+    vi.spyOn(performance, "now").mockReturnValue(now + 5000)
+    window.history.pushState({ page: "later" }, "", "/later")
+    expect(window.history.length).toBe(length + 1)
+    expect(window.location.pathname).toBe("/later")
   })
 
   it("pushes one entry under StrictMode", async () => {

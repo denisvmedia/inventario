@@ -111,17 +111,49 @@ function withStack(state: unknown, stack: string[]): Record<string, unknown> {
   return next
 }
 
-// Set while the dialog steps back over its own entry: the step is the
-// dialog's, not the user's, so the router never hears of it, and the entry
-// below takes the URL and state the dialog's entry had by then.
-let pendingStepBack: { state: unknown; url: string } | null = null
+interface HistoryEntry {
+  state: unknown
+  url: string
+}
+
+// Set while the dialog steps back over its own entry. The step is the
+// dialog's, not the user's, so the router never hears of it. The entry below
+// takes the URL and state the dialog's entry had by then, and the entries the
+// app pushed meanwhile are pushed after it.
+let pendingStepBack: { below: HistoryEntry; pushed: HistoryEntry[]; since: number } | null = null
+
+// A step back that has not landed by then is taken as lost, so the history
+// does not stay in this mode.
+const STEP_BACK_TIMEOUT_MS = 3000
+
+function stepBackUnderWay() {
+  if (pendingStepBack && performance.now() - pendingStepBack.since > STEP_BACK_TIMEOUT_MS) {
+    pendingStepBack = null
+  }
+  return pendingStepBack
+}
 
 function onPopStateCapture(event: PopStateEvent) {
-  if (!pendingStepBack) return
-  const { state, url } = pendingStepBack
+  const step = stepBackUnderWay()
+  if (!step) return
   pendingStepBack = null
   event.stopImmediatePropagation()
-  realReplaceState.call(window.history, state, "", url)
+  realReplaceState.call(window.history, step.below.state, "", step.below.url)
+  for (const entry of step.pushed) realPushState.call(window.history, entry.state, "", entry.url)
+}
+
+// While the dialog steps back, a push must not reach the browser: a browser
+// may drop the step back for it, or step back over it. The entry the dialog is
+// leaving takes the new URL and state at once, so the router reads them, and
+// the entry is pushed once the step back lands.
+function pushEntry(data: unknown, unused: string, url?: string | URL | null) {
+  const step = stepBackUnderWay()
+  if (!step) {
+    realPushState.call(window.history, data, unused, url)
+    return
+  }
+  realReplaceState.call(window.history, data, unused, url)
+  step.pushed.push({ state: data, url: window.location.href })
 }
 
 // While a dialog's entry is the current one, a navigation of the app applies
@@ -135,14 +167,20 @@ function patchHistory() {
   historyPatched = true
   const history = window.history
   history.pushState = function pushState(data, unused, url) {
-    if (dialogStack(history.state).length > 0) realReplaceState.call(history, data, unused, url)
-    else realPushState.call(history, data, unused, url)
+    if (!stepBackUnderWay() && dialogStack(history.state).length > 0) {
+      realReplaceState.call(history, data, unused, url)
+    } else {
+      pushEntry(data, unused, url)
+    }
   }
   history.replaceState = function replaceState(data, unused, url) {
-    if (pendingStepBack) {
-      // The step back is under way: the entry below takes this state too.
+    const step = stepBackUnderWay()
+    if (step) {
+      // The step back is under way: the entry that lands takes this state too.
       realReplaceState.call(history, data, unused, url)
-      pendingStepBack = { state: data, url: window.location.href }
+      const entry = { state: data, url: window.location.href }
+      if (step.pushed.length > 0) step.pushed[step.pushed.length - 1] = entry
+      else step.below = entry
       return
     }
     const stack = dialogStack(history.state)
@@ -159,16 +197,22 @@ function pushDialogEntry(id: string) {
   const stack = dialogStack(state).filter((entry) => entry !== id)
   // The same URL and the router's fields (`key`, `idx`), so the router sees
   // the same location when the entry is popped.
-  realPushState.call(window.history, withStack(state, [...stack, id]), "")
+  pushEntry(withStack(state, [...stack, id]), "")
 }
 
 function removeDialogEntry(id: string) {
   const stack = dialogStack(window.history.state)
   liveDialogs.delete(id)
-  if (stack[stack.length - 1] !== id) return
+  // One step back at a time. During another one the entry stays; with the
+  // dialog gone its marker no longer counts.
+  if (stack[stack.length - 1] !== id || stepBackUnderWay()) return
   pendingStepBack = {
-    state: withStack(window.history.state, stack.slice(0, -1)),
-    url: window.location.href,
+    below: {
+      state: withStack(window.history.state, stack.slice(0, -1)),
+      url: window.location.href,
+    },
+    pushed: [],
+    since: performance.now(),
   }
   window.history.back()
 }
@@ -250,7 +294,11 @@ function applyToastInset() {
  * at the bottom of the screen, so they do not cover the dialog's footer
  * buttons.
  */
-export function useToastBottomInset(enabled: boolean, footer: HTMLElement | null, keyboard: number) {
+export function useToastBottomInset(
+  enabled: boolean,
+  footer: HTMLElement | null,
+  keyboard: number
+) {
   const id = React.useId()
   const [footerHeight, setFooterHeight] = React.useState(0)
 

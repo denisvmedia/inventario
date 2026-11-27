@@ -110,6 +110,44 @@ test.describe('Full-screen dialogs on a phone (#2931)', () => {
     expect(await dialogEntries(page)).toEqual([]);
   });
 
+  test('a page pushed while the dialog steps back stays, and Back returns to the list', async ({
+    page,
+    recorder,
+  }) => {
+    await navigateWithAuth(page, '/locations', recorder);
+    await page.setViewportSize(PHONE);
+    const listUrl = page.url();
+
+    await page.getByTestId('locations-add-button').click();
+    const dialog = page.getByTestId('location-form-dialog');
+    await expect(dialog).toHaveAttribute('data-state', 'open');
+    await expect.poll(() => dialogEntries(page)).toHaveLength(1);
+
+    // The next history.back() is the dialog's own step back; a push right
+    // after it lands before the step does, as a fast navigation after a close.
+    await page.evaluate(() => {
+      const back = history.back.bind(history);
+      history.back = () => {
+        history.back = back;
+        back();
+        const state = history.state as { idx?: number } | null;
+        history.pushState({ usr: null, key: 'race', idx: (state?.idx ?? 0) + 1 }, '', '/race-target');
+      };
+    });
+    await dialog.locator('[data-slot="dialog-header"]').getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect.poll(() => page.evaluate(() => location.pathname)).toBe('/race-target');
+    // Give the step back time to land, then check it left the push in place.
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => location.pathname)).toBe('/race-target');
+    expect(await page.evaluate(() => (history.state as { key?: string } | null)?.key)).toBe('race');
+
+    await page.goBack();
+    await expect(page).toHaveURL(listUrl);
+    expect(await dialogEntries(page)).toEqual([]);
+  });
+
   test('a toast shown over a full-screen dialog sits above its footer', async ({ page, recorder }) => {
     await navigateWithAuth(page, '/settings', recorder);
     await page.setViewportSize(PHONE);
