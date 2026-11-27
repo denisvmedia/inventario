@@ -2757,6 +2757,48 @@ type LocationGroupRegistry interface {
 	// returns the group with applied=false. A missing group gives
 	// ErrNotFound.
 	SetHiddenSections(ctx context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// UpdateDetails writes the name, icon and description of an active
+	// group, its hidden sections when details carries them, and updated_at.
+	// No other column is written, so a deletion, a currency migration or a
+	// settings change that commits meanwhile is kept. The name is required.
+	// It returns the stored group and applied=true. A group that is not
+	// active is left as it is: the call returns the group with
+	// applied=false. A missing group gives ErrNotFound.
+	//
+	// The generic Update writes every column from the value it is given;
+	// the API's write paths use UpdateDetails, SetHiddenSections,
+	// MarkPendingDeletion and SetCurrencyMigrationID instead.
+	UpdateDetails(ctx context.Context, groupID string, details GroupDetails, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// MarkPendingDeletion moves an active group to pending_deletion and sets
+	// updated_at, writing those two columns only; the group purge worker
+	// deletes the group later. It returns the stored group and
+	// applied=true. A group that is not active is left as it is: the call
+	// returns the group with applied=false. A missing group gives
+	// ErrNotFound. MarkPendingDeletionAdmin is the cross-tenant form the
+	// back office uses.
+	MarkPendingDeletion(ctx context.Context, groupID string, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// SetCurrencyMigrationID records the currency migration that holds the
+	// group's item write lock, writing currency_migration_id only. It writes
+	// nothing and returns applied=false when the group is not active, or
+	// when the migration is no longer pending or running: the worker that
+	// finished it has already cleared the id, and writing the id back would
+	// show the group as migrating until another migration replaced it. The
+	// memory backend runs no migrations, so it checks the group alone. A
+	// missing group gives ErrNotFound.
+	SetCurrencyMigrationID(ctx context.Context, groupID, migrationID string) (applied bool, err error)
+}
+
+// GroupDetails is what LocationGroupRegistry.UpdateDetails writes: the name,
+// icon and description, which are always written, and the hidden sections,
+// which are written only when HiddenSections is not nil.
+type GroupDetails struct {
+	Name           string
+	Icon           string
+	Description    string
+	HiddenSections *models.GroupSections
 }
 
 // AdminGroupSortField names the columns the admin group listing endpoint
