@@ -11,8 +11,16 @@ import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { createQueryClient } from "@/lib/query-client"
 import { TagsListPage } from "@/pages/tags/TagsListPage"
-import { commodityHandlers, groupHandlers, memberHandlers, tagHandlers } from "@/test/handlers"
+import { toastSpies } from "@/test/global-mocks"
+import {
+  apiUrl,
+  commodityHandlers,
+  groupHandlers,
+  memberHandlers,
+  tagHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
@@ -34,9 +42,10 @@ beforeEach(() => {
   setAccessToken("good-token")
 })
 
-function renderPage() {
+function renderPage(opts: { queryClient?: ReturnType<typeof createQueryClient> } = {}) {
   return renderWithProviders({
     withAuth: true,
+    queryClient: opts.queryClient,
     initialPath: `/g/${SLUG}/tags`,
     routes: (
       <Route
@@ -251,6 +260,58 @@ describe("<TagsListPage />", () => {
     await waitFor(() => {
       expect((labelInput as HTMLInputElement).value).toBe("")
     })
+  })
+
+  // The app's global toast reports a 423, so the page adds no second toast
+  // with the request URL in it (#3011).
+  it("shows one toast when a delete is refused during a currency migration", async () => {
+    seed()
+    server.use(
+      http.delete(apiUrl(`/g/${SLUG}/tags/t2`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Locked",
+                code: "currency_migration.migration_in_progress",
+                error: { msg: "a currency migration is running" },
+              },
+            ],
+          },
+          { status: 423 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderPage({ queryClient: createQueryClient() })
+    await user.click(await screen.findByTestId("tag-row-garden-delete"))
+    await user.click(await screen.findByTestId("confirm-accept"))
+
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("Locked while a currency migration is running.")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the server's reason when a delete is refused", async () => {
+    seed()
+    server.use(
+      http.delete(apiUrl(`/g/${SLUG}/tags/t2`), () =>
+        HttpResponse.json(
+          { errors: [{ status: "409", detail: "the tag is used by a saved view" }] },
+          { status: 409 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderPage({ queryClient: createQueryClient() })
+    await user.click(await screen.findByTestId("tag-row-garden-delete"))
+    await user.click(await screen.findByTestId("confirm-accept"))
+
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("the tag is used by a saved view")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
   })
 
   it("renders the error block when /tags returns 500", async () => {

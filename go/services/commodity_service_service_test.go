@@ -173,6 +173,33 @@ func TestCommodityServiceService_MarkReturned_RecordsFinalCost(t *testing.T) {
 	c.Assert(final.CostCurrency, qt.Equals, "EUR")
 }
 
+func TestCommodityServiceService_UpdateService_RecordsCostOfZero(t *testing.T) {
+	c := qt.New(t)
+	fx := newServiceServiceFixture(c)
+
+	created := fx.sendForService(c)
+
+	zero := decimal.Zero
+	currency := "EUR"
+	updated, err := fx.serviceSvc.UpdateService(fx.ctx, created.ID, services.ServiceUpdate{
+		CostAmount:   &zero,
+		CostCurrency: &currency,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(updated.CostAmount.IsZero(), qt.IsTrue)
+	c.Assert(updated.CostCurrency, qt.Equals, "EUR")
+	c.Assert(updated.HasCost(), qt.IsTrue)
+
+	// An amount of 0 with an empty currency clears it again.
+	empty := ""
+	cleared, err := fx.serviceSvc.UpdateService(fx.ctx, created.ID, services.ServiceUpdate{
+		CostAmount:   &zero,
+		CostCurrency: &empty,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(cleared.HasCost(), qt.IsFalse)
+}
+
 func TestCommodityServiceService_UpdateService_EmitsServiceUpdated(t *testing.T) {
 	c := qt.New(t)
 	fx := newServiceServiceFixture(c)

@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # e2e-tests is a pure consumer: it pulls the production Docker image and the
 # darwin binary produced by docker.yml (one workflow handles both PR and
@@ -125,7 +125,7 @@ jobs:
     # name `E2E Tests (${{ matrix.browser }})` instead, and a required context
     # that never appears blocks the merge forever (#2569). The `gate` step
     # below decides whether there is anything to run. `!cancelled()` rather
-    # than `always()`, so a superseded run still cancels promptly.
+    # than `always()`, so a superseded pull request run still cancels promptly.
     if: ${{ !cancelled() && needs.changes.result == 'success' }}
     strategy:
       fail-fast: false

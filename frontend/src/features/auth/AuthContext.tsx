@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 
-import { getAccessToken } from "@/lib/auth-storage"
+import { getAccessToken, onAuthIdentityChange } from "@/lib/auth-storage"
 import { HttpError } from "@/lib/http"
 import {
   __resetNavigationForTests,
@@ -68,6 +68,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // correct branch (skipping the refresh when a token is present).
   const [bootRefreshState, setBootRefreshState] = useState<"pending" | "settled" | "skipped">(() =>
     getAccessToken() ? "skipped" : "pending"
+  )
+
+  // Every cached query and mutation belongs to the user who was signed in when
+  // it ran, and most keys do not name the user. So when the signed-in user
+  // changes (sign-in, sign-out, a forced sign-out after a failed refresh, or
+  // any of these in another tab) the whole cache goes, before the next user's
+  // first render. The counter re-renders the provider so `user` is derived
+  // from the new storage state, which also covers a change made in another tab.
+  const [identityVersion, setIdentityVersion] = useState(0)
+  useEffect(
+    () =>
+      onAuthIdentityChange(() => {
+        queryClient.clear()
+        setIdentityVersion((v) => v + 1)
+      }),
+    [queryClient]
   )
 
   useEffect(() => {
@@ -136,6 +152,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [navigate])
 
   const value = useMemo<AuthContextValue>(() => {
+    // identityVersion is a dependency only: getAccessToken() reads storage,
+    // which React cannot observe.
+    void identityVersion
     const hasToken = !!getAccessToken()
     // Classify the probe error. A 401 is a definitive "not signed in"; the
     // http client (#1403) has already tried to refresh and failed by the time
@@ -181,7 +200,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isAuthenticated: resolvedUser !== null && resolvedUser !== undefined,
       logout: () => logoutMutation.mutateAsync(),
     }
-  }, [user, isFetched, error, logoutMutation, bootRefreshState])
+  }, [user, isFetched, error, logoutMutation, bootRefreshState, identityVersion])
 
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

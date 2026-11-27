@@ -308,6 +308,53 @@ func (r *FileRegistry) SetChecksum(ctx context.Context, id, sha256 string) error
 	return nil
 }
 
+// ListPendingThumbnailOrientation returns JPEG files whose thumbnails are not
+// marked oriented; see the interface doc.
+func (r *FileRegistry) ListPendingThumbnailOrientation(ctx context.Context, afterID string, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE NOT thumbnails_oriented AND mime_type = 'image/jpeg' AND original_path <> '' AND id > $1
+			ORDER BY id
+			LIMIT $2`, r.tableNames.Files())
+		rows, err := tx.QueryxContext(ctx, query, afterID, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var file models.FileEntity
+			if err := rows.StructScan(&file); err != nil {
+				return errxtrace.Wrap("failed to scan file", err)
+			}
+			files = append(files, &file)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files pending thumbnail orientation", err)
+	}
+	return files, nil
+}
+
+// SetThumbnailsOriented marks a file's thumbnails oriented; see the interface
+// doc.
+func (r *FileRegistry) SetThumbnailsOriented(ctx context.Context, id string) error {
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET thumbnails_oriented = TRUE WHERE id = $1 AND NOT thumbnails_oriented`, r.tableNames.Files())
+		_, err := tx.ExecContext(ctx, query, id)
+		return err
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to mark thumbnails oriented", err)
+	}
+	return nil
+}
+
 // MoveLegacyLinks moves single links from the legacy columns into file_links;
 // see the interface doc. One statement per batch: the rows are locked with
 // SKIP LOCKED so two instances starting together split the work instead of

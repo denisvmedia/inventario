@@ -138,32 +138,62 @@ describe("features/files/api", () => {
     await expect(deleteFile("f1")).resolves.toBeUndefined()
   })
 
-  it("trashUnlinkedFile trashes only a file nothing links, and keeps one it cannot read", async () => {
-    const deleted: string[] = []
-    const attributes: Record<string, unknown> = {
-      f1: { id: "f1", links: [] },
-      f2: {
-        id: "f2",
-        links: [{ id: "l1", file_id: "f2", entity_type: "commodity", entity_id: "c1" }],
-      },
-    }
+  it("trashUnlinkedFile leaves the check to the server, in one request (#2930)", async () => {
+    // f2 had no links when the form uploaded it; another tab attached it
+    // since. Only the server, at the moment it trashes, can tell.
+    const linked = new Set(["f2"])
+    const deletes: string[] = []
+    let reads = 0
     server.use(
-      http.get(apiUrl("/g/g1/files/:id"), ({ params }) => {
-        const id = String(params.id)
-        if (id === "gone") return HttpResponse.json({ errors: [] }, { status: 404 })
-        // f3 answers without attributes, so its links are unknown.
-        return HttpResponse.json({ id, type: "files", attributes: attributes[id] })
+      http.get(apiUrl("/g/g1/files/:id"), () => {
+        reads++
+        return HttpResponse.json({ errors: [] }, { status: 500 })
       }),
-      http.delete(apiUrl("/g/g1/files/:id"), ({ params }) => {
-        deleted.push(String(params.id))
+      http.delete(apiUrl("/g/g1/files/:id"), ({ params, request }) => {
+        const id = String(params.id)
+        deletes.push(`${id}?${new URL(request.url).searchParams.toString()}`)
+        if (id === "gone")
+          return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+        if (id === "busy") {
+          return HttpResponse.json(
+            { errors: [{ status: "409", code: "restore.in_progress" }] },
+            { status: 409 }
+          )
+        }
+        if (linked.has(id)) {
+          return HttpResponse.json(
+            { errors: [{ status: "409", code: "file.linked" }] },
+            { status: 409 }
+          )
+        }
         return new HttpResponse(null, { status: 204 })
       })
     )
     await expect(trashUnlinkedFile("f1")).resolves.toBe(true)
     await expect(trashUnlinkedFile("f2")).resolves.toBe(false)
     await expect(trashUnlinkedFile("gone")).resolves.toBe(false)
-    await expect(trashUnlinkedFile("f3")).rejects.toThrow(/missing attributes/)
-    expect(deleted).toEqual(["f1"])
+    // Any other refusal is an error the caller sees.
+    await expect(trashUnlinkedFile("busy")).rejects.toThrow()
+    expect(reads).toBe(0)
+    expect(deletes).toEqual([
+      "f1?unless_linked=true",
+      "f2?unless_linked=true",
+      "gone?unless_linked=true",
+      "busy?unless_linked=true",
+    ])
+  })
+
+  it("trashUnlinkedFile sends the request to the files path it is given", async () => {
+    let url = ""
+    server.use(
+      http.delete(apiUrl("/g/other/files/:id"), ({ request }) => {
+        url = request.url
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    await expect(trashUnlinkedFile("f1", { filesPath: "/g/other/files" })).resolves.toBe(true)
+    expect(new URL(url).pathname).toBe("/api/v1/g/other/files/f1")
+    expect(new URL(url).searchParams.get("unless_linked")).toBe("true")
   })
 
   it("bulkDeleteFiles aggregates succeeded + failed", async () => {

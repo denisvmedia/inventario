@@ -11,8 +11,15 @@ export type DraftSaveState =
   // The save failed; the values stay in the form and on this device.
   // failedFiles names the files that did not reach the draft. forItem marks
   // the save Add item runs before it promotes the draft (#1626): no item is
-  // made until every file is on the draft.
-  | { kind: "error"; message: string; failedFiles: string[]; forItem?: boolean }
+  // made until every file is on the draft. forEdit marks the save of an
+  // existing item, whose changes wait until every new file is on it (#2916).
+  | {
+      kind: "error"
+      message: string
+      failedFiles: string[]
+      forItem?: boolean
+      forEdit?: boolean
+    }
   // The draft was saved elsewhere after this form loaded it.
   | { kind: "conflict" }
   // The draft became an item elsewhere; commodityId names it when known.
@@ -96,13 +103,15 @@ export function DraftSaveAlert({
         <AlertTitle>
           {state.forItem
             ? t("commodities:form.addFailedTitle")
-            : t("commodities:drafts.saveFailedTitle")}
+            : state.forEdit
+              ? t("commodities:form.editFailedTitle")
+              : t("commodities:drafts.saveFailedTitle")}
         </AlertTitle>
         <AlertDescription>
           <p>{state.message}</p>
           {state.failedFiles.length > 0 ? (
             <p>
-              {state.forItem
+              {state.forItem || state.forEdit
                 ? t("commodities:form.filesNotUploaded", { names: state.failedFiles.join(", ") })
                 : t("commodities:drafts.filesNotSaved", { names: state.failedFiles.join(", ") })}
             </p>
@@ -110,7 +119,9 @@ export function DraftSaveAlert({
           <p>
             {state.forItem
               ? t("commodities:form.addRetryHint")
-              : t("commodities:drafts.keptOnDevice")}
+              : state.forEdit
+                ? t("commodities:form.editRetryHint")
+                : t("commodities:drafts.keptOnDevice")}
           </p>
           <Button
             type="button"

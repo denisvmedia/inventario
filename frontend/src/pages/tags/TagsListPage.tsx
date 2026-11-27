@@ -36,6 +36,7 @@ import {
 } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { cn } from "@/lib/utils"
 
 // Search-input debounce keeps the page responsive on every keystroke
@@ -271,8 +272,7 @@ export function TagsListPage() {
       await createMutation.mutateAsync({ ...values, kind: viewKind })
       toast.success(t("tags:form.createSuccess"))
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(t("tags:form.createError", { error: message }))
+      toastMutationError(err, t("tags:form.createError"))
       throw err
     }
   }
@@ -283,8 +283,7 @@ export function TagsListPage() {
       toast.success(t("tags:form.createSuccess"))
       setDialog({ open: false, mode: "create" })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(t("tags:form.createError", { error: message }))
+      toastMutationError(err, t("tags:form.createError"))
       // Re-throw so the dialog can map field-level 422 errors onto its
       // inputs (it stays open). The toast above is the summary.
       throw err
@@ -297,8 +296,7 @@ export function TagsListPage() {
       toast.success(t("tags:form.updateSuccess"))
       setDialog({ open: false, mode: "create" })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(t("tags:form.updateError", { error: message }))
+      toastMutationError(err, t("tags:form.updateError"))
       // Re-throw so the dialog can map field-level 422 errors onto its
       // inputs (it stays open). The toast above is the summary.
       throw err
@@ -319,11 +317,7 @@ export function TagsListPage() {
         await deleteMutation.mutateAsync({ id: tag.id })
         toast.success(t("tags:removal.deleteSuccess"))
       } catch (err) {
-        toast.error(
-          t("tags:removal.deleteError", {
-            error: err instanceof Error ? err.message : String(err),
-          })
-        )
+        toastMutationError(err, t("tags:removal.deleteError"))
       }
       return
     }
@@ -345,11 +339,7 @@ export function TagsListPage() {
       await deleteMutation.mutateAsync({ id: tag.id, force: true })
       toast.success(t("tags:removal.deleteSuccess"))
     } catch (err) {
-      toast.error(
-        t("tags:removal.deleteError", {
-          error: err instanceof Error ? err.message : String(err),
-        })
-      )
+      toastMutationError(err, t("tags:removal.deleteError"))
     }
   }
 

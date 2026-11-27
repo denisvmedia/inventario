@@ -173,8 +173,8 @@ func (r *PersonalDataExportRegistry) ClaimPending(ctx context.Context, id string
 	}
 	var claimed bool
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`UPDATE %s SET status = $1, started_at = $2 WHERE id = $3 AND status = $4`,
-			r.tableNames.PersonalDataExports())
+		query := fmt.Sprintf(`UPDATE %s SET status = $1, started_at = $2, attempt_count = attempt_count + 1
+			WHERE id = $3 AND status = $4`, r.tableNames.PersonalDataExports())
 		res, err := tx.ExecContext(ctx, query, string(models.PersonalDataExportStatusInProgress), startedAt,
 			id, string(models.PersonalDataExportStatusPending))
 		if err != nil {
@@ -190,23 +190,41 @@ func (r *PersonalDataExportRegistry) ClaimPending(ctx context.Context, id string
 	return claimed, nil
 }
 
-func (r *PersonalDataExportRegistry) RequeueStalled(ctx context.Context, startedBefore time.Time) (int, error) {
-	var moved int64
-	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`UPDATE %s SET status = $1, started_at = NULL WHERE status = $2 AND started_at < $3`,
-			r.tableNames.PersonalDataExports())
-		res, err := tx.ExecContext(ctx, query, string(models.PersonalDataExportStatusPending),
-			string(models.PersonalDataExportStatusInProgress), startedBefore)
+func (r *PersonalDataExportRegistry) RecoverStalled(ctx context.Context, sweep registry.PersonalDataExportStalledSweep) (requeued, failed int, err error) {
+	table := r.tableNames.PersonalDataExports()
+	err = r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// The export that used its builds fails first, so the requeue below
+		// does not see it. Both pick only rows still in_progress, so a build
+		// that finished meanwhile is left alone.
+		res, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET status = $1, error_message = $2, completed_at = $3,
+			blob_key = '', size_bytes = 0
+			WHERE status = $4 AND started_at < $5 AND attempt_count >= $6`, table),
+			string(models.PersonalDataExportStatusFailed), sweep.ErrorMessage, sweep.Now,
+			string(models.PersonalDataExportStatusInProgress), sweep.StartedBefore, sweep.MaxBuilds)
 		if err != nil {
 			return err
 		}
-		moved, err = res.RowsAffected()
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		failed = int(n)
+
+		res, err = tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET status = $1, started_at = NULL
+			WHERE status = $2 AND started_at < $3`, table),
+			string(models.PersonalDataExportStatusPending),
+			string(models.PersonalDataExportStatusInProgress), sweep.StartedBefore)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		requeued = int(n)
 		return err
 	})
 	if err != nil {
-		return 0, errxtrace.Wrap("failed to queue stalled personal data exports again", err)
+		return 0, 0, errxtrace.Wrap("failed to recover stalled personal data exports", err)
 	}
-	return int(moved), nil
+	return requeued, failed, nil
 }
 
 func (r *PersonalDataExportRegistry) Update(ctx context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error) {

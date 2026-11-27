@@ -63,6 +63,8 @@ func newPostgresFailedJobEnv(t *testing.T) registrytest.FailedJobEnv {
 			ID: groupB.ID, Ctx: loanCtxFor(user, groupB.ID),
 			Set: postgres.NewRegistrySetWithUserAndGroupID(dbx, user.ID, user.TenantID, groupB.ID),
 		},
-		IntakeService: factorySet.IntakeRegistryFactory.CreateServiceRegistry(),
+		IntakeService:   factorySet.IntakeRegistryFactory.CreateServiceRegistry(),
+		PersonalExports: factorySet.PersonalDataExportRegistry,
+		PersonalUser:    user,
 	}
 }

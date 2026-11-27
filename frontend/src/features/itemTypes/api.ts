@@ -15,8 +15,9 @@ export const ITEM_TYPE_NAME_MAX = 50
 // JSON:API error codes of the item type endpoints.
 // A create or rename whose name another type of the group already has.
 export const ITEM_TYPE_NAME_TAKEN = "item_type.name_taken"
-// A delete without reassign_to of a type that items still have, Trash
-// included. The error's meta carries item_count and trashed_item_count.
+// A delete without reassign_to of a type that items, Trash included, or
+// drafts still have. The error's meta carries item_count,
+// trashed_item_count and draft_count.
 export const ITEM_TYPE_IN_USE = "item_type.in_use"
 // A delete of the group's last type.
 export const ITEM_TYPE_LAST = "item_type.last"

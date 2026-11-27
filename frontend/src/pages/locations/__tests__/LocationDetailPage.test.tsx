@@ -239,7 +239,8 @@ describe("<LocationDetailPage />", () => {
       ...areaHandlers.list(SLUG, []),
       ...commodityHandlers.list(SLUG, []),
       ...fileHandlers.list(SLUG, []),
-      // The Files panel reads the group's file tags once the user is known.
+      // The file sheet loads the file tag catalog. Without it the request
+      // fails as a network error, whose toast would race the one asserted.
       ...tagHandlers.list(SLUG, []),
       http.delete(apiUrl(`/g/${SLUG}/locations/loc2`), deleteResponse)
     )

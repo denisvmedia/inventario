@@ -19,10 +19,10 @@ import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
-// A batch that stops scanning is read once more, with the file lists, one
-// poll later (#1626): the server puts each scan's tag and title on the
-// files after it stores the scan, so the read that sees the batch leave
-// "processing" can still show the files without them.
+// A batch that stops scanning marks the file lists stale (#1626). The server
+// writes each scan's tag and title on the files with the stored scan
+// (#2940), so this happens on the read that sees the batch leave
+// "processing", and the batch is not read again for it.
 
 const SLUG = "household"
 const groups: Schema<"models.LocationGroup">[] = [
@@ -107,9 +107,8 @@ afterEach(() => {
 })
 
 describe("useIntakeSession after the scans", () => {
-  it("reads the batch and the files again one poll after it leaves processing", async () => {
-    const session = receiptSession()
-    session.sources[1] = { ...session.sources[1]!, status: "pending", error_code: undefined }
+  it("marks the files stale as it leaves processing and reads the batch no more", async () => {
+    const session = processingSession()
     const fake = intakeHandlers.backend(SLUG, [session])
     server.use(...groupHandlers.list(groups), ...fake.handlers)
     const reads = detailReads(session.id)
@@ -118,24 +117,13 @@ describe("useIntakeSession after the scans", () => {
 
     // The worker finishes the last file.
     session.sources[1] = { ...session.sources[1]!, status: "scanned" }
-    await act(async () => {
-      vi.advanceTimersByTime(INTAKE_POLL_MS)
-    })
+    await poll()
     expect(await screen.findByText("review")).toBeInTheDocument()
+    await waitFor(() => expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(true))
     const afterTransition = reads.n
-    expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(false)
 
-    await act(async () => {
-      vi.advanceTimersByTime(INTAKE_POLL_MS)
-    })
-    await waitFor(() => expect(reads.n).toBe(afterTransition + 1))
-    expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(true)
-
-    // Only once: nothing is read after that.
-    await act(async () => {
-      vi.advanceTimersByTime(INTAKE_POLL_MS * 3)
-    })
-    expect(reads.n).toBe(afterTransition + 1)
+    await poll(3)
+    expect(reads.n).toBe(afterTransition)
   })
 
   it("reads nothing again for a batch that was done scanning when it opened", async () => {
@@ -155,7 +143,7 @@ describe("useIntakeSession after the scans", () => {
 })
 
 describe("useIntakeSessions after the scans", () => {
-  it("reads the batch and the files again one poll after the list shows it leave processing", async () => {
+  it("marks the batch and the files stale as the list shows it leave processing", async () => {
     const session = processingSession()
     const fake = intakeHandlers.backend(SLUG, [session])
     server.use(...groupHandlers.list(groups), ...fake.handlers)
@@ -167,16 +155,13 @@ describe("useIntakeSessions after the scans", () => {
     session.sources[1] = { ...session.sources[1]!, status: "scanned" }
     await poll()
     expect(await screen.findByText("review")).toBeInTheDocument()
-    expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(false)
-
-    await poll()
     await waitFor(() => expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(true))
     expect(queryClient.getQueryState(intakeKeys.detail(SLUG, session.id))?.isInvalidated).toBe(true)
   })
 })
 
 describe("useInbox after the scans", () => {
-  it("reads the files again one poll after a batch in the inbox leaves processing", async () => {
+  it("marks the files stale as a batch in the inbox leaves processing", async () => {
     const fake = inboxHandlers.backend(SLUG, [inboxHandlers.intakeSession("s1", "processing")])
     server.use(...groupHandlers.list(groups), ...fake.handlers)
     const { queryClient } = renderProbe(<InboxProbe />)
@@ -185,30 +170,6 @@ describe("useInbox after the scans", () => {
     fake.entries[0] = inboxHandlers.intakeSession("s1", "review")
     await poll()
     expect(await screen.findByText("review")).toBeInTheDocument()
-    expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(false)
-
-    await poll()
     await waitFor(() => expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(true))
-  })
-})
-
-describe("useRefreshWhenScanned when the page closes", () => {
-  it("reads nothing again once the page that waited is gone", async () => {
-    const session = processingSession()
-    const fake = intakeHandlers.backend(SLUG, [session])
-    server.use(...groupHandlers.list(groups), ...fake.handlers)
-    const reads = detailReads(session.id)
-    const { queryClient, unmount } = renderProbe(<Probe id={session.id} />)
-    expect(await screen.findByText("processing")).toBeInTheDocument()
-
-    session.sources[1] = { ...session.sources[1]!, status: "scanned" }
-    await poll()
-    expect(await screen.findByText("review")).toBeInTheDocument()
-    const closed = reads.n
-    unmount()
-
-    await poll(3)
-    expect(reads.n).toBe(closed)
-    expect(queryClient.getQueryState(FILES_KEY)?.isInvalidated).toBe(false)
   })
 })

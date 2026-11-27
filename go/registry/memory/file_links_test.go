@@ -194,6 +194,47 @@ func TestFileRegistry_Memory_Links(t *testing.T) {
 		c.Assert(linkKeys(updated), qt.DeepEquals, []string{"commodity/lamp/images"})
 	})
 
+	t.Run("the thumbnail orientation pass lists unmarked JPEG files and an edit keeps the mark", func(t *testing.T) {
+		c := qt.New(t)
+		ctx := fileLinkTestContext(c, "group-orientation")
+		reg := factory.MustCreateUserRegistry(ctx)
+		svc := factory.CreateServiceRegistry()
+
+		_, err := reg.Create(ctx, newLinkTestFile("manual", 1))
+		c.Assert(err, qt.IsNil)
+		jpegFile := func(name string) *models.FileEntity {
+			f := newLinkTestFile(name, 1)
+			f.Type, f.Category = models.FileTypeImage, models.FileCategoryImages
+			f.Ext, f.MIMEType = ".jpg", "image/jpeg"
+			file, err := reg.Create(ctx, f)
+			c.Assert(err, qt.IsNil)
+			return file
+		}
+		first, second := jpegFile("first"), jpegFile("second")
+		if second.ID < first.ID {
+			first, second = second, first
+		}
+
+		pending, err := svc.ListPendingThumbnailOrientation(ctx, "", 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(fileIDs(pending), qt.DeepEquals, []string{first.ID, second.ID})
+		pending, err = svc.ListPendingThumbnailOrientation(ctx, first.ID, 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(fileIDs(pending), qt.DeepEquals, []string{second.ID})
+
+		c.Assert(svc.SetThumbnailsOriented(ctx, first.ID), qt.IsNil)
+		c.Assert(svc.SetThumbnailsOriented(ctx, "no-such-file"), qt.IsNil)
+		pending, err = svc.ListPendingThumbnailOrientation(ctx, "", 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(fileIDs(pending), qt.DeepEquals, []string{second.ID})
+
+		edit := *first
+		edit.Title = "Renamed"
+		updated, err := reg.Update(ctx, edit)
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.ThumbnailsOriented, qt.IsTrue)
+	})
+
 	t.Run("checksums", func(t *testing.T) {
 		c := qt.New(t)
 		ctx := fileLinkTestContext(c, "group-checksums")
@@ -285,4 +326,12 @@ func TestFileRegistry_Memory_MoveLegacyLinks(t *testing.T) {
 	gotS, err := reg.Get(ctx, standalone.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(gotS.Links, qt.HasLen, 0)
+}
+
+func fileIDs(files []*models.FileEntity) []string {
+	ids := make([]string, 0, len(files))
+	for _, f := range files {
+		ids = append(ids, f.ID)
+	}
+	return ids
 }

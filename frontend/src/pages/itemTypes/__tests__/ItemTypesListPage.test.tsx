@@ -275,6 +275,69 @@ describe("<ItemTypesListPage />", () => {
     await waitFor(() => expect(calls).toEqual(["", "type-furniture"]))
   })
 
+  it("moves the drafts of a type no item has to the type picked, then deletes it", async () => {
+    const calls: string[] = []
+    const camping = {
+      id: "type-camping",
+      slug: "camping",
+      name: "Camping",
+      icon: "tent",
+      builtin: false,
+      item_count: 0,
+      trashed_item_count: 0,
+      draft_count: 2,
+    }
+    seed([...types, camping])
+    server.use(...itemTypeHandlers.remove(SLUG, camping.id, 0, calls))
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("item-type-row-camping-delete"))
+    const dialog = await screen.findByTestId("item-type-delete-dialog")
+    expect(within(dialog).getByTestId("item-type-delete-description")).toHaveTextContent(
+      "No item has the type Camping, but 2 drafts do. Pick the type they move to; then Camping is deleted."
+    )
+    const confirm = within(dialog).getByTestId("item-type-delete-confirm")
+    expect(confirm).toHaveTextContent("Move drafts and delete")
+    expect(confirm).toBeDisabled()
+    await pickRadixSelect(user, /^Move the drafts to$/, { optionLabel: /^Vehicle$/ })
+    await user.click(confirm)
+    await waitFor(() => expect(calls).toEqual([vehicle.id]))
+  })
+
+  it("says that the drafts of a type move with its items", async () => {
+    seed([builtins[0], { ...electronics, draft_count: 1 }, ...builtins.slice(2), vehicle])
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("item-type-row-electronics-delete"))
+    const dialog = await screen.findByTestId("item-type-delete-dialog")
+    expect(within(dialog).getByTestId("item-type-delete-description")).toHaveTextContent(
+      "5 items have the type Electronics, 1 of them in Trash. Pick the type they move to; then Electronics is deleted. 1 draft has it too and moves with them."
+    )
+    expect(within(dialog).getByTestId("item-type-delete-confirm")).toHaveTextContent(
+      "Move items and delete"
+    )
+  })
+
+  it("asks for a target when drafts got the type after the page loaded", async () => {
+    const calls: string[] = []
+    seed()
+    server.use(
+      ...itemTypeHandlers.inUse(SLUG, "type-other", { live: 0, trashed: 0, drafts: 1 }, calls)
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("item-type-row-other-delete"))
+    const dialog = await screen.findByTestId("item-type-delete-dialog")
+    await user.click(within(dialog).getByTestId("item-type-delete-confirm"))
+    expect(await within(dialog).findByTestId("item-type-delete-refused")).toBeVisible()
+    expect(within(dialog).getByTestId("item-type-delete-description")).toHaveTextContent(
+      "No item has the type Other, but 1 draft does."
+    )
+    await pickRadixSelect(user, /^Move the drafts to$/, { optionLabel: /^Furniture$/ })
+    await user.click(within(dialog).getByTestId("item-type-delete-confirm"))
+    await waitFor(() => expect(calls).toEqual(["", "type-furniture"]))
+  })
+
   it("does not offer to delete the group's last type", async () => {
     seed([vehicle])
     renderPage()

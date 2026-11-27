@@ -213,10 +213,11 @@ func TestCommodityServiceModel_CostPairValidation(t *testing.T) {
 	svc.CostCurrency = ""
 	c.Assert(svc.ValidateWithContext(c.Context()), qt.IsNotNil)
 
-	// Currency only → invalid.
+	// A currency on an amount of 0 → valid, a recorded cost of 0.
 	svc.CostAmount = decimal.Zero
 	svc.CostCurrency = "EUR"
-	c.Assert(svc.ValidateWithContext(c.Context()), qt.IsNotNil)
+	c.Assert(svc.ValidateWithContext(c.Context()), qt.IsNil)
+	c.Assert(svc.HasCost(), qt.IsTrue)
 
 	// Bogus currency → invalid (not ISO 4217).
 	svc.CostAmount = decimal.NewFromInt(100)
