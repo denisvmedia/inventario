@@ -8,6 +8,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
 
@@ -311,23 +312,23 @@ func (s *EntityService) UnlinkAndDeleteArea(ctx context.Context, id string) erro
 		return errxtrace.Wrap("failed to create commodity registry", err)
 	}
 
-	// Un-assign each commodity (read-modify-write so no field is lost). A
-	// commodity that has been removed in the meantime is fine — skip it.
+	// Un-assign each commodity. The write names the revision it read, so a
+	// change saved since is not undone (RewriteCommodity reads the item
+	// again). A commodity removed or moved to another area in the meantime
+	// is skipped.
 	for _, commodityID := range commodities {
-		commodity, err := comReg.Get(ctx, commodityID)
-		if err != nil {
-			if errors.Is(err, registry.ErrNotFound) {
-				continue
+		_, _, err := RewriteCommodity(ctx, comReg, commodityID, nil, func(next *models.Commodity) bool {
+			if next.AreaID == nil || *next.AreaID != id {
+				return false
 			}
-			return errxtrace.Wrap("failed to get commodity", err, errx.Attrs("commodity_id", commodityID))
+			next.AreaID = nil
+			next.CustomFields = nil // only the area changes
+			return true
+		})
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
 		}
-
-		commodity.AreaID = nil
-		commodity.CustomFields = nil // only the area changes
-		if _, err := comReg.Update(ctx, *commodity); err != nil {
-			if errors.Is(err, registry.ErrNotFound) {
-				continue
-			}
+		if err != nil {
 			return errxtrace.Wrap("failed to unlink commodity", err, errx.Attrs("commodity_id", commodityID))
 		}
 	}

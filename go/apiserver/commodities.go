@@ -679,18 +679,21 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	updateData := *commodity
-	// Only the cover changes; the custom field values read with the item
-	// would overwrite one written since.
-	updateData.CustomFields = nil
-	if desired == "" {
-		updateData.CoverFileID = nil
-	} else {
-		v := desired
-		updateData.CoverFileID = &v
-	}
-
-	updated, err := registrySet.CommodityRegistry.Update(r.Context(), updateData)
+	// The item is written whole with the revision it was read at, so a change
+	// saved since the middleware read it (a bulk change, a tag rename) is not
+	// undone: RewriteCommodity reads it again and retries, and answers 409
+	// after the last attempt.
+	before, updated, err := services.RewriteCommodity(r.Context(), registrySet.CommodityRegistry, commodity.ID, commodity, func(next *models.Commodity) bool {
+		// Only the cover changes; the custom field values read with the item
+		// would overwrite one written since.
+		next.CustomFields = nil
+		if desired == "" {
+			next.CoverFileID = nil
+		} else {
+			next.CoverFileID = new(desired)
+		}
+		return true
+	})
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -699,7 +702,7 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	// #1450: cover override change is a distinct event kind so the timeline
 	// can render "set / cleared cover photo" without aliasing it to the
 	// generic "updated" row.
-	api.eventService.EmitUpdated(r.Context(), commodity, updated)
+	api.eventService.EmitUpdated(r.Context(), before, updated)
 
 	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
 	if cover := api.resolveCoverForOne(r, updated); cover != nil {

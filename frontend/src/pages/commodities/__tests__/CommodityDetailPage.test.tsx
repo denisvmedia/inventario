@@ -608,6 +608,47 @@ describe("<CommodityDetailPage />", () => {
     })
   })
 
+  // The item changed after the edit form opened: a save from All fields is
+  // refused, and the form under the dialog offers the reload. A form opened
+  // again afterwards is fresh and says nothing about it (#2981).
+  it("refuses an All fields save on a changed item, and forgets it when the form closes", async () => {
+    const user = userEvent.setup()
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    server.use(
+      http.put(apiUrl(`/g/${SLUG}/commodities/:id`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Conflict",
+                code: "commodity.revision_conflict",
+                error: { msg: "the item changed since it was read" },
+              },
+            ],
+          },
+          { status: 409 }
+        )
+      )
+    )
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    await user.click(await screen.findByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(within(dialog).getByTestId("commodity-form-submit"))
+
+    expect(
+      await within(dialog).findByText(/This item changed since you opened it, so nothing was saved/)
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByTestId("commodity-form-cancel"))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(screen.getByTestId("commodity-edit-stale")).toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-edit-cancel"))
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    expect(await screen.findByTestId("commodity-edit-form")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-edit-stale")).toBeNull()
+  })
+
   it("deletes the commodity from the detail page", async () => {
     const user = userEvent.setup()
     server.use(

@@ -319,11 +319,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const [allFieldsOn, setAllFieldsOn] = useState<{ id: string; values: Commodity } | null>(null)
   const dialogDraft = allFieldsOn?.id === id ? allFieldsOn.values : null
   // The item whose edit form was opened before the item last changed: a
-  // save from it, or from the dialog it opened, was refused. Reload reads
-  // the item again and opens a fresh form (a new formLoad gives it a new key).
+  // save from the dialog that form opened was refused (the form tracks its
+  // own refused saves). Reload reads the item again and opens a fresh form
+  // (a new formLoad gives it a new key).
   const [staleEditOn, setStaleEditOn] = useState<string | null>(null)
   const [formLoad, setFormLoad] = useState(0)
   const [reloadingForm, setReloadingForm] = useState(false)
+  // The refusal belongs to the edit form it happened in. Leaving that form
+  // by any way (Cancel, Back, Save and next) forgets it: the refused save
+  // read the item again, so the next form opens on the item as it is.
+  useEffect(() => {
+    if (!editing) return
+    return () => setStaleEditOn(null)
+  }, [editing, id])
   // The Details tab field being edited in place (#2795), if any.
   const [quickEditOn, setQuickEditOn] = useState<{ id: string; field: QuickEditField } | null>(null)
   const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null

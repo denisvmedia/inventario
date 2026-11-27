@@ -909,12 +909,15 @@ when to add an entry and where it goes.
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
 
-- Saving an item from an edit form opened before a bulk action no longer
-  drops what the action set, such as a tag, a status or an area. Each item now
-  has a revision that every change moves on, and a save from a form opened at
-  an older revision is refused: the form says the item changed since you
-  opened it and offers **Reload**. The same holds for a change saved on
-  another device, a tag rename and a quick edit
+- Saving an item from an edit form opened before someone changed the item on
+  another device, or before a tag on it was renamed, no longer puts back what
+  the form showed and drops that change. Each item now has a revision that
+  every change moves on, and a save from a form opened at an older revision
+  is refused: the form says the item changed since you opened it and offers
+  **Reload**. The same holds for a quick edit, and for a form opened before a
+  bulk change of the items. Choosing a cover photo, removing the cover photo
+  from an item and deleting an area that still holds items no longer undo a
+  change saved on the item at the same time
   ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
 
 ### Security

@@ -17,6 +17,8 @@ import (
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/registrytest"
 )
 
 // priceJSON is how a price reads in a JSON:API response: null when it is
@@ -571,6 +573,40 @@ func TestCommodityCoverPatch_SetThenClear(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)
 	body = rr.Body.Bytes()
 	c.Check(body, checkers.JSONPathEquals("$.meta.cover.source"), "first_photo")
+}
+
+// A change saved on the item between the read the cover handler starts
+// from and its write is kept: the write names the revision it read and is
+// tried again on the item as it is now.
+func TestCommodityCoverPatch_KeepsAChangeSavedMeanwhile(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	files := must.Must(registrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "images"))
+	c.Assert(files, qt.Not(qt.HasLen), 0)
+	target := files[len(files)-1]
+	params.FactorySet.CommodityRegistryFactory = registrytest.InterleaveCommodityWrite(
+		params.FactorySet.CommodityRegistryFactory, commodity.ID,
+		func(ctx context.Context, reg registry.CommodityRegistry, read models.Commodity) error {
+			read.Comments = "saved meanwhile"
+			_, err := reg.Update(ctx, read)
+			return err
+		})
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"` + target.ID + `"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	got := must.Must(registrySet.CommodityRegistry.Get(context.Background(), commodity.ID))
+	c.Assert(got.CoverFileID, qt.IsNotNil)
+	c.Check(*got.CoverFileID, qt.Equals, target.ID)
+	c.Check(got.Comments, qt.Equals, "saved meanwhile")
 }
 
 func TestCommodityCoverPatch_RejectsForeignFile(t *testing.T) {
