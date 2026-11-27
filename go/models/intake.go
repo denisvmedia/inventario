@@ -97,7 +97,10 @@ const (
 	// IntakeClientKeyMaxLength caps the idempotency key of a session.
 	IntakeClientKeyMaxLength = 128
 	// IntakeExternalValueMaxLength caps each part of a source's external
-	// identity.
+	// identity, in bytes. The unique indexes on intake_sources and
+	// intake_documents hold the system, the instance and the document id
+	// together, and a PostgreSQL btree entry is limited to about 2.7 kB, which
+	// three values of 255 characters could pass.
 	IntakeExternalValueMaxLength = 255
 	// IntakeCandidateQuantityMax caps the reviewed quantity of a product.
 	IntakeCandidateQuantityMax = 100000
@@ -220,7 +223,7 @@ func (*IntakeSession) Validate() error {
 func (s *IntakeSession) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, s,
 		validation.Field(&s.TenantGroupAwareEntityID),
-		validation.Field(&s.ClientKey, rules.NotEmpty, validation.Length(1, IntakeClientKeyMaxLength), clientKeyRule),
+		validation.Field(&s.ClientKey, rules.NotEmpty, validation.RuneLength(1, IntakeClientKeyMaxLength), clientKeyRule),
 		validation.Field(&s.Origin, validation.Required, validation.In(IntakeOriginUpload, IntakeOriginExternal)),
 	)
 }
@@ -382,10 +385,11 @@ func (s *IntakeSource) ValidateWithContext(ctx context.Context) error {
 		)),
 		validation.Field(&s.Attempts, validation.Min(0)),
 		validation.Field(&s.RetryBase, validation.Min(0), validation.Max(s.Attempts)),
+		// Bytes: see IntakeExternalValueMaxLength.
 		validation.Field(&s.ExternalSystem, validation.Length(0, IntakeExternalValueMaxLength),
 			validation.When(s.ExternalDocumentID != "", validation.Required)),
-		validation.Field(&s.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),
-		validation.Field(&s.ExternalDocumentID, validation.Length(0, IntakeExternalValueMaxLength)),
+		validation.Field(&s.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),   // Bytes: see IntakeExternalValueMaxLength.
+		validation.Field(&s.ExternalDocumentID, validation.Length(0, IntakeExternalValueMaxLength)), // Bytes: see IntakeExternalValueMaxLength.
 	)
 }
 
@@ -520,7 +524,9 @@ func IntakeDraftClientKey(candidateID string) string {
 // document another system delivered (#2809), from the document's identity.
 // The product of a delivery is the only one of its source, and the key does
 // not change when the session is deleted and made again, so a repeat of the
-// delivery finds the draft without the session.
+// delivery finds the draft without the session. The postgres promotion of a
+// draft computes the same digest in SQL to find the document of a delivered
+// draft that the document does not name yet.
 func IntakeDeliveredDraftClientKey(system, instance, documentID string) string {
 	sum := sha256.Sum256([]byte(system + "\x00" + instance + "\x00" + documentID))
 	return IntakeDeliveredDraftKeyPrefix + hex.EncodeToString(sum[:])

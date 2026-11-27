@@ -28,8 +28,8 @@ func NewUserContentOwnershipChecker(fs *registry.FactorySet) *UserContentOwnersh
 	return &UserContentOwnershipChecker{fs: fs}
 }
 
-// HasRetainedOwnedContent walks the ownedSources marked deletionPreCheck and
-// returns true on the first row the user owns in a retained group. It performs
+// HasRetainedOwnedContent walks the ownedSources whose rows block a deletion
+// and returns true on the first row the user owns in a retained group. It performs
 // no writes.
 func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error) {
 	if tenantID == "" {
@@ -45,7 +45,7 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 	}
 
 	for _, src := range ownedSources(r.fs) {
-		if !src.deletionPreCheck {
+		if src.onDeletion != deletionBlocks {
 			continue
 		}
 		rows, err := src.rows(ctx)

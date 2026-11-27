@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"time"
 
 	"github.com/jellydator/validation"
 
@@ -49,9 +48,8 @@ func (p FileTagPatch) Apply(f models.FileEntity) (models.FileEntity, bool) {
 }
 
 // FileBulkService changes the tags of many files. Only the tags of each file
-// change, through the same registry write a single edit uses; a file that
-// fails does not stop the others, and the outcome says what happened to
-// each.
+// are written (FileRegistry.PatchTags); a file that fails does not stop the
+// others, and the outcome says what happened to each.
 type FileBulkService struct {
 	tags *TagService
 }
@@ -75,8 +73,10 @@ func (s *FileBulkService) EnsureTags(ctx context.Context, patch *FileTagPatch) e
 	return nil
 }
 
-// UpdateTags applies patch to every file in ids. A file whose tags the patch
-// does not change is skipped; a file in Trash fails as not found.
+// UpdateTags applies patch to every file in ids. Each file's tags are
+// changed as stored under the file's row lock, so a tag or another field an
+// edit saves while the action runs is kept. A file whose tags the patch does
+// not change is skipped; a file in Trash fails as not found.
 func (s *FileBulkService) UpdateTags(ctx context.Context, files registry.FileRegistry, ids []string, patch FileTagPatch) BulkOutcome {
 	var out BulkOutcome
 	ids = uniqueIDs(ids)
@@ -87,22 +87,20 @@ func (s *FileBulkService) UpdateTags(ctx context.Context, files registry.FileReg
 			}
 			break
 		}
-		before, err := files.Get(ctx, id)
-		if err != nil {
-			out.fail(id, "", err)
-			continue
-		}
-		after, changed := patch.Apply(*before)
-		if !changed {
+		name := ""
+		before, after, err := files.PatchTags(ctx, id, patch.AddTags, func(f models.FileEntity) (models.FileEntity, bool, error) {
+			name = fileName(&f)
+			next, changed := patch.Apply(f)
+			return next, changed, nil
+		})
+		switch {
+		case err != nil:
+			out.fail(id, name, err)
+		case after == nil:
 			out.Skipped = append(out.Skipped, BulkSkip{ID: id, Name: fileName(before)})
-			continue
+		default:
+			out.Succeeded = append(out.Succeeded, id)
 		}
-		after.UpdatedAt = time.Now()
-		if _, err := files.Update(ctx, after); err != nil {
-			out.fail(id, fileName(before), err)
-			continue
-		}
-		out.Succeeded = append(out.Succeeded, id)
 	}
 	return out
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -515,26 +516,122 @@ func (r *LocationGroupRegistry) SetHiddenSections(ctx context.Context, groupID s
 	if groupID == "" {
 		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
 	}
+	return r.updateActiveGroup(ctx, groupID, "set hidden sections",
+		"hidden_sections = $1, updated_at = $2", sections.Normalize(), updatedAt)
+}
 
+// UpdateDetails writes the name, icon, description, the hidden sections when
+// given, and updated_at of an active group in one statement (see
+// registry.LocationGroupRegistry.UpdateDetails).
+func (r *LocationGroupRegistry) UpdateDetails(ctx context.Context, groupID string, details registry.GroupDetails, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	if details.Name == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Name"))
+	}
+
+	set := "name = $1, icon = $2, description = $3, updated_at = $4"
+	args := []any{details.Name, details.Icon, details.Description, updatedAt}
+	if details.HiddenSections != nil {
+		set += ", hidden_sections = $5"
+		args = append(args, details.HiddenSections.Normalize())
+	}
+	return r.updateActiveGroup(ctx, groupID, "update location group", set, args...)
+}
+
+// MarkPendingDeletion moves an active group to pending_deletion in one
+// statement (see registry.LocationGroupRegistry.MarkPendingDeletion).
+func (r *LocationGroupRegistry) MarkPendingDeletion(ctx context.Context, groupID string, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	return r.updateActiveGroup(ctx, groupID, "mark location group pending_deletion",
+		"status = $1, updated_at = $2", string(models.LocationGroupStatusPendingDeletion), updatedAt)
+}
+
+// SetCurrencyMigrationID writes currency_migration_id of an active group
+// while the migration is pending or running (see
+// registry.LocationGroupRegistry.SetCurrencyMigrationID).
+//
+// The worker that finishes a migration updates the group row (clearing the
+// id) before it marks the migration completed, in one transaction. The row
+// is locked first so that the UPDATE, a statement of its own, takes its
+// snapshot after that transaction committed. A single UPDATE with the
+// migration check would wait on the same row lock and then evaluate the
+// check against the snapshot it took before the wait, which still shows the
+// migration running, and write the cleared id back.
+func (r *LocationGroupRegistry) SetCurrencyMigrationID(ctx context.Context, groupID, migrationID string) (bool, error) {
+	if groupID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	if migrationID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "MigrationID"))
+	}
+
+	groupsTable := r.tableNames.LocationGroups()
+	var applied bool
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var status string
+		err := tx.GetContext(ctx, &status, fmt.Sprintf(`SELECT status FROM %s WHERE id = $1 FOR UPDATE`, groupsTable), groupID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "LocationGroup", "entity_id", groupID))
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to lock location group", err)
+		}
+		if status != string(models.LocationGroupStatusActive) {
+			return nil
+		}
+
+		update := fmt.Sprintf(
+			`UPDATE %s SET currency_migration_id = $1
+			  WHERE id = $2
+			    AND EXISTS (SELECT 1 FROM %s WHERE id = $1 AND status IN ($3, $4))`,
+			groupsTable, r.tableNames.CurrencyMigrations(),
+		)
+		res, err := tx.ExecContext(ctx, update, migrationID, groupID,
+			string(models.CurrencyMigrationStatusPending), string(models.CurrencyMigrationStatusRunning))
+		if err != nil {
+			return errxtrace.Wrap("failed to set currency migration id", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return errxtrace.Wrap("failed to set currency migration id", err)
+		}
+		applied = n == 1
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return applied, nil
+}
+
+// updateActiveGroup runs `UPDATE ... SET <set> WHERE id = ? AND status =
+// 'active' RETURNING *` as one statement and returns the stored group. set
+// refers to args as $1..$n. A write that queues behind another one on the
+// row re-checks the status against the row that one left, so it cannot bring
+// back a group whose deletion committed meanwhile. When no active row
+// matches, the row is read to tell a missing group (ErrNotFound) from one
+// that is not active (applied=false).
+func (r *LocationGroupRegistry) updateActiveGroup(ctx context.Context, groupID, what, set string, args ...any) (*models.LocationGroup, bool, error) {
 	groupsTable := r.tableNames.LocationGroups()
 	var (
 		group   models.LocationGroup
 		applied bool
 	)
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		update := fmt.Sprintf(
-			`UPDATE %s SET hidden_sections = $1, updated_at = $2 WHERE id = $3 AND status = $4 RETURNING *`,
-			groupsTable,
-		)
-		err := tx.GetContext(ctx, &group, update, sections.Normalize(), updatedAt, groupID, string(models.LocationGroupStatusActive))
+		n := len(args)
+		update := fmt.Sprintf(`UPDATE %s SET %s WHERE id = $%d AND status = $%d RETURNING *`, groupsTable, set, n+1, n+2)
+		err := tx.GetContext(ctx, &group, update, slices.Concat(args, []any{groupID, string(models.LocationGroupStatusActive)})...)
 		if err == nil {
 			applied = true
 			return nil
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
-			return errxtrace.Wrap("failed to set hidden sections", err)
+			return errxtrace.Wrap("failed to "+what, err)
 		}
-		// No active row: tell a group that is gone from one that is not active.
 		err = tx.GetContext(ctx, &group, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, groupsTable), groupID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "LocationGroup", "entity_id", groupID))

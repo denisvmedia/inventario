@@ -143,8 +143,8 @@ type ImportExportAttributes struct {
 func (a *ImportExportAttributes) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
-		validation.Field(&a.Description, validation.Required, validation.Length(1, 500)),
-		validation.Field(&a.SourceFilePath, validation.Required, validation.Length(1, 1000)),
+		validation.Field(&a.Description, validation.Required, validation.RuneLength(1, 500)),
+		validation.Field(&a.SourceFilePath, validation.Required, validation.RuneLength(1, 1000)),
 	)
 	return validation.ValidateStructWithContext(ctx, a, fields...)
 }

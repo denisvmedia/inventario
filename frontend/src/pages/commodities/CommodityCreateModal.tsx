@@ -6,6 +6,8 @@ import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { useAreas } from "@/features/areas/hooks"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
+import { addItemSlot } from "@/features/commodities/draft"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLocations } from "@/features/locations/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -40,6 +42,7 @@ export function CommodityCreateModalRoute() {
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
+  const userId = useOptionalAuth()?.user?.id
   const areas = useAreas()
   const locationsQuery = useLocations()
   const create = useSubmitNewItem()
@@ -133,7 +136,7 @@ export function CommodityCreateModalRoute() {
       defaultCurrency={currentGroup?.group_currency ?? "USD"}
       onSubmit={handleSubmit}
       isPending={create.isPending}
-      draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
+      draftKey={slug && userId ? addItemSlot(userId, slug) : undefined}
       serverDrafts
       resumeDraftId={resumeDraftId}
     />

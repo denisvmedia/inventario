@@ -165,6 +165,10 @@ func (s *stubFileRegistry) ListTrashedBefore(context.Context, time.Time, int) ([
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) PatchTags(context.Context, string, []string, func(models.FileEntity) (models.FileEntity, bool, error)) (before, after *models.FileEntity, err error) {
+	panic("not implemented")
+}
+
 func (s *stubFileRegistry) Trash(context.Context, string, string, string, time.Time) error {
 	panic("not implemented")
 }

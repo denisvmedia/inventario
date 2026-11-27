@@ -952,25 +952,26 @@ export function CommodityFormDialog({
   ): Promise<{ added: boolean; draftFailed: boolean; failedFiles: number }> {
     const outcome = { added: false, draftFailed: false, failedFiles: 0 }
     if (!itemDraft && fileIds.length === 0) return outcome
+    const group = formGroup()
     if (itemDraft) {
       try {
-        const current = await getDraft(itemDraft)
+        const current = await getDraft(itemDraft, { group })
         if (current.status === "promoted") outcome.added = true
         else if (
           current.status === "open" &&
           localKey &&
           current.revision === readBaseRevision(localKey)
         ) {
-          await discardDraft(itemDraft)
+          await discardDraft(itemDraft, { group })
         }
       } catch (err) {
         // A draft that is gone has nothing left to discard.
         if (!(err instanceof HttpError && err.status === 404)) outcome.draftFailed = true
       }
     }
-    const results = await Promise.allSettled(fileIds.map((id) => trashUnlinkedFile(id)))
+    const results = await Promise.allSettled(fileIds.map((id) => trashUnlinkedFile(id, { group })))
     outcome.failedFiles = results.filter((r) => r.status === "rejected").length
-    const slug = activeSlug ?? ""
+    const slug = group ?? ""
     void invalidateDrafts()
     void queryClient.invalidateQueries({ queryKey: trashKeys.group(slug) })
     void queryClient.invalidateQueries({ queryKey: fileKeys.group(slug) })
@@ -993,7 +994,7 @@ export function CommodityFormDialog({
     try {
       await queryClient.fetchQuery({
         queryKey: draftKeys.files(activeSlug ?? "", draftId),
-        queryFn: ({ signal }) => listDraftFiles(draftId, signal),
+        queryFn: ({ signal }) => listDraftFiles(draftId, { signal, group: formGroup() }),
       })
     } catch {
       // The list shows them once it loads.
@@ -1051,6 +1052,7 @@ export function CommodityFormDialog({
     setFileStatus({})
     try {
       const result = await saveDraftWithFiles({
+        group: formGroup(),
         draft: target,
         clientKey,
         lastSavedRevision: readBaseRevision(localKey) ?? 1,
@@ -1222,7 +1224,7 @@ export function CommodityFormDialog({
   async function loadNewerDraft() {
     if (!serverDraft || !localKey) return
     try {
-      const fresh = await getDraft(serverDraft.id)
+      const fresh = await getDraft(serverDraft.id, { group: formGroup() })
       const next = {
         ...defaults,
         ...(fresh.values as Partial<CommodityFormInput>),
@@ -1250,10 +1252,11 @@ export function CommodityFormDialog({
     const link = (row.file.links ?? []).find(
       (l) => l.entity_type === "draft" && l.entity_id === serverDraft.id
     )
+    const group = formGroup()
     try {
       if (link?.id) {
-        const rest = await detachFile(row.file.id, link.id)
-        if (ordinaryLinks(rest).length === 0) await deleteFile(row.file.id)
+        const rest = await detachFile(row.file.id, link.id, { group })
+        if (ordinaryLinks(rest).length === 0) await deleteFile(row.file.id, { group })
       }
       void draftFilesQuery.refetch()
       void invalidateDrafts()
@@ -1295,11 +1298,11 @@ export function CommodityFormDialog({
       row.file
     let saved: ListedFile["file"]
     try {
-      saved = await updateFile(row.file.id, {
-        title: change.title,
-        description: current.description ?? "",
-        tags: change.tags,
-      })
+      saved = await updateFile(
+        row.file.id,
+        { title: change.title, description: current.description ?? "", tags: change.tags },
+        { group: formGroup() }
+      )
     } catch (err) {
       toast.error(classifyServerError(err, t("commodities:drafts.updateFileFailed")).message)
       return false
@@ -1337,6 +1340,7 @@ export function CommodityFormDialog({
             id: target.id,
             revision: target.revision,
             ...(localKey ? { promotionKey: promotionKeyFor(localKey) } : {}),
+            group: formGroup(),
           }
         : undefined
       const created = await onSubmit(
@@ -1380,10 +1384,15 @@ export function CommodityFormDialog({
         const filesToUpload = pendingFiles
         if (linkTargetId) {
           if (filesToUpload.length > 0) {
-            void uploadPendingFiles(filesToUpload, linkTargetId, (entry, err) => {
-              toast.error(t("commodities:form.fileUploadFailed", { name: entry.file.name }))
-              console.error("file attach failed", entry.file.name, err)
-            }).then(() => queryClient.invalidateQueries({ queryKey: fileKeys.all }))
+            void uploadPendingFiles(
+              filesToUpload,
+              linkTargetId,
+              (entry, err) => {
+                toast.error(t("commodities:form.fileUploadFailed", { name: entry.file.name }))
+                console.error("file attach failed", entry.file.name, err)
+              },
+              { group: formGroup() }
+            ).then(() => queryClient.invalidateQueries({ queryKey: fileKeys.all }))
           }
           // Reset state so the next dialog open starts clean.
           setPendingFiles([])
@@ -1485,6 +1494,20 @@ export function CommodityFormDialog({
   // sees in the manual currency picker.
   const groupContext = useOptionalCurrentGroup()
   const activeSlug = groupContext?.currentGroup?.slug ?? null
+  // The group the form opened in (#2920). The requests of a save, a discard
+  // or a file change go there, so one still running when the member moves
+  // to another group, with browser Back for example, ends in the group it
+  // started in.
+  const openedInRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!open) {
+      openedInRef.current = null
+      return
+    }
+    openedInRef.current ??= activeSlug
+  }, [open, activeSlug])
+  // formGroup is the group the form's requests go to.
+  const formGroup = () => openedInRef.current ?? activeSlug ?? undefined
 
   // enteredScanValues lists what the form holds that the user entered, for
   // the review of an AI scan (#1626): such a field shows both values and
@@ -2274,7 +2297,6 @@ function BasicsStep(props: any) {
         </FieldLabel>
         <Input
           id="commodity-short-name"
-          maxLength={40}
           className="font-mono text-sm"
           aria-required
           placeholder={t("commodities:fields.shortNamePlaceholder")}

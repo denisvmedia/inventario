@@ -95,22 +95,24 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 
 	prefsCache := s.prefsForSweep()
 	sweep := newMaintenanceSweep()
-	sections := newSectionGate(s.factorySet)
+	gate := newReminderGate(s.factorySet)
 
 	for _, m := range schedules {
 		if m == nil || !m.Enabled {
 			continue
 		}
-		hidden, hideErr := sections.hides(ctx, m.GroupID, models.GroupSectionMaintenance)
-		if hideErr != nil {
+		skipped, skipErr := gate.skips(ctx, m.TenantID, m.GroupID, models.GroupSectionMaintenance)
+		if skipErr != nil {
 			stats.Failed++
 			slog.ErrorContext(ctx, "maintenance reminder failed",
 				"schedule_id", m.ID,
-				"error", hideErr,
+				"error", skipErr,
 			)
 			continue
 		}
-		if hidden {
+		if skipped {
+			// The tenant is not active or the group hides the section:
+			// no row, so the reminder goes out once that changes.
 			continue
 		}
 		target, planErr := s.planSchedule(ctx, m, now, prefsCache, sweep)
@@ -203,6 +205,11 @@ func (s *MaintenanceReminderService) planSchedule(
 		if err := s.resolveTarget(ctx, m, prefsCache, sweep, &target); err != nil {
 			return target, err
 		}
+		if target.commodity != nil && !ReminderTargetActive(target.commodity) {
+			// The group no longer has the item. No threshold, so no row:
+			// the reminders still due go out once it is back in use.
+			return maintenanceTarget{}, nil
+		}
 		var union []int
 		for _, r := range target.recipients {
 			union = append(union, r.leadTimes...)
@@ -232,7 +239,8 @@ func (s *MaintenanceReminderService) planSchedule(
 }
 
 // resolveTarget fills target's commodity and recipients, each recipient
-// with their maintenance lead times. A missing commodity leaves both empty.
+// with their maintenance lead times. A missing commodity leaves both empty,
+// and an item that is not active (ReminderTargetActive) gets no recipients.
 func (s *MaintenanceReminderService) resolveTarget(
 	ctx context.Context,
 	m *models.MaintenanceSchedule,
@@ -245,7 +253,7 @@ func (s *MaintenanceReminderService) resolveTarget(
 		return errxtrace.Wrap("maintenance reminder: lookup commodity", err)
 	}
 	target.commodity = commodity
-	if commodity == nil {
+	if !ReminderTargetActive(commodity) {
 		return nil
 	}
 	recipients, err := s.cachedRecipients(ctx, commodity, sweep.recipientsByGroup)

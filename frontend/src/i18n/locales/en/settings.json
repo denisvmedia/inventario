@@ -510,6 +510,7 @@
       "other": "Other",
       "trash": "Trash"
     },
+    "countsNote": "Counts each file at the size it was uploaded. The thumbnails made for photos are not counted.",
     "errorBody": "Couldn't load storage usage right now. Try again in a moment.",
     "free": "Free",
     "manageFiles": "Manage files",

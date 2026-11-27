@@ -116,7 +116,7 @@ func (a CommodityDraftCreateAttributes) Validate() error {
 
 func (a CommodityDraftCreateAttributes) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &a,
-		validation.Field(&a.ClientKey, validation.Required, validation.Length(1, models.CommodityDraftClientKeyMaxLength),
+		validation.Field(&a.ClientKey, validation.Required, validation.RuneLength(1, models.CommodityDraftClientKeyMaxLength),
 			models.MemberDraftClientKeyRule),
 		validation.Field(&a.Values, models.CommodityDraftValuesRule),
 	)

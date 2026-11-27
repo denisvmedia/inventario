@@ -2,9 +2,15 @@ package restore
 
 import (
 	"context"
+	"time"
+
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"go.5x5.cz/inventario/backup/restore/processor"
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/metrics"
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
@@ -29,6 +35,26 @@ func NewRestoreService(factorySet *registry.FactorySet, entityService *services.
 		uploadLocation: uploadLocation,
 		signer:         signer,
 	}
+}
+
+// StalledRestoreError is stored on a restore whose worker stopped while it
+// ran.
+const StalledRestoreError = "the worker stopped before the restore finished"
+
+// RecoverStalled fails the restores whose worker stopped in the middle of the
+// run, which stay running otherwise, and counts each as dead-lettered. A
+// restore is never queued again: it may have written part of its backup. See
+// package stall for when a run counts as stopped.
+func (s *RestoreService) RecoverStalled(ctx context.Context, now time.Time) (int, error) {
+	reg := s.factorySet.RestoreOperationRegistryFactory.CreateServiceRegistry()
+	failed, err := reg.FailStalled(ctx, stall.NewSweep(now, StalledRestoreError))
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to fail stalled restores", err)
+	}
+	for range failed {
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeRestore))
+	}
+	return failed, nil
 }
 
 // ProcessRestoreOperation processes a restore operation in the background with detailed logging.
