@@ -668,6 +668,16 @@ when to add an entry and where it goes.
   includes inactive items, as the search does
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
+- Leaving a group, or being removed from it, deletes what was personal to the
+  member there in the same transaction as the membership: their personal saved
+  views and placements, notification settings, item reminders, drafts, Add
+  items from files batches and the invites they sent that nobody accepted.
+  Their API tokens limited to the group are revoked. Before, these rows stayed
+  where nobody could see or remove them, and came back if the member was
+  invited again. Shared views, the drafts of delivered documents and the
+  group's data the member added stay
+  ([#2892](https://github.com/denisvmedia/inventario/issues/2892)).
+
 ### Fixed
 
 - Reminder emails go out only for items in use. An item marked Sold, Lost,

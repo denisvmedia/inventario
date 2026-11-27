@@ -3029,6 +3029,13 @@ type GroupMembershipRegistry interface {
 	// for `LeaveGroup` and the admin-initiated remove-member API;
 	// callers that bypass the invariants (e.g. group deletion) keep
 	// using the plain `Delete`.
+	//
+	// With the membership go the rows that were personal to the member
+	// in the group (#2892): their saved view placements and personal
+	// views, notification overrides, item reminders, drafts other than
+	// the ones made for delivered documents, Add item sessions and the
+	// invites they created that nobody used; their API tokens limited to
+	// the group are revoked. Postgres does it in the same transaction.
 	DeleteWithMemberInvariants(ctx context.Context, membershipID string) error
 
 	// UpdateRoleWithMemberInvariants atomically swaps the row's role

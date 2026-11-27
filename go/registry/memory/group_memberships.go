@@ -23,6 +23,15 @@ type GroupMembershipRegistry struct {
 	// return memberships with a nil User field, mirroring "row missing
 	// from join" semantics rather than panicking.
 	userRegistry registry.UserRegistry
+	// departure removes what a member leaves behind in the group, set by
+	// setMemberDeparture; nil leaves it.
+	departure *memberDeparture
+}
+
+// setMemberDeparture wires the cleanup DeleteWithMemberInvariants runs
+// after it deletes a membership.
+func (r *GroupMembershipRegistry) setMemberDeparture(d *memberDeparture) {
+	r.departure = d
 }
 
 func NewGroupMembershipRegistry() *GroupMembershipRegistry {
@@ -176,17 +185,33 @@ func (r *GroupMembershipRegistry) CountAdminsByGroup(_ context.Context, groupID 
 // per-group advisory lock: two goroutines calling this for the same
 // group serialize, so a race where both pass the count check and
 // both delete is impossible.
-func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(_ context.Context, membershipID string) error {
+func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(ctx context.Context, membershipID string) error {
 	if membershipID == "" {
 		return registry.ErrFieldRequired
 	}
+	target, err := r.deleteWithMemberInvariants(membershipID)
+	if err != nil {
+		return err
+	}
+	// The cleanup runs after the membership lock is released: the stores it
+	// changes have their own locks, and the memory backend has no
+	// transaction to share.
+	if r.departure == nil {
+		return nil
+	}
+	return r.departure.run(ctx, target.TenantID, target.GroupID, target.MemberUserID)
+}
 
+// deleteWithMemberInvariants is the count and delete of
+// DeleteWithMemberInvariants under the registry lock. It returns the
+// deleted membership.
+func (r *GroupMembershipRegistry) deleteWithMemberInvariants(membershipID string) (*models.GroupMembership, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	target, ok := r.items.Get(membershipID)
 	if !ok {
-		return registry.ErrNotFound
+		return nil, registry.ErrNotFound
 	}
 
 	groupID := target.GroupID
@@ -208,14 +233,14 @@ func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(_ context.Context, 
 	// member-count fallback only fires when the owner check passes
 	// vacuously (role data drift on a single-member group).
 	if target.Role == models.GroupRoleOwner && ownerCount <= 1 {
-		return registry.ErrLastOwner
+		return nil, registry.ErrLastOwner
 	}
 	if memberCount <= 1 {
-		return registry.ErrLastMember
+		return nil, registry.ErrLastMember
 	}
 
 	r.items.Delete(membershipID)
-	return nil
+	return target, nil
 }
 
 // UpdateRoleWithMemberInvariants shares the same write lock as

@@ -198,6 +198,8 @@ If you no longer want to be part of a group, you can leave it.
 2. In the **Leave group** panel, click **Leave group**.
 
 You'll lose access to all of that group's data, but you can be re-invited later.
+See [What a member leaves behind](#what-a-member-leaves-behind) for what
+happens to your views, reminders and drafts there.
 
 :::caution[Last owner can't leave]
 You can't leave a group if you're its **last owner** — that would strand the group with no one able to manage it. Promote another member to owner first, or delete the group. If you're the only member at all, delete the group instead of leaving.
@@ -212,6 +214,31 @@ Owners and administrators can remove other people from a group.
 3. Confirm in the dialog.
 
 The person loses access to the group's data immediately, and you can re-invite them later. You can't remove the **last owner** (promote someone else first), and the menu doesn't offer a remove action on your own row — use [Leave a group](#leave-a-group) for that.
+
+### What a member leaves behind
+
+When a member leaves or is removed, what was personal to them in the group is
+deleted at the same moment, and does not come back if they are invited again:
+
+- their personal [saved views](../items/#saved-views), and where they showed
+  views in the sidebar and on the Dashboard;
+- their notification settings for the group;
+- the [item reminders](../warranties-loans-maintenance/#item-reminders) they
+  set;
+- the [drafts of new items](../items/#drafts-of-a-new-item) they started. The
+  files saved with a draft stay in the group as standalone files;
+- the batches they sent to [Add items from files](../items/#add-items-from-files),
+  with their review pages. The drafts they made from a batch go with their
+  other drafts, and the files stay as standalone files;
+- the invites they sent that nobody accepted yet.
+
+Their [API tokens](../api-tokens/) limited to the group stop working; tokens
+for all their groups keep working for the other groups.
+
+What the rest of the group uses stays: the items, files, places, tags,
+sellers, loans, history entries and other records the member added, the views
+they shared with the group (and where other members show them), and the drafts
+made for [documents other systems sent](../documents-from-other-systems/).
 
 ## Delete a group
 

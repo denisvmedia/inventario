@@ -546,6 +546,8 @@ func (r *GroupMembershipRegistry) lockGroupAndReadMembershipRole(ctx context.Con
 // removing it would drop the total membership count to zero,
 // ErrLastMember is returned (defense-in-depth — catches the case
 // where role data has drifted so the owner check passes vacuously).
+// The same transaction removes the rows that were personal to the member
+// in the group; see removeDepartedMemberRows.
 // Returns ErrNotFound if no row with the given id exists.
 func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(ctx context.Context, membershipID string) error {
 	if membershipID == "" {
@@ -590,23 +592,19 @@ func (r *GroupMembershipRegistry) DeleteWithMemberInvariants(ctx context.Context
 			return errxtrace.Classify(registry.ErrLastMember, errx.Attrs("group_id", groupID))
 		}
 
-		del := fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
-		res, delErr := tx.ExecContext(ctx, del, membershipID)
-		if delErr != nil {
+		del := fmt.Sprintf(`DELETE FROM %s WHERE id = $1 RETURNING tenant_id, member_user_id`, r.tableNames.GroupMemberships())
+		var tenantID, userID string
+		if delErr := tx.QueryRowContext(ctx, del, membershipID).Scan(&tenantID, &userID); delErr != nil {
+			if errors.Is(delErr, sql.ErrNoRows) {
+				// Raced with another leave / delete; the row is gone.
+				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
+					"entity_type", "GroupMembership",
+					"entity_id", membershipID,
+				))
+			}
 			return errxtrace.Wrap("failed to delete membership under leave lock", delErr)
 		}
-		affected, raErr := res.RowsAffected()
-		if raErr != nil {
-			return errxtrace.Wrap("failed to read rows-affected", raErr)
-		}
-		if affected == 0 {
-			// Raced with another leave / delete; the row is gone.
-			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs(
-				"entity_type", "GroupMembership",
-				"entity_id", membershipID,
-			))
-		}
-		return nil
+		return r.removeDepartedMemberRows(ctx, tx, tenantID, groupID, userID)
 	})
 	if err != nil {
 		// Pass-through the classified sentinels so callers can
