@@ -648,6 +648,14 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Saving an item from the **All fields** dialog keeps its status date, status
+  note and sale price. The dialog sent the item without them, and the save
+  cleared them. The dialog also offered a status change it could not finish:
+  leaving In Use needs a date, which it did not ask for, so the save failed
+  with the server's English text. It now shows the status without changing
+  it; **Change Status** on the item page changes it
+  ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
+
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API

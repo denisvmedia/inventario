@@ -421,6 +421,8 @@
     "leftoverFilesFailed_one": "{{count}} nahraný soubor se nepodařilo přesunout do koše. Najdete jej na stránce Soubory.",
     "leftoverFilesFailed_other": "{{count}} nahraných souborů se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
     "serverError": "Něco se pokazilo. Zkuste to prosím znovu.",
+    "statusChanged": "Stav položky se po otevření formuláře změnil, proto se nic neuložilo. Otevřete položku znovu a podívejte se na její stav.",
+    "statusHelp": "Stav změníte tlačítkem „Změnit stav“ na stránce položky. Zadáte tam i datum a poznámku.",
     "step": {
       "ai": {
         "choose": {

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { HttpError } from "@/lib/http"
 import { renderWithProviders } from "@/test/render"
 import { pickRadixSelect } from "@/test/radix"
 
@@ -218,7 +219,7 @@ describe("<CommodityFormDialog />", () => {
     expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("X")
   })
 
-  it("renders the status field in edit mode and prefills from initial values", async () => {
+  it("prefills edit mode from initial values", async () => {
     renderWithProviders({
       children: (
         <CommodityFormDialog
@@ -242,11 +243,105 @@ describe("<CommodityFormDialog />", () => {
     })
     expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("Existing")
     expect(screen.getByLabelText(/^Quantity$/i)).toHaveValue(2)
-    // Status select only renders in edit mode — the create flow defaults
-    // every new commodity to in_use.
     // Radix Select trigger reflects the current value as its accessible
     // text content rather than a `value` attribute.
     expect(screen.getByLabelText(/^Status$/i)).toHaveTextContent(/Sold/i)
+  })
+
+  describe("status in edit mode (#2915)", () => {
+    // A sold item: its status date, note and sale price are not on the form.
+    const sold = {
+      id: "c1",
+      name: "Bike",
+      short_name: "Bike",
+      type: "other" as const,
+      status: "sold" as const,
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+      count: 1,
+      draft: false,
+      purchase_date: "2024-03-01",
+      original_price: 400,
+      original_price_currency: "USD",
+    }
+
+    function renderSold(onSubmit = vi.fn().mockResolvedValue(undefined)) {
+      renderWithProviders({
+        children: (
+          <CommodityFormDialog
+            open
+            onOpenChange={() => {}}
+            mode="edit"
+            initialValues={sold}
+            areas={areas}
+            locations={locations}
+            defaultCurrency="USD"
+            onSubmit={onSubmit}
+          />
+        ),
+      })
+      return onSubmit
+    }
+
+    it("shows the status without offering a change, and names Change Status", async () => {
+      renderSold()
+      const status = await screen.findByLabelText(/^Status$/i)
+      expect(status).toHaveTextContent(/Sold/i)
+      expect(status).toBeDisabled()
+      expect(status).toHaveAccessibleDescription(/Change Status on the item page/i)
+    })
+
+    it("sends back the status date, note and sale price the item has", async () => {
+      const user = userEvent.setup()
+      const onSubmit = renderSold()
+      const name = await screen.findByLabelText(/^Name$/i)
+      await user.clear(name)
+      await user.type(name, "Road bike")
+      await user.click(screen.getByTestId("commodity-form-submit"))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        name: "Road bike",
+        status: "sold",
+        status_date: "2026-05-17",
+        status_note: "Sold to Bob",
+        sale_price: 99.5,
+      })
+    })
+
+    it("explains a refused status in its own words, not the server's", async () => {
+      const user = userEvent.setup()
+      // The item went back to In Use meanwhile; the form still sends Sold,
+      // and the server asks for a date the item never had.
+      const refused = new HttpError("invalid", 422, "/commodities/c1", {
+        errors: [
+          {
+            status: "Unprocessable Entity",
+            detail: "status_date: status date is required when leaving in_use.",
+            error: {
+              type: "validation.Errors",
+              error: {
+                data: {
+                  attributes: { status_date: "status date is required when leaving in_use" },
+                },
+              },
+              errorCodes: {
+                data: {
+                  attributes: { status_date: { code: "status_date_required_on_transition" } },
+                },
+              },
+            },
+          },
+        ],
+      })
+      renderSold(vi.fn().mockRejectedValue(refused))
+      await screen.findByLabelText(/^Name$/i)
+      await user.click(screen.getByTestId("commodity-form-submit"))
+      expect(
+        await screen.findByText(/status changed after you opened this form/i)
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/leaving in_use/i)).toBeNull()
+    })
   })
 
   describe("edit mode (#2795)", () => {

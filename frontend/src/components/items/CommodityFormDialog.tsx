@@ -341,6 +341,14 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   files: [],
 }
 
+// The status details of an item that is not in use. The form does not show
+// them; Change Status on the item page sets them with the status (#2915).
+const STATUS_DETAIL_FIELDS: ReadonlySet<string> = new Set([
+  "status_date",
+  "status_note",
+  "sale_price",
+])
+
 // resumeStep is the step a resumed server draft opens on (#2794), so Continue
 // picks up where the draft was left instead of walking every step again: the
 // first step with a field the form refuses (`refused`: the form marks those
@@ -1333,6 +1341,10 @@ export function CommodityFormDialog({
         : undefined
       const created = await onSubmit(
         {
+          // A save replaces the whole item, so in edit mode what the form
+          // does not show (the status date, note and sale price, the cover)
+          // goes back as the item has it (#2915).
+          ...(mode === "edit" ? initialValues : undefined),
           ...toRequest(values, defaultCurrency),
           custom_fields: customFieldsRequest(
             customFields,
@@ -1434,7 +1446,18 @@ export function CommodityFormDialog({
       // inline errors point at the offending step, the banner gives the
       // overall status. Don't "simplify" this to match the others — it
       // would hide the step-jump cue.
-      setServerError(classifyServerError(err, t("commodities:form.serverError")))
+      //
+      // The form sends the status, date, note and sale price the item had
+      // when it opened. The server refuses them only when the status was
+      // changed since, which its own text would not explain (#2915).
+      const statusRefused = Object.keys(fieldResult?.unmapped ?? {}).some((path) =>
+        STATUS_DETAIL_FIELDS.has(path.split(".")[0])
+      )
+      setServerError(
+        statusRefused
+          ? { kind: "validation", message: t("commodities:form.statusChanged") }
+          : classifyServerError(err, t("commodities:form.serverError"))
+      )
     } finally {
       addingRef.current = false
       setAdding(false)
@@ -2371,34 +2394,31 @@ function BasicsStep(props: any) {
         />
       ) : null}
 
+      {/* The status is shown, not changed, here (#2915): leaving In Use
+          needs a date, and Sold a sale price, which Change Status on the
+          item page asks for. */}
       {showStatus ? (
         <div className="flex flex-col gap-1.5">
-          <FieldLabel htmlFor="commodity-status" required>
-            {t("commodities:fields.status")}
-          </FieldLabel>
-          <Controller
-            control={control}
-            name="status"
-            render={({ field }) => (
-              <Select value={field.value || undefined} onValueChange={field.onChange}>
-                <SelectTrigger
-                  id="commodity-status"
-                  className="w-full"
-                  aria-required
-                  aria-invalid={!!errors.status}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMMODITY_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {t(`commodities:status.${s}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
+          <FieldLabel htmlFor="commodity-status">{t("commodities:fields.status")}</FieldLabel>
+          <Select value={watch("status") || undefined} disabled>
+            <SelectTrigger
+              id="commodity-status"
+              className="w-full"
+              aria-describedby="commodity-status-help"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COMMODITY_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {t(`commodities:status.${s}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p id="commodity-status-help" className="text-xs text-muted-foreground">
+            {t("commodities:form.statusHelp")}
+          </p>
           <FieldError error={errors.status} />
         </div>
       ) : null}
