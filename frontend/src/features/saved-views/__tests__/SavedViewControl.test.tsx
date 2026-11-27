@@ -14,6 +14,7 @@ import {
   areaHandlers,
   commodityHandlers,
   groupHandlers,
+  locationHandlers,
   savedViewHandlers,
   sellerHandlers,
   tagHandlers,
@@ -284,6 +285,28 @@ describe("<SavedViewControl /> on the items list", () => {
     expect(notice).toHaveTextContent("The area of this view was deleted.")
     expect(notice).toHaveTextContent("Tag gone-tag no longer exists.")
     expect(notice).not.toHaveTextContent("garage")
+  })
+
+  it("names the deleted location an open view still filters by (#2897)", async () => {
+    const user = userEvent.setup()
+    const gone: SavedViewFixture = {
+      id: "sv3",
+      name: "Sold house",
+      query: "include_inactive=false&location_id=gone&sort=name",
+    }
+    server.use(
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ]),
+      ...savedViewHandlers.list(SLUG, [gone])
+    )
+    renderList("?location=gone&saved_view=sv3")
+
+    await user.click(await screen.findByTestId("saved-views-menu"))
+    const notice = await screen.findByTestId("saved-views-stale")
+    expect(notice).toHaveTextContent("The location of this view was deleted.")
+    // The view's own filter is not a change.
+    expect(screen.queryByTestId("saved-views-changed")).not.toBeInTheDocument()
   })
 
   it("names a deleted seller an open view still filters by, and only once the sellers loaded", async () => {

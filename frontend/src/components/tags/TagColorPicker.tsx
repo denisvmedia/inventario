@@ -19,14 +19,26 @@ export interface TagColorPickerProps {
   onChange: (next: TagColor) => void
   testId?: string
   disabled?: boolean
+  // Marks the group invalid and points it at the form's FieldError.
+  invalid?: boolean
+  describedBy?: string
 }
 
-export function TagColorPicker({ value, onChange, testId, disabled }: TagColorPickerProps) {
+export function TagColorPicker({
+  value,
+  onChange,
+  testId,
+  disabled,
+  invalid,
+  describedBy,
+}: TagColorPickerProps) {
   const { t } = useTranslation(["tags"])
   return (
     <div
       role="radiogroup"
       aria-label={t("tags:color.selectLabel")}
+      aria-invalid={invalid || undefined}
+      aria-describedby={describedBy}
       className="flex flex-wrap items-center gap-2"
       data-testid={testId}
     >

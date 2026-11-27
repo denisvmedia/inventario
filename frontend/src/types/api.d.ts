@@ -119,10 +119,14 @@ export type paths = {
          * @description Returns the background jobs that failed for good and were neither
          *     retried nor discarded, across every tenant, newest failure first
          *     (#1307). Each job is read from its type's own table; `id` is the row
-         *     id there. ?type limits the list to one job type and ?tenantID to one
-         *     tenant. `meta.job_types` lists the job types with whether each can be
-         *     retried.
-         *     An unknown ?type returns 400 with `failed_job.unknown_type`.
+         *     id there. ?type limits the list to one job type, ?tenantID to one
+         *     tenant and ?failed_before to the jobs that failed before a time (a
+         *     job without a failure time counts from its creation), the jobs a bulk
+         *     discard with the same filter takes. `meta.job_types` lists the job
+         *     types with whether each can be retried.
+         *     An unknown ?type returns 400 with `failed_job.unknown_type`, a
+         *     ?failed_before that is not a date or an RFC 3339 time 400 with
+         *     `failed_job.invalid_failed_before`.
          */
         get: {
             parameters: {
@@ -131,6 +135,11 @@ export type paths = {
                     type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
                     /** @description Tenant ID */
                     tenantID?: string;
+                    /**
+                     * @description Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time
+                     * @example 2026-11-01
+                     */
+                    failed_before?: string;
                     /** @description Page number (default 1) */
                     page?: number;
                     /** @description Items per page (default 50, max 100) */
@@ -151,7 +160,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobListEnvelope"];
                     };
                 };
-                /** @description Bad Request - unknown job type */
+                /** @description Bad Request - unknown job type or unreadable failed_before */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -182,6 +191,98 @@ export type paths = {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/failed-jobs/bulk-discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard failed background jobs in bulk (admin)
+         * @description Marks discarded every failed job that failed before ?failed_before
+         *     (#2946), as the single discard does: the jobs leave the failed list
+         *     and the depth gauge and keep their rows and errors. A job without a
+         *     failure time counts from its creation. The filter is the list's:
+         *     ?type limits the discard to one job type and ?tenantID to one tenant,
+         *     and GET /admin/failed-jobs with the same query lists the jobs it
+         *     takes. ?dry_run=true only counts them. `meta.discarded` is how many
+         *     jobs were discarded; a job someone retried or discarded in the
+         *     meantime is not among them.
+         *     A discard writes one audit row that names the filter and the counts,
+         *     also when it is refused; a dry run writes none. Needs the
+         *     platform_admin role: a support_agent gets 403 `admin.role_required`.
+         *     A missing, unreadable or future ?failed_before returns 400
+         *     `failed_job.invalid_failed_before`, an unknown ?type 400
+         *     `failed_job.unknown_type`.
+         */
+        post: {
+            parameters: {
+                query: {
+                    /**
+                     * @description Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future
+                     * @example 2026-11-01
+                     */
+                    failed_before: string;
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Tenant ID */
+                    tenantID?: string;
+                    /** @description Count the jobs and discard nothing */
+                    dry_run?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobBulkDiscardResponse"];
+                    };
+                };
+                /** @description Bad Request - missing, unreadable or future failed_before, or unknown job type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - account disabled, or not a platform_admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2744,8 +2845,10 @@ export type paths = {
         };
         /**
          * Update current user profile
-         * @description Update the authenticated user's profile. The name field is required;
-         *     default_group_id (#1263, #1592) is optional — send a group UUID the
+         * @description Update the authenticated user's profile. Both fields are optional and
+         *     a field left out keeps its stored value. name, when sent, must not be
+         *     blank (at most 100 characters).
+         *     default_group_id (#1263, #1592): send a group UUID the
          *     user is a member of to set, or null to clear (only allowed when the
          *     user has zero memberships; otherwise rejected with 400). Email, role,
          *     tenant_id, and is_active are ignored even if submitted.
@@ -3733,8 +3836,9 @@ export type paths = {
         };
         /**
          * Get a profile photo from a signed URL
-         * @description Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+         * @description Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
          *     they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+         *     A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
          */
         get: {
             parameters: {
@@ -3742,7 +3846,9 @@ export type paths = {
                     /** @description Photo version */
                     v: string;
                     /** @description The user the URL was issued to */
-                    uid: string;
+                    uid?: string;
+                    /** @description The back-office operator the URL was issued to */
+                    op?: string;
                     /** @description The group the two users share */
                     gid?: string;
                     /** @description Expiry, Unix seconds */
@@ -4836,6 +4942,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
@@ -5378,6 +5486,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Include drafts and non-in_use commodities (default true) */
@@ -11530,6 +11640,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Commodities only: only items with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Commodities only: only items in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Commodities only: filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */
@@ -12415,6 +12527,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
             };
         };
         options?: never;
@@ -12471,6 +12592,15 @@ export type paths = {
                 };
                 /** @description User-side request problem */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -15712,6 +15842,18 @@ export type components = {
             /** @description Reason is the free-form justification for the block (max 500 chars). */
             reason: string;
         };
+        "apiserver.AdminFailedJobBulkDiscardMeta": {
+            /** @description ByType counts per job type; a type with none is left out. */
+            by_type?: {
+                [key: string]: number;
+            };
+            /** @example 12 */
+            discarded?: number;
+            dry_run?: boolean;
+        };
+        "apiserver.AdminFailedJobBulkDiscardResponse": {
+            meta?: components["schemas"]["apiserver.AdminFailedJobBulkDiscardMeta"];
+        };
         "apiserver.AdminFailedJobListEnvelope": {
             data?: components["schemas"]["apiserver.AdminFailedJobResource"][];
             meta?: components["schemas"]["apiserver.FailedJobListMeta"];
@@ -16366,6 +16508,12 @@ export type components = {
             user?: components["schemas"]["jsonapi.AdminGroupMemberUser"];
         };
         "jsonapi.AdminGroupMemberUser": {
+            /**
+             * @description AvatarURL is a signed URL of the member's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the member
+             *     has none.
+             */
+            avatar_url?: string;
             email?: string;
             id?: string;
             name?: string;
@@ -16423,6 +16571,11 @@ export type components = {
         };
         "jsonapi.AdminUserDetail": {
             active_session_count?: number;
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested it. Absent when the user has none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_memberships?: components["schemas"]["jsonapi.AdminUserGroupMembership"][];
@@ -16447,6 +16600,12 @@ export type components = {
             role?: components["schemas"]["models.GroupRole"];
         };
         "jsonapi.AdminUserListItem": {
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the user has
+             *     none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_membership_count?: number;

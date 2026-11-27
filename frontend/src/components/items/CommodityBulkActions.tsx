@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import type { Area } from "@/features/areas/api"
 import {
   MAX_BULK_QUERY_ITEMS,
@@ -569,12 +570,11 @@ export function CommodityBulkActions({
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <Label htmlFor="bulk-move-area">{t("commodities:bulk.moveTargetLabel")}</Label>
-            {/* eslint-disable-next-line no-restricted-syntax -- bulk move-to-area utility selector; native <select> retained, covered by native-select e2e (commodity-bulk-and-filter.spec.ts) */}
-            <select
+            <NativeSelect
               id="bulk-move-area"
               value={moveArea}
               onChange={(e) => setMoveArea(e.target.value)}
-              className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
+              wrapperClassName="w-full"
               data-testid="bulk-move-area"
             >
               <option value="">{t("commodities:bulk.moveTargetPlaceholder")}</option>
@@ -583,7 +583,7 @@ export function CommodityBulkActions({
                   {a.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialog(null)}>

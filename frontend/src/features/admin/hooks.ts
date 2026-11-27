@@ -7,6 +7,8 @@ import { hardRedirect } from "@/lib/navigation"
 
 import {
   addAdminGroupMember,
+  bulkDiscardAdminFailedJobs,
+  countAdminFailedJobsBefore,
   discardAdminFailedJob,
   listAdminFailedJobs,
   retryAdminFailedJob,
@@ -33,6 +35,7 @@ import {
   type AdminAddMemberRequest,
   type AdminBlockRequest,
   type AdminFailedJob,
+  type AdminFailedJobsBulkResult,
   type AdminFailedJobsResult,
   type AdminGroupDetail,
   type AdminGroupMember,
@@ -51,6 +54,7 @@ import {
 } from "./api"
 import {
   adminKeys,
+  type AdminFailedJobsBulkParams,
   type AdminFailedJobsParams,
   type AdminGroupsParams,
   type AdminTenantsParams,
@@ -478,5 +482,33 @@ export function useDiscardAdminFailedJob() {
   return useMutation<void, Error, FailedJobRef>({
     mutationFn: (job) => discardAdminFailedJob(job.job_type ?? "", job.id),
     onSettled: () => qc.invalidateQueries({ queryKey: adminKeys.failedJobs() }),
+  })
+}
+
+// The dry-run count of a bulk discard (#2946), read while the dialog has a
+// date. Always fresh: the count is what the operator confirms.
+export function useAdminFailedJobsBulkCount(
+  params: AdminFailedJobsBulkParams,
+  { enabled = true }: QueryOptions = {}
+) {
+  const isBackofficeAuthed = useIsBackofficeAuthed()
+  return useQuery<AdminFailedJobsBulkResult>({
+    queryKey: adminKeys.failedJobBulkCount(params),
+    queryFn: ({ signal }) => countAdminFailedJobsBefore(params, signal),
+    enabled: enabled && isBackofficeAuthed && params.failedBefore !== "",
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  })
+}
+
+// Discards in bulk and refetches the list when it settles. The dry-run
+// count is left alone: the dialog closes on success and counts again on
+// its next open.
+export function useBulkDiscardAdminFailedJobs() {
+  const qc = useQueryClient()
+  return useMutation<AdminFailedJobsBulkResult, Error, AdminFailedJobsBulkParams>({
+    mutationFn: (params) => bulkDiscardAdminFailedJobs(params),
+    onSettled: () => qc.invalidateQueries({ queryKey: [...adminKeys.failedJobs(), "list"] }),
   })
 }

@@ -55,6 +55,7 @@
     "showFilesTagged": "Zobrazit soubory se štítkem {{name}}",
     "showItems": "Zobrazit položky",
     "showItemsInArea": "Zobrazit položky v oblasti {{name}}",
+    "showItemsInLocation": "Zobrazit položky v umístění {{name}}",
     "showItemsTagged": "Zobrazit položky se štítkem {{name}}"
   },
   "seeAll": "Zobrazit vše",

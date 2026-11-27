@@ -326,6 +326,11 @@ func (r *FailedJobRegistry) ListFailed(_ context.Context, jobType models.WorkerT
 		return nil, err
 	}
 	jobs := a.list(scope)
+	if !scope.FailedBefore.IsZero() {
+		jobs = slices.DeleteFunc(jobs, func(job *models.FailedJob) bool {
+			return !failedBefore(job, scope.FailedBefore)
+		})
+	}
 	slices.SortFunc(jobs, func(x, y *models.FailedJob) int {
 		// Newest failure first, a job without a time last, as postgres
 		// orders DESC NULLS LAST; the id breaks ties.
@@ -395,6 +400,40 @@ func (r *FailedJobRegistry) Discard(_ context.Context, jobType models.WorkerType
 		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("job_type", string(jobType), "entity_id", id))
 	}
 	return nil
+}
+
+// DiscardFailed discards the jobs ListFailed returns for the scope, one at
+// a time under the store's lock. A job retried between the list and its
+// discard is left alone and not counted.
+func (r *FailedJobRegistry) DiscardFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, now time.Time) (int, error) {
+	a, err := r.adapter(jobType)
+	if err != nil {
+		return 0, err
+	}
+	if scope.FailedBefore.IsZero() {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "failed_before"))
+	}
+	jobs, err := r.ListFailed(ctx, jobType, scope, 0)
+	if err != nil {
+		return 0, err
+	}
+	discarded := 0
+	for _, job := range jobs {
+		if a.discard(scope, job.ID, now.UTC()) {
+			discarded++
+		}
+	}
+	return discarded, nil
+}
+
+// failedBefore reports whether the job failed before the time; a job
+// without a failure time counts from its creation, as in postgres.
+func failedBefore(job *models.FailedJob, before time.Time) bool {
+	at := job.CreatedAt
+	if job.FailedAt != nil {
+		at = *job.FailedAt
+	}
+	return at.Before(before)
 }
 
 // inFailedJobScope reports whether a row of tenantID and groupID is in the
