@@ -1229,6 +1229,12 @@ when to add an entry and where it goes.
   upgrade deletes the older migrations kept so far, so set a longer period
   before the upgrade to keep them. See the admin runbook §10
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
+- A stopped draft discard that fails again when the drafts list or the inbox
+  tries to finish it is logged once, as `Failed to finish a stopped draft
+  discard` with its `draft_id`. The first such draft of a pass was also
+  logged a second time as `Failed to finish stopped draft discards`, which
+  now means only that the pass itself could not run
+  ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
 
 ## [0.2.2] - 2026-11-23
 

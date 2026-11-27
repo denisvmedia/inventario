@@ -199,9 +199,12 @@ func (r *CommodityDraftRegistry) CreateOrGet(ctx context.Context, draft models.C
 		existing := fmt.Sprintf(`SELECT * FROM %s WHERE group_id = $1 AND client_key = $2`, r.tableNames.CommodityDrafts())
 		err = tx.QueryRowxContext(ctx, existing, r.groupID, draft.ClientKey).StructScan(&stored)
 		if errors.Is(err, sql.ErrNoRows) {
-			// The row the insert conflicted with is gone: a discard deleted
-			// it between the two statements. Only a discard deletes a
-			// draft, so the key belongs to a discarded draft.
+			// The row the insert conflicted with is gone: something deleted
+			// it between the two statements. A discard does, and so do the
+			// purge of the account that created the draft and a
+			// full-replace restore, which clears the group's drafts. Each
+			// ends the draft the key named, so the create is answered as
+			// for a discarded draft in every case.
 			return errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("client_key", draft.ClientKey))
 		}
 		if err != nil {
