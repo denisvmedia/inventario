@@ -948,6 +948,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: #1264 is largely satisfied by the React rewrite (#1397); this is the roadmap's "#1264 start" slice (per #1651). Extracting `<FieldError>` is invisible visually but removes n copies of the same markup. The dropdown guard makes every remaining native `<select>` a conscious, documented choice ("pick one and stick with it") without a risky sweep of tested utility selectors. Converting those six is a deferred follow-up.
 - **Approved by**: user (explicit) — chose scope "Roadmap «start»" + approach "primitives-direct + FieldError" when offered the options.
 - **Reversion plan**: Permanent for `<FieldError>` + the lint guard. The six annotated native selectors are the explicit backlog: migrate them to `<Select>` (or a ported `native-select` primitive) and drop the disable comments in the post-launch design-system "finish" pass.
+- **Resolved**: 2026-11-27, PR #2972 — back to 1:1 for the six native selects: they render through `components/ui/native-select.tsx`, ported from the mock, and no `eslint-disable` remains outside the primitive. The port adds a `wrapperClassName` prop, since the mock's wrapper is `w-fit` and four of the six fill their row. `<FieldError>` and the lint guard stay as described.
 
 #### 2026-05-29 — Two intentional IconPicker components (popover vs. inline grid) kept separate
 

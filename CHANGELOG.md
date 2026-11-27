@@ -753,6 +753,12 @@ when to add an entry and where it goes.
   127 letters was refused with 422
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
+- The tag sort, the bulk "move to" pickers on the items and files lists, the
+  file category pickers on the upload dialog and the file edit page, and the
+  category picker on a phone's Files page look like the other fields: a
+  chevron, the same height and border, and the same focus ring
+  ([#2911](https://github.com/denisvmedia/inventario/issues/2911)).
+
 - Settings saved on the server show up in the app again. The settings
   endpoint sent its keys capitalized (`NotificationsWarrantyExpiry`) while the
   app reads camelCase (`notificationsWarrantyExpiry`), so after a reload the
