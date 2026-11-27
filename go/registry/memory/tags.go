@@ -261,8 +261,9 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int, kind mode
 }
 
 // SlugsByLabel returns the sorted slugs of the group's tags of the given kind
-// whose label contains text, ignoring case — the same literal substring rule
-// the postgres backend applies with an escaped ILIKE.
+// whose label contains text, ignoring case — the literal substring rule of
+// the item search, registry.ContainsFold, which the postgres backend states
+// with an escaped ILIKE.
 func (r *TagRegistry) SlugsByLabel(ctx context.Context, kind models.TagKind, text string) ([]string, error) {
 	if text == "" {
 		return nil, nil
@@ -271,10 +272,9 @@ func (r *TagRegistry) SlugsByLabel(ctx context.Context, kind models.TagKind, tex
 	if err != nil {
 		return nil, err
 	}
-	needle := strings.ToLower(text)
 	var slugs []string
 	for _, t := range filterTagsByKind(all, kind) {
-		if strings.Contains(strings.ToLower(t.Label), needle) {
+		if registry.ContainsFold(t.Label, text) {
 			slugs = append(slugs, t.Slug)
 		}
 	}
