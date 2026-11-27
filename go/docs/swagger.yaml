@@ -10524,6 +10524,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: Only commodities in an area of this location; cannot be combined
+          with unassigned
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: Filter by seller ID; repeat for several (OR)
         in: query
@@ -11870,6 +11875,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: Only commodities in an area of this location; cannot be combined
+          with unassigned
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: Filter by seller ID; repeat for several (OR)
         in: query
@@ -15137,6 +15147,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: 'Commodities only: only items in an area of this location; cannot
+          be combined with unassigned'
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: 'Commodities only: filter by seller ID; repeat for several (OR)'
         in: query

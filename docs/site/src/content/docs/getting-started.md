@@ -63,9 +63,10 @@ Type at least two characters. The results are grouped by kind: **Items**,
 **Locations**, **Areas**, **Files**, and **Tags**, a few of each. Click a
 result, or move to it with the arrow keys and press `Enter`, to open it.
 
-- An area or a tag has a **Show items** button next to it that opens the list
-  of items in that area or with that tag. A file tag offers **Show files**
-  instead.
+- A location, an area or a tag has a **Show items** button next to it that
+  opens the list of items in that location or area, or with that tag. A file
+  tag offers **Show files** instead. On a narrow screen the button shows only
+  its icon.
 - **All matching items** opens **All Items** with the same search, inactive
   items included.
 - The first row, **Search "…" across items, locations, files…**, opens the

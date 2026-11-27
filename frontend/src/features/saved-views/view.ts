@@ -95,33 +95,36 @@ export function savedViewQueryString(query: CommodityQuery): string {
   return commodityQueryToApiQuery(query)
 }
 
-// What a view's query names that no longer exists: an area that was
-// deleted, tags without a tag row, the IDs of deleted sellers, the slugs
-// of item types the group no longer has and the IDs of deleted custom
+// What a view's query names that no longer exists: an area or a location
+// that was deleted, tags without a tag row, the IDs of deleted sellers, the
+// slugs of item types the group no longer has and the IDs of deleted custom
 // fields, in its conditions or its sort. Only meaningful once the areas and
 // tags have loaded.
 export interface StaleReferences {
   area: boolean
+  location: boolean
   tags: string[]
   sellers: string[]
   types: string[]
   customFields: string[]
 }
 
-// sellerIds, typeSlugs and fieldIds are undefined while the sellers, the
-// item types or the custom fields are not known (loading or failed): none
-// of them is reported deleted then.
+// sellerIds, typeSlugs, fieldIds and locationIds are undefined while the
+// sellers, the item types, the custom fields or the locations are not known
+// (loading or failed): none of them is reported deleted then.
 export function staleReferences(
   query: CommodityQuery,
   areaIds: ReadonlySet<string>,
   tagSlugs: ReadonlySet<string>,
   sellerIds?: ReadonlySet<string>,
   typeSlugs?: ReadonlySet<string>,
-  fieldIds?: ReadonlySet<string>
+  fieldIds?: ReadonlySet<string>,
+  locationIds?: ReadonlySet<string>
 ): StaleReferences {
   const named = [...query.tags.include, ...query.tags.exclude]
   return {
     area: query.areaId !== "" && !areaIds.has(query.areaId),
+    location: !!locationIds && query.locationId !== "" && !locationIds.has(query.locationId),
     tags: named.filter((slug) => !tagSlugs.has(slug)),
     sellers: sellerIds ? query.sellerIds.filter((id) => !sellerIds.has(id)) : [],
     types: typeSlugs ? query.types.filter((slug) => !typeSlugs.has(slug)) : [],
@@ -134,6 +137,7 @@ export function staleReferences(
 export function hasStaleReferences(stale: StaleReferences): boolean {
   return (
     stale.area ||
+    stale.location ||
     stale.tags.length > 0 ||
     stale.sellers.length > 0 ||
     stale.types.length > 0 ||
