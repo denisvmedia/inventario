@@ -11,9 +11,8 @@ import { useCurrentRouteTitle } from "@/components/routing/RouteTitle"
 // shows the sidebar toggle, the active page title (sourced from
 // RouteTitleContext — RouteTitle inside each page broadcasts the
 // translated title), and on the right the search entry that opens the
-// command palette, then the mode + density toggles. The onboarding-tour
-// and group selector live in the sidebar; we keep this bar minimal so
-// per-feature pages have room for their own breadcrumbs later if needed.
+// command palette, the group switcher with the caller's role
+// (GroupRoleCluster), then the density and mode toggles.
 //
 // The TopBar is on every authenticated page, so it also mounts the command
 // palette: CommandPaletteProvider renders the palette dialog and binds

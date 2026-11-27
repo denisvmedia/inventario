@@ -2744,8 +2744,10 @@ export type paths = {
         };
         /**
          * Update current user profile
-         * @description Update the authenticated user's profile. The name field is required;
-         *     default_group_id (#1263, #1592) is optional — send a group UUID the
+         * @description Update the authenticated user's profile. Both fields are optional and
+         *     a field left out keeps its stored value. name, when sent, must not be
+         *     blank (at most 100 characters).
+         *     default_group_id (#1263, #1592): send a group UUID the
          *     user is a member of to set, or null to clear (only allowed when the
          *     user has zero memberships; otherwise rejected with 400). Email, role,
          *     tenant_id, and is_active are ignored even if submitted.

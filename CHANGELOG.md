@@ -747,6 +747,13 @@ when to add an entry and where it goes.
   going out without that recipient, or, for a loan, being marked as sent
   with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Switching groups in the sidebar now saves the group as your default group,
+  as the top bar switcher already did, so the next sign-in lands in the group
+  you used last whichever control you used. A switch saves only the group: it
+  no longer writes back a name you changed on another device since the page
+  loaded. The role next to the top bar switcher is the Members page badge,
+  with its icon, color and translated label, in place of the untranslated role
+  key ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
 - The users of a suspended or inactive tenant get no email from Inventario:
   no item, warranty, loan or maintenance reminders, no storage quota
   warnings, no weekly digest and no "your personal data export is ready"
