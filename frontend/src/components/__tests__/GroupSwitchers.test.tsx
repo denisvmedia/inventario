@@ -36,7 +36,7 @@ function ownerOf(groupId: string) {
   ]
 }
 
-type ProfilePut = { name: string; default_group_id: string }
+type ProfilePut = { name?: string; default_group_id: string }
 
 // captureProfilePuts records every PUT /auth/me body.
 function captureProfilePuts(): ProfilePut[] {
@@ -45,7 +45,7 @@ function captureProfilePuts(): ProfilePut[] {
     http.put(apiUrl("/auth/me"), async ({ request }) => {
       const body = (await request.json()) as ProfilePut
       puts.push(body)
-      return HttpResponse.json({ id: "u1", email: "denis@example.com", ...body })
+      return HttpResponse.json({ id: "u1", email: "denis@example.com", name: "Denis", ...body })
     })
   )
   return puts
@@ -97,7 +97,9 @@ describe("group switchers (#2910)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("loc")).toHaveAttribute("data-pathname", "/g/office")
     )
-    await waitFor(() => expect(puts).toEqual([{ name: "Denis", default_group_id: "g2" }]))
+    await waitFor(() => expect(puts).toEqual([{ default_group_id: "g2" }]))
+    // Only the group is saved, never the name this page loaded.
+    expect(puts[0]).not.toHaveProperty("name")
   })
 
   it("the top bar switcher saves the same way", async () => {
@@ -111,7 +113,7 @@ describe("group switchers (#2910)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("loc")).toHaveAttribute("data-pathname", "/g/office")
     )
-    await waitFor(() => expect(puts).toEqual([{ name: "Denis", default_group_id: "g2" }]))
+    await waitFor(() => expect(puts).toEqual([{ default_group_id: "g2" }]))
   })
 
   it("sends the save when the switcher unmounts before the delay ends", async () => {
@@ -125,7 +127,7 @@ describe("group switchers (#2910)", () => {
     await user.click(await screen.findByRole("menuitem", { name: /Office/ }))
     unmount()
 
-    await waitFor(() => expect(puts).toEqual([{ name: "Denis", default_group_id: "g2" }]))
+    await waitFor(() => expect(puts).toEqual([{ default_group_id: "g2" }]))
   })
 
   it("does not save when the active group is picked again", async () => {

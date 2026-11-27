@@ -708,6 +708,13 @@ when to add an entry and where it goes.
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
+- Switching groups in the sidebar now saves the group as your default group,
+  as the top bar switcher already did, so the next sign-in lands in the group
+  you used last whichever control you used. A switch saves only the group: it
+  no longer writes back a name you changed on another device since the page
+  loaded. The role next to the top bar switcher is the Members page badge,
+  with its icon, color and translated label, in place of the untranslated role
+  key ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
 - An item opened from a searched Items list, or from an area's items, stays
   open. Before, an item clicked within a moment of the list loading closed
   again and the list came back
@@ -753,12 +760,6 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
-- Switching groups in the sidebar now saves the group as your default group,
-  as the top bar switcher already did, so the next sign-in lands in the group
-  you used last whichever control you used. The role next to the top bar
-  switcher is the Members page badge, with its icon, color and translated
-  label, in place of the untranslated role key
-  ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
 
 ### Security
 

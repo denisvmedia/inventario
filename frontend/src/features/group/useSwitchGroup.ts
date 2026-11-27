@@ -28,7 +28,7 @@ export function useSwitchGroup(): (group: SwitchTarget | undefined) => void {
   const updateProfile = useUpdateProfile()
 
   const activeSlug = groupCtx?.currentGroup?.slug ?? params.groupSlug ?? null
-  const pending = useRef<{ groupId: string; name: string } | null>(null)
+  const pending = useRef<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // The mutate function of the latest render, for the unmount flush.
   const mutateRef = useRef(updateProfile.mutate)
@@ -41,7 +41,7 @@ export function useSwitchGroup(): (group: SwitchTarget | undefined) => void {
       if (timer.current) clearTimeout(timer.current)
       const next = pending.current
       pending.current = null
-      if (next) mutateRef.current({ name: next.name, default_group_id: next.groupId })
+      if (next) mutateRef.current({ default_group_id: next })
     },
     []
   )
@@ -50,15 +50,15 @@ export function useSwitchGroup(): (group: SwitchTarget | undefined) => void {
     if (!group?.slug || group.slug === activeSlug) return
     navigate(`/g/${encodeURIComponent(group.slug)}`)
     if (!group.id || !auth?.user) return
-    // PUT /auth/me takes the name with the default group; the current name is
-    // sent unchanged so only the group preference changes.
-    pending.current = { groupId: group.id, name: auth.user.name ?? "" }
+    // Only the group is sent: the name this page loaded may be stale, and
+    // the server keeps the stored name when the body has none.
+    pending.current = group.id
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
       timer.current = null
       const next = pending.current
       pending.current = null
-      if (next) mutateRef.current({ name: next.name, default_group_id: next.groupId })
+      if (next) mutateRef.current({ default_group_id: next })
     }, SAVE_DELAY_MS)
   }
 }

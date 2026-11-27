@@ -274,11 +274,13 @@ export async function resetPassword(token: string, newPassword: string): Promise
 // accepts only `name` and `default_group_id` — email is read-only here
 // (changing it requires the verification flow which lives elsewhere).
 //
-// `default_group_id` semantics (#1263): undefined → leave unchanged,
-// null → clear the preference, string → set to that group UUID. The
-// backend validates the membership.
+// A field left undefined is left out of the body, and the server keeps its
+// stored value. `name`, when sent, must not be blank. `default_group_id`
+// (#1263): null clears the preference, a string sets that group UUID; the
+// backend validates the membership. A save that changes only the default
+// group sends no name, so it cannot write back a name changed elsewhere.
 export interface UpdateProfileRequest {
-  name: string
+  name?: string
   default_group_id?: string | null
 }
 
