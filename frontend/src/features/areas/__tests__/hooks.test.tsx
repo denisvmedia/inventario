@@ -59,6 +59,45 @@ beforeEach(() => {
   setAccessToken("good-token")
 })
 
+// The list endpoint pages its result (50 by default, at most 100). The hook
+// feeds pickers and name lookups, so it must return every area.
+describe("useAreas paging", () => {
+  function manyAreas(count: number) {
+    return Array.from({ length: count }, (_, i) =>
+      areaResource(`a${i + 1}`, { name: `Area ${i + 1}`, location_id: "loc1" })
+    )
+  }
+
+  it("returns every area when the group has more than one page", async () => {
+    const requests: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.paged(SLUG, manyAreas(230), requests)
+    )
+    const { result } = renderHook(() => useAreas(), { wrapper: makeWrapper(newClient()) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(result.current.data).toHaveLength(230)
+    expect(result.current.data?.at(-1)).toMatchObject({ id: "a230", name: "Area 230" })
+    const asked = requests.map((url) => new URL(url).searchParams)
+    expect(asked.map((q) => q.get("page"))).toEqual(["1", "2", "3"])
+    expect(asked.every((q) => q.get("per_page") === "100")).toBe(true)
+  })
+
+  it("stops once it has as many areas as the server reports", async () => {
+    const requests: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.paged(SLUG, manyAreas(100), requests)
+    )
+    const { result } = renderHook(() => useAreas(), { wrapper: makeWrapper(newClient()) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(result.current.data).toHaveLength(100)
+    expect(requests).toHaveLength(1)
+  })
+})
+
 describe("useAreas + mutations", () => {
   it("rolls the list back when an optimistic update fails", async () => {
     server.use(
