@@ -478,10 +478,12 @@ func runCustomFieldDeleteContract(t *testing.T, newEnv func(t *testing.T) Custom
 		c.Check(err, qt.ErrorIs, registry.ErrDraftRevisionConflict,
 			qt.Commentf("a tab that loaded the draft before the delete cannot put the value back"))
 
+		// The item form keeps an empty entry for every field it shows; a
+		// member whose draft never used the field keeps editing it (#3023).
 		gotEmpty, err := env.DraftsA.Get(env.CtxA, empty.ID)
 		c.Assert(err, qt.IsNil)
-		c.Check(gotEmpty.Values.DraftCustomFields(), qt.HasLen, 0, qt.Commentf("an empty entry goes too"))
-		c.Check(gotEmpty.Revision, qt.Equals, empty.Revision+1)
+		c.Check(gotEmpty.Revision, qt.Equals, empty.Revision, qt.Commentf("a draft with an empty entry is left alone"))
+		c.Check(gotEmpty.Values.DraftCustomFields(), qt.DeepEquals, empty.Values.DraftCustomFields())
 		gotOther, err := env.DraftsA.Get(env.CtxA, other.ID)
 		c.Assert(err, qt.IsNil)
 		c.Check(gotOther.Revision, qt.Equals, other.Revision, qt.Commentf("a draft without the field is left alone"))

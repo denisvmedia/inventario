@@ -2180,8 +2180,9 @@ type CustomFieldRegistry interface {
 	// DeleteWithValues deletes the field with id together with its values
 	// and template entries, in one transaction, and returns how many items
 	// and open drafts had a value. It also takes the field's entry out of
-	// every open draft that has one, value or not, and gives each such
-	// draft a new revision. expected is how many items and drafts together
+	// every open draft that holds a value of it, and gives each such draft a
+	// new revision; a draft whose entry is empty keeps it and its revision.
+	// expected is how many items and drafts together
 	// the caller confirmed to lose a value, or AnyValueCount; when another
 	// number has a value, it fails with ErrCustomFieldInUse and nothing is
 	// deleted.

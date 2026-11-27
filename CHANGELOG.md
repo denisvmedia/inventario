@@ -1026,10 +1026,13 @@ when to add an entry and where it goes.
   have a value of the field. Deleting a type moves its drafts with its items
   to the type you pick, deleting a field takes the value out of the drafts
   once you confirm, and removing the set keeps a type or field that a draft
-  uses. In the API, the item type and custom field lists and their `409`
-  answers carry a `draft_count`, and `expected_values` of a custom field
-  delete counts the drafts with a value too
-  ([#2939](https://github.com/denisvmedia/inventario/issues/2939)).
+  uses. A draft that shows the field empty is left as it is, so a member
+  editing it is not told that it changed elsewhere. In the API, the item type
+  and custom field lists and their `409` answers carry a `draft_count`, and
+  `expected_values` of a custom field delete counts the drafts with a value
+  too
+  ([#2939](https://github.com/denisvmedia/inventario/issues/2939),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - `inventario users delete` left the user's profile photo in storage, where
   nothing pointed at it any more. It now deletes the photo after the account,
   as deleting your own account does; pass `--upload-location` with the
@@ -1369,10 +1372,11 @@ when to add an entry and where it goes.
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 - A stopped draft discard that fails again when the drafts list or the inbox
   tries to finish it is logged once, as `Failed to finish a stopped draft
-  discard` with its `draft_id`. The first such draft of a pass was also
-  logged a second time as `Failed to finish stopped draft discards`, which
-  now means only that the pass itself could not run
-  ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
+  discard` with its `draft_id` and `group_id`. The first such draft of a
+  pass was also logged a second time as `Failed to finish stopped draft
+  discards`, which now means only that the pass itself could not run
+  ([#2877](https://github.com/denisvmedia/inventario/issues/2877),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 
 ## [0.2.2] - 2026-11-23
 
