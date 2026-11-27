@@ -80,6 +80,32 @@ func TestTagRegistry_Memory_CreateAndGetBySlug(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
+// TestTagRegistry_Memory_SlugsByLabelFoldsCase checks that the labels the
+// item search resolves are matched with the same case folding as the item
+// text, so a term finds an item through its tag as it finds it by name.
+func TestTagRegistry_Memory_SlugsByLabelFoldsCase(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagFixture(c, "group-1")
+
+	for _, tag := range []models.Tag{
+		{Kind: models.TagKindCommodity, Slug: "odos", Label: "ΟΔΟΣ", Color: models.TagColorBlue},
+		{Kind: models.TagKindCommodity, Slug: "strasse", Label: "Straße", Color: models.TagColorBlue},
+	} {
+		_, err := fx.tagReg.Create(fx.ctx, tag)
+		c.Assert(err, qt.IsNil)
+	}
+
+	for term, want := range map[string][]string{
+		"οδος":    {"odos"},
+		"STRASSE": {"strasse"},
+		"οδοι":    nil,
+	} {
+		got, err := fx.tagReg.SlugsByLabel(fx.ctx, models.TagKindCommodity, term)
+		c.Assert(err, qt.IsNil)
+		c.Check(got, qt.DeepEquals, want, qt.Commentf("term %q", term))
+	}
+}
+
 // TestTagRegistry_Memory_SameSlugDifferentKinds pins the core split
 // invariant: the same slug can exist once as a commodity tag and once as a
 // file tag, and the two are distinct rows.

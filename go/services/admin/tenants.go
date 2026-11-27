@@ -171,6 +171,18 @@ func (s *Service) checkTenantDomainFree(ctx context.Context, tenantID string, do
 	}
 }
 
+// tenantDomainTaken returns ErrTenantDomainTaken for a registry write that
+// the unique index on tenants.domain refused, and err as it is otherwise. Two
+// writes that give one domain to two tenants at the same time both pass
+// checkTenantDomainFree; the second to commit gets this, the error the check
+// gives.
+func tenantDomainTaken(err error, domain *string) error {
+	if !errors.Is(err, registry.ErrDomainAlreadyExists) || domain == nil {
+		return err
+	}
+	return errxtrace.Classify(ErrTenantDomainTaken, errx.Attrs("domain", *domain))
+}
+
 // normalizeTenantDomain turns an empty domain into no domain, so clearing the
 // domain stores NULL rather than an empty string.
 func normalizeTenantDomain(domain *string) *string {

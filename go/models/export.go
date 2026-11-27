@@ -132,7 +132,7 @@ func (e ExportSelectedItem) Validate() error {
 
 func (e ExportSelectedItem) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &e,
-		validation.Field(&e.ID, validation.Required, validation.Length(1, 100)),
+		validation.Field(&e.ID, validation.Required, validation.RuneLength(1, 100)),
 		validation.Field(&e.Type, validation.Required),
 	)
 }
@@ -259,7 +259,7 @@ func (e *Export) ValidateWithContext(ctx context.Context) error {
 		// Description is optional — the service layer synthesises a sensible
 		// "Backup · {type} · {date}" default when the user leaves it blank, so
 		// the list row never renders as an empty line.
-		validation.Field(&e.Description, validation.Length(0, 500)),
+		validation.Field(&e.Description, validation.RuneLength(0, 500)),
 		validation.Field(&e.Type, validation.Required),
 	)
 

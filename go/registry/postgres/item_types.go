@@ -248,7 +248,8 @@ func (r *ItemTypeRegistry) Delete(ctx context.Context, id string) error {
 // DeleteReassigning deletes a type, moving its items to reassignTo first.
 //
 // Lock order: the group lock, then the deleted type's row (FOR UPDATE) and
-// the target's (FOR SHARE), then the items' rows. An item write locks the
+// the target's (FOR SHARE), then the group's currency-migration lock, then
+// the items' rows. An item write locks the
 // item's row and then, when it changes the type, the new type's row FOR
 // SHARE; it never waits for the type it is leaving, so the two orders cannot
 // deadlock. A write that names the deleted type waits for this transaction
@@ -339,6 +340,11 @@ func moveItemsOfType(
 	}
 	if target == nil {
 		return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", src.ID, "items", used))
+	}
+	// A running currency migration updates the group's items one by one
+	// under its lock; moving them all at once in another order waits for it.
+	if err := lockGroupCurrencyMigration(ctx, tx, src.GroupID); err != nil {
+		return 0, err
 	}
 	res, err := tx.ExecContext(ctx,
 		fmt.Sprintf(`UPDATE %s SET type = $1 WHERE group_id = $2 AND type = $3`, commodities),

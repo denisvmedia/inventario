@@ -793,9 +793,18 @@ Create and edit:
   closed.
 - Slugs and domains are unique: one another tenant has is refused with
   `409` and `tenant.slug_taken` or `tenant.domain_taken`. A domain is a
-  bare lowercase hostname; an empty `domain` on edit removes it. An edit
-  checks the domain only when it changes it, so a domain two tenants
-  already share does not block a rename.
+  bare lowercase hostname; an empty `domain` on edit removes it, as
+  `inventario tenants update <slug> --domain=` does. A unique index on
+  `tenants.domain` holds the rule in the database, so two creates or
+  edits that give one domain to two tenants at the same time cannot both
+  succeed: the second gets the same `409`.
+- Tenants written before the index existed (#2948) can share a domain.
+  `inventario db migrate up` checks for that before it applies anything,
+  and stops with the shared domains and the slugs of their tenants:
+  `tenants share a domain, so tenants.domain cannot be made unique:
+  "acme.com" (tenants acme, acme-old)`. Leave each domain with one tenant,
+  then run the migrations again. `db migrate up --dry-run` runs the same
+  check, so it can be run before the upgrade.
 - With a tenant base domain (`--tenant-base-domain`), where
   `<slug>.<base domain>` is a tenant's address, a custom domain that is the
   base domain or a host under it is refused with `422` and

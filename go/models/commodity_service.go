@@ -182,9 +182,9 @@ func (*CommodityService) Validate() error {
 func (s *CommodityService) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, s,
 		validation.Field(&s.CommodityID, rules.NotEmpty),
-		validation.Field(&s.ProviderName, rules.NotEmpty, validation.Length(1, 200)),
-		validation.Field(&s.ProviderContact, validation.Length(0, 200)),
-		validation.Field(&s.Reason, validation.Length(0, 1000)),
+		validation.Field(&s.ProviderName, rules.NotEmpty, validation.RuneLength(1, 200)),
+		validation.Field(&s.ProviderContact, validation.RuneLength(0, 200)),
+		validation.Field(&s.Reason, validation.RuneLength(0, 1000)),
 		validation.Field(&s.SentAt, validation.Required, DateFormat),
 		validation.Field(&s.ExpectedReturnAt),
 		validation.Field(&s.ReturnedAt),
