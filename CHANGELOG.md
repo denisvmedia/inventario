@@ -1459,6 +1459,35 @@ when to add an entry and where it goes.
   registration and a request that reaches a tenant-only route without a
   tenant are now logged
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- Request, file, upload and back-office log lines in the API follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  The tenant field checks log their refusals as warnings, not errors
+  (`Security violation: user-provided tenant ID in header`, `in query
+  parameter` and `in request body`, `Security violation: forbidden tenant
+  header detected`, the tenant-scan size cap and an unreadable body). So do
+  a missing item (`CommodityCtx: Failed to get commodity`), a back-office
+  block or unblock the user registry refuses, a seed request with a bad
+  body, and an upload whose signed URLs or inline thumbnail could not be
+  made; a database failure on those paths stays an error. These are errors
+  now: `Signed URL cross-tenant access attempt`, a signed URL lookup that
+  fails for a reason other than a missing row, and the two steps that end a
+  user's sessions on a back-office block or session revoke, renamed
+  `admin end sessions: failed to revoke refresh tokens` and
+  `admin end sessions: failed to blacklist access tokens`. A refused signed
+  URL no longer logs its query string, which carries the signature, and a
+  request refused for a tenant field in its body no longer logs the start of
+  the body, which can hold a password; lines written before the upgrade can
+  hold either. An invalid public URL is logged once, by the line for the
+  link that could not be built, and no longer also as
+  `Invalid public URL configuration`. The group invite line no longer
+  carries the recipient's address. `user_email` is `email`, and the
+  per-request debug lines `RLS Security: User context validated` and
+  `Signed URL file access granted` carry no address. `file_path` and
+  `filename` holding a storage key are `blob_key`, and `slug` on the group
+  resolver line is `group_slug`. The seed endpoint logs `Seed endpoint
+  called` and, at debug, `Parsed seed request`. A failed back-office user or
+  worker step is logged once, without a second `internal server error` line
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

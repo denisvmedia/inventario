@@ -1052,7 +1052,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 				slog.ErrorContext(r.Context(), "RLS Security Violation: User ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
-					"user_email", user.Email,
+					"email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "Invalid user context", http.StatusUnauthorized)
 				return
@@ -1063,7 +1063,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
-					"user_email", user.Email,
+					"email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "Invalid tenant context", http.StatusUnauthorized)
 				return
@@ -1075,7 +1075,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
-					"user_email", user.Email,
+					"email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "User account disabled", http.StatusForbidden)
 				return
@@ -1095,7 +1095,6 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			slog.DebugContext(r.Context(), "RLS Security: User context validated",
 				"user_id", user.ID,
 				"tenant_id", user.TenantID,
-				"user_email", user.Email,
 				"method", r.Method,
 				"path", r.URL.Path)
 
