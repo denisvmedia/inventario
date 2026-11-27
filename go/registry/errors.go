@@ -139,6 +139,12 @@ var (
 	// invariant still blocks the leave. #1652.
 	ErrLastMember = errx.NewSentinel("cannot remove the last member from a group")
 
+	// ErrNotAGroupMember signals that APITokenRegistry.Create refused a
+	// token limited to a group its user is not a member of. The check
+	// runs under the group's membership lock, so a removal that commits
+	// after the service's own membership check still stops the insert.
+	ErrNotAGroupMember = errx.NewSentinel("user is not a member of the group")
+
 	// ErrLastSystemAdmin signals that
 	// SystemAdminGrantRegistry.RevokeAtomic refused to drop the
 	// platform's system-admin count to zero. Defined at the registry

@@ -354,7 +354,8 @@ create a new one.
 
 A token acts as you, with your current role in each group it can reach: if you
 are a viewer in a group, a **Read and write** token cannot change anything there
-either, and if you leave a group, the token loses it too. It works only on the
+either, and if you leave a group, the token loses it too; a token limited to
+that group is revoked. It works only on the
 data inside groups (items, locations, areas, files, tags, loans, services,
 maintenance, exports and the like), and it can read the list of your groups,
 each group's details, and its members and their photos.

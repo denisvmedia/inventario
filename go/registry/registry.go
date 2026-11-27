@@ -3050,6 +3050,13 @@ type GroupMembershipRegistry interface {
 	// for `LeaveGroup` and the admin-initiated remove-member API;
 	// callers that bypass the invariants (e.g. group deletion) keep
 	// using the plain `Delete`.
+	//
+	// With the membership go the rows that were personal to the member
+	// in the group (#2892): their saved view placements and personal
+	// views, notification overrides, item reminders, drafts other than
+	// the ones made for delivered documents, Add item sessions and the
+	// invites they created that nobody used; their API tokens limited to
+	// the group are revoked. Postgres does it in the same transaction.
 	DeleteWithMemberInvariants(ctx context.Context, membershipID string) error
 
 	// UpdateRoleWithMemberInvariants atomically swaps the row's role
@@ -3365,6 +3372,16 @@ type RefreshTokenRegistry interface {
 // no caller can rewrite a token's scope, group or owner after creation.
 type APITokenRegistry interface {
 	// Create inserts a token. ID, UUID and CreatedAt are assigned here.
+	//
+	// A token limited to a group is inserted only while its user is a
+	// member of that group. The check and the insert are serialized with
+	// GroupMembershipRegistry.DeleteWithMemberInvariants: postgres takes
+	// the same per-group lock, memory checks under the token store lock
+	// that the removal's revocation takes after the membership is gone.
+	// A removal therefore either finds the new token and revokes it, or
+	// the insert finds the membership gone and returns
+	// ErrNotAGroupMember, so no token limited to the group outlives the
+	// membership.
 	Create(ctx context.Context, token models.APIToken) (*models.APIToken, error)
 
 	// GetByTokenHash returns the token whose digest matches, revoked or not.
