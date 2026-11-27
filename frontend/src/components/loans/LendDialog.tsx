@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldError } from "@/components/FieldError"
 import { lendFormSchema, type LendFormInput } from "@/features/loans/schemas"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 
@@ -123,13 +124,15 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               data-testid="lend-borrower-name"
               placeholder={t("loans:dialog.borrowerNamePlaceholder")}
               autoComplete="off"
+              aria-invalid={!!errors.borrower_name}
+              aria-describedby={errors.borrower_name ? "lend-borrower-name-error" : undefined}
               {...register("borrower_name")}
             />
-            {errors.borrower_name?.message ? (
-              <p className="text-xs text-destructive" data-testid="lend-borrower-name-error">
-                {t(errors.borrower_name.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="lend-borrower-name-error"
+              testId="lend-borrower-name-error"
+              message={errors.borrower_name?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -139,14 +142,16 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               data-testid="lend-borrower-contact"
               placeholder={t("loans:dialog.borrowerContactPlaceholder")}
               autoComplete="off"
+              aria-invalid={!!errors.borrower_contact}
+              aria-describedby={errors.borrower_contact ? "lend-borrower-contact-error" : undefined}
               {...register("borrower_contact")}
             />
             <p className="text-xs text-muted-foreground">{t("loans:dialog.borrowerContactHint")}</p>
-            {errors.borrower_contact?.message ? (
-              <p className="text-xs text-destructive" data-testid="lend-borrower-contact-error">
-                {t(errors.borrower_contact.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="lend-borrower-contact-error"
+              testId="lend-borrower-contact-error"
+              message={errors.borrower_contact?.message}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -156,13 +161,15 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
                 id="lend-lent-at"
                 type="date"
                 data-testid="lend-lent-at"
+                aria-invalid={!!errors.lent_at}
+                aria-describedby={errors.lent_at ? "lend-lent-at-error" : undefined}
                 {...register("lent_at")}
               />
-              {errors.lent_at?.message ? (
-                <p className="text-xs text-destructive" data-testid="lend-lent-at-error">
-                  {t(errors.lent_at.message)}
-                </p>
-              ) : null}
+              <FieldError
+                id="lend-lent-at-error"
+                testId="lend-lent-at-error"
+                message={errors.lent_at?.message}
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="lend-due-back-at">{t("loans:dialog.dueBackAt")}</Label>
@@ -170,13 +177,15 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
                 id="lend-due-back-at"
                 type="date"
                 data-testid="lend-due-back-at"
+                aria-invalid={!!errors.due_back_at}
+                aria-describedby={errors.due_back_at ? "lend-due-back-at-error" : undefined}
                 {...register("due_back_at")}
               />
-              {errors.due_back_at?.message ? (
-                <p className="text-xs text-destructive" data-testid="lend-due-back-at-error">
-                  {t(errors.due_back_at.message)}
-                </p>
-              ) : null}
+              <FieldError
+                id="lend-due-back-at-error"
+                testId="lend-due-back-at-error"
+                message={errors.due_back_at?.message}
+              />
             </div>
           </div>
 
@@ -187,13 +196,15 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
               data-testid="lend-borrower-note"
               placeholder={t("loans:dialog.borrowerNotePlaceholder")}
               autoComplete="off"
+              aria-invalid={!!errors.borrower_note}
+              aria-describedby={errors.borrower_note ? "lend-borrower-note-error" : undefined}
               {...register("borrower_note")}
             />
-            {errors.borrower_note?.message ? (
-              <p className="text-xs text-destructive" data-testid="lend-borrower-note-error">
-                {t(errors.borrower_note.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="lend-borrower-note-error"
+              testId="lend-borrower-note-error"
+              message={errors.borrower_note?.message}
+            />
           </div>
 
           <DialogFooter>

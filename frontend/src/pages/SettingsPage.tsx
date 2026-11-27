@@ -107,6 +107,7 @@ import { NUMBER_FORMAT_LOCALE_OPTIONS } from "@/lib/numberFormatLocale"
 import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 import { shortAppVersion } from "@/lib/app-version"
 import { withId } from "@/lib/with-id"
 
@@ -557,13 +558,16 @@ function DeleteAccountDialog({
               disabled={deleteMutation.isPending}
               aria-invalid={!!form.formState.errors.confirmEmail}
               data-testid="delete-confirm-email"
+              aria-describedby={
+                form.formState.errors.confirmEmail ? "delete-account-email-error" : undefined
+              }
               {...form.register("confirmEmail")}
             />
-            {form.formState.errors.confirmEmail ? (
-              <p className="text-xs text-destructive" data-testid="delete-confirm-email-error">
-                {t(form.formState.errors.confirmEmail.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="delete-account-email-error"
+              testId="delete-confirm-email-error"
+              message={form.formState.errors.confirmEmail?.message}
+            />
           </div>
           {hasPassword ? (
             <div className="space-y-1.5">
@@ -577,13 +581,16 @@ function DeleteAccountDialog({
                 disabled={deleteMutation.isPending}
                 aria-invalid={!!form.formState.errors.password}
                 data-testid="delete-password"
+                aria-describedby={
+                  form.formState.errors.password ? "delete-account-password-error" : undefined
+                }
                 {...form.register("password")}
               />
-              {form.formState.errors.password ? (
-                <p className="text-xs text-destructive" data-testid="delete-password-error">
-                  {t(form.formState.errors.password.message ?? "")}
-                </p>
-              ) : null}
+              <FieldError
+                id="delete-account-password-error"
+                testId="delete-password-error"
+                message={form.formState.errors.password?.message}
+              />
             </div>
           ) : (
             // OAuth-only account: nothing to re-authenticate with. A short
@@ -638,7 +645,6 @@ function DefaultGroupSelectorRow() {
   const [error, setError] = useState<string | null>(null)
 
   const userId = user?.id
-  const userName = user?.name ?? ""
   const currentDefault = user?.default_group_id ?? ""
   // The selector value is the user's default if it still matches a current
   // membership; otherwise it falls back to the first available group so the
@@ -653,10 +659,8 @@ function DefaultGroupSelectorRow() {
     if (!next || next === currentDefault || !userId) return
     setError(null)
     try {
-      await updateMutation.mutateAsync({
-        name: userName,
-        default_group_id: next,
-      })
+      // Only the group: the server keeps the stored name when none is sent.
+      await updateMutation.mutateAsync({ default_group_id: next })
       toast.success(t("settings:profile.defaultGroupSaved"))
     } catch (err) {
       setError(parseServerError(err, t("settings:profile.edit.errorGeneric")))

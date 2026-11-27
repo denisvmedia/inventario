@@ -27,7 +27,8 @@ import (
 //
 // A recipient who has turned off notifications.item_reminder, or who has
 // left the group, gets nothing and no row is written; re-enabling the
-// toggle picks up the reminder at its current lead time.
+// toggle picks up the reminder at its current lead time. The same holds for
+// the reminders of a tenant that is not active (tenantGate).
 type ItemReminderService struct {
 	factorySet *registry.FactorySet
 	emailSvc   EmailService
@@ -89,6 +90,7 @@ type sweepState struct {
 	prefs       *notifications.Cache
 	commodities map[string]*models.Commodity
 	groupSlugs  map[string]string
+	tenants     *tenantGate
 }
 
 // RemindOnce runs one sweep pinned to now.
@@ -106,6 +108,7 @@ func (s *ItemReminderService) RemindOnce(ctx context.Context, now time.Time) (It
 		now:         now,
 		commodities: make(map[string]*models.Commodity),
 		groupSlugs:  make(map[string]string),
+		tenants:     newTenantGate(s.factorySet.TenantRegistry),
 	}
 	if s.prefs != nil {
 		st.prefs = s.prefs.NewCache()
@@ -145,6 +148,13 @@ func (s *ItemReminderService) RemindOnce(ctx context.Context, now time.Time) (It
 // processOne handles one due (reminder, occurrence, lead time). It returns
 // true only when an email was enqueued.
 func (s *ItemReminderService) processOne(ctx context.Context, st *sweepState, r *models.CommodityReminder, occurrence models.Date, lead, daysLeft int) (bool, error) {
+	active, err := st.tenants.active(ctx, r.TenantID)
+	if err != nil {
+		return false, errxtrace.Wrap("item reminder: check tenant", err)
+	}
+	if !active {
+		return false, nil
+	}
 	sends := s.factorySet.CommodityReminderSendRegistry
 	already, err := sends.HasSentAtOrBelow(ctx, r.ID, occurrence, lead)
 	if err != nil {

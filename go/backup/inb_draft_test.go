@@ -19,7 +19,6 @@ import (
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/backup/export"
-	"go.5x5.cz/inventario/backup/restore/processor"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
@@ -618,12 +617,11 @@ func TestINBRestore_FailedDraftKeepsItsFiles(t *testing.T) {
 	}
 }
 
-// TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile: when the TV fails
-// to restore, the receipt's bytes, stored under the TV, match no reference.
-// The draft's later reference to the receipt then finds no bytes, and a real
-// restore fails as a missing member rather than restoring the draft without
-// the receipt.
-func TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile(t *testing.T) {
+// TestINBRestore_FailedItemLeavesSharedFileToTheDraft: when the TV fails to
+// restore, the receipt's bytes, stored under the TV, wait for the draft's
+// later reference, and the draft gets the receipt. A dry run ends the same
+// way.
+func TestINBRestore_FailedItemLeavesSharedFileToTheDraft(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
 	f := newDraftFixture(c)
@@ -654,9 +652,20 @@ func TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile(t *testing.T) {
 	key := "t/tenant-a/restores/drafts-item-failed.inb"
 	writeArchive(c, f.inbFixture, key, broken)
 
+	dry, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace), DryRun: true})
+	c.Assert(err, qt.IsNil)
+	c.Check(dry.Status, qt.Equals, models.RestoreStatusCompleted)
+
 	final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
-	c.Assert(err, qt.ErrorIs, processor.ErrMissingFileMembers)
-	c.Check(final.Status, qt.Equals, models.RestoreStatusFailed)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("error: %s", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("only the TV is an error"))
+
+	draft := f.draftsByKey(c)["draft-in-backup"]
+	c.Assert(draft, qt.IsNotNil)
+	receipt := f.fileByUUID(c, f.receipt)
+	c.Assert(receipt.Links, qt.HasLen, 1)
+	c.Check(draftLink(receipt, draft.ID), qt.IsNotNil)
 }
 
 // TestINBRestore_MergeReportsWhyADraftWasKept: the restore log says what

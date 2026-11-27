@@ -221,6 +221,11 @@ The log walks through each step with a result marker so you can see what was cre
 
 If the server stops while a restore runs, the restore is marked **Failed** about ten minutes later with "the worker stopped before the restore finished". It is not run again on its own, because it may have changed part of your data already: look at what it restored, then start a new restore.
 
+An item the restore cannot bring back, for example one edited by hand in the
+backup file, counts as an error, and the rest of the restore goes on. A file
+that item shared with other items still comes back with them. A file that only
+such items used is left out and counts as an error too.
+
 ## Manage and delete exports
 
 - Every export you create or import appears in the **Backup** list with its status, scope, and size.

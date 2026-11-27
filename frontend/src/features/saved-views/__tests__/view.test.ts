@@ -105,6 +105,7 @@ describe("staleReferences", () => {
     const stale = staleReferences(query, new Set(["a1"]), new Set(["red"]))
     expect(stale).toEqual({
       area: true,
+      location: false,
       tags: ["gone", "old"],
       sellers: [],
       types: [],
@@ -136,6 +137,18 @@ describe("staleReferences", () => {
     expect(hasStaleReferences(known)).toBe(true)
     const unknown = staleReferences(query, new Set(), new Set())
     expect(unknown.types).toEqual([])
+    expect(hasStaleReferences(unknown)).toBe(false)
+  })
+
+  it("names a deleted location once the locations are known, and none before (#2897)", () => {
+    const query = { ...DEFAULT_COMMODITY_QUERY, locationId: "l9" }
+    const args = [new Set<string>(), new Set<string>(), undefined, undefined, undefined] as const
+    const known = staleReferences(query, ...args, new Set(["l1"]))
+    expect(known.location).toBe(true)
+    expect(hasStaleReferences(known)).toBe(true)
+    expect(staleReferences(query, ...args, new Set(["l9"])).location).toBe(false)
+    const unknown = staleReferences(query, ...args)
+    expect(unknown.location).toBe(false)
     expect(hasStaleReferences(unknown)).toBe(false)
   })
 

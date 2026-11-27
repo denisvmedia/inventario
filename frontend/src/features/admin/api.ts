@@ -22,6 +22,7 @@ import {
   type FailedJobListMeta,
 } from "@/features/failed-jobs/api"
 import type {
+  AdminFailedJobsBulkParams,
   AdminFailedJobsParams,
   AdminGroupsParams,
   AdminTenantsParams,
@@ -682,4 +683,48 @@ export async function retryAdminFailedJob(jobType: string, id: string): Promise<
 // only leaves the failed list.
 export async function discardAdminFailedJob(jobType: string, id: string): Promise<void> {
   await http.post(adminFailedJobPath(jobType, id, "discard"))
+}
+
+type AdminFailedJobBulkDiscardResponse = Schema<"apiserver.AdminFailedJobBulkDiscardResponse">
+
+// How many jobs a bulk discard took, or would take on a dry run, in all and
+// per job type (a type with none is left out).
+export interface AdminFailedJobsBulkResult {
+  discarded: number
+  byType: Record<string, number>
+}
+
+async function postBulkDiscard(
+  params: AdminFailedJobsBulkParams,
+  dryRun: boolean,
+  signal?: AbortSignal
+): Promise<AdminFailedJobsBulkResult> {
+  const query = new URLSearchParams({ failed_before: params.failedBefore })
+  if (params.type) query.set("type", params.type)
+  if (params.tenantID) query.set("tenantID", params.tenantID)
+  if (dryRun) query.set("dry_run", "true")
+  const body = await http.post<AdminFailedJobBulkDiscardResponse>(
+    `/admin/failed-jobs/bulk-discard?${query.toString()}`,
+    undefined,
+    { signal }
+  )
+  return { discarded: body.meta?.discarded ?? 0, byType: body.meta?.by_type ?? {} }
+}
+
+// Counts the failed jobs a bulk discard with these filters would take, and
+// discards nothing (#2946). 400 failed_job.invalid_failed_before: the date
+// is in the future.
+export function countAdminFailedJobsBefore(
+  params: AdminFailedJobsBulkParams,
+  signal?: AbortSignal
+): Promise<AdminFailedJobsBulkResult> {
+  return postBulkDiscard(params, true, signal)
+}
+
+// Discards every failed job of the filters that failed before the date.
+// Platform admins only (403 admin.role_required otherwise).
+export function bulkDiscardAdminFailedJobs(
+  params: AdminFailedJobsBulkParams
+): Promise<AdminFailedJobsBulkResult> {
+  return postBulkDiscard(params, false)
 }
