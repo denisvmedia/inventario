@@ -216,6 +216,10 @@ out and keeps them out until it is reactivated; a status change made with
 > server's upload location. Moving a user together with their content is not
 > supported.
 
+> **Deleting a user** also deletes their profile photo from storage, so pass
+> `--upload-location` (or `INVENTARIO_USERS_DELETE_UPLOAD_LOCATION`) with the
+> server's upload location, as for a move.
+
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 
 #### System Administrators

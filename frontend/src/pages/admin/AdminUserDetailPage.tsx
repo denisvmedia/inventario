@@ -277,6 +277,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
           <UserAvatar
             name={user.name}
             email={user.email}
+            src={user.avatar_url}
             className="size-14 rounded-full"
             fallbackClassName="bg-primary text-lg text-primary-foreground"
           />

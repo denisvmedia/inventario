@@ -2762,7 +2762,7 @@ const docTemplate = `{
         },
         "/avatars/{userID}": {
             "get": {
-                "description": "Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.",
+                "description": "Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.\nA URL names either the user it was issued to (uid) or the back-office operator (op), never both.",
                 "produces": [
                     "image/jpeg"
                 ],
@@ -2789,8 +2789,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "The user the URL was issued to",
                         "name": "uid",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "The back-office operator the URL was issued to",
+                        "name": "op",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -15069,6 +15074,10 @@ const docTemplate = `{
         "jsonapi.AdminGroupMemberUser": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the member's profile photo, valid for the\noperator and session that requested the list. Absent when the member\nhas none.",
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -15224,6 +15233,10 @@ const docTemplate = `{
                 "active_session_count": {
                     "type": "integer"
                 },
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the user's profile photo, valid for the\noperator and session that requested it. Absent when the user has none.",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -15289,6 +15302,10 @@ const docTemplate = `{
         "jsonapi.AdminUserListItem": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the user's profile photo, valid for the\noperator and session that requested the list. Absent when the user has\nnone.",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
