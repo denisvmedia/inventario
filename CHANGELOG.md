@@ -72,8 +72,11 @@ when to add an entry and where it goes.
   is not a group backup, and the restore upload refuses one with 422
   `restore.personal_data_export`. The export worker builds it in the
   background and emails the user when it is ready; a build cut short by a
-  restart is queued again and built once more. One request is allowed per
-  day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
+  restart is queued again, three builds in all, and a build whose worker
+  stops during the third fails the export with "the worker stopped before
+  the personal data export finished"
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)). One
+  request is allowed per day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
   archive is deleted after 7 days or with the account, only its owner can
   list and download it, an impersonation session can neither request nor
   download one, and each request and download is recorded in the audit log.
@@ -731,11 +734,6 @@ when to add an entry and where it goes.
   reads: the query of a saved view and the external system, instance and
   document identifiers of the intake API
   ([#2919](https://github.com/denisvmedia/inventario/issues/2919)).
-- A personal data export whose build stops its worker every time is no
-  longer started again every hour for good. Each build counts, and a build
-  whose worker stops during the third one fails the export with "the
-  worker stopped before the personal data export finished"
-  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)).
 
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
@@ -867,15 +865,6 @@ when to add an entry and where it goes.
   exiting with status 2, so the panic is what log alerting and the pod's last
   state showed
   ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
-- The upgrade runs one more database migration, which adds `attempt_count`
-  and `discarded_at` to `personal_data_exports`. During a rolling upgrade,
-  pods that still run v0.2.x fail reads of personal data exports until they
-  are replaced, as described in the entry on unknown columns
-  ([#2873](https://github.com/denisvmedia/inventario/issues/2873)).
-  Personal data exports that failed before the upgrade are listed among the
-  failed jobs and count toward `inventario_jobs_dead_letter_depth` from the
-  first collection; see the admin runbook §10
-  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
   each retry and discard to the audit log. Two metrics come with it:
