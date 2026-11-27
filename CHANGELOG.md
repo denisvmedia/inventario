@@ -648,6 +648,17 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Saving the group settings no longer undoes a change someone else made to
+  the group at the same moment. A rename that met a deletion brought the
+  group back; it is now refused, and the group is deleted. A rename that met
+  a currency migration as it finished put the group back on its old currency
+  with its prices already converted, and a rename also wrote back the hidden
+  sections it had read. Each of these writes now changes only its own
+  columns, and a write to a group whose deletion has started is refused. A
+  migration that finished before its start request recorded it on the group
+  no longer leaves the group shown as migrating
+  ([#2918](https://github.com/denisvmedia/inventario/issues/2918)).
+
 - Saving an item from the **All fields** dialog keeps its status date, status
   note and sale price. The dialog sent the item without them, and the save
   cleared them. The dialog also offered a status change it could not finish:

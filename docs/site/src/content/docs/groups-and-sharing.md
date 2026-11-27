@@ -221,6 +221,8 @@ Deleting a group is permanent and removes **all** of its locations, items, files
 
 The group name guards against an accidental click; your password protects against someone using a hijacked session.
 
+Deletion starts as soon as you confirm. If another member saves the group settings at the same moment, their change is refused and the deletion goes ahead.
+
 :::caution[No undo]
 There's no way to recover a deleted group. If you might want the data later, create a [backup](../backup-and-restore/) first.
 :::
