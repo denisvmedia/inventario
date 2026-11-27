@@ -112,11 +112,20 @@ describe("service display helpers", () => {
         hasCost({ cost_amount: undefined, cost_currency: "EUR" as unknown as undefined })
       ).toBe(false)
     })
-    it("returns false for a recorded zero cost", () => {
+    it("returns true for a recorded cost of 0", () => {
+      // A free repair, under warranty for example.
       expect(
         hasCost({
           cost_amount: "0" as unknown as undefined,
           cost_currency: "EUR" as unknown as undefined,
+        })
+      ).toBe(true)
+    })
+    it("returns false for an amount of 0 without a currency", () => {
+      expect(
+        hasCost({
+          cost_amount: "0" as unknown as undefined,
+          cost_currency: "" as unknown as undefined,
         })
       ).toBe(false)
     })
@@ -466,13 +475,16 @@ describe("serviceFormSchema", () => {
     expect(result.success).toBe(false)
   })
 
-  it("rejects cost_currency without cost_amount", () => {
+  it("drops cost_currency without cost_amount", () => {
+    // The dialog's currency picker starts on the group currency, so a
+    // currency with no amount means "no cost"; the pair goes out empty.
     const result = serviceFormSchema.safeParse({
       provider_name: "Apple Service",
       sent_at: "2026-05-05",
       cost_currency: "EUR",
     })
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
+    expect(result.data?.cost_currency).toBe("")
   })
 
   it("accepts both cost fields when set together", () => {
@@ -498,12 +510,23 @@ describe("serviceFormSchema", () => {
     expect(result.success).toBe(true)
   })
 
+  it("accepts a lowercase currency and upper-cases it", () => {
+    const result = serviceFormSchema.safeParse({
+      provider_name: "Apple Service",
+      sent_at: "2026-05-05",
+      cost_amount: "245.00",
+      cost_currency: "eur",
+    })
+    expect(result.success).toBe(true)
+    expect(result.data?.cost_currency).toBe("EUR")
+  })
+
   it("rejects bogus currency formats", () => {
     const result = serviceFormSchema.safeParse({
       provider_name: "Apple Service",
       sent_at: "2026-05-05",
       cost_amount: "245.00",
-      cost_currency: "eur", // lowercase fails the [A-Z]{3} rule
+      cost_currency: "EURO",
     })
     expect(result.success).toBe(false)
   })

@@ -30,6 +30,11 @@ type StorageUsage struct {
 // settings storage card. Today it just reads the SUM(size_bytes)
 // breakdown from the file registry (RLS scopes to the current group);
 // when plans land, the quota lookup will move here too.
+//
+// The sum covers the uploaded files only. The thumbnails rendered for each
+// JPEG and PNG (thumbnailSizes) are blobs without a file row, so they are
+// not counted, here or in the storage quota reminders; the storage card
+// says so (#2896).
 type StorageUsageService struct {
 	files registry.FileRegistry
 }

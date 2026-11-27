@@ -55,6 +55,7 @@ func TestCustomFieldContract_Memory(t *testing.T) {
 			FieldsB:      fs.CustomFieldRegistryFactory.MustCreateUserRegistry(ctxB),
 			TypesA:       fs.ItemTypeRegistryFactory.MustCreateUserRegistry(ctxA),
 			CommoditiesA: fs.CommodityRegistryFactory.MustCreateUserRegistry(ctxA),
+			DraftsA:      fs.CommodityDraftRegistryFactory.MustCreateUserRegistry(ctxA),
 			CommoditiesB: fs.CommodityRegistryFactory.MustCreateUserRegistry(ctxB),
 			AreaA:        areaFor(ctxA),
 			AreaB:        areaFor(ctxB),

@@ -246,4 +246,61 @@ test.describe('Commodities — bulk edit', () => {
       await cleanupItems(request, auth, group.slug, ids, suffix)
     }
   })
+
+  // A default dialog taller than the window stays inside it and scrolls as a
+  // whole, so its buttons can be reached (#2988). Both palettes list every
+  // tag of the group, so 30 tags make the tags dialog taller than the window
+  // at a desktop and at a phone size.
+  test('keeps the tags dialog inside a window it is taller than', async ({ page, request }) => {
+    const auth = await extractApiAuth(page)
+    const group = await resolveActiveGroup(request, auth)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    const suffix = newSuffix()
+    const tags = Array.from({ length: 30 }, (_, i) => `tall-${i}-${suffix}`)
+    const ids: string[] = []
+
+    try {
+      const item = await createCommodityViaAPI(
+        request,
+        auth,
+        group.slug,
+        { name: `Bulk Edit Tall ${suffix}`, areaId, tags },
+        group.groupCurrency,
+      )
+      ids.push(item.id)
+
+      for (const size of [
+        { width: 1280, height: 720 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(size)
+        await gotoScoped(page, group, suffix)
+        const cb = page.locator(`[data-commodity-id="${item.id}"] [data-testid="commodity-select"]`)
+        await expect(cb).toBeVisible({ timeout: 15000 })
+        await cb.click()
+        const bar = page.getByTestId('commodities-bulk-bar')
+        await openEditItem(page, bar, 'commodities-bulk-edit-tags')
+        const dialog = page.getByTestId('bulk-tags-dialog')
+        await expect(dialog).toHaveAttribute('data-state', 'open')
+        await expect(dialog.getByTestId(`bulk-tags-remove-option-${tags[29]}`)).toBeAttached()
+
+        // The card fits the window and its content scrolls.
+        await expect
+          .poll(async () => {
+            const b = await dialog.boundingBox()
+            return b !== null && b.y >= 0 && b.y + b.height <= size.height
+          })
+          .toBe(true)
+        expect(await dialog.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+
+        const confirm = dialog.getByTestId('bulk-tags-confirm')
+        await confirm.scrollIntoViewIfNeeded()
+        await expect(confirm).toBeInViewport()
+        await page.keyboard.press('Escape')
+        await expect(dialog).toBeHidden()
+      }
+    } finally {
+      await cleanupItems(request, auth, group.slug, ids, suffix)
+    }
+  })
 })

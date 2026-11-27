@@ -62,6 +62,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { categoryFromMime, FILE_TAG_PILLS } from "@/features/files/constants"
 import { useTagPillLabel } from "@/features/files/labels"
 import {
+  attachPendingFiles,
   buildDefaults,
   capFileTitle,
   clearDraft,
@@ -540,9 +541,31 @@ export function CommodityFormDialog({
   // staged file are saved as the draft first, and the draft is promoted only
   // once it holds them all, so the item never misses a file the user picked.
   const saveThroughDraft = serverMode && !!localKey
+  // `useOptionalCurrentGroup` returns undefined when the dialog is mounted
+  // outside a GroupProvider (the unit-test harness does this for the non-AI
+  // flow). The AI step gates its scan button behind a non-empty slug.
+  const groupContext = useOptionalCurrentGroup()
+  const activeSlug = groupContext?.currentGroup?.slug ?? null
+  // The group the form opened in (#2920). The form reads its draft there and
+  // sends the requests of a save, a discard or a file change there, so one
+  // still running when the member moves to another group, with browser Back
+  // for example, ends in the group it started in. An opening takes the group
+  // current when it starts, or the first one known after. It is set while
+  // rendering, so the first render of an opening has it, and kept after the
+  // dialog closes for the requests still running then.
+  const [openedIn, setOpenedIn] = useState(() => ({ open, group: open ? activeSlug : null }))
+  let opened = openedIn
+  if (open !== opened.open) opened = { open, group: open ? activeSlug : opened.group }
+  else if (open && opened.group === null && activeSlug !== null) {
+    opened = { open, group: activeSlug }
+  }
+  if (opened !== openedIn) setOpenedIn(opened)
+  const formSlug = opened.group ?? activeSlug
+  // formGroup is the group the form's requests go to.
+  const formGroup = () => formSlug ?? undefined
   // Server draft session (#2812): the draft this form saves to, with the
   // revision its values are based on.
-  const resumedQuery = useDraft(resumeId)
+  const resumedQuery = useDraft(resumeId, formSlug ?? undefined)
   const resumed = resumedQuery.data
   const resumeLoading = !!resumeId && resumedQuery.isPending
   const [serverDraft, setServerDraft] = useState<DraftRef | null>(null)
@@ -556,7 +579,7 @@ export function CommodityFormDialog({
   // True when the form opened with input kept on this device that the
   // server does not have.
   const [restoredUnsaved, setRestoredUnsaved] = useState(false)
-  const draftFilesQuery = useDraftFiles(serverMode ? serverDraft?.id : null)
+  const draftFilesQuery = useDraftFiles(serverMode ? serverDraft?.id : null, formSlug ?? undefined)
   const invalidateDrafts = useInvalidateDrafts()
   // The resumed draft seeds the form once per opening; a refetch must not
   // wipe what the user typed since.
@@ -839,6 +862,38 @@ export function CommodityFormDialog({
     void savePendingFiles(localKey, pendingFiles)
   }, [open, persistDrafts, localKey, pendingFiles, pendingFilesLoaded])
 
+  // A file an edit save uploaded but could not attach goes to Trash when the
+  // dialog closes without it, however it closes (#2916). The file being sent
+  // when the dialog closes is left to the save, which stops after its upload
+  // and sends it to Trash, or trashes it when its attach fails. Trash takes
+  // only a file nothing links, so one whose attach went through stays. The
+  // files are in the group the form opened in (#2920), which the form keeps
+  // after it closes; the cleanup reads it through a ref because it runs
+  // without the render's values.
+  const formSlugRef = useRef(formSlug)
+  useEffect(() => {
+    formSlugRef.current = formSlug
+  }, [formSlug])
+  const editLeftoversRef = useRef<string[]>([])
+  useEffect(() => {
+    editLeftoversRef.current =
+      mode === "edit"
+        ? uploadedLeftovers(pendingFiles.filter((entry) => fileStatus[entry.id] !== "uploading"))
+        : []
+  }, [mode, pendingFiles, fileStatus])
+  useEffect(() => {
+    if (!open || mode !== "edit") return
+    return () => {
+      const ids = editLeftoversRef.current
+      if (ids.length === 0) return
+      const group = formSlugRef.current ?? undefined
+      void Promise.allSettled(ids.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
+        void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+        void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+      })
+    }
+  }, [open, mode, queryClient])
+
   async function nextStep() {
     // A server draft takes the form as it is, so draft mode walks the
     // steps without checking them.
@@ -973,7 +1028,7 @@ export function CommodityFormDialog({
     const results = await Promise.allSettled(fileIds.map((id) => trashUnlinkedFile(id, { group })))
     outcome.failedFiles = results.filter((r) => r.status === "rejected").length
     const slug = group ?? ""
-    void invalidateDrafts()
+    void invalidateDrafts(group)
     void queryClient.invalidateQueries({ queryKey: trashKeys.group(slug) })
     void queryClient.invalidateQueries({ queryKey: fileKeys.group(slug) })
     void queryClient.invalidateQueries({ queryKey: storageKeys.group(slug) })
@@ -994,7 +1049,7 @@ export function CommodityFormDialog({
     if (entryIds.length === 0) return
     try {
       await queryClient.fetchQuery({
-        queryKey: draftKeys.files(activeSlug ?? "", draftId),
+        queryKey: draftKeys.files(formSlug ?? "", draftId),
         queryFn: ({ signal }) => listDraftFiles(draftId, { signal, group: formGroup() }),
       })
     } catch {
@@ -1005,6 +1060,66 @@ export function CommodityFormDialog({
     setFileStatus((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([id]) => !done.has(id)))
     )
+  }
+
+  // attachEditFiles uploads the staged files of the item the form edits, one
+  // at a time, and attaches each to it (#2916). It resolves true once every
+  // file is on the item. The files that made it leave the list, as they are
+  // the item's now; the ones that failed stay with their status, the alert
+  // names them and Retry goes on with them. A file whose attach failed keeps
+  // its upload, so the retry attaches it without sending it again.
+  async function attachEditFiles(itemId: string, opening: number): Promise<boolean> {
+    const over = () => openingRef.current !== opening
+    const mark = (id: string, status: FileUploadStatus) => {
+      if (!over()) setFileStatus((prev) => ({ ...prev, [id]: status }))
+    }
+    setDraftSave({ kind: "idle" })
+    setFileStatus({})
+    const attached = new Set<string>()
+    const group = formGroup()
+    const result = await attachPendingFiles(pendingFiles, itemId, {
+      group,
+      shouldStop: over,
+      onFileStart: (entry) => mark(entry.id, "uploading"),
+      onFileUploaded: (entry, fileId) =>
+        setPendingFiles((prev) =>
+          prev.map((pending) =>
+            pending.id === entry.id ? { ...pending, uploadedFileId: fileId } : pending
+          )
+        ),
+      onFileAttached: (entry) => {
+        attached.add(entry.id)
+        mark(entry.id, "uploaded")
+      },
+    })
+    if (attached.size > 0) void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+    if (over()) {
+      // Nobody is left to retry: the uploads of the files that failed go to
+      // Trash, as the dialog's close does with the ones it knows of.
+      const left = result.failed.flatMap((failure) => failure.fileId ?? [])
+      if (left.length > 0) {
+        void Promise.allSettled(left.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
+          void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+          void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+        })
+      }
+      return false
+    }
+    setPendingFiles((prev) => prev.filter((pending) => !attached.has(pending.id)))
+    setFileStatus((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => !attached.has(id)))
+    )
+    if (result.failed.length === 0) return true
+    for (const failure of result.failed) mark(failure.entry.id, "failed")
+    setDraftSave({
+      kind: "error",
+      message: classifyServerError(result.failed[0].error, t("commodities:form.editFailed"))
+        .message,
+      failedFiles: result.failed.map((failure) => failure.entry.file.name),
+      forEdit: true,
+    })
+    setStep("files")
+    return false
   }
 
   // saveToServer stores the form and its staged files as a server draft
@@ -1083,7 +1198,7 @@ export function CommodityFormDialog({
           mark(entry.id, "uploaded")
         },
       })
-      void invalidateDrafts()
+      void invalidateDrafts(formGroup())
       if (result.stopped || over()) {
         // The dialog closed while Add item ran, after its last file too: no
         // item is made. The draft keeps the files that reached it, the local
@@ -1212,7 +1327,7 @@ export function CommodityFormDialog({
       clearDraftSession(localKey)
     }
     onOpenChange(false)
-    const slug = activeSlug ?? ""
+    const slug = formSlug ?? ""
     navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityId)}`)
   }
 
@@ -1260,7 +1375,7 @@ export function CommodityFormDialog({
         if (ordinaryLinks(rest).length === 0) await deleteFile(row.file.id, { group })
       }
       void draftFilesQuery.refetch()
-      void invalidateDrafts()
+      void invalidateDrafts(group)
     } catch (err) {
       toast.error(classifyServerError(err, t("commodities:drafts.removeFileFailed")).message)
     }
@@ -1269,15 +1384,18 @@ export function CommodityFormDialog({
   // updateSavedFile saves a saved file's title and tags (#1626). The saves
   // of one file run one after the other, in the order the user made the
   // changes: two quick edits would otherwise race, and the first PUT landing
-  // last would undo the second.
+  // last would undo the second. Each save goes to the group and the draft
+  // the form had when the change was made, even when it waits until after
+  // the form opened again elsewhere (#2920).
   const savedFileSaves = useRef(new Map<string, Promise<boolean>>())
   function updateSavedFile(
     row: ListedFile,
     change: { title: string; tags: string[] }
   ): Promise<boolean> {
     const id = row.file.id
+    const target = { group: formGroup(), draftId: serverDraft?.id ?? "" }
     const before = savedFileSaves.current.get(id) ?? Promise.resolve(true)
-    const run = before.then(() => putSavedFile(row, change))
+    const run = before.then(() => putSavedFile(row, change, target))
     savedFileSaves.current.set(id, run)
     void run.then(() => {
       if (savedFileSaves.current.get(id) === run) savedFileSaves.current.delete(id)
@@ -1291,9 +1409,10 @@ export function CommodityFormDialog({
   // without reading the list again.
   async function putSavedFile(
     row: ListedFile,
-    change: { title: string; tags: string[] }
+    change: { title: string; tags: string[] },
+    { group, draftId }: { group: string | undefined; draftId: string }
   ): Promise<boolean> {
-    const key = draftKeys.files(activeSlug ?? "", serverDraft?.id ?? "")
+    const key = draftKeys.files(group ?? "", draftId)
     const current =
       queryClient.getQueryData<ListedFile[]>(key)?.find((r) => r.file.id === row.file.id)?.file ??
       row.file
@@ -1302,7 +1421,7 @@ export function CommodityFormDialog({
       saved = await updateFile(
         row.file.id,
         { title: change.title, description: current.description ?? "", tags: change.tags },
-        { group: formGroup() }
+        { group }
       )
     } catch (err) {
       toast.error(classifyServerError(err, t("commodities:drafts.updateFileFailed")).message)
@@ -1311,7 +1430,7 @@ export function CommodityFormDialog({
     queryClient.setQueryData<ListedFile[]>(key, (rows) =>
       rows?.map((r) => (r.file.id === saved.id ? { ...r, file: { ...r.file, ...saved } } : r))
     )
-    void queryClient.invalidateQueries({ queryKey: fileKeys.group(activeSlug ?? "") })
+    void queryClient.invalidateQueries({ queryKey: fileKeys.group(group ?? "") })
     return true
   }
 
@@ -1332,6 +1451,13 @@ export function CommodityFormDialog({
         saved = await saveToServer({ forItem: true })
         // The promotion is not sent once the opening is over.
         if (!saved || openingRef.current !== opening) return
+      }
+      // An existing item gets its new files before its changes (#2916): the
+      // dialog stays open while they upload, and a file that fails stops the
+      // save here, with the alert naming it and Retry going on from there.
+      if (mode === "edit" && initialValues?.id && pendingFiles.length > 0) {
+        const attached = await attachEditFiles(initialValues.id, opening)
+        if (!attached || openingRef.current !== opening) return
       }
       const target = saved ?? serverDraft
       // A promotion carries the slot's promotion key, the same for every
@@ -1370,18 +1496,17 @@ export function CommodityFormDialog({
         // The promotion moved the draft's files to the item.
         setPendingFiles([])
         setFileStatus({})
-      } else {
-        // Without a server draft (edit mode, or a draft that was an item
-        // before this save), the staged files are uploaded and linked once
-        // the caller has saved the item: POST /uploads/file, PUT /files/:id,
-        // POST /files/:id/links. Fire-and-forget so the caller's close +
-        // navigate path doesn't wait on the upload loop; files-list
-        // invalidation surfaces the uploads on whatever page the user lands
-        // on. Per-file failures are toasted; the item is already saved, and
-        // the file can be attached from the item's Files tab. In create mode
-        // the caller returns the new item; in edit mode the existing record
-        // is the link target.
-        const linkTargetId = created?.id ?? initialValues?.id
+      } else if (mode === "create") {
+        // Without a server draft (a form that keeps no drafts, or a draft
+        // that was an item before this save), the staged files are uploaded
+        // and linked once the caller has created the item: POST
+        // /uploads/file, PUT /files/:id, POST /files/:id/links.
+        // Fire-and-forget so the caller's close + navigate path doesn't wait
+        // on the upload loop; files-list invalidation surfaces the uploads on
+        // whatever page the user lands on. Per-file failures are toasted; the
+        // item is already saved, and the file can be attached from the
+        // item's Files tab.
+        const linkTargetId = created?.id
         const filesToUpload = pendingFiles
         if (linkTargetId) {
           if (filesToUpload.length > 0) {
@@ -1483,32 +1608,6 @@ export function CommodityFormDialog({
     if (target && target !== step) setStep(target)
   }
   const submitForm = () => void handleSubmit(submit, onInvalid)()
-
-  // Slug + currency list for the AI scan step. `useOptionalCurrentGroup`
-  // returns undefined when the dialog is mounted outside a GroupProvider
-  // (the unit-test harness does this for the non-AI flow). The AI step
-  // gates its scan button behind a non-empty slug, so the empty-string
-  // fallback is safe — the wire request would just 404, which the
-  // typed error banner surfaces. The currencies query reuses the same
-  // `/currencies` endpoint the CurrencyCombobox queries, so the
-  // unknown-currency rejection in AiScanStep matches what the user
-  // sees in the manual currency picker.
-  const groupContext = useOptionalCurrentGroup()
-  const activeSlug = groupContext?.currentGroup?.slug ?? null
-  // The group the form opened in (#2920). The requests of a save, a discard
-  // or a file change go there, so one still running when the member moves
-  // to another group, with browser Back for example, ends in the group it
-  // started in.
-  const openedInRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!open) {
-      openedInRef.current = null
-      return
-    }
-    openedInRef.current ??= activeSlug
-  }, [open, activeSlug])
-  // formGroup is the group the form's requests go to.
-  const formGroup = () => openedInRef.current ?? activeSlug ?? undefined
 
   // enteredScanValues lists what the form holds that the user entered, for
   // the review of an AI scan (#1626): such a field shows both values and
@@ -1688,8 +1787,8 @@ export function CommodityFormDialog({
   // are until it ends.
   const busy = draftSaving || submitting || discarding
   // How far the save that runs is with the staged files (#1626), for the
-  // busy button and screen readers.
-  const uploadTotal = draftSaving ? pendingFiles.length : 0
+  // busy button and screen readers. An edit save uploads them first (#2916).
+  const uploadTotal = draftSaving || (adding && mode === "edit") ? pendingFiles.length : 0
   const uploadDone = pendingFiles.filter((entry) => fileStatus[entry.id] === "uploaded").length
   const uploadProgress =
     uploadTotal > 0 && uploadDone < uploadTotal
@@ -2052,9 +2151,10 @@ export function CommodityFormDialog({
           <DraftSaveAlert
             state={draftSave}
             // A failed Add item retries Add item: the save picks up where it
-            // stopped, and the promotion follows.
+            // stopped, and the promotion follows. A failed edit save goes on
+            // with the files still missing, then saves the changes.
             onRetry={() =>
-              draftSave.kind === "error" && draftSave.forItem
+              draftSave.kind === "error" && (draftSave.forItem || draftSave.forEdit)
                 ? submitForm()
                 : void saveDraftAndClose()
             }

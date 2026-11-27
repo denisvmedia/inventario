@@ -9,6 +9,7 @@ import (
 
 	"go.5x5.cz/inventario/internal/aivision"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // intakeDocumentTypeTags maps the document type a scan suggests for a file
@@ -89,22 +90,37 @@ func intakeSuggestedTitle(guess aivision.FileGuess) (string, bool) {
 	return title, title != ""
 }
 
-// applyIntakeFileSuggestions writes the scan's suggestion for each file of a
-// source to the file. fileIDs are the files in the order the scan got them,
-// so a suggestion's index names its file. ctx acts as the session's author.
+// intakeFileUpdates holds the scan's suggestion for each file of a source,
+// as the file updates StoreScan writes with the scan (#2940), and records
+// which files they changed.
+type intakeFileUpdates struct {
+	updates []registry.IntakeFileUpdate
+	changed []intakeFileChange
+}
+
+// intakeFileChange is a file a suggestion changed.
+type intakeFileChange struct {
+	fileID       string
+	tags         []string
+	titleChanged bool
+}
+
+// fileUpdates returns the scan's suggestion for each file of a source.
+// fileIDs are the files in the order the scan got them, so a suggestion's
+// index names its file. ctx acts as the session's author.
 //
-// The tags the suggestions may add are created in the group first. Each file
-// is then read again just before the write, since the member may have
-// changed it during the scan. A failure costs that file its suggestion and
-// is logged; the scan stands. The read and the write are not one
-// transaction: a change the member saves in between is overwritten, as with
-// any other two edits of one file that cross.
-func (w *IntakeWorker) applyIntakeFileSuggestions(ctx context.Context, fileIDs []string, guesses []aivision.FileGuess, log *slog.Logger) {
+// The tags the suggestions may add are created in the group first, with the
+// labels a member's new tag gets. When that fails, the scan is stored without
+// the suggestions and the files stay as they are. The suggestion itself is
+// worked out on the file as StoreScan reads it under its lock, so a change
+// the member saved during the scan is seen and kept.
+func (w *IntakeWorker) fileUpdates(ctx context.Context, fileIDs []string, guesses []aivision.FileGuess, log *slog.Logger) *intakeFileUpdates {
+	out := &intakeFileUpdates{}
 	guesses = slices.DeleteFunc(slices.Clone(guesses), func(g aivision.FileGuess) bool {
 		return g.Index < 0 || g.Index >= len(fileIDs)
 	})
 	if len(guesses) == 0 {
-		return
+		return out
 	}
 	var tags []string
 	for _, guess := range guesses {
@@ -116,29 +132,34 @@ func (w *IntakeWorker) applyIntakeFileSuggestions(ctx context.Context, fileIDs [
 		// A tag a file refers to has to exist in the group.
 		if _, err := NewTagService(w.factorySet).NormalizeAndEnsureSlugs(ctx, models.TagKindFile, tags); err != nil {
 			log.WarnContext(ctx, "Intake worker: cannot create the suggested file tags", "error", err)
-			return
+			return out
 		}
 	}
-	files, err := w.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		log.WarnContext(ctx, "Intake worker: cannot apply the file suggestions", "error", err)
-		return
-	}
+	now := w.clock()
 	for _, guess := range guesses {
-		fileLog := log.With("file_id", fileIDs[guess.Index])
-		current, err := files.Get(ctx, fileIDs[guess.Index])
-		if err != nil {
-			fileLog.WarnContext(ctx, "Intake worker: cannot read a file to apply its suggestion", "error", err)
-			continue
+		update := registry.IntakeFileUpdate{
+			FileID: fileIDs[guess.Index],
+			Apply: func(file models.FileEntity) (models.FileEntity, bool) {
+				next, changed := intakeFileSuggestion(file, guess, now)
+				if changed {
+					out.changed = append(out.changed, intakeFileChange{
+						fileID: file.ID, tags: []string(next.Tags), titleChanged: next.Title != file.Title,
+					})
+				}
+				return next, changed
+			},
 		}
-		updated, changed := intakeFileSuggestion(*current, guess, w.clock())
-		if !changed {
-			continue
+		if tag, ok := intakeSuggestedTag(guess); ok {
+			update.Tags = []string{tag}
 		}
-		if _, err := files.Update(ctx, updated); err != nil {
-			fileLog.WarnContext(ctx, "Intake worker: cannot apply a file suggestion", "error", err)
-			continue
-		}
-		fileLog.InfoContext(ctx, "Intake worker: applied a file suggestion", "tags", []string(updated.Tags), "title_changed", updated.Title != current.Title)
+		out.updates = append(out.updates, update)
+	}
+	return out
+}
+
+// logStored logs each file the stored scan changed.
+func (u *intakeFileUpdates) logStored(ctx context.Context, log *slog.Logger) {
+	for _, ch := range u.changed {
+		log.InfoContext(ctx, "Intake worker: applied a file suggestion", "file_id", ch.fileID, "tags", ch.tags, "title_changed", ch.titleChanged)
 	}
 }

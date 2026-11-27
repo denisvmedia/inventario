@@ -187,7 +187,8 @@ out and keeps them out until it is reactivated; a status change made with
 ./inventario users update admin@acme.com --password          # prompts securely
 ./inventario users update new@acme.com --tenant=acme --upload-location=s3://bucket   # move to another tenant
 
-# Delete user with confirmation
+# Delete user with confirmation (refused, changing nothing, while they own
+# items, files, places, exports or a group they created)
 ./inventario users delete admin@acme.com
 
 # Preview operations without making changes
@@ -215,6 +216,10 @@ out and keeps them out until it is reactivated; a status change made with
 > `--upload-location` (or `INVENTARIO_USERS_UPDATE_UPLOAD_LOCATION`) with the
 > server's upload location. Moving a user together with their content is not
 > supported.
+
+> **Deleting a user** also deletes their profile photo from storage, so pass
+> `--upload-location` (or `INVENTARIO_USERS_DELETE_UPLOAD_LOCATION`) with the
+> server's upload location, as for a move.
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 

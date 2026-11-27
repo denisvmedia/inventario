@@ -10,6 +10,7 @@ import { TagsStatsBar } from "@/components/tags/TagsStatsBar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -406,11 +407,9 @@ export function TagsListPage() {
           >
             {t("tags:sort.label")}
           </Label>
-          {/* eslint-disable-next-line no-restricted-syntax -- list sort utility selector; native <select> retained, covered by native-select unit (TagsListPage.test) */}
-          <select
+          <NativeSelect
             id="tags-sort-select"
             data-testid="tags-sort"
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             value={`${urlSort}.${urlOrder}`}
             onChange={(e) => patchSort(e.target.value)}
           >
@@ -418,7 +417,7 @@ export function TagsListPage() {
             <option value="label.desc">{t("tags:sort.labelDesc")}</option>
             <option value="usage.desc">{t("tags:sort.mostUsed")}</option>
             <option value="created_at.desc">{t("tags:sort.newest")}</option>
-          </select>
+          </NativeSelect>
         </div>
       </div>
 

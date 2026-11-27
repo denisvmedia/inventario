@@ -3,9 +3,11 @@ import { z } from "zod"
 // serviceFormSchema backs the SendForServiceDialog (RHF + zod) on
 // commodity detail. provider_name + sent_at are required; everything
 // else is optional. Empty string is the canonical "no value" sentinel
-// for optional fields. Cost is paired: amount and currency must both
-// be set or both be empty — enforced via .superRefine so the error
-// lands on cost_currency for surface-level rendering.
+// for optional fields. Cost is paired: the parsed values carry amount
+// and currency together or neither. An amount without a currency is an
+// error on cost_currency. The currency picker starts on the group
+// currency, so a currency without an amount means "no cost" and is
+// dropped. The currency is upper-cased before it is checked.
 //
 // Validation messages are i18n keys so the form can render localised
 // errors via `t(form.formState.errors.X.message)`.
@@ -46,16 +48,14 @@ export const serviceFormSchema = z
       .string()
       .optional()
       .default("")
+      .transform((v) => v.trim().toUpperCase())
       .refine((v) => v === "" || /^[A-Z]{3}$/.test(v), "services:validation.costCurrencyInvalid"),
   })
   .superRefine((values, ctx) => {
-    // Pair gate: amount and currency must both be present or both absent.
-    // We test only "is the field non-empty?" — a literal "0" amount is a
-    // legitimate cost (warranty repair, comp fix), and rejecting it would
-    // force users to fudge the bill or leave currency blank to record it.
-    const amountSet = values.cost_amount !== ""
-    const currencySet = values.cost_currency !== ""
-    if (amountSet !== currencySet) {
+    // An amount needs a currency. We test only "is the field non-empty?" —
+    // a literal "0" amount is a legitimate cost (warranty repair, comp
+    // fix), and rejecting it would force users to fudge the bill.
+    if (values.cost_amount !== "" && values.cost_currency === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["cost_currency"],
@@ -63,6 +63,7 @@ export const serviceFormSchema = z
       })
     }
   })
+  .transform((values) => (values.cost_amount === "" ? { ...values, cost_currency: "" } : values))
 
 export type ServiceFormInput = z.input<typeof serviceFormSchema>
 export type ServiceFormOutput = z.output<typeof serviceFormSchema>

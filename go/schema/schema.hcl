@@ -804,9 +804,6 @@ table "commodity_custom_field_values" {
   index "idx_commodity_custom_field_values_field_select" {
     columns = [column.field_id, column.value_select]
   }
-  index "idx_commodity_custom_field_values_field_text" {
-    columns = [column.field_id, column.value_text]
-  }
   index "idx_commodity_custom_field_values_item" {
     columns = [column.value_item_id]
   }
@@ -1966,6 +1963,10 @@ table "exports" {
     type = INTEGER
     default = "0"
   }
+  column "heartbeat_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "discarded_at" {
     type = TIMESTAMP
     null = true
@@ -2189,6 +2190,10 @@ table "files" {
   column "sha256" {
     type = TEXT
     default = ""
+  }
+  column "thumbnails_oriented" {
+    type = BOOLEAN
+    default = "false"
   }
   primary_key {
     columns = [column.id]
@@ -3738,6 +3743,14 @@ table "personal_data_exports" {
     type = TIMESTAMP
     null = true
   }
+  column "attempt_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "expires_at" {
     type = TIMESTAMP
   }
@@ -3930,6 +3943,10 @@ table "restore_operations" {
     default = "0"
   }
   column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "heartbeat_at" {
     type = TIMESTAMP
     null = true
   }

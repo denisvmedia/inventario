@@ -1,7 +1,7 @@
 // Pure functions that talk to the backend. Hooks (`./hooks.ts`) wrap these
 // in TanStack Query — keeping fetch logic separate from React makes them
 // trivial to test with MSW and reuse outside React (e.g. boot probes).
-import { http } from "@/lib/http"
+import { http, withSignOut } from "@/lib/http"
 import { clearAuth, setAccessToken, setCsrfToken } from "@/lib/auth-storage"
 import { clearItemFormRecovery } from "@/features/commodities/draft"
 import type { Schema } from "@/types"
@@ -225,16 +225,20 @@ export async function regenerateMFABackupCodes(code: string): Promise<string[]> 
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await http.post<void>("/auth/logout")
-  } finally {
-    // Whether or not the server acknowledged, the user has clicked Logout —
-    // wiping local credentials guarantees the UI can't keep using them.
-    clearAuth()
-    // What the item form kept for this user goes too, so the next person
-    // on this browser does not find it (#2920).
-    await clearItemFormRecovery()
-  }
+  // withSignOut keeps a 401 that the logout itself causes from refreshing
+  // the session back into existence (#3026).
+  await withSignOut("tenant", async () => {
+    try {
+      await http.post<void>("/auth/logout")
+    } finally {
+      // Whether or not the server acknowledged, the user has clicked Logout —
+      // wiping local credentials guarantees the UI can't keep using them.
+      clearAuth()
+      // What the item form kept for this user goes too, so the next person
+      // on this browser does not find it (#2920).
+      await clearItemFormRecovery()
+    }
+  })
 }
 
 // register hits the unauthenticated /register endpoint. The server always
@@ -278,11 +282,13 @@ export async function resetPassword(token: string, newPassword: string): Promise
 // accepts only `name` and `default_group_id` — email is read-only here
 // (changing it requires the verification flow which lives elsewhere).
 //
-// `default_group_id` semantics (#1263): undefined → leave unchanged,
-// null → clear the preference, string → set to that group UUID. The
-// backend validates the membership.
+// A field left undefined is left out of the body, and the server keeps its
+// stored value. `name`, when sent, must not be blank. `default_group_id`
+// (#1263): null clears the preference, a string sets that group UUID; the
+// backend validates the membership. A save that changes only the default
+// group sends no name, so it cannot write back a name changed elsewhere.
 export interface UpdateProfileRequest {
-  name: string
+  name?: string
   default_group_id?: string | null
 }
 

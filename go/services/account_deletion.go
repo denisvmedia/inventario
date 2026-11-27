@@ -30,11 +30,12 @@ var (
 	ErrAccountSoleOwnerOfSharedGroup = errx.NewSentinel("cannot delete account: you are the sole owner of a shared group — transfer ownership first")
 
 	// ErrAccountStillOwnsContent is returned by DeleteAccount when the user still
-	// owns content (commodities/files/areas/locations/exports/tags) authored in a
-	// RETAINED group, or created a location_group that is not being purged. Those
-	// rows carry a NOT NULL created_by_user_id (or created_by) FK to users(id)
-	// that cannot be orphaned without a schema change, so the account cannot be
-	// erased unilaterally. It is raised up-front by the read-only pre-check
+	// owns content (items, files, file links, places, exports) authored in a
+	// RETAINED group. Those rows carry a NOT NULL created_by_user_id FK to
+	// users(id) and are the user's own, so they are neither purged nor handed
+	// over, and the account cannot be erased unilaterally. A row that is
+	// handed over (a group the user created, tags, item history, …) counts too
+	// when its retained group has no other member to take it. It is raised up-front by the read-only pre-check
 	// (abort-before-mutate) and, as a TOCTOU backstop, by the final users-row
 	// delete's foreign-key violation. Surfaces as 422 auth.delete.owns_content.
 	//
@@ -57,13 +58,16 @@ var (
 //     - otherwise (co-owner ≥2 owners, or non-owner)      -> leave untouched;
 //     the membership row is removed by UserPurger in step 3.
 //     1.5. PRE-CHECK content ownership (read-only). If the user authored content in
-//     a RETAINED group, or created a location_group that is NOT being purged,
-//     abort with ErrAccountStillOwnsContent — mutating nothing.
+//     a RETAINED group, or a row to hand over in a RETAINED group with no other
+//     member, abort with ErrAccountStillOwnsContent — mutating nothing.
 //  2. For each PRIVATE group, run GroupPurgeService.purgeGroup (blobs ->
 //     GroupPurger -> invites -> location_groups row).
-//  3. UserPurger.PurgeUserDependents (auth/identity + memberships + per-user rows
-//     + the user's group_invites_audit references + the item reminders the
-//     user created, which email only their author).
+//  3. UserPurger.PurgeUserDependents: deletes the user's auth/identity and
+//     personal rows (memberships, invites, item reminders, drafts, saved
+//     views, ...) and hands the group rows they created in retained groups
+//     (the groups themselves, item history, loans, service records,
+//     maintenance, item types, ...) to another member. Every other row that
+//     references the user is one the pre-check in step 1.5 refused on.
 //  4. UserRegistry.Delete. A foreign-key violation here (SQLSTATE 23503) means a
 //     concurrent request re-created user-owned content after the pre-check (a
 //     TOCTOU race) -> ErrAccountStillOwnsContent. Any other error -> 500.
@@ -111,8 +115,8 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	// 1.5) Up-front content-ownership pre-check (abort BEFORE mutating). The
 	// private groups in privateGroupIDs are purged wholesale below, so content
 	// there does not block deletion. But any content the user authored in a
-	// RETAINED group — or any location_group the user created that is NOT being
-	// purged — carries a NOT NULL FK to users(id) that cannot be orphaned. If any
+	// RETAINED group — or a row to hand over in a RETAINED group that has no
+	// other member — carries a NOT NULL FK to users(id) that cannot be orphaned. If any
 	// such row exists, refuse the delete now, mutating nothing, rather than
 	// discovering it at the final DELETE FROM users (which would leave a
 	// half-erased account). This mirrors the abort-before-mutate contract of the

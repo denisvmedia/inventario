@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,17 +80,26 @@ func (f *IntakeDocumentRegistryFactory) CreateServiceRegistry() registry.IntakeD
 }
 
 // promoted records the item a draft became on the document the draft came
-// from, as the postgres promotion does in its transaction. The caller holds
-// the draft factory's writes lock.
-func (f *IntakeDocumentRegistryFactory) promoted(groupID, draftID, commodityID string, now time.Time) {
+// from, as the postgres promotion does in its transaction: the one that
+// names the draft, or the one whose identity gives the key of a delivered
+// draft and that names a session and no draft yet. The caller holds the
+// draft factory's writes lock.
+func (f *IntakeDocumentRegistryFactory) promoted(groupID, draftID, draftKey, commodityID string, now time.Time) {
 	f.writes.Lock()
 	defer f.writes.Unlock()
 	f.base.lock.Lock()
 	defer f.base.lock.Unlock()
+	keyed := strings.HasPrefix(draftKey, models.IntakeDeliveredDraftKeyPrefix)
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		doc := pair.Value
-		if doc.GroupID == groupID && doc.DraftID != nil && *doc.DraftID == draftID {
+		if doc.GroupID != groupID {
+			continue
+		}
+		names := doc.DraftID != nil && *doc.DraftID == draftID
+		unrecorded := doc.DraftID == nil && doc.SessionID != nil && keyed && doc.DraftClientKey() == draftKey
+		if names || unrecorded {
 			cp := *doc
+			cp.DraftID = new(draftID)
 			cp.CommodityID = new(commodityID)
 			cp.UpdatedAt = now
 			pair.Value = &cp
@@ -115,14 +125,16 @@ func (f *IntakeDocumentRegistryFactory) groupsCreatedBy(tenantID, userID string)
 }
 
 // reattributeCreator gives the documents userID created in tenantID to
-// heirs[groupID], as the user purge does with group configuration, and
-// deletes the ones whose group has no heir: that group leaves with the user.
-func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// heirs[groupID], as the user purge does with group configuration, returns
+// how many each group handed over, and deletes the ones whose group has no
+// heir: that group leaves with the user.
+func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	f.writes.Lock()
 	defer f.writes.Unlock()
 	f.base.lock.Lock()
 	defer f.base.lock.Unlock()
 	var gone []string
+	moved := map[string]int{}
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		doc := pair.Value
 		if doc.TenantID != tenantID || doc.CreatedByUserID != userID {
@@ -132,6 +144,7 @@ func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID stri
 			cp := *doc
 			cp.CreatedByUserID = heir
 			pair.Value = &cp
+			moved[doc.GroupID]++
 			continue
 		}
 		gone = append(gone, doc.ID)
@@ -139,6 +152,7 @@ func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID stri
 	for _, id := range gone {
 		f.base.items.Delete(id)
 	}
+	return moved
 }
 
 func (r *IntakeDocumentRegistry) requireGroup() error {

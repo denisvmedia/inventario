@@ -28,9 +28,10 @@ func NewUserContentOwnershipChecker(fs *registry.FactorySet) *UserContentOwnersh
 	return &UserContentOwnershipChecker{fs: fs}
 }
 
-// HasRetainedOwnedContent walks the ownedSources marked deletionPreCheck and
-// returns true on the first row the user owns in a retained group. It performs
-// no writes.
+// HasRetainedOwnedContent walks the ownedSources whose rows can block a
+// deletion and returns true on the first row the user owns in a retained
+// group: any row of a deletionBlocks source, and a row of a deletionHandsOver
+// source whose group has no other member to hand it to. It performs no writes.
 func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error) {
 	if tenantID == "" {
 		return false, errxtrace.Wrap("tenantID required", registry.ErrFieldRequired)
@@ -43,9 +44,10 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 	for _, id := range purgedGroupIDs {
 		purged[id] = struct{}{}
 	}
+	heirs := heirLookup{memberships: r.fs.GroupMembershipRegistry, userID: userID, known: map[string]bool{}}
 
 	for _, src := range ownedSources(r.fs) {
-		if !src.deletionPreCheck {
+		if src.onDeletion != deletionBlocks && src.onDeletion != deletionHandsOver {
 			continue
 		}
 		rows, err := src.rows(ctx)
@@ -59,10 +61,46 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 			if _, isPurged := purged[row.groupID]; isPurged {
 				continue
 			}
+			if src.onDeletion == deletionHandsOver {
+				has, err := heirs.has(ctx, row.groupID)
+				if err != nil {
+					return false, err
+				}
+				if has {
+					continue
+				}
+			}
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+// heirLookup answers, once per group, whether a group has a member other
+// than userID to hand the user's rows to.
+type heirLookup struct {
+	memberships registry.GroupMembershipRegistry
+	userID      string
+	known       map[string]bool
+}
+
+func (h heirLookup) has(ctx context.Context, groupID string) (bool, error) {
+	if has, ok := h.known[groupID]; ok {
+		return has, nil
+	}
+	members, err := h.memberships.ListByGroup(ctx, groupID)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to list the group's members", err)
+	}
+	has := false
+	for _, m := range members {
+		if m != nil && m.MemberUserID != h.userID {
+			has = true
+			break
+		}
+	}
+	h.known[groupID] = has
+	return has, nil
 }
 
 // createdByEntry is the trio the ownership matcher needs from a content row:

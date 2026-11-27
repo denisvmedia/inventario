@@ -57,6 +57,7 @@ func TestItemTypeContract_Memory(t *testing.T) {
 			TypesB:       fs.ItemTypeRegistryFactory.MustCreateUserRegistry(ctxB),
 			ServiceTypes: fs.ItemTypeRegistryFactory.CreateServiceRegistry(),
 			CommoditiesA: fs.CommodityRegistryFactory.MustCreateUserRegistry(ctxA),
+			DraftsA:      fs.CommodityDraftRegistryFactory.MustCreateUserRegistry(ctxA),
 			CommoditiesB: fs.CommodityRegistryFactory.MustCreateUserRegistry(ctxB),
 			AreaA:        areaFor(ctxA),
 			AreaB:        areaFor(ctxB),

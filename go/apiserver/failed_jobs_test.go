@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -224,6 +225,118 @@ func TestAdminFailedJobs_SupportAgentRetriesButCannotDiscard(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("a platform_admin discards"))
 }
 
+const bulkDiscardPath = "/api/v1/admin/failed-jobs/bulk-discard"
+
+// A dry run counts the jobs a bulk discard would take and changes nothing;
+// the list with the same filter shows them.
+func TestAdminFailedJobs_BulkDiscardDryRun(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	now := url.QueryEscape(time.Now().UTC().Format(time.RFC3339))
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodPost, bulkDiscardPath+"?dry_run=true&failed_before="+now, env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathEquals("$.meta.discarded"), float64(3))
+	c.Assert(body, checkers.JSONPathEquals("$.meta.by_type"), map[string]any{"export": float64(2), "restore": float64(1)})
+	c.Assert(body, checkers.JSONPathEquals("$.meta.dry_run"), true)
+	c.Assert(env.auditRows(apiserver.AuditActionAdminFailedJobBulkDiscard), qt.HasLen, 0, qt.Commentf("a dry run is not audited"))
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?failed_before="+now, env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(3), qt.Commentf("nothing was discarded"))
+
+	before := time.Now().UTC().Add(-2 * time.Hour).Format(time.DateOnly)
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?failed_before="+before, env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(0))
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?failed_before=yesterday", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobInvalidFailedBeforeCode)
+}
+
+// A bulk discard takes the jobs of the filter and writes one audit row that
+// names the filter and the counts.
+func TestAdminFailedJobs_BulkDiscard(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	now := time.Now().UTC().Format(time.RFC3339)
+	query := url.Values{"failed_before": {now}, "type": {"export"}, "tenantID": {env.adminA.TenantID}}.Encode()
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodPost, bulkDiscardPath+"?"+query, env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.discarded"), float64(2))
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.dry_run"), false)
+	c.Assert(env.exportStatus(c, env.adminA, env.groupA, env.exportA).DiscardedAt, qt.IsNotNil)
+	c.Assert(env.exportStatus(c, env.adminB, env.groupB, env.exportB).DiscardedAt, qt.IsNotNil)
+
+	rows := env.auditRows(apiserver.AuditActionAdminFailedJobBulkDiscard)
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	c.Assert(*rows[0].TenantID, qt.Equals, env.adminA.TenantID)
+	c.Assert(*rows[0].EntityType, qt.Equals, "export")
+	c.Assert(rows[0].EntityID, qt.IsNil)
+	c.Assert([]byte(rows[0].UserAgent), checkers.JSONPathEquals("$.discarded"), float64(2))
+	c.Assert([]byte(rows[0].UserAgent), checkers.JSONPathEquals("$.by_type"), map[string]any{"export": float64(2)})
+	c.Assert([]byte(rows[0].UserAgent), checkers.JSONPathEquals("$.failed_before"), now)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs", env.adminToken, nil)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(1))
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].id"), env.restoreA)
+}
+
+func TestAdminFailedJobs_BulkDiscardRefusesABadFilter(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+
+	for _, tc := range []struct {
+		name  string
+		query url.Values
+		code  string
+	}{
+		{"no time", url.Values{"type": {"export"}}, apiserver.FailedJobInvalidFailedBeforeCode},
+		{"an unreadable time", url.Values{"failed_before": {"last week"}}, apiserver.FailedJobInvalidFailedBeforeCode},
+		{"a time in the future", url.Values{"failed_before": {time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}}, apiserver.FailedJobInvalidFailedBeforeCode},
+		{"an unknown type", url.Values{"failed_before": {"2026-11-01"}, "type": {"weekly-digest"}}, apiserver.FailedJobUnknownTypeCode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			rr := doAdminJSONRequest(t, env.handler, http.MethodPost, bulkDiscardPath+"?"+tc.query.Encode(), env.adminToken, nil)
+			c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+			assertErrorCode(t, c, rr.Body.Bytes(), tc.code)
+		})
+	}
+	rows := env.auditRows(apiserver.AuditActionAdminFailedJobBulkDiscard)
+	c.Assert(rows, qt.HasLen, 4, qt.Commentf("a refused discard is audited too"))
+	for _, row := range rows {
+		c.Assert(row.Success, qt.IsFalse)
+	}
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodPost, bulkDiscardPath+"?failed_before=2026-11-01&dry_run=maybe", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs", env.adminToken, nil)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(3))
+}
+
+// A bulk discard, its dry run too, needs the platform_admin role (#2946).
+func TestAdminFailedJobs_SupportAgentCannotBulkDiscard(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	_, supportToken := withBackofficeOperator(t, env.params, models.BackofficeRoleSupportAgent)
+	now := url.QueryEscape(time.Now().UTC().Format(time.RFC3339))
+
+	for _, dryRun := range []string{"true", "false"} {
+		rr := doAdminJSONRequest(t, env.handler, http.MethodPost, bulkDiscardPath+"?failed_before="+now+"&dry_run="+dryRun, supportToken, nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+		assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminRoleRequiredCode)
+	}
+	c.Assert(env.auditRows(apiserver.AuditActionAdminFailedJobBulkDiscard), qt.HasLen, 0)
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs", env.adminToken, nil)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(3))
+}
+
 func TestAdminFailedJobs_DeniesTenantUser(t *testing.T) {
 	c := qt.New(t)
 	env := newFailedJobsEnv(c)
@@ -312,4 +425,98 @@ func TestGroupFailedJobs_RefusesMembersAndOtherGroups(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf("the admin of another group"))
 
 	c.Assert(env.exportStatus(c, env.adminA, env.groupA, env.exportA).Status, qt.Equals, models.ExportStatusFailed)
+}
+
+// failedPersonalExport stores a personal data export of the user whose build
+// failed.
+func (e *failedJobsEnv) failedPersonalExport(c *qt.C, user *models.User) string {
+	c.Helper()
+	ctx := context.Background()
+	reg := e.params.FactorySet.PersonalDataExportRegistry
+	now := time.Now().UTC()
+	created, blocking, err := reg.CreateUnlessRequestedSince(ctx, models.PersonalDataExport{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: user.TenantID, UserID: user.ID},
+		CreatedAt:               now.Add(-time.Hour),
+		ExpiresAt:               now.Add(models.PersonalDataExportRetention),
+	}, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(blocking, qt.IsNil)
+	claimed, err := reg.ClaimPending(ctx, created.ID, now.Add(-time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	failed := must.Must(reg.Get(ctx, created.ID))
+	failed.Status = models.PersonalDataExportStatusFailed
+	failed.ErrorMessage = "the account is not active"
+	failed.CompletedAt = new(now.Add(-time.Minute))
+	must.Must(reg.Update(ctx, *failed))
+	return created.ID
+}
+
+// A failed personal data export belongs to a user, not to a group: the back
+// office lists it, retries it and discards it, with the same audit rows as
+// the other types.
+func TestAdminFailedJobs_PersonalDataExports(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	retried := env.failedPersonalExport(c, env.member)
+	discarded := env.failedPersonalExport(c, env.adminB)
+	reg := env.params.FactorySet.PersonalDataExportRegistry
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?type=personal-data-export", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data[*].id", qt.ContentEquals), []any{retried, discarded})
+	c.Assert(body, checkers.JSONPathMatches("$.data[*].attributes.title", qt.ContentEquals), []any{"member@example.com", "admin-b@example.com"})
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.job_type"), "personal-data-export")
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.retryable"), true)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.tenant_name"), "Test Organization")
+
+	base := "/api/v1/admin/failed-jobs/personal-data-export/"
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+retried+"/retry", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+	c.Assert(must.Must(reg.Get(context.Background(), retried)).Status, qt.Equals, models.PersonalDataExportStatusPending)
+	rows := env.auditRows(apiserver.AuditActionAdminFailedJobRetry)
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	c.Assert(*rows[0].EntityType, qt.Equals, "personal-data-export")
+	c.Assert(*rows[0].EntityID, qt.Equals, retried)
+	c.Assert(*rows[0].TenantID, qt.Equals, env.member.TenantID)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+discarded+"/discard", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+	got := must.Must(reg.Get(context.Background(), discarded))
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed, qt.Commentf("discard keeps the row"))
+	c.Assert(got.DiscardedAt, qt.IsNotNil)
+	rows = env.auditRows(apiserver.AuditActionAdminFailedJobDiscard)
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	c.Assert(*rows[0].EntityType, qt.Equals, "personal-data-export")
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?type=personal-data-export", env.adminToken, nil)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(0))
+}
+
+// The group card never shows a personal data export, not even the one of a
+// group admin: it belongs to the user.
+func TestGroupFailedJobs_LeaveOutPersonalDataExports(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	id := env.failedPersonalExport(c, env.adminA)
+	base := "/api/v1/g/" + env.groupA.Slug + "/failed-jobs"
+
+	rr := doJSONAPIRequest(t, env.handler, http.MethodGet, base, env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data[*].id", qt.ContentEquals), []any{env.exportA, env.restoreA})
+	c.Assert(body, checkers.JSONPathMatches("$.meta.job_types[*].type", qt.Not(qt.Contains)), "personal-data-export")
+
+	rr = doJSONAPIRequest(t, env.handler, http.MethodGet, base+"?type=personal-data-export", env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
+
+	rr = doJSONAPIRequest(t, env.handler, http.MethodPost, base+"/personal-data-export/"+id+"/retry", env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
+	got := must.Must(env.params.FactorySet.PersonalDataExportRegistry.Get(context.Background(), id))
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
 }

@@ -16,6 +16,8 @@ export function failedJobTypeLabel(t: TFunction, type: string | undefined): stri
       return t("common:failedJobs.types.intake")
     case "currency-migration":
       return t("common:failedJobs.types.currencyMigration")
+    case "personal-data-export":
+      return t("common:failedJobs.types.personalDataExport")
     default:
       return type ?? "—"
   }

@@ -25,6 +25,7 @@
       "export": "Export",
       "import": "Import",
       "intake": "Intake scan",
+      "personalDataExport": "Personal data export",
       "restore": "Restore",
       "thumbnail": "Thumbnail"
     }

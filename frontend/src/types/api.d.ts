@@ -119,18 +119,29 @@ export type paths = {
          * @description Returns the background jobs that failed for good and were neither
          *     retried nor discarded, across every tenant, newest failure first
          *     (#1307). Each job is read from its type's own table; `id` is the row
-         *     id there. ?type limits the list to one job type and ?tenantID to one
-         *     tenant. `meta.job_types` lists the job types with whether each can be
-         *     retried.
-         *     An unknown ?type returns 400 with `failed_job.unknown_type`.
+         *     id there. ?type limits the list to one job type, ?tenantID to one
+         *     tenant and ?failed_before to the jobs that failed before a time (a
+         *     job without a failure time counts from its creation), the jobs a bulk
+         *     discard with the same filter takes. `meta.job_types` lists the job
+         *     types with whether each can be retried. A personal data export
+         *     belongs to a user, not to a group; its title is the user's email
+         *     address.
+         *     An unknown ?type returns 400 with `failed_job.unknown_type`, a
+         *     ?failed_before that is not a date or an RFC 3339 time 400 with
+         *     `failed_job.invalid_failed_before`.
          */
         get: {
             parameters: {
                 query?: {
                     /** @description Job type */
-                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Tenant ID */
                     tenantID?: string;
+                    /**
+                     * @description Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time
+                     * @example 2026-11-01
+                     */
+                    failed_before?: string;
                     /** @description Page number (default 1) */
                     page?: number;
                     /** @description Items per page (default 50, max 100) */
@@ -151,7 +162,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobListEnvelope"];
                     };
                 };
-                /** @description Bad Request - unknown job type */
+                /** @description Bad Request - unknown job type or unreadable failed_before */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -188,6 +199,98 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/failed-jobs/bulk-discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard failed background jobs in bulk (admin)
+         * @description Marks discarded every failed job that failed before ?failed_before
+         *     (#2946), as the single discard does: the jobs leave the failed list
+         *     and the depth gauge and keep their rows and errors. A job without a
+         *     failure time counts from its creation. The filter is the list's:
+         *     ?type limits the discard to one job type and ?tenantID to one tenant,
+         *     and GET /admin/failed-jobs with the same query lists the jobs it
+         *     takes. ?dry_run=true only counts them. `meta.discarded` is how many
+         *     jobs were discarded; a job someone retried or discarded in the
+         *     meantime is not among them.
+         *     A discard writes one audit row that names the filter and the counts,
+         *     also when it is refused; a dry run writes none. Needs the
+         *     platform_admin role: a support_agent gets 403 `admin.role_required`.
+         *     A missing, unreadable or future ?failed_before returns 400
+         *     `failed_job.invalid_failed_before`, an unknown ?type 400
+         *     `failed_job.unknown_type`.
+         */
+        post: {
+            parameters: {
+                query: {
+                    /**
+                     * @description Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future
+                     * @example 2026-11-01
+                     */
+                    failed_before: string;
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
+                    /** @description Tenant ID */
+                    tenantID?: string;
+                    /** @description Count the jobs and discard nothing */
+                    dry_run?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobBulkDiscardResponse"];
+                    };
+                };
+                /** @description Bad Request - missing, unreadable or future failed_before, or unknown job type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - account disabled, or not a platform_admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/failed-jobs/{jobType}/{jobID}/discard": {
         parameters: {
             query?: never;
@@ -213,7 +316,7 @@ export type paths = {
                 header?: never;
                 path: {
                     /** @description Job type */
-                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Job ID */
                     jobID: string;
                 };
@@ -276,7 +379,9 @@ export type paths = {
          * Retry a failed background job (admin)
          * @description Puts the failed job back in its queue the way its type runs it again
          *     (#1307): an export or import runs from the start, a thumbnail gets a
-         *     fresh set of attempts, an intake scan is due again at once. A restore
+         *     fresh set of attempts, an intake scan is due again at once, a personal
+         *     data export is built again from the start and kept until 7 days after
+         *     the build finishes; it does not count as a new request. A restore
          *     and a currency migration cannot be retried (409
          *     `failed_job.not_retryable`); discard them instead. 404
          *     `failed_job.unknown_type` for an unknown type, 404
@@ -289,7 +394,7 @@ export type paths = {
                 header?: never;
                 path: {
                     /** @description Job type */
-                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Job ID */
                     jobID: string;
                 };
@@ -2744,8 +2849,10 @@ export type paths = {
         };
         /**
          * Update current user profile
-         * @description Update the authenticated user's profile. The name field is required;
-         *     default_group_id (#1263, #1592) is optional — send a group UUID the
+         * @description Update the authenticated user's profile. Both fields are optional and
+         *     a field left out keeps its stored value. name, when sent, must not be
+         *     blank (at most 100 characters).
+         *     default_group_id (#1263, #1592): send a group UUID the
          *     user is a member of to set, or null to clear (only allowed when the
          *     user has zero memberships; otherwise rejected with 400). Email, role,
          *     tenant_id, and is_active are ignored even if submitted.
@@ -3733,8 +3840,9 @@ export type paths = {
         };
         /**
          * Get a profile photo from a signed URL
-         * @description Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+         * @description Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
          *     they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+         *     A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
          */
         get: {
             parameters: {
@@ -3742,7 +3850,9 @@ export type paths = {
                     /** @description Photo version */
                     v: string;
                     /** @description The user the URL was issued to */
-                    uid: string;
+                    uid?: string;
+                    /** @description The back-office operator the URL was issued to */
+                    op?: string;
                     /** @description The group the two users share */
                     gid?: string;
                     /** @description Expiry, Unix seconds */
@@ -4836,6 +4946,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
@@ -5378,6 +5490,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Include drafts and non-in_use commodities (default true) */
@@ -7052,7 +7166,7 @@ export type paths = {
         };
         /**
          * List custom fields
-         * @description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+         * @description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;
          *     each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
          */
         get: {
@@ -7182,15 +7296,15 @@ export type paths = {
         post?: never;
         /**
          * Delete a custom field
-         * @description Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
-         *     unless delete_values=true; then its values are deleted with it, in the same transaction.
+         * @description Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,
+         *     unless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.
          */
         delete: {
             parameters: {
                 query?: {
                     /** @description Delete the field's values along with it */
                     delete_values?: boolean;
-                    /** @description With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta */
+                    /** @description With delete_values=true: how many items and drafts together the member confirmed to lose a value. When another number has one, the delete is refused with 409 custom_field.in_use and the counts */
                     expected_values?: number;
                 };
                 header?: never;
@@ -7204,7 +7318,7 @@ export type paths = {
             };
             requestBody?: never;
             responses: {
-                /** @description Deleted; meta.deleted_values counts the values removed */
+                /** @description Deleted; meta.deleted_values counts the values removed, those of drafts included */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -7222,7 +7336,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Items have a value of the field and delete_values was not true, or expected_values is not how many items have one */
+                /** @description Items or drafts have a value of the field and delete_values was not true, or expected_values is not how many have one */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -8775,10 +8889,21 @@ export type paths = {
          * @description Move the file to Trash. It keeps its links, so restoring it
          *     puts it back where it was. An export bundle is deleted for
          *     good.
+         *
+         *     With unless_linked=true the file goes to Trash only when
+         *     nothing holds it: no link, or only links to items in Trash
+         *     (it then goes with the item linked first). The links are
+         *     checked and the file trashed in one transaction. A file that a
+         *     link holds, an export bundle included, stays and the answer is
+         *     409 file.linked; a file that is gone or in Trash already is a
+         *     404.
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Keep the file when a link holds it */
+                    unless_linked?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -8797,8 +8922,26 @@ export type paths = {
                     };
                     content?: never;
                 };
-                /** @description File not found */
+                /** @description File not found, or in Trash already */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description file.linked: with unless_linked=true, a link holds the file, so it stays */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description unless_linked is not a boolean */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -10050,7 +10193,7 @@ export type paths = {
         /**
          * List item types
          * @description The item types of the group: the built-in ones first in their fixed order, then the others by name.
-         *     Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+         *     Each carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.
          */
         get: {
             parameters: {
@@ -10180,8 +10323,9 @@ export type paths = {
         post?: never;
         /**
          * Delete an item type
-         * @description Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
-         *     then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+         * @description Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta
+         *     unless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,
+         *     and each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).
          */
         delete: {
             parameters: {
@@ -10218,7 +10362,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description The type is in use and no reassign_to was given, or it is the group's last type */
+                /** @description Items or drafts have the type and no reassign_to was given, or it is the group's last type */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -11530,6 +11674,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Commodities only: only items with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Commodities only: only items in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Commodities only: filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */
@@ -12064,7 +12210,8 @@ export type paths = {
         };
         /**
          * Get storage usage for a group
-         * @description Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         * @description Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         *     Each file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.
          */
         get: {
             parameters: {
@@ -12414,6 +12561,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
             };
         };
         options?: never;
@@ -12470,6 +12626,15 @@ export type paths = {
                 };
                 /** @description User-side request problem */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -15711,6 +15876,18 @@ export type components = {
             /** @description Reason is the free-form justification for the block (max 500 chars). */
             reason: string;
         };
+        "apiserver.AdminFailedJobBulkDiscardMeta": {
+            /** @description ByType counts per job type; a type with none is left out. */
+            by_type?: {
+                [key: string]: number;
+            };
+            /** @example 12 */
+            discarded?: number;
+            dry_run?: boolean;
+        };
+        "apiserver.AdminFailedJobBulkDiscardResponse": {
+            meta?: components["schemas"]["apiserver.AdminFailedJobBulkDiscardMeta"];
+        };
         "apiserver.AdminFailedJobListEnvelope": {
             data?: components["schemas"]["apiserver.AdminFailedJobResource"][];
             meta?: components["schemas"]["apiserver.FailedJobListMeta"];
@@ -16365,6 +16542,12 @@ export type components = {
             user?: components["schemas"]["jsonapi.AdminGroupMemberUser"];
         };
         "jsonapi.AdminGroupMemberUser": {
+            /**
+             * @description AvatarURL is a signed URL of the member's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the member
+             *     has none.
+             */
+            avatar_url?: string;
             email?: string;
             id?: string;
             name?: string;
@@ -16422,6 +16605,11 @@ export type components = {
         };
         "jsonapi.AdminUserDetail": {
             active_session_count?: number;
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested it. Absent when the user has none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_memberships?: components["schemas"]["jsonapi.AdminUserGroupMembership"][];
@@ -16446,6 +16634,12 @@ export type components = {
             role?: components["schemas"]["models.GroupRole"];
         };
         "jsonapi.AdminUserListItem": {
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the user has
+             *     none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_membership_count?: number;
@@ -17313,10 +17507,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
@@ -17630,6 +17824,13 @@ export type components = {
         };
         "jsonapi.CustomFieldView": {
             created_at?: string;
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with a value of the
+             *     field. Deleting the field takes the value out of them too.
+             * @example 0
+             */
+            draft_count?: number;
             /**
              * Format: int64
              * @description ItemCount and TrashedItemCount are the items with a value of the
@@ -18455,6 +18656,13 @@ export type components = {
              */
             custom_field_id?: string;
             /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with a value of the
+             *     field.
+             * @example 0
+             */
+            draft_count?: number;
+            /**
              * @description FieldType is the type of the group's field, or the set's type for a
              *     missing one.
              * @example select
@@ -18469,8 +18677,8 @@ export type components = {
             item_count?: number;
             /**
              * @description KeepReason says why removing the set keeps a field the group has:
-             *     own or in_use (items have a value of it). Absent when the field is
-             *     removable or missing.
+             *     own or in_use (items or drafts have a value of it). Absent when the
+             *     field is removable or missing.
              * @example in_use
              * @enum {string}
              */
@@ -18518,6 +18726,12 @@ export type components = {
             trashed_item_count?: number;
         };
         "jsonapi.ItemSetItemTypeView": {
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts that have the type.
+             * @example 0
+             */
+            draft_count?: number;
             /** @example coins */
             icon?: string;
             /**
@@ -18533,9 +18747,9 @@ export type components = {
             item_type_id?: string;
             /**
              * @description KeepReason says why removing the set keeps a type the group has:
-             *     own (a member made it), in_use (items have it, in Trash or not) or
-             *     last_type (a group keeps at least one type). Absent when the type is
-             *     removable or missing.
+             *     own (a member made it), in_use (items, in Trash or not, or drafts have
+             *     it) or last_type (a group keeps at least one type). Absent when the
+             *     type is removable or missing.
              * @example in_use
              * @enum {string}
              */
@@ -18715,6 +18929,13 @@ export type components = {
             /** @example true */
             builtin?: boolean;
             created_at?: string;
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with this type.
+             *     Deleting the type moves them along with the items.
+             * @example 0
+             */
+            draft_count?: number;
             /** @example laptop */
             icon?: string;
             /**
@@ -20092,10 +20313,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**

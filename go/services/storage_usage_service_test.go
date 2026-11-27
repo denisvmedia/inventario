@@ -46,6 +46,12 @@ func (s *stubFileRegistry) Delete(context.Context, string) error {
 func (s *stubFileRegistry) Count(context.Context) (int, error) {
 	panic("not implemented")
 }
+func (s *stubFileRegistry) ListCreatedBy(context.Context, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+func (s *stubFileRegistry) ListTrashedCreatedBy(context.Context, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
 func (s *stubFileRegistry) ListByType(context.Context, models.FileType) ([]*models.FileEntity, error) {
 	panic("not implemented")
 }
@@ -126,6 +132,14 @@ func (s *stubFileRegistry) ListPendingChecksum(context.Context, string, int) ([]
 }
 
 func (s *stubFileRegistry) SetChecksum(context.Context, string, string) error {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListPendingThumbnailOrientation(context.Context, string, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) SetThumbnailsOriented(context.Context, string) error {
 	panic("not implemented")
 }
 

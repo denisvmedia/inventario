@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -17,6 +18,7 @@ import (
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 	"go.5x5.cz/inventario/services/admin"
 )
 
@@ -73,9 +75,10 @@ func jobTypeList() string {
 
 // ListConfig carries the list command's flags.
 type ListConfig struct {
-	Type   string `yaml:"type" env:"TYPE"`
-	Tenant string `yaml:"tenant" env:"TENANT"`
-	Limit  int    `yaml:"limit" env:"LIMIT"`
+	Type         string `yaml:"type" env:"TYPE"`
+	Tenant       string `yaml:"tenant" env:"TENANT"`
+	Limit        int    `yaml:"limit" env:"LIMIT"`
+	FailedBefore string `yaml:"failed_before" env:"FAILED_BEFORE"`
 }
 
 type listCommand struct {
@@ -95,9 +98,13 @@ func newList(dbConfig *shared.DatabaseConfig) *listCommand {
 		Long: `List the background jobs that failed for good and were neither retried nor
 discarded, newest failure first, across every tenant.
 
+--failed-before lists the jobs that ` + "`inventario jobs failed discard --failed-before`" + `
+with the same filter discards.
+
 Examples:
   inventario jobs failed list
-  inventario jobs failed list --type intake --tenant acme --limit 20`,
+  inventario jobs failed list --type intake --tenant acme --limit 20
+  inventario jobs failed list --failed-before 2026-11-01`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.run(cmd, dbConfig)
@@ -107,11 +114,30 @@ Examples:
 	flags.StringVar(&c.config.Type, "type", c.config.Type, "Only jobs of this type")
 	flags.StringVar(&c.config.Tenant, "tenant", c.config.Tenant, "Only jobs of this tenant (id or slug)")
 	flags.IntVar(&c.config.Limit, "limit", c.config.Limit, "Print at most this many jobs (0 prints all)")
+	flags.StringVar(&c.config.FailedBefore, "failed-before", c.config.FailedBefore, failedBeforeUsage)
 	return c
+}
+
+const failedBeforeUsage = "Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time"
+
+// parseFailedBeforeFlag reads --failed-before; empty is the zero time.
+func parseFailedBeforeFlag(raw string) (time.Time, error) {
+	if strings.TrimSpace(raw) == "" {
+		return time.Time{}, nil
+	}
+	t, err := services.ParseFailedBefore(raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid --failed-before %q: use a date such as 2026-11-01 or an RFC 3339 time: %w", raw, err)
+	}
+	return t, nil
 }
 
 func (c *listCommand) run(cmd *cobra.Command, dbConfig *shared.DatabaseConfig) error {
 	out := cmd.OutOrStdout()
+	failedBefore, err := parseFailedBeforeFlag(c.config.FailedBefore)
+	if err != nil {
+		return err
+	}
 	svc, err := openService(dbConfig)
 	if err != nil {
 		return err
@@ -119,9 +145,10 @@ func (c *listCommand) run(cmd *cobra.Command, dbConfig *shared.DatabaseConfig) e
 	defer closeService(out, svc)
 
 	page, err := svc.ListFailedJobs(cmd.Context(), admin.FailedJobListRequest{
-		Type:   c.config.Type,
-		Tenant: c.config.Tenant,
-		Limit:  c.config.Limit,
+		Type:         c.config.Type,
+		Tenant:       c.config.Tenant,
+		Limit:        c.config.Limit,
+		FailedBefore: failedBefore,
 	})
 	if err != nil {
 		return errxtrace.Wrap("failed to list failed jobs", err)
@@ -175,9 +202,13 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// ActionConfig carries the retry and discard commands' flags.
+// ActionConfig carries the retry and discard commands' flags. FailedBefore,
+// Tenant and DryRun are the discard command's bulk form.
 type ActionConfig struct {
-	Type string `yaml:"type" env:"TYPE"`
+	Type         string `yaml:"type" env:"TYPE"`
+	FailedBefore string `yaml:"failed_before" env:"FAILED_BEFORE"`
+	Tenant       string `yaml:"tenant" env:"TENANT"`
+	DryRun       bool   `yaml:"dry_run" env:"DRY_RUN"`
 }
 
 type actionCommand struct {
@@ -191,35 +222,124 @@ func newAction(dbConfig *shared.DatabaseConfig, verb string) *actionCommand {
 	c := &actionCommand{verb: verb}
 	shared.TryReadSection("jobs.failed."+verb, &c.config)
 	short, long := "Put a failed job back in its queue", `Put a failed job back in its queue the way its type runs it again: an
-export or import runs from the start, a thumbnail gets a fresh set of
-attempts, an intake scan is due at once. A restore and a currency
-migration cannot be retried; discard them instead.
+export or import runs from the start, a personal data export builds its
+copy again from the start and keeps it 7 days from when that build
+finishes, a thumbnail gets a fresh set of attempts, an intake scan is due
+at once. A restore and a currency migration cannot be retried; discard
+them instead.
 
 The retry is written to the audit log.
 
 Example:
   inventario jobs failed retry --type export <job-id>`
+	use, args := verb+" <job-id>", cobra.ExactArgs(1)
 	if verb == "discard" {
-		short, long = "Discard a failed job", `Discard a failed job. It leaves the failed list and the depth gauge, but
+		short, long = "Discard a failed job, or every job that failed before a time", `Discard a failed job. It leaves the failed list and the depth gauge, but
 its row and its error stay until the normal cleanup removes them. Every
 job type can be discarded.
 
-The discard is written to the audit log.
+Without a job id, --failed-before discards every failed job that failed
+before the time, of the --type and --tenant given or of every type and
+tenant. A job without a failure time counts from its creation. The time
+is a date, which stands for its midnight UTC, or an RFC 3339 time, and
+must not be in the future. --dry-run counts the jobs and discards
+nothing; `+"`inventario jobs failed list`"+` with the same filter lists them.
 
-Example:
-  inventario jobs failed discard --type restore <job-id>`
+A discard is written to the audit log: a bulk discard as one row that
+names the filter and the counts.
+
+Examples:
+  inventario jobs failed discard --type restore <job-id>
+  inventario jobs failed discard --failed-before 2026-11-01 --dry-run
+  inventario jobs failed discard --type export --failed-before 2026-11-01`
+		use, args = verb+" [<job-id>]", cobra.MaximumNArgs(1)
 	}
 	c.Base = command.NewBase(&cobra.Command{
-		Use:   verb + " <job-id>",
+		Use:   use,
 		Short: short,
 		Long:  long,
-		Args:  cobra.ExactArgs(1),
+		Args:  args,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return c.runBulk(cmd, dbConfig)
+			}
 			return c.run(cmd, dbConfig, args[0])
 		},
 	})
-	c.Cmd().Flags().StringVar(&c.config.Type, "type", c.config.Type, "Type of the job (required): "+jobTypeList())
+	flags := c.Cmd().Flags()
+	if verb != "discard" {
+		flags.StringVar(&c.config.Type, "type", c.config.Type, "Type of the job (required): "+jobTypeList())
+		return c
+	}
+	flags.StringVar(&c.config.Type, "type", c.config.Type,
+		"Type of the job (required with a job id; without one, only jobs of this type): "+jobTypeList())
+	flags.StringVar(&c.config.FailedBefore, "failed-before", c.config.FailedBefore,
+		"Without a job id: discard the jobs that failed before this time, a date (midnight UTC) or an RFC 3339 time")
+	flags.StringVar(&c.config.Tenant, "tenant", c.config.Tenant, "With --failed-before: only jobs of this tenant (id or slug)")
+	flags.BoolVar(&c.config.DryRun, "dry-run", c.config.DryRun, "With --failed-before: count the jobs and discard nothing")
 	return c
+}
+
+// runBulk discards every failed job that failed before --failed-before.
+func (c *actionCommand) runBulk(cmd *cobra.Command, dbConfig *shared.DatabaseConfig) error {
+	out := cmd.OutOrStdout()
+	if strings.TrimSpace(c.config.FailedBefore) == "" {
+		return errors.New("give a job id, or --failed-before to discard every job that failed before a time")
+	}
+	failedBefore, err := parseFailedBeforeFlag(c.config.FailedBefore)
+	if err != nil {
+		return err
+	}
+	svc, err := openService(dbConfig)
+	if err != nil {
+		return err
+	}
+	defer closeService(out, svc)
+
+	counts, err := svc.DiscardFailedJobsBefore(cmd.Context(), admin.FailedJobBulkDiscardRequest{
+		Type:         c.config.Type,
+		Tenant:       c.config.Tenant,
+		FailedBefore: failedBefore,
+		DryRun:       c.config.DryRun,
+	})
+	cutoff := failedBefore.UTC().Format(time.RFC3339)
+	switch {
+	case errors.Is(err, registry.ErrUnknownFailedJobType):
+		return fmt.Errorf("unknown job type %q; known types: %s: %w", c.config.Type, jobTypeList(), err)
+	case errors.Is(err, registry.ErrInvalidInput):
+		return fmt.Errorf("--failed-before %s is in the future: %w", cutoff, err)
+	case err != nil && counts.Total > 0:
+		return errxtrace.Wrap(fmt.Sprintf("discarded %s (%s), then failed", failedJobs(counts.Total), countsByType(counts)), err)
+	case err != nil:
+		return errxtrace.Wrap("failed to discard the jobs", err)
+	}
+	switch {
+	case counts.Total == 0:
+		fmt.Fprintf(out, "No failed jobs failed before %s.\n", cutoff)
+	case c.config.DryRun:
+		fmt.Fprintf(out, "Would discard %s that failed before %s: %s. Nothing was discarded.\n", failedJobs(counts.Total), cutoff, countsByType(counts))
+	default:
+		fmt.Fprintf(out, "Discarded %s that failed before %s: %s.\n", failedJobs(counts.Total), cutoff, countsByType(counts))
+	}
+	return nil
+}
+
+func failedJobs(n int) string {
+	if n == 1 {
+		return "1 failed job"
+	}
+	return fmt.Sprintf("%d failed jobs", n)
+}
+
+// countsByType prints the counts per type, in the order of the job types.
+func countsByType(counts services.FailedJobCounts) string {
+	parts := make([]string, 0, len(counts.ByType))
+	for _, t := range models.FailedJobTypes() {
+		if n := counts.ByType[string(t)]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d", t, n))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (c *actionCommand) run(cmd *cobra.Command, dbConfig *shared.DatabaseConfig, id string) error {
@@ -227,6 +347,9 @@ func (c *actionCommand) run(cmd *cobra.Command, dbConfig *shared.DatabaseConfig,
 	jobType := strings.TrimSpace(c.config.Type)
 	if jobType == "" {
 		return errors.New("--type is required")
+	}
+	if c.config.FailedBefore != "" || c.config.Tenant != "" || c.config.DryRun {
+		return errors.New("--failed-before, --tenant and --dry-run discard in bulk; leave out the job id")
 	}
 	// An unknown type is refused by the service, which audits the refusal
 	// like any other (#1307).

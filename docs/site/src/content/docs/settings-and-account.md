@@ -31,8 +31,9 @@ and the **Account** section of Preferences). On the **Edit profile** page you
 can:
 
 1. Update your **Name**.
-2. Choose your **Default group** — the group you land in after signing in. You
-   can switch groups any time from the group selector.
+2. Choose your **Default group** — the group you land in after signing in.
+   Switching groups with a group selector also makes that group your default,
+   so you come back to the group you used last.
 3. Click **Save changes**.
 
 ### Profile photo
@@ -48,13 +49,14 @@ your Profile page to pick one.
   512 × 512 pixels. A photo taken sideways on a phone is turned upright first.
 - Everything stored in the file besides the picture itself, such as the camera
   model and the location where the photo was taken, is removed.
-- The photo is visible to you and to the members of the groups you belong to.
-  Nobody else can see it.
+- The photo is visible to you, to the members of the groups you belong to,
+  and to the administrators of the server on its admin pages. Nobody else can
+  see it.
 - A profile photo does not count toward any group's storage use.
 
 To go back to your initials, click **Remove photo** under the picture and
 confirm. Uploading a new photo replaces the old one. Deleting your account also
-deletes your photo.
+deletes your photo, and so does an administrator deleting it.
 
 A couple of things to know:
 
@@ -71,13 +73,24 @@ A couple of things to know:
   cases are
   blocked with an explanation instead of deleting: if you're the **only owner**
   of a group that still has other members, hand ownership to someone else first;
-  and if you created anything inside a group someone else owns (items, files,
-  places, exports, tags or sellers), it needs to be removed first. This
-  includes a tag or a seller you added there, even when other members use it on
-  their own items. [Item types](../item-types/) you added to a shared group
-  stay with the group and pass to its owner, so they don't block deletion. So
+  and if you created items, files, places or exports inside a group someone
+  else owns, they need to be removed first. Both checks run before anything is
+  deleted, so a blocked deletion leaves your account, your groups and your
+  sessions as they were.
+  A shared group you created doesn't block deletion once someone else owns
+  it: the group stays with its members and passes to its owner.
+  [Tags](../tags/), [sellers](../sellers/) and [item types](../item-types/)
+  you added to a shared group stay with the group and pass to its owner, so
+  they don't block deletion and other members keep using them. So
   does the record of the [documents other systems sent](../documents-from-other-systems/)
   with one of your API tokens, together with the drafts those documents made.
+  What you recorded on the items of a shared group stays there too and passes
+  to its owner: the [history entries](../items/#the-item-detail-page) of your changes, loans,
+  service records, supply links and maintenance schedules, and the restores
+  and currency changes you ran. The item history then names the owner for the
+  changes you made. The audit log of the server records, for each group, what
+  passed to whom; the people who run the server can read it. Invites you
+  created for a shared group stop working.
   Item reminders you set in a shared group are deleted with your account,
   since they only ever emailed you. So are the other
   [drafts of new items](../items/#drafts-of-a-new-item) you started there. A
@@ -97,7 +110,8 @@ service. Click **Request a copy**. Inventario prepares it in the background and
 sends you an email when it is ready; the email links back to this card, not to
 the file. While it is being prepared the copy shows as **Waiting** or
 **Preparing**, and the list updates on its own; if the server restarts while
-your copy is being prepared, it is prepared again. A copy still not ready two
+your copy is being prepared, it is prepared again, up to three times in all.
+A copy still not ready two
 hours after the request is no longer checked on its own; come back to the page
 later to see it. When it is **Ready**, the
 row shows its size and the day it is deleted, and **Download** saves it as
@@ -118,6 +132,10 @@ The copy has:
   supply links, open [drafts of new items](../items/#drafts-of-a-new-item),
   saved views, and the history entries you made.
 
+A file in the Trash is included, also one that went there together with its
+item, and so are the loans, maintenance schedules and service records of an
+item in the Trash.
+
 Locations, areas, sellers, item types and tags appear by name on your items.
 A history entry holds only the fields you changed, with the values you set,
 not the values they replaced. Other members appear only as ids, and text you
@@ -135,6 +153,10 @@ A few rules apply:
   or not. A copy that could not be prepared shows as **Failed** and is removed
   from the list 7 days after the request; request a new one when the daily
   limit allows.
+- The administrator of your Inventario server sees a copy that failed and can
+  prepare it again for you. It then shows as **Waiting** again, you get the
+  email when it is ready, and it is deleted 7 days after that. This is not a
+  new request: the daily limit still counts from the request you made.
 - Only you can see and download your copies. The download works only in the
   browser where you are signed in and clicked **Download**.
 - A copy is **not a backup**. It holds only your part of each group, so it
@@ -338,7 +360,8 @@ create a new one.
 
 A token acts as you, with your current role in each group it can reach: if you
 are a viewer in a group, a **Read and write** token cannot change anything there
-either, and if you leave a group, the token loses it too. It works only on the
+either, and if you leave a group, the token loses it too; a token limited to
+that group is revoked. It works only on the
 data inside groups (items, locations, areas, files, tags, loans, services,
 maintenance, exports and the like), and it can read the list of your groups,
 each group's details, and its members and their photos.

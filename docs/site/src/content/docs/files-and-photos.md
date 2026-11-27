@@ -54,7 +54,9 @@ files in a row; click **Done** when you are finished.
 
 Attaching does not copy anything. It stays one file wherever it is attached:
 edit its title or tags once and every place shows the change, and it counts
-toward your group's storage once.
+toward your group's storage once, at the size it was uploaded. The thumbnails
+Inventario makes of a photo are not counted; the storage card in
+**Group settings → Data & storage** says so under the usage.
 
 The upload dialog itself runs in three quick steps:
 

@@ -38,8 +38,9 @@ type Service struct {
 	// location they don't need.
 	fileService *services.FileService
 	// avatars is optional. When set (via SetAvatarService), a tenant move
-	// copies the user's profile photo into the new tenant's storage. A move
-	// of a user who has a photo is refused while it is nil.
+	// copies the user's profile photo into the new tenant's storage, and
+	// DeleteUser deletes the photo of the user it deletes. A move of a user
+	// who has a photo is refused while it is nil; a delete leaves the photo.
 	avatars *services.AvatarService
 	// blacklist is optional. When set (via SetTokenBlacklist), ending a
 	// tenant's sessions stamps it for every user of the tenant, for
@@ -56,8 +57,9 @@ func NewServiceWithFactorySet(factorySet *registry.FactorySet) *Service {
 }
 
 // SetAvatarService wires the avatar service a tenant move copies the user's
-// profile photo with. Callers that may move users (the users update CLI, which
-// builds it from the --upload-location flag) must call this.
+// profile photo with and DeleteUser deletes it with. Callers that may move or
+// delete users (the users update and delete CLIs, which build it from the
+// --upload-location flag) must call this.
 func (s *Service) SetAvatarService(avatars *services.AvatarService) {
 	s.avatars = avatars
 }
@@ -695,25 +697,25 @@ func (s *Service) moveUserToTenant(ctx context.Context, user *models.User, tenan
 	return moved, nil
 }
 
-// DeleteUser hard-deletes a user's account along with its auth / identity rows
-// (#2116). Before this the method issued a bare DELETE FROM users, which the
-// many NO ACTION child FKs pointing at users(id) rejected, so deleting any user
-// that had ever logged in failed.
+// ErrUserOwnsContent is returned by DeleteUser for a user who still authored
+// content deleting the account cannot remove or hand over: items, files,
+// places, exports, or a group they created. The delete changes nothing.
+var ErrUserOwnsContent = errx.NewSentinel("the user still owns content")
+
+// DeleteUser hard-deletes a user's account along with its auth / identity rows.
 //
-// Order (each step aborts the whole operation on error):
+// Order:
 //
-//	a) purge the user's auth/identity dependent rows (UserPurger): refresh
-//	   tokens, login events, MFA secret, OAuth identities, memberships, …
-//	b) drop the users row itself.
-//
-// IMPORTANT: every content table (commodities/files/areas/locations/exports/
-// tags/…) carries a NOT NULL created_by_user_id (and a NOT NULL user_id RLS
-// owner), neither of which can be orphaned without a schema change. A user who
-// still OWNS content therefore CANNOT be hard-deleted today: the final
-// UserRegistry.Delete will fail with an FK violation. We surface that as a
-// clear, honest error rather than claiming success — full GDPR deletion of a
-// content-owning user needs ownership transfer or content purge first, which is
-// out of scope here.
+//	a) refuse, before anything is changed, a user who still authored content
+//	   (items, files, places, exports, groups they created) in any group:
+//	   those rows carry a NOT NULL created_by_user_id (or created_by) and
+//	   cannot be orphaned. Unlike self-service account deletion, an operator's
+//	   delete purges no group, so content in the user's private groups counts
+//	   too;
+//	b) purge the user's auth/identity dependent rows (UserPurger): refresh
+//	   tokens, login events, MFA secret, OAuth identities, memberships, …,
+//	   and hand the group rows they created to another member;
+//	c) drop the users row itself.
 func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 	// Validate the user exists (and resolve email -> id + tenant).
 	user, err := s.GetUser(ctx, idOrEmail)
@@ -721,23 +723,37 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 		return err
 	}
 
-	// (a) Purge the user's auth / identity dependent rows so the parent
+	// (a) The final delete would fail on owned content after (b) had
+	// removed the user from every group. Ask first, so a refused delete
+	// leaves the user as they were.
+	if s.factorySet.UserContentOwnershipChecker == nil {
+		return errxtrace.Wrap("the content ownership check is not configured", registry.ErrFieldRequired)
+	}
+	owns, err := s.factorySet.UserContentOwnershipChecker.HasRetainedOwnedContent(ctx, user.TenantID, user.ID, nil)
+	if err != nil {
+		return errxtrace.Wrap("failed to check the user's content", err)
+	}
+	if owns {
+		return userOwnsContentError(user)
+	}
+
+	// (b) Purge the user's auth / identity dependent rows so the parent
 	// users row has no remaining NO ACTION children from those tables.
 	if err := s.factorySet.UserPurger.PurgeUserDependents(ctx, user.TenantID, user.ID); err != nil {
 		return errxtrace.Wrap("failed to purge user dependents", err)
 	}
 
-	// (b) Drop the users row. If the user still owns content, the NOT NULL
-	// created_by_user_id / user_id FKs reject this DELETE — report the real
-	// cause instead of a misleading generic failure.
+	// (c) Drop the users row. Content created between (a) and here is the
+	// one way the foreign keys can still reject it.
 	if err := s.factorySet.UserRegistry.Delete(ctx, user.ID); err != nil {
-		return errxtrace.Wrap(
-			fmt.Sprintf(
-				"cannot delete user %s (%s): they still own content (commodities, files, areas, locations, exports, tags, …) which cannot be orphaned — reassign or delete that content first",
-				user.ID, user.Email,
-			),
-			err,
-		)
+		return errxtrace.Wrap("failed to delete the user row", err)
+	}
+
+	// (d) The account is gone, so a photo left behind would be a personal
+	// image nobody can see or remove. Best effort, as for self-service
+	// account deletion: the user is already deleted.
+	if s.avatars != nil && user.AvatarPath != nil {
+		s.avatars.DeleteStored(ctx, *user.AvatarPath)
 	}
 
 	return nil
@@ -752,6 +768,17 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 // The recovery story per #1380 v1 is "contact support"; this is the
 // support-side action. The user can re-enroll afterwards through the
 // normal Settings → Privacy & Security flow.
+// userOwnsContentError tells the operator what keeps the user and what to do.
+func userOwnsContentError(user *models.User) error {
+	return errxtrace.Wrap(
+		fmt.Sprintf(
+			"cannot delete user %s (%s): they still own content (items, files, places, exports or groups they created) — reassign or delete that content first",
+			user.ID, user.Email,
+		),
+		ErrUserOwnsContent,
+	)
+}
+
 func (s *Service) ResetUserMFA(ctx context.Context, idOrEmail string) (resetUser *models.User, hadEnrollment bool, err error) {
 	user, err := s.GetUser(ctx, idOrEmail)
 	if err != nil {

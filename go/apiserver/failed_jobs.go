@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +27,10 @@ const (
 	AuditActionAdminFailedJobList    = "admin.failed_job_list"
 	AuditActionAdminFailedJobRetry   = "admin.failed_job_retry"
 	AuditActionAdminFailedJobDiscard = "admin.failed_job_discard"
-	AuditActionFailedJobRetry        = "failed_job_retry"
+	// AuditActionAdminFailedJobBulkDiscard is one row per bulk discard
+	// (#2946), naming the filter and how many jobs it discarded.
+	AuditActionAdminFailedJobBulkDiscard = "admin.failed_job_bulk_discard"
+	AuditActionFailedJobRetry            = "failed_job_retry"
 )
 
 // JSON:API error codes of the failed-jobs endpoints.
@@ -40,6 +44,10 @@ const (
 	FailedJobNotFoundCode = "failed_job.not_found"
 	// FailedJobNotRetryableCode: the job's type can only be discarded. 409.
 	FailedJobNotRetryableCode = "failed_job.not_retryable"
+	// FailedJobInvalidFailedBeforeCode: ?failed_before is not a date or an
+	// RFC 3339 time, or, on a bulk discard, is missing or in the future.
+	// 400.
+	FailedJobInvalidFailedBeforeCode = "failed_job.invalid_failed_before"
 )
 
 // failedJobResourceType is the JSON:API resource type of a failed job.
@@ -123,8 +131,8 @@ type AdminFailedJobListEnvelope struct {
 	Meta FailedJobListMeta        `json:"meta"`
 }
 
-func failedJobTypeInfos() []FailedJobTypeInfo {
-	types := models.FailedJobTypes()
+func failedJobTypeInfos(scope registry.FailedJobScope) []FailedJobTypeInfo {
+	types := services.FailedJobTypesIn(scope)
 	out := make([]FailedJobTypeInfo, 0, len(types))
 	for _, t := range types {
 		out = append(out, FailedJobTypeInfo{Type: string(t), Retryable: models.FailedJobRetryable(t)})
@@ -132,13 +140,15 @@ func failedJobTypeInfos() []FailedJobTypeInfo {
 	return out
 }
 
-func failedJobListMeta(page, perPage, total int) FailedJobListMeta {
+// failedJobListMeta is the meta block of a list in the scope: a group's list
+// names only the types whose jobs belong to a group.
+func failedJobListMeta(scope registry.FailedJobScope, page, perPage, total int) FailedJobListMeta {
 	return FailedJobListMeta{
 		Page:       page,
 		PerPage:    perPage,
 		Total:      total,
 		TotalPages: jsonapi.ComputeTotalPages(total, perPage),
-		JobTypes:   failedJobTypeInfos(),
+		JobTypes:   failedJobTypeInfos(scope),
 	}
 }
 
@@ -156,14 +166,14 @@ func failedJobView(job *models.FailedJob) FailedJobView {
 }
 
 // parseFailedJobTypeFilter reads the optional ?type filter. ok is false
-// after it wrote a 400 for an unknown type.
-func parseFailedJobTypeFilter(w http.ResponseWriter, r *http.Request) (models.WorkerType, bool) {
+// after it wrote a 400 for a type the scope does not know.
+func parseFailedJobTypeFilter(w http.ResponseWriter, r *http.Request, scope registry.FailedJobScope) (models.WorkerType, bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("type"))
 	if raw == "" {
 		return "", true
 	}
 	t := models.WorkerType(raw)
-	if !models.IsFailedJobType(t) {
+	if !services.IsFailedJobTypeIn(scope, t) {
 		_ = codedBadRequestError(w, r, errUnknownFailedJobType, FailedJobUnknownTypeCode)
 		return "", false
 	}
@@ -174,17 +184,37 @@ func parseFailedJobTypeFilter(w http.ResponseWriter, r *http.Request) (models.Wo
 // the response and in the audit row.
 var errUnknownFailedJobType = errors.New("unknown job type")
 
+// errInvalidFailedBefore is the cause of a refused failed_before, in the
+// response and in the audit row.
+var errInvalidFailedBefore = errors.New("failed_before must be a date (2006-01-02) or an RFC 3339 time")
+
+// parseFailedBeforeFilter reads the optional ?failed_before filter. ok is
+// false after it wrote a 400 for a value it cannot read.
+func parseFailedBeforeFilter(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("failed_before"))
+	if raw == "" {
+		return time.Time{}, true
+	}
+	t, err := services.ParseFailedBefore(raw)
+	if err != nil {
+		_ = codedBadRequestError(w, r, errInvalidFailedBefore, FailedJobInvalidFailedBeforeCode)
+		return time.Time{}, false
+	}
+	return t, true
+}
+
 // maxAuditedJobTypeLen caps the {jobType} segment an audit row records for a
 // refused request: the segment is whatever the caller sent.
 const maxAuditedJobTypeLen = 64
 
 // failedJobPath reads the {jobType} and {jobID} path segments. known is
-// false for a type that keeps no failed jobs; the type is then the segment
-// as sent, cut to maxAuditedJobTypeLen bytes, for the audit row.
-func failedJobPath(r *http.Request) (jobType models.WorkerType, jobID string, known bool) {
+// false for a type whose failed jobs the scope does not reach; the type is
+// then the segment as sent, cut to maxAuditedJobTypeLen bytes, for the
+// audit row.
+func failedJobPath(r *http.Request, scope registry.FailedJobScope) (jobType models.WorkerType, jobID string, known bool) {
 	raw := strings.TrimSpace(chi.URLParam(r, "jobType"))
 	jobID = chi.URLParam(r, "jobID")
-	if t := models.WorkerType(raw); models.IsFailedJobType(t) {
+	if t := models.WorkerType(raw); services.IsFailedJobTypeIn(scope, t) {
 		return t, jobID, true
 	}
 	if len(raw) > maxAuditedJobTypeLen {
@@ -238,18 +268,25 @@ type adminFailedJobsAPI struct {
 // @Description Returns the background jobs that failed for good and were neither
 // @Description retried nor discarded, across every tenant, newest failure first
 // @Description (#1307). Each job is read from its type's own table; `id` is the row
-// @Description id there. ?type limits the list to one job type and ?tenantID to one
-// @Description tenant. `meta.job_types` lists the job types with whether each can be
-// @Description retried.
-// @Description An unknown ?type returns 400 with `failed_job.unknown_type`.
+// @Description id there. ?type limits the list to one job type, ?tenantID to one
+// @Description tenant and ?failed_before to the jobs that failed before a time (a
+// @Description job without a failure time counts from its creation), the jobs a bulk
+// @Description discard with the same filter takes. `meta.job_types` lists the job
+// @Description types with whether each can be retried. A personal data export
+// @Description belongs to a user, not to a group; its title is the user's email
+// @Description address.
+// @Description An unknown ?type returns 400 with `failed_job.unknown_type`, a
+// @Description ?failed_before that is not a date or an RFC 3339 time 400 with
+// @Description `failed_job.invalid_failed_before`.
 // @Tags admin
 // @Produce json-api
-// @Param type query string false "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration)
+// @Param type query string false "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
 // @Param tenantID query string false "Tenant ID"
+// @Param failed_before query string false "Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time" example(2026-11-01)
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Success 200 {object} AdminFailedJobListEnvelope "OK"
-// @Failure 400 {object} jsonapi.Errors "Bad Request - unknown job type"
+// @Failure 400 {object} jsonapi.Errors "Bad Request - unknown job type or unreadable failed_before"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
 // @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Router /admin/failed-jobs [get]
@@ -258,16 +295,22 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 	// The tenant filter is `tenantID`: the admin subtree is exempt from
 	// the check that refuses a tenant in the query, as for /admin/groups.
 	tenantID := strings.TrimSpace(q.Get("tenantID"))
-	jobType, ok := parseFailedJobTypeFilter(w, r)
+	scope := registry.FailedJobScope{TenantID: tenantID}
+	jobType, ok := parseFailedJobTypeFilter(w, r, scope)
 	if !ok {
 		api.audit(r, AuditActionAdminFailedJobList, tenantID, "", "", errUnknownFailedJobType)
+		return
+	}
+	failedBefore, ok := parseFailedBeforeFilter(w, r)
+	if !ok {
+		api.audit(r, AuditActionAdminFailedJobList, tenantID, "", "", errInvalidFailedBefore)
 		return
 	}
 	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 
 	result, err := api.service.List(r.Context(), services.FailedJobQuery{
 		Type:   jobType,
-		Scope:  registry.FailedJobScope{TenantID: tenantID},
+		Scope:  registry.FailedJobScope{TenantID: tenantID, FailedBefore: failedBefore},
 		Offset: (page - 1) * perPage,
 		Limit:  perPage,
 	})
@@ -290,7 +333,7 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 	setPaginationHeaders(w, page, perPage, result.Total)
 	writeErr := writeFailedJobEnvelope(w, r, AdminFailedJobListEnvelope{
 		Data: data,
-		Meta: failedJobListMeta(page, perPage, result.Total),
+		Meta: failedJobListMeta(scope, page, perPage, result.Total),
 	})
 	api.audit(r, AuditActionAdminFailedJobList, tenantID, "", "", writeErr)
 }
@@ -300,14 +343,16 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 // @Summary Retry a failed background job (admin)
 // @Description Puts the failed job back in its queue the way its type runs it again
 // @Description (#1307): an export or import runs from the start, a thumbnail gets a
-// @Description fresh set of attempts, an intake scan is due again at once. A restore
+// @Description fresh set of attempts, an intake scan is due again at once, a personal
+// @Description data export is built again from the start and kept until 7 days after
+// @Description the build finishes; it does not count as a new request. A restore
 // @Description and a currency migration cannot be retried (409
 // @Description `failed_job.not_retryable`); discard them instead. 404
 // @Description `failed_job.unknown_type` for an unknown type, 404
 // @Description `failed_job.not_found` when the job is not failed or was already
 // @Description retried or discarded.
 // @Tags admin
-// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration)
+// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
 // @Param jobID path string true "Job ID"
 // @Success 204 "No Content"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
@@ -330,7 +375,7 @@ func (api *adminFailedJobsAPI) retryFailedJob(w http.ResponseWriter, r *http.Req
 // @Description `failed_job.not_found` when the job is not failed or was already
 // @Description retried or discarded.
 // @Tags admin
-// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration)
+// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
 // @Param jobID path string true "Job ID"
 // @Success 204 "No Content"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
@@ -341,13 +386,146 @@ func (api *adminFailedJobsAPI) discardFailedJob(w http.ResponseWriter, r *http.R
 	api.act(w, r, AuditActionAdminFailedJobDiscard, api.service.Discard)
 }
 
+// AdminFailedJobBulkDiscardMeta says how many jobs a bulk discard took, or
+// would take on a dry run.
+type AdminFailedJobBulkDiscardMeta struct {
+	Discarded int `json:"discarded" example:"12"`
+	// ByType counts per job type; a type with none is left out.
+	ByType map[string]int `json:"by_type"`
+	DryRun bool           `json:"dry_run"`
+}
+
+// AdminFailedJobBulkDiscardResponse is the response of
+// POST /admin/failed-jobs/bulk-discard.
+type AdminFailedJobBulkDiscardResponse struct {
+	Meta AdminFailedJobBulkDiscardMeta `json:"meta"`
+}
+
+// errFailedBeforeRequired is the cause of a bulk discard without a time.
+var errFailedBeforeRequired = errors.New("failed_before is required")
+
+// bulkDiscardFailedJobs discards the failed jobs that failed before a time.
+//
+// @Summary Discard failed background jobs in bulk (admin)
+// @Description Marks discarded every failed job that failed before ?failed_before
+// @Description (#2946), as the single discard does: the jobs leave the failed list
+// @Description and the depth gauge and keep their rows and errors. A job without a
+// @Description failure time counts from its creation. The filter is the list's:
+// @Description ?type limits the discard to one job type and ?tenantID to one tenant,
+// @Description and GET /admin/failed-jobs with the same query lists the jobs it
+// @Description takes. ?dry_run=true only counts them. `meta.discarded` is how many
+// @Description jobs were discarded; a job someone retried or discarded in the
+// @Description meantime is not among them.
+// @Description A discard writes one audit row that names the filter and the counts,
+// @Description also when it is refused; a dry run writes none. Needs the
+// @Description platform_admin role: a support_agent gets 403 `admin.role_required`.
+// @Description A missing, unreadable or future ?failed_before returns 400
+// @Description `failed_job.invalid_failed_before`, an unknown ?type 400
+// @Description `failed_job.unknown_type`.
+// @Tags admin
+// @Produce json-api
+// @Param failed_before query string true "Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future" example(2026-11-01)
+// @Param type query string false "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
+// @Param tenantID query string false "Tenant ID"
+// @Param dry_run query bool false "Count the jobs and discard nothing"
+// @Success 200 {object} AdminFailedJobBulkDiscardResponse "OK"
+// @Failure 400 {object} jsonapi.Errors "Bad Request - missing, unreadable or future failed_before, or unknown job type"
+// @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
+// @Failure 403 {object} jsonapi.Errors "Forbidden - account disabled, or not a platform_admin"
+// @Router /admin/failed-jobs/bulk-discard [post]
+func (api *adminFailedJobsAPI) bulkDiscardFailedJobs(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	dryRun := false
+	if raw := strings.TrimSpace(q.Get("dry_run")); raw != "" {
+		var err error
+		if dryRun, err = strconv.ParseBool(raw); err != nil {
+			_ = badRequest(w, r, errors.New("dry_run must be true or false"))
+			return
+		}
+	}
+	tenantID := strings.TrimSpace(q.Get("tenantID"))
+	rawType := strings.TrimSpace(q.Get("type"))
+	if len(rawType) > maxAuditedJobTypeLen {
+		rawType = strings.ToValidUTF8(rawType[:maxAuditedJobTypeLen], "")
+	}
+	extra := map[string]any{"failed_before": auditValue(strings.TrimSpace(q.Get("failed_before"))), "type": rawType}
+	audit := func(err error) {
+		if !dryRun {
+			api.bulkAudit(r, tenantID, rawType, extra, err)
+		}
+	}
+
+	jobType, ok := parseFailedJobTypeFilter(w, r, registry.FailedJobScope{TenantID: tenantID})
+	if !ok {
+		audit(errUnknownFailedJobType)
+		return
+	}
+	failedBefore, ok := parseFailedBeforeFilter(w, r)
+	if !ok {
+		audit(errInvalidFailedBefore)
+		return
+	}
+	if failedBefore.IsZero() {
+		audit(errFailedBeforeRequired)
+		_ = codedBadRequestError(w, r, errFailedBeforeRequired, FailedJobInvalidFailedBeforeCode)
+		return
+	}
+	extra["failed_before"] = failedBefore.Format(time.RFC3339)
+
+	query := services.FailedJobBulkQuery{
+		Type:  jobType,
+		Scope: registry.FailedJobScope{TenantID: tenantID, FailedBefore: failedBefore},
+	}
+	var counts services.FailedJobCounts
+	var err error
+	if dryRun {
+		counts, err = api.service.CountBulk(r.Context(), query)
+	} else {
+		counts, err = api.service.DiscardBulk(r.Context(), query)
+		extra["discarded"] = counts.Total
+		extra["by_type"] = counts.ByType
+		audit(err)
+	}
+	switch {
+	case errors.Is(err, registry.ErrInvalidInput):
+		_ = codedBadRequestError(w, r, errors.New("failed_before must not be in the future"), FailedJobInvalidFailedBeforeCode)
+		return
+	case err != nil:
+		_ = internalServerError(w, r, err)
+		return
+	}
+	_ = writeFailedJobEnvelope(w, r, AdminFailedJobBulkDiscardResponse{Meta: AdminFailedJobBulkDiscardMeta{
+		Discarded: counts.Total,
+		ByType:    counts.ByType,
+		DryRun:    dryRun,
+	}})
+}
+
+// bulkAudit writes the one audit row of a bulk discard. The subject is the
+// job type of the filter, none for every type.
+func (api *adminFailedJobsAPI) bulkAudit(r *http.Request, tenantID, jobType string, extra map[string]any, opErr error) {
+	if api.auditService == nil {
+		return
+	}
+	api.auditService.LogAdmin(r.Context(), services.AdminEvent{
+		Action:      AuditActionAdminFailedJobBulkDiscard,
+		ActorID:     actorIDFromRequest(r),
+		TenantID:    nullableString(tenantID),
+		SubjectType: nullableString(jobType),
+		Success:     opErr == nil,
+		Request:     r,
+		ErrMsg:      strPtrFromErr(opErr),
+		Extra:       extra,
+	})
+}
+
 // failedJobAction is a FailedJobService retry or discard.
 type failedJobAction func(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string) (*models.FailedJob, error)
 
 // act runs a retry or discard across tenants and audits it, also when it
 // is refused, with the job's tenant when the job was found.
 func (api *adminFailedJobsAPI) act(w http.ResponseWriter, r *http.Request, action string, do failedJobAction) {
-	jobType, jobID, known := failedJobPath(r)
+	jobType, jobID, known := failedJobPath(r, registry.FailedJobScope{})
 	if !known {
 		api.audit(r, action, "", string(jobType), jobID, errUnknownFailedJobType)
 		writeUnknownFailedJobType(w, r)
@@ -514,7 +692,7 @@ func (api *groupFailedJobsAPI) list(w http.ResponseWriter, r *http.Request) {
 		_ = internalServerError(w, r, errors.New("group context required"))
 		return
 	}
-	jobType, ok := parseFailedJobTypeFilter(w, r)
+	jobType, ok := parseFailedJobTypeFilter(w, r, scope)
 	if !ok {
 		return
 	}
@@ -535,7 +713,7 @@ func (api *groupFailedJobsAPI) list(w http.ResponseWriter, r *http.Request) {
 		data = append(data, FailedJobResource{Type: failedJobResourceType, ID: job.ID, Attributes: failedJobView(job)})
 	}
 	setPaginationHeaders(w, page, perPage, result.Total)
-	_ = writeFailedJobEnvelope(w, r, FailedJobListEnvelope{Data: data, Meta: failedJobListMeta(page, perPage, result.Total)})
+	_ = writeFailedJobEnvelope(w, r, FailedJobListEnvelope{Data: data, Meta: failedJobListMeta(scope, page, perPage, result.Total)})
 }
 
 // retry puts one of the group's failed jobs back in its queue.
@@ -562,7 +740,7 @@ func (api *groupFailedJobsAPI) retry(w http.ResponseWriter, r *http.Request) {
 		_ = internalServerError(w, r, errors.New("group context required"))
 		return
 	}
-	jobType, jobID, known := failedJobPath(r)
+	jobType, jobID, known := failedJobPath(r, scope)
 	if !known {
 		api.audit(r, scope, string(jobType), jobID, errUnknownFailedJobType)
 		writeUnknownFailedJobType(w, r)

@@ -31,13 +31,18 @@ type failedJobAdapter struct {
 	where func(store.TableNames) string
 	// columns selects the failedJobRow fields.
 	columns func(store.TableNames) string
-	// groupColumn is the column that holds the job's group.
+	// groupColumn is the column that holds the job's group. Empty for a
+	// type whose jobs belong to no group, which a group scope does not
+	// reach.
 	groupColumn string
 	// retrySet is the SET clause of a retry, where @now stands for the time
 	// of the retry. Empty for a type that cannot be retried.
 	retrySet string
 	// failedAt orders the list, newest failure first.
 	failedAt string
+	// createdAt is the creation column: a job without a failure time counts
+	// from it for FailedBefore.
+	createdAt string
 	// asWorker reads a group scope under the background-worker role: the
 	// table's row-level security is per user, not per group, so the app role
 	// with a group context would see no rows. The group filter in the query
@@ -74,6 +79,7 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		groupColumn: "j.group_id",
 		retrySet:    failedJobExportRetry,
 		failedAt:    "j.completed_date",
+		createdAt:   "j.created_date",
 	},
 	models.WorkerTypeImport: {
 		table:       func(t store.TableNames) store.TableName { return t.Exports() },
@@ -82,6 +88,7 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		groupColumn: "j.group_id",
 		retrySet:    failedJobExportRetry,
 		failedAt:    "j.completed_date",
+		createdAt:   "j.created_date",
 	},
 	// A restore is not retried: it may have written part of its backup.
 	models.WorkerTypeRestore: {
@@ -93,6 +100,7 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		},
 		groupColumn: "j.group_id",
 		failedAt:    "j.completed_date",
+		createdAt:   "j.created_date",
 	},
 	models.WorkerTypeThumbnail: {
 		table: func(t store.TableNames) store.TableName { return t.ThumbnailGenerationJobs() },
@@ -117,8 +125,9 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		// retry starts it over.
 		retrySet: `status = 'pending', attempt_count = 0, error_message = '',
 			processing_started_at = NULL, processing_completed_at = NULL, updated_at = @now`,
-		failedAt: "j.processing_completed_at",
-		asWorker: true,
+		failedAt:  "j.processing_completed_at",
+		createdAt: "j.created_at",
+		asWorker:  true,
 	},
 	// A failed scan is retried the way resuming its session retries it: back
 	// in the queue, due now, with a fresh allowance of attempts. Attempts
@@ -138,7 +147,8 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 			wait_reason = '', error_code = '', updated_at = @now`,
 		// A failed source is not changed again until it is retried, so its
 		// last change is its failure.
-		failedAt: "j.updated_at",
+		failedAt:  "j.updated_at",
+		createdAt: "j.created_at",
 	},
 	// A currency migration is not retried: its rate and totals were
 	// confirmed in a preview for that moment. A new migration is started
@@ -152,6 +162,28 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		},
 		groupColumn: "j.group_id",
 		failedAt:    "j.completed_at",
+		createdAt:   "j.created_at",
+	},
+	// A personal data export belongs to a user, not to a group. Its title is
+	// the user's email address, so the operator knows whose copy it is. A
+	// retry builds it again from the start, and the new expiry keeps the row
+	// until the build is done; the build sets the expiry again when it
+	// finishes.
+	models.FailedJobTypePersonalDataExport: {
+		table: func(t store.TableNames) store.TableName { return t.PersonalDataExports() },
+		join: func(t store.TableNames) string {
+			return fmt.Sprintf("LEFT JOIN %s u ON u.id = j.user_id", t.Users())
+		},
+		columns: func(store.TableNames) string {
+			return `j.id, j.tenant_id, '' AS group_id, j.user_id, COALESCE(u.email, '') AS title,
+				j.error_message AS error, GREATEST(j.attempt_count, 1) AS attempts, j.created_at,
+				j.completed_at AS failed_at`
+		},
+		retrySet: fmt.Sprintf(`status = 'pending', error_message = '', started_at = NULL, completed_at = NULL,
+			blob_key = '', size_bytes = 0, expires_at = @now::timestamp + INTERVAL '%d seconds'`,
+			int64(models.PersonalDataExportRetention/time.Second)),
+		failedAt:  "j.completed_at",
+		createdAt: "j.created_at",
 	},
 }
 
@@ -166,9 +198,11 @@ func NewFailedJobRegistry(dbx *sqlx.DB) *FailedJobRegistry {
 	return &FailedJobRegistry{dbx: dbx, tableNames: store.DefaultTableNames}
 }
 
-func (r *FailedJobRegistry) adapter(jobType models.WorkerType) (failedJobAdapter, error) {
+// adapter returns the type's adapter for the scope. A group scope does not
+// know a type whose jobs belong to no group.
+func (r *FailedJobRegistry) adapter(jobType models.WorkerType, scope registry.FailedJobScope) (failedJobAdapter, error) {
 	a, ok := failedJobAdapters[jobType]
-	if !ok {
+	if !ok || (scope.GroupID != "" && a.groupColumn == "") {
 		return failedJobAdapter{}, errxtrace.Classify(registry.ErrUnknownFailedJobType, errx.Attrs("job_type", string(jobType)))
 	}
 	return a, nil
@@ -207,6 +241,10 @@ func (r *FailedJobRegistry) conditions(a failedJobAdapter, scope registry.Failed
 		conds = append(conds, fmt.Sprintf("%s = $%d", a.groupColumn, next+len(args)))
 		args = append(args, scope.GroupID)
 	}
+	if !scope.FailedBefore.IsZero() {
+		conds = append(conds, fmt.Sprintf("COALESCE(%s, %s) < $%d", a.failedAt, a.createdAt, next+len(args)))
+		args = append(args, scope.FailedBefore.UTC())
+	}
 	return strings.Join(conds, " AND "), args
 }
 
@@ -219,7 +257,7 @@ func (r *FailedJobRegistry) from(a failedJobAdapter) string {
 }
 
 func (r *FailedJobRegistry) ListFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, limit int) ([]*models.FailedJob, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +282,7 @@ func (r *FailedJobRegistry) ListFailed(ctx context.Context, jobType models.Worke
 }
 
 func (r *FailedJobRegistry) CountFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope) (int, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return 0, err
 	}
@@ -261,7 +299,7 @@ func (r *FailedJobRegistry) CountFailed(ctx context.Context, jobType models.Work
 }
 
 func (r *FailedJobRegistry) GetFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string) (*models.FailedJob, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +319,7 @@ func (r *FailedJobRegistry) GetFailed(ctx context.Context, jobType models.Worker
 }
 
 func (r *FailedJobRegistry) Retry(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string, now time.Time) error {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return err
 	}
@@ -292,11 +330,41 @@ func (r *FailedJobRegistry) Retry(ctx context.Context, jobType models.WorkerType
 }
 
 func (r *FailedJobRegistry) Discard(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string, now time.Time) error {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return err
 	}
 	return r.update(ctx, a, jobType, scope, id, "discarded_at = @now", now)
+}
+
+// DiscardFailed marks the type's failed jobs in the scope discarded in one
+// statement. A row another transaction holds, a retry say, is skipped and
+// left to the next call.
+func (r *FailedJobRegistry) DiscardFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, now time.Time) (int, error) {
+	a, err := r.adapter(jobType, scope)
+	if err != nil {
+		return 0, err
+	}
+	if scope.FailedBefore.IsZero() {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "failed_before"))
+	}
+	where, scopeArgs := r.conditions(a, scope, 2)
+	args := append([]any{now.UTC()}, scopeArgs...)
+	query := fmt.Sprintf("UPDATE %s SET discarded_at = $1 WHERE id IN (SELECT j.id FROM %s WHERE %s FOR UPDATE OF j SKIP LOCKED)",
+		a.table(r.tableNames), r.from(a), where)
+	var changed int64
+	err = r.do(ctx, a, scope, func(ctx context.Context, tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		changed, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to discard failed jobs", err, errx.Attrs("job_type", string(jobType)))
+	}
+	return int(changed), nil
 }
 
 // update applies set to the job when it is a failed, undiscarded job of the

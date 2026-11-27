@@ -23,7 +23,7 @@ An `.inb` artifact is an **outer tar** (`internal/inb`) holding:
 1. `payload.tar.gz.sig` — an Ed25519 signature (`internal/backupsign`) over the streaming SHA-256 digest of the payload.
 2. `payload.tar.gz` — a gzip(tar) payload whose members are, **in this order**:
    - `manifest.json` — written first; format, signing-key info, per-location index, the group's sellers, item types and custom fields (format 3.6), and aggregate statistics (see `inb_types.go`).
-   - one `location-<slug>-<uuid>.json` member per location (location → areas → commodities, each commodity bundling its image/invoice/manual file references), each immediately followed by that location's commodity file bytes at `files/<loc-slug>/<commodity-uuid>/<bucket>/<file-uuid>/<name>`.
+   - one `location-<slug>-<uuid>.json` member per location (location → areas → commodities, each commodity bundling its image/invoice/manual file references and, from format 3.9, its loans, service records, maintenance schedules, supply links and reminders, each naming the UUID of the member who recorded it), each immediately followed by that location's commodity file bytes at `files/<loc-slug>/<commodity-uuid>/<bucket>/<file-uuid>/<name>`.
    - `unassigned-commodities.json` — area-less commodities, written only when at least one is in scope (issue #1986), followed by their file bytes.
    - `files/_drafts.json` — the group's **open drafts** of new items (#2812, format 3.5): each with its UUID, client key, form values, revision and timestamps. The form values name the draft's area and seller by UUID; the entries under `custom_fields` (format 3.6) are keyed by the field's UUID like an item's values, and a link names the linked item's UUID. Written only by a whole-class export of a group that has an open draft; promoted drafts and drafts being discarded are left out. The legacy XML exporter writes no drafts and exports a draft's file as a standalone file. The planning pass encodes this member and fails the export with `ErrDraftsTooLarge` when it exceeds the 32 MiB a restore accepts for one JSON member. The drafts are read before the items, so a promotion during the export leaves both the draft and the item in the archive rather than neither.
    - `files/_intake_documents.json` — the record of the **documents other systems delivered** (#2809, format 3.7): each with its UUID, its identity in the other system (`externalSystem`, `externalInstance`, `externalDocumentId`), the source name and URL, the payload hash, and whether a draft was made (`draftMade`). The draft and the item it made are named by UUID when the archive carries them. Written only by a whole-class export of a group that has a delivered document; the intake sessions are not in the archive. The planning pass fails the export with `ErrIntakeDocumentsTooLarge` when the member exceeds the 32 MiB a restore accepts.
@@ -35,7 +35,7 @@ The exporter stamps the resulting `FileEntity` with `Ext=".inb"`, `MIMEType="app
 
 ### Format versioning
 
-`INBFormatVersion` (manifest `version`) is currently `"3.7"`; `inb_types.go` records what each version added. The **MAJOR** component is the compatibility contract the restore side enforces: a reader accepts any archive whose major version it knows and rejects a higher one with `ErrUnsupportedFormatVersion` *before* touching any data. MINOR bumps are additive-only — a new **optional** member plus an optional manifest pointer, dispatched by member name — so a 2.0 archive still restores unchanged on a 2.1 reader.
+`INBFormatVersion` (manifest `version`) is currently `"3.9"`; `inb_types.go` records what each version added. The **MAJOR** component is the compatibility contract the restore side enforces: a reader accepts any archive whose major version it knows and rejects a higher one with `ErrUnsupportedFormatVersion` *before* touching any data. MINOR bumps are additive-only — a new **optional** member plus an optional manifest pointer, dispatched by member name — so a 2.0 archive still restores unchanged on a 2.1 reader.
 
 The optional members (`unassignedFile`, `draftsFile`, `intakeDocumentsFile`, `filesFile`) are omitted entirely when empty, so an archive that uses none of them is byte-stable against the 2.0 layout.
 
@@ -72,7 +72,7 @@ A row is the user's when its `created_by_user_id` is the user (or `user_id` wher
 
 ### Legacy: XML (build-tag-gated)
 
-The pre-#534 XML format (root `<inventory>` with base64-embedded file data) is **deprecated** and compiled only with `go build -tags legacy_xml_backup`. Do not write new code against it.
+The pre-#534 XML format (root `<inventory>` with base64-embedded file data) is **deprecated** and compiled only with `go build -tags legacy_xml_backup`. Do not write new code against it. The `test` job of `.github/workflows/go-test.yml` vets the tagged build and runs the backup tests under the tag, and a test file that uses an `.inb` fixture needs `//go:build !legacy_xml_backup`, as the fixtures have.
 
 ## Key Features
 

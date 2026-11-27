@@ -26,7 +26,8 @@
       "restore": "Восстановление",
       "thumbnail": "Миниатюра",
       "intake": "Распознавание документа",
-      "currencyMigration": "Смена валюты"
+      "currencyMigration": "Смена валюты",
+      "personalDataExport": "Выгрузка личных данных"
     }
   },
   "listError": {

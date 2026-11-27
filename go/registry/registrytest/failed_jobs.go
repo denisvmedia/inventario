@@ -23,8 +23,9 @@ type FailedJobGroup struct {
 
 // FailedJobEnv is what RunFailedJobContract needs from a backend: the
 // failed-jobs registry, the tenant, two groups of it with the same member,
-// and the intake service registry the scan worker uses. Both groups start
-// empty.
+// the intake service registry the scan worker uses, and the personal data
+// export registry with a user of the tenant stored in the users table. Both
+// groups start empty.
 type FailedJobEnv struct {
 	Jobs     registry.FailedJobRegistry
 	TenantID string
@@ -32,13 +33,17 @@ type FailedJobEnv struct {
 	UserID        string
 	A, B          FailedJobGroup
 	IntakeService registry.IntakeRegistry
+	// PersonalExports stores the personal data exports of PersonalUser,
+	// a user of the tenant. They start empty.
+	PersonalExports registry.PersonalDataExportRegistry
+	PersonalUser    *models.User
 }
 
 // RunFailedJobContract checks a backend's FailedJobRegistry (#1307): each
 // job type's failed jobs are listed from its own table, a group scope never
-// reaches another group's jobs, a retry puts a job back in its queue for the
-// types that can be retried, and a discard keeps the row. newEnv is called
-// once per subtest.
+// reaches another group's jobs nor a personal data export, a retry puts a
+// job back in its queue for the types that can be retried, and a discard
+// keeps the row. newEnv is called once per subtest.
 func RunFailedJobContract(t *testing.T, newEnv func(t *testing.T) FailedJobEnv) {
 	tests := []struct {
 		name string
@@ -53,6 +58,11 @@ func RunFailedJobContract(t *testing.T, newEnv func(t *testing.T) FailedJobEnv) 
 		{"an unknown type and a group without a tenant are refused", failedJobContractRefusals},
 		{"a discarded scan that is resumed or rescanned shows again when it fails", failedJobContractIntakeRequeue},
 		{"only the newest thumbnail job of a file counts", failedJobContractThumbnailNewest},
+		{"a personal data export is listed outside a group only", failedJobContractPersonalList},
+		{"a retry builds a personal data export again", failedJobContractPersonalRetry},
+		{"a discarded personal data export keeps its row", failedJobContractPersonalDiscard},
+		{"failed before limits the list and the count", failedJobContractFailedBefore},
+		{"a bulk discard marks the jobs that failed before the time", failedJobContractDiscardFailed},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -231,7 +241,7 @@ func failedJobContractList(t *testing.T, env FailedJobEnv) {
 		models.WorkerTypeCurrencyMigration: 1,
 	}
 
-	for _, jobType := range models.FailedJobTypes() {
+	for _, jobType := range models.FailedJobGroupTypes() {
 		c.Run(string(jobType), func(c *qt.C) {
 			c.Assert(failedIDs(c, env, jobType, groupScope(env, env.A)), qt.DeepEquals, []string{a[jobType]})
 			c.Assert(failedIDs(c, env, jobType, groupScope(env, env.B)), qt.DeepEquals, []string{b[jobType]})
@@ -273,7 +283,7 @@ func failedJobContractGroupIsolation(t *testing.T, env FailedJobEnv) {
 	ctx := context.Background()
 	scopeA := groupScope(env, env.A)
 
-	for _, jobType := range models.FailedJobTypes() {
+	for _, jobType := range models.FailedJobGroupTypes() {
 		c.Run(string(jobType), func(c *qt.C) {
 			_, err := env.Jobs.GetFailed(ctx, jobType, scopeA, b[jobType])
 			c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -297,7 +307,7 @@ func failedJobContractRetry(t *testing.T, env FailedJobEnv) {
 	ctx := context.Background()
 	scopeA := groupScope(env, env.A)
 
-	for _, jobType := range models.FailedJobTypes() {
+	for _, jobType := range models.FailedJobGroupTypes() {
 		if !models.FailedJobRetryable(jobType) {
 			continue
 		}
@@ -345,7 +355,7 @@ func failedJobContractNotRetryable(t *testing.T, env FailedJobEnv) {
 	ctx := context.Background()
 	scopeA := groupScope(env, env.A)
 
-	for _, jobType := range models.FailedJobTypes() {
+	for _, jobType := range models.FailedJobGroupTypes() {
 		if models.FailedJobRetryable(jobType) {
 			continue
 		}
@@ -363,7 +373,7 @@ func failedJobContractDiscard(t *testing.T, env FailedJobEnv) {
 	ctx := context.Background()
 	scopeA := groupScope(env, env.A)
 
-	for _, jobType := range models.FailedJobTypes() {
+	for _, jobType := range models.FailedJobGroupTypes() {
 		c.Assert(env.Jobs.Discard(ctx, jobType, scopeA, a[jobType], now), qt.IsNil, qt.Commentf("%s", jobType))
 		c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.HasLen, 0, qt.Commentf("%s", jobType))
 		n, err := env.Jobs.CountFailed(ctx, jobType, registry.FailedJobScope{})
@@ -536,4 +546,245 @@ func failedJobContractThumbnailNewest(t *testing.T, env FailedJobEnv) {
 		c.Assert(env.Jobs.Retry(ctx, models.WorkerTypeThumbnail, scope, id, base), qt.ErrorIs, registry.ErrNotFound)
 		c.Assert(env.Jobs.Discard(ctx, models.WorkerTypeThumbnail, scope, id, base), qt.ErrorIs, registry.ErrNotFound)
 	}
+}
+
+// seedPersonalExports stores, for the env's personal user, a personal data
+// export whose build failed at failedAt, and one that finished, which no
+// list may show. It returns the failed one.
+func seedPersonalExports(c *qt.C, env FailedJobEnv, failedAt time.Time) *models.PersonalDataExport {
+	c.Helper()
+	ctx := context.Background()
+	request := func(at time.Time) *models.PersonalDataExport {
+		created, blocking, err := env.PersonalExports.CreateUnlessRequestedSince(ctx, models.PersonalDataExport{
+			TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: env.TenantID, UserID: env.PersonalUser.ID},
+			CreatedAt:               at,
+			ExpiresAt:               at.Add(models.PersonalDataExportRetention),
+		}, at)
+		c.Assert(err, qt.IsNil)
+		c.Assert(blocking, qt.IsNil)
+		claimed, err := env.PersonalExports.ClaimPending(ctx, created.ID, at)
+		c.Assert(err, qt.IsNil)
+		c.Assert(claimed, qt.IsTrue)
+		got, err := env.PersonalExports.Get(ctx, created.ID)
+		c.Assert(err, qt.IsNil)
+		return got
+	}
+
+	done := request(failedAt.Add(-2 * time.Hour))
+	done.Status = models.PersonalDataExportStatusCompleted
+	done.BlobKey = "done.tar.gz"
+	done.CompletedAt = new(failedAt.Add(-time.Hour))
+	_, err := env.PersonalExports.Update(ctx, *done)
+	c.Assert(err, qt.IsNil)
+
+	failed := request(failedAt.Add(-time.Hour))
+	failed.Status = models.PersonalDataExportStatusFailed
+	failed.ErrorMessage = "the account is not active"
+	failed.CompletedAt = new(failedAt)
+	stored, err := env.PersonalExports.Update(ctx, *failed)
+	c.Assert(err, qt.IsNil)
+	return stored
+}
+
+func failedJobContractPersonalList(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	failedAt := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
+	export := seedPersonalExports(c, env, failedAt)
+	jobType := models.FailedJobTypePersonalDataExport
+
+	c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.DeepEquals, []string{export.ID})
+	c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{TenantID: env.TenantID}), qt.DeepEquals, []string{export.ID})
+	c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{TenantID: "another-tenant"}), qt.HasLen, 0)
+	n, err := env.Jobs.CountFailed(ctx, jobType, registry.FailedJobScope{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+
+	job, err := env.Jobs.GetFailed(ctx, jobType, registry.FailedJobScope{}, export.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(job.Type, qt.Equals, jobType)
+	c.Assert(job.TenantID, qt.Equals, env.TenantID)
+	c.Assert(job.GroupID, qt.Equals, "")
+	c.Assert(job.UserID, qt.Equals, env.PersonalUser.ID)
+	c.Assert(job.Title, qt.Equals, env.PersonalUser.Email)
+	c.Assert(job.Error, qt.Equals, "the account is not active")
+	c.Assert(job.Attempts, qt.Equals, 1)
+	c.Assert(job.FailedAt, qt.IsNotNil)
+	c.Assert(job.FailedAt.Equal(failedAt), qt.IsTrue, qt.Commentf("failed at %s", job.FailedAt))
+
+	// A group scope does not know the type: the export belongs to a user.
+	scopeA := groupScope(env, env.A)
+	_, err = env.Jobs.ListFailed(ctx, jobType, scopeA, 0)
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	_, err = env.Jobs.CountFailed(ctx, jobType, scopeA)
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	_, err = env.Jobs.GetFailed(ctx, jobType, scopeA, export.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	c.Assert(env.Jobs.Retry(ctx, jobType, scopeA, export.ID, failedAt), qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	c.Assert(env.Jobs.Discard(ctx, jobType, scopeA, export.ID, failedAt), qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.DeepEquals, []string{export.ID})
+}
+
+func failedJobContractPersonalRetry(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	export := seedPersonalExports(c, env, now.Add(-time.Hour))
+	jobType := models.FailedJobTypePersonalDataExport
+
+	c.Assert(env.Jobs.Retry(ctx, jobType, registry.FailedJobScope{TenantID: env.TenantID}, export.ID, now), qt.IsNil)
+	c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.HasLen, 0)
+	c.Assert(env.Jobs.Retry(ctx, jobType, registry.FailedJobScope{}, export.ID, now), qt.ErrorIs, registry.ErrNotFound,
+		qt.Commentf("an export retried once is no longer failed"))
+
+	got, err := env.PersonalExports.Get(ctx, export.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+	c.Assert(got.ErrorMessage, qt.Equals, "")
+	c.Assert(got.StartedAt, qt.IsNil)
+	c.Assert(got.CompletedAt, qt.IsNil)
+	c.Assert(got.BlobKey, qt.Equals, "")
+	c.Assert(got.SizeBytes, qt.Equals, int64(0))
+	c.Assert(got.AttemptCount, qt.Equals, 1, qt.Commentf("the builds of earlier runs are kept"))
+	c.Assert(got.ExpiresAt.Equal(now.Add(models.PersonalDataExportRetention)), qt.IsTrue,
+		qt.Commentf("the row is kept while the build waits: expires at %s", got.ExpiresAt))
+	c.Assert(got.CreatedAt.Equal(export.CreatedAt), qt.IsTrue, qt.Commentf("the request keeps its time"))
+
+	claimed, err := env.PersonalExports.ClaimPending(ctx, export.ID, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue, qt.Commentf("the worker builds it again"))
+}
+
+func failedJobContractPersonalDiscard(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	export := seedPersonalExports(c, env, now.Add(-time.Hour))
+	jobType := models.FailedJobTypePersonalDataExport
+
+	c.Assert(env.Jobs.Discard(ctx, jobType, registry.FailedJobScope{TenantID: "another-tenant"}, export.ID, now), qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(env.Jobs.Discard(ctx, jobType, registry.FailedJobScope{}, export.ID, now), qt.IsNil)
+	c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.HasLen, 0)
+	c.Assert(env.Jobs.Discard(ctx, jobType, registry.FailedJobScope{}, export.ID, now), qt.ErrorIs, registry.ErrNotFound,
+		qt.Commentf("an export is discarded once"))
+	c.Assert(env.Jobs.Retry(ctx, jobType, registry.FailedJobScope{}, export.ID, now), qt.ErrorIs, registry.ErrNotFound,
+		qt.Commentf("a discarded export is not retried"))
+
+	got, err := env.PersonalExports.Get(ctx, export.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(got.ErrorMessage, qt.Equals, "the account is not active")
+	c.Assert(got.DiscardedAt, qt.IsNotNil)
+}
+
+// The seed backdates every failure but the intake scan's, which fails at
+// the wall clock: a cutoff a day ago leaves the scan out, one an hour ahead
+// takes it in.
+func failedJobContractFailedBefore(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	a := seedFailedJobs(c, env, env.A, now.Add(-48*time.Hour))
+	dayAgo := registry.FailedJobScope{FailedBefore: now.Add(-24 * time.Hour)}
+	ahead := registry.FailedJobScope{FailedBefore: now.Add(time.Hour)}
+
+	for _, jobType := range models.FailedJobGroupTypes() {
+		want := []string{a[jobType]}
+		if jobType == models.WorkerTypeIntake {
+			want = []string{}
+		}
+		c.Assert(failedIDs(c, env, jobType, dayAgo), qt.DeepEquals, want, qt.Commentf("%s", jobType))
+		n, err := env.Jobs.CountFailed(ctx, jobType, dayAgo)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, len(want), qt.Commentf("%s", jobType))
+		c.Assert(failedIDs(c, env, jobType, ahead), qt.DeepEquals, []string{a[jobType]}, qt.Commentf("%s", jobType))
+	}
+
+	personal := seedPersonalExports(c, env, now.Add(-48*time.Hour))
+	personalType := models.FailedJobTypePersonalDataExport
+	c.Assert(failedIDs(c, env, personalType, dayAgo), qt.DeepEquals, []string{personal.ID})
+	n, err := env.Jobs.CountFailed(ctx, personalType, dayAgo)
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+	c.Assert(failedIDs(c, env, personalType, registry.FailedJobScope{FailedBefore: now.Add(-72 * time.Hour)}), qt.HasLen, 0)
+
+	// An export that failed without a completion time counts from its
+	// creation, which the postgres registry sets to the time of Create.
+	g := env.A
+	undated, err := g.Set.ExportRegistry.Create(g.Ctx, models.Export{
+		Type:         models.ExportTypeFullDatabase,
+		Status:       models.ExportStatusFailed,
+		Description:  "Old backup",
+		ErrorMessage: "failed",
+		CreatedDate:  models.NewPTimestamp(now),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(failedIDs(c, env, models.WorkerTypeExport, dayAgo), qt.DeepEquals, []string{a[models.WorkerTypeExport]})
+	ids := failedIDs(c, env, models.WorkerTypeExport, ahead)
+	c.Assert(ids, qt.HasLen, 2)
+	c.Assert(ids, qt.Contains, undated.ID)
+}
+
+func failedJobContractDiscardFailed(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	a := seedFailedJobs(c, env, env.A, now.Add(-48*time.Hour))
+	b := seedFailedJobs(c, env, env.B, now.Add(-48*time.Hour))
+	dayAgoInA := groupScope(env, env.A)
+	dayAgoInA.FailedBefore = now.Add(-24 * time.Hour)
+
+	for _, jobType := range models.FailedJobGroupTypes() {
+		_, err := env.Jobs.DiscardFailed(ctx, jobType, groupScope(env, env.A), now)
+		c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired, qt.Commentf("%s: a bulk discard needs a time", jobType))
+
+		want := 1
+		if jobType == models.WorkerTypeIntake {
+			want = 0
+		}
+		n, err := env.Jobs.DiscardFailed(ctx, jobType, dayAgoInA, now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, want, qt.Commentf("%s", jobType))
+		n, err = env.Jobs.DiscardFailed(ctx, jobType, dayAgoInA, now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, 0, qt.Commentf("%s: a job is discarded once", jobType))
+
+		c.Assert(failedIDs(c, env, jobType, groupScope(env, env.B)), qt.DeepEquals, []string{b[jobType]},
+			qt.Commentf("%s: the other group keeps its job", jobType))
+	}
+	c.Assert(failedIDs(c, env, models.WorkerTypeIntake, groupScope(env, env.A)), qt.DeepEquals, []string{a[models.WorkerTypeIntake]})
+
+	// Across the tenant, a cutoff ahead of now takes the rest.
+	ahead := registry.FailedJobScope{TenantID: env.TenantID, FailedBefore: now.Add(time.Hour)}
+	total := 0
+	for _, jobType := range models.FailedJobGroupTypes() {
+		n, err := env.Jobs.DiscardFailed(ctx, jobType, ahead, now)
+		c.Assert(err, qt.IsNil)
+		total += n
+		c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.HasLen, 0, qt.Commentf("%s", jobType))
+	}
+	c.Assert(total, qt.Equals, len(models.FailedJobGroupTypes())+1)
+
+	// A personal data export belongs to no group: a group scope does not
+	// reach it, the tenant does.
+	personal := seedPersonalExports(c, env, now.Add(-48*time.Hour))
+	personalType := models.FailedJobTypePersonalDataExport
+	_, err := env.Jobs.DiscardFailed(ctx, personalType, dayAgoInA, now)
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	dayAgoInTenant := registry.FailedJobScope{TenantID: env.TenantID, FailedBefore: now.Add(-24 * time.Hour)}
+	n, err := env.Jobs.DiscardFailed(ctx, personalType, dayAgoInTenant, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+	c.Assert(failedIDs(c, env, personalType, registry.FailedJobScope{}), qt.HasLen, 0)
+	discarded, err := env.PersonalExports.Get(ctx, personal.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(discarded.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(discarded.DiscardedAt, qt.IsNotNil)
+
+	// The rows stay failed, with their errors.
+	export, err := env.A.Set.ExportRegistry.Get(env.A.Ctx, a[models.WorkerTypeExport])
+	c.Assert(err, qt.IsNil)
+	c.Assert(export.Status, qt.Equals, models.ExportStatusFailed)
+	c.Assert(export.ErrorMessage, qt.Equals, "disk full")
+	c.Assert(export.DiscardedAt, qt.IsNotNil)
 }

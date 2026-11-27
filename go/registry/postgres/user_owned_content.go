@@ -24,56 +24,96 @@ type userOwnedTable struct {
 	// groupColumn names the group the row belongs to. The account-deletion
 	// pre-check uses it to leave out the groups it purges.
 	groupColumn string
-	// deletionPreCheck marks the tables the account-deletion pre-check
-	// (HasRetainedOwnedContent) reads: content that would survive the
-	// deletion of the user's private groups and that nothing purges or hands
-	// over. The others are removed with the account (memberships, reminders,
-	// drafts, intake sessions, saved views), handed to another member (item
-	// types, custom fields, intake documents), or not yet classified for
-	// deletion (#2882).
-	deletionPreCheck bool
+	// onDeletion is what deleting the user's account does with the rows
+	// outside the private groups it purges.
+	onDeletion accountDeletion
+}
+
+// accountDeletion is what deleting an account does with a row that names the
+// user, in a group that stays.
+type accountDeletion int
+
+const (
+	// deletionBlocks marks the user's content: items, files, places and
+	// exports. The account-deletion pre-check (HasRetainedOwnedContent)
+	// refuses the deletion, before anything is changed, while such a row
+	// exists in a group that stays.
+	deletionBlocks accountDeletion = iota + 1
+	// deletionRemoves marks rows that are personal to the user: memberships,
+	// the invites they created, reminders that email only them, drafts,
+	// intake sessions and saved views. UserPurger deletes them.
+	deletionRemoves
+	// deletionHandsOver marks rows that belong to the group: the group's own
+	// row for the groups the user created, tags, sellers, item history,
+	// loans, service records, supply links, maintenance, reminder send
+	// records, item types, custom fields, delivered documents, restores and
+	// currency changes. UserPurger gives them to another member of the group
+	// and records each hand-over in the audit log. A row whose group has no
+	// other member has nobody to go to, so the pre-check refuses the deletion
+	// while one exists in a group that stays.
+	deletionHandsOver
+)
+
+// String names the rule for test output.
+func (d accountDeletion) String() string {
+	switch d {
+	case deletionBlocks:
+		return "blocks"
+	case deletionRemoves:
+		return "removed"
+	case deletionHandsOver:
+		return "handed over"
+	default:
+		return "unclassified"
+	}
 }
 
 // userOwnedTables is the one list of what ties a user to their tenant. The
-// tenant move refuses a user with a row in any of them; the account-deletion
-// pre-check reads the ones marked deletionPreCheck. TestUserTenantMove_
-// CoversEveryUserReference checks it against the foreign keys to users(id) in
-// the live schema, so a new table cannot be left out of both.
+// tenant move refuses a user with a row in any of them. Account deletion
+// treats each table as its onDeletion says: the pre-check reads the
+// deletionBlocks tables, and UserPurger removes the deletionRemoves rows and
+// hands over the deletionHandsOver rows. TestUserTenantMove_
+// CoversEveryUserReference and TestAccountDeletion_CoversEveryUserReference
+// check it against the foreign keys to users(id) in the live schema, so a new
+// table cannot be left out.
+//
+// The deletionRemoves entries are deleted in list order, so a child table
+// whose foreign key to its parent is not ON DELETE CASCADE must come first.
 var userOwnedTables = []userOwnedTable{
-	{registry.OwnedGroupMemberships, func(t store.TableNames) store.TableName { return t.GroupMemberships() }, "member_user_id", "group_id", false},
-	{registry.OwnedLocationGroups, func(t store.TableNames) store.TableName { return t.LocationGroups() }, "created_by", "id", true},
-	{registry.OwnedGroupInvites, func(t store.TableNames) store.TableName { return t.GroupInvites() }, "created_by", "group_id", false},
-	{registry.OwnedCommodities, func(t store.TableNames) store.TableName { return t.Commodities() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedFiles, func(t store.TableNames) store.TableName { return t.Files() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedFileLinks, func(t store.TableNames) store.TableName { return t.FileLinks() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedLocations, func(t store.TableNames) store.TableName { return t.Locations() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedAreas, func(t store.TableNames) store.TableName { return t.Areas() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedTags, func(t store.TableNames) store.TableName { return t.Tags() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedSellers, func(t store.TableNames) store.TableName { return t.Sellers() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedExports, func(t store.TableNames) store.TableName { return t.Exports() }, createdByUserIDColumn, "group_id", true},
-	{registry.OwnedCommodityEvents, func(t store.TableNames) store.TableName { return t.CommodityEvents() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCommodityLoans, func(t store.TableNames) store.TableName { return t.CommodityLoans() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCommodityServices, func(t store.TableNames) store.TableName { return t.CommodityServices() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCommoditySupplyLinks, func(t store.TableNames) store.TableName { return t.CommoditySupplyLinks() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedMaintenanceSchedules, func(t store.TableNames) store.TableName { return t.MaintenanceSchedules() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedMaintenanceReminders, func(t store.TableNames) store.TableName { return t.MaintenanceReminders() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCommodityReminders, func(t store.TableNames) store.TableName { return t.CommodityReminders() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCommodityReminderSends, func(t store.TableNames) store.TableName { return t.CommodityReminderSends() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedWarrantyReminders, func(t store.TableNames) store.TableName { return t.WarrantyReminders() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedStorageQuotaReminders, func(t store.TableNames) store.TableName { return t.StorageQuotaReminders() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCommodityDrafts, func(t store.TableNames) store.TableName { return t.CommodityDrafts() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedIntakeSessions, func(t store.TableNames) store.TableName { return t.IntakeSessions() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedIntakeSources, func(t store.TableNames) store.TableName { return t.IntakeSources() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedIntakeCandidates, func(t store.TableNames) store.TableName { return t.IntakeCandidates() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedIntakeDocuments, func(t store.TableNames) store.TableName { return t.IntakeDocuments() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedItemTypes, func(t store.TableNames) store.TableName { return t.ItemTypes() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCustomFieldDefinitions, func(t store.TableNames) store.TableName { return t.CustomFieldDefinitions() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedItemTypeCustomFields, func(t store.TableNames) store.TableName { return t.ItemTypeCustomFields() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedSavedViews, func(t store.TableNames) store.TableName { return t.SavedViews() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCurrencyMigrations, func(t store.TableNames) store.TableName { return t.CurrencyMigrations() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedCurrencyMigrationAudit, func(t store.TableNames) store.TableName { return t.CurrencyMigrationAudit() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedRestoreOperations, func(t store.TableNames) store.TableName { return t.RestoreOperations() }, createdByUserIDColumn, "group_id", false},
-	{registry.OwnedRestoreSteps, func(t store.TableNames) store.TableName { return t.RestoreSteps() }, createdByUserIDColumn, "group_id", false},
+	{registry.OwnedGroupMemberships, func(t store.TableNames) store.TableName { return t.GroupMemberships() }, "member_user_id", "group_id", deletionRemoves},
+	{registry.OwnedLocationGroups, func(t store.TableNames) store.TableName { return t.LocationGroups() }, "created_by", "id", deletionHandsOver},
+	{registry.OwnedGroupInvites, func(t store.TableNames) store.TableName { return t.GroupInvites() }, "created_by", "group_id", deletionRemoves},
+	{registry.OwnedCommodities, func(t store.TableNames) store.TableName { return t.Commodities() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedFiles, func(t store.TableNames) store.TableName { return t.Files() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedFileLinks, func(t store.TableNames) store.TableName { return t.FileLinks() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedLocations, func(t store.TableNames) store.TableName { return t.Locations() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedAreas, func(t store.TableNames) store.TableName { return t.Areas() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedTags, func(t store.TableNames) store.TableName { return t.Tags() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedSellers, func(t store.TableNames) store.TableName { return t.Sellers() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedExports, func(t store.TableNames) store.TableName { return t.Exports() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedCommodityEvents, func(t store.TableNames) store.TableName { return t.CommodityEvents() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCommodityLoans, func(t store.TableNames) store.TableName { return t.CommodityLoans() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCommodityServices, func(t store.TableNames) store.TableName { return t.CommodityServices() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCommoditySupplyLinks, func(t store.TableNames) store.TableName { return t.CommoditySupplyLinks() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedMaintenanceSchedules, func(t store.TableNames) store.TableName { return t.MaintenanceSchedules() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedMaintenanceReminders, func(t store.TableNames) store.TableName { return t.MaintenanceReminders() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCommodityReminders, func(t store.TableNames) store.TableName { return t.CommodityReminders() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedCommodityReminderSends, func(t store.TableNames) store.TableName { return t.CommodityReminderSends() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedWarrantyReminders, func(t store.TableNames) store.TableName { return t.WarrantyReminders() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedStorageQuotaReminders, func(t store.TableNames) store.TableName { return t.StorageQuotaReminders() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCommodityDrafts, func(t store.TableNames) store.TableName { return t.CommodityDrafts() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedIntakeSessions, func(t store.TableNames) store.TableName { return t.IntakeSessions() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedIntakeSources, func(t store.TableNames) store.TableName { return t.IntakeSources() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedIntakeCandidates, func(t store.TableNames) store.TableName { return t.IntakeCandidates() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedIntakeDocuments, func(t store.TableNames) store.TableName { return t.IntakeDocuments() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedItemTypes, func(t store.TableNames) store.TableName { return t.ItemTypes() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCustomFieldDefinitions, func(t store.TableNames) store.TableName { return t.CustomFieldDefinitions() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedItemTypeCustomFields, func(t store.TableNames) store.TableName { return t.ItemTypeCustomFields() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedSavedViews, func(t store.TableNames) store.TableName { return t.SavedViews() }, createdByUserIDColumn, "group_id", deletionRemoves},
+	{registry.OwnedCurrencyMigrations, func(t store.TableNames) store.TableName { return t.CurrencyMigrations() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedCurrencyMigrationAudit, func(t store.TableNames) store.TableName { return t.CurrencyMigrationAudit() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedRestoreOperations, func(t store.TableNames) store.TableName { return t.RestoreOperations() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedRestoreSteps, func(t store.TableNames) store.TableName { return t.RestoreSteps() }, createdByUserIDColumn, "group_id", deletionHandsOver},
 }
 
 const createdByUserIDColumn = "created_by_user_id"

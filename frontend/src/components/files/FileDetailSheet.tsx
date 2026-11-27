@@ -273,8 +273,9 @@ export function FileDetailSheet({
             ) : null}
             {file ? (
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={onDelete}
                 disabled={deleteMutation.isPending}
                 data-testid="file-detail-delete"
@@ -307,7 +308,7 @@ export function FileDetailSheet({
         // just a bare fullscreen host.
         <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
           <DialogContent
-            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+            className="flex h-screen max-h-none w-screen max-w-none flex-col gap-0 overflow-visible rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
             data-testid="file-detail-pdf-fullscreen"
           >
             <DialogHeader className="sr-only">

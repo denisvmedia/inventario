@@ -374,6 +374,8 @@
     "inactiveHidden": "Skrýt neaktivní",
     "inactiveShown": "Zobrazují se neaktivní",
     "lentOut": "Zapůjčeno",
+    "location": "Umístění",
+    "locationAll": "Všechna umístění",
     "missing": "Chybí",
     "missingOptions": {
       "noPhoto": "Bez fotografie",
@@ -412,6 +414,9 @@
     "continue": "Pokračovat",
     "createTitle": "Přidat položku",
     "discardAlreadyAdded": "Položka už byla přidána do inventáře.",
+    "editFailed": "Změny se nepodařilo uložit.",
+    "editFailedTitle": "Změny nebyly uloženy",
+    "editRetryHint": "Změny se uloží, až se nahrají všechny nové soubory. Nahrané soubory už jsou u položky a Zkusit znovu pokračuje tam, kde se skončilo.",
     "editTitle": "Upravit položku",
     "filesNotUploaded": "Nenahráno: {{names}}",
     "fileUploadFailed": "Soubor {{name}} se nepodařilo nahrát. Můžete jej připojit později ze stránky s podrobnostmi položky.",
@@ -631,6 +636,7 @@
     "conditions": {
       "ascending": "vzestupně",
       "deletedArea": "Smazaná oblast",
+      "deletedLocation": "Smazané umístění",
       "deletedTag": "{{condition}} (štítek smazán)",
       "deletedType": "{{type}} (typ smazán)",
       "descending": "sestupně",
@@ -737,6 +743,7 @@
     "stale": {
       "area": "Oblast tohoto pohledu byla smazána.",
       "hint": "Označené podmínky odkazují na něco, co bylo smazáno. Pohled je stále uplatňuje, takže zobrazuje to, co stále odpovídá.",
+      "location": "Umístění tohoto pohledu bylo smazáno.",
       "sellers_one": "Prodejce tohoto pohledu byl smazán.",
       "sellers_few": "{{count}} prodejci tohoto pohledu byli smazáni.",
       "sellers_many": "{{count}} prodejce tohoto pohledu bylo smazáno.",

@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGroupServices } from "@/features/services/hooks"
-import { daysOverdue, isOpen, type ServiceState } from "@/features/services/api"
+import { daysOverdue, hasCost, isOpen, type ServiceState } from "@/features/services/api"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -145,7 +145,7 @@ export function ServicesListPage() {
                             : "—"}
                         </td>
                         <td className="whitespace-nowrap px-2 py-2 text-muted-foreground">
-                          {service.cost_amount && service.cost_currency ? (
+                          {hasCost(service) ? (
                             <>
                               {service.cost_amount} {service.cost_currency}
                             </>

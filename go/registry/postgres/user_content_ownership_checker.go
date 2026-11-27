@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -38,10 +39,12 @@ func NewUserContentOwnershipCheckerWithTableNames(dbx *sqlx.DB, tableNames store
 }
 
 // HasRetainedOwnedContent runs one read-only transaction with an EXISTS query
-// per userOwnedTables entry marked deletionPreCheck. It returns true on the
-// FIRST match (short-circuit), so a user who owns nothing outside their private
-// groups pays the full set of cheap index-backed existence checks and a user
-// who owns something stops early.
+// per userOwnedTables entry whose rows can block a deletion: every row of a
+// deletionBlocks table, and the rows of a deletionHandsOver table whose group
+// has no other member to hand them to. It returns true on the FIRST match
+// (short-circuit), so a user who owns nothing outside their private groups
+// pays the full set of cheap index-backed existence checks and a user who owns
+// something stops early.
 func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error) {
 	if tenantID == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
@@ -61,7 +64,7 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 		// tables that tie a user to their tenant. location_groups is on it with
 		// its own id as the group column: a group's primary key IS the group id.
 		for _, t := range userOwnedTables {
-			if !t.deletionPreCheck {
+			if t.onDeletion != deletionBlocks && t.onDeletion != deletionHandsOver {
 				continue
 			}
 			found, err := r.existsOwnedContent(ctx, tx, t, tenantID, userID, purgedGroupIDs)
@@ -82,10 +85,15 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 }
 
 // existsOwnedContent runs EXISTS on one table for rows the user authored in a
-// group outside purgedGroupIDs.
+// group outside purgedGroupIDs. For a deletionHandsOver table only the rows
+// whose group has no other member count.
 func (r *UserContentOwnershipChecker) existsOwnedContent(ctx context.Context, tx *sqlx.Tx, t userOwnedTable, tenantID, userID string, purgedGroupIDs []string) (bool, error) {
 	table := string(t.table(r.tableNames))
-	query, args := ownedRowExistsQuery(table, t.userColumn, t.groupColumn, tenantID, userID, purgedGroupIDs)
+	heirsFrom := ""
+	if t.onDeletion == deletionHandsOver {
+		heirsFrom = string(r.tableNames.GroupMemberships())
+	}
+	query, args := ownedRowExistsQuery(table, t.userColumn, t.groupColumn, heirsFrom, tenantID, userID, purgedGroupIDs)
 	var exists bool
 	if err := tx.QueryRowxContext(ctx, query, args...).Scan(&exists); err != nil {
 		return false, errxtrace.Wrap(
@@ -100,12 +108,19 @@ func (r *UserContentOwnershipChecker) existsOwnedContent(ctx context.Context, tx
 // ownedRowExistsQuery asks whether table holds a row of the tenant whose
 // authorColumn is the user and whose groupColumn is not one of purgedGroupIDs.
 // With no ids to exclude it matches every owned row: the user purges nothing,
-// so any owned row is retained.
-func ownedRowExistsQuery(table, authorColumn, groupColumn, tenantID, userID string, purgedGroupIDs []string) (string, []any) {
-	owned := newSelect().Select("1").From(table)
-	owned.Where(owned.Equal("tenant_id", tenantID), owned.Equal(authorColumn, userID))
+// so any owned row is retained. A heirsFrom that is not empty names the
+// memberships table, and only the rows whose group has no member other than
+// the user match: those have nobody to be handed to.
+func ownedRowExistsQuery(table, authorColumn, groupColumn, heirsFrom, tenantID, userID string, purgedGroupIDs []string) (string, []any) {
+	owned := newSelect().Select("1").From(table + " t")
+	owned.Where(owned.Equal("t.tenant_id", tenantID), owned.Equal("t."+authorColumn, userID))
 	if len(purgedGroupIDs) > 0 {
-		owned.Where(owned.NotIn(groupColumn, anyStrings(purgedGroupIDs)...))
+		owned.Where(owned.NotIn("t."+groupColumn, anyStrings(purgedGroupIDs)...))
+	}
+	if heirsFrom != "" {
+		owned.Where(fmt.Sprintf(
+			"NOT EXISTS (SELECT 1 FROM %s m WHERE m.tenant_id = t.tenant_id AND m.group_id = t.%s AND m.member_user_id <> %s)",
+			heirsFrom, groupColumn, owned.Var(userID)))
 	}
 	sb := newSelect()
 	return sb.Select(sb.Exists(owned)).Build()
