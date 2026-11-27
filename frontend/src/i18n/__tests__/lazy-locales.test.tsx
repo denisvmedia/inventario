@@ -50,7 +50,10 @@ describe("lazy cs/ru catalogs (#3018)", () => {
     // the shared one (and react-i18next's global) untouched.
     window.localStorage.setItem("inventario-language", "cs")
     const instance = i18next.createInstance()
-    await instance.use(lazyBackend).use(LanguageDetector).init(buildOptions({ debug: false }))
+    await instance
+      .use(lazyBackend)
+      .use(LanguageDetector)
+      .init(buildOptions({ debug: false }))
     expect(instance.resolvedLanguage).toBe("cs")
     expect(instance.t("common:actions.goHome")).toBe(csCommon.actions.goHome)
   })
