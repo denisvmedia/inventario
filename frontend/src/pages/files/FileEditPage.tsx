@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -453,13 +454,12 @@ function FileReview({
                         control={form.control}
                         name="category"
                         render={({ field }) => (
-                          // eslint-disable-next-line no-restricted-syntax -- file-edit category field; native <select> retained (has native-select coverage). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md
-                          <select
+                          <NativeSelect
                             id="file-category"
                             data-testid="file-edit-category"
                             value={field.value}
                             onChange={(e) => field.onChange(e.target.value)}
-                            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                            wrapperClassName="w-full"
                           >
                             <option value="images">
                               {t("files:categoryImages", { defaultValue: "Images" })}
@@ -470,7 +470,7 @@ function FileReview({
                             <option value="other">
                               {t("files:categoryOther", { defaultValue: "Other" })}
                             </option>
-                          </select>
+                          </NativeSelect>
                         )}
                       />
                     </div>
@@ -547,7 +547,7 @@ function FileReview({
       {url && isPdfMime(file.mime_type) ? (
         <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
           <DialogContent
-            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+            className="flex h-screen max-h-none w-screen max-w-none flex-col gap-0 overflow-visible rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
             data-testid="file-review-pdf-fullscreen"
           >
             <DialogHeader className="sr-only">

@@ -797,6 +797,22 @@ func StartLegacyPriceBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 	}
 }
 
+// StartThumbnailOrientationBackfill makes again, in the background, the
+// thumbnails of JPEG photos their EXIF orientation turns (see
+// services.BackfillThumbnailOrientation) and returns a stop function that
+// cancels the pass and waits for it to return.
+func StartThumbnailOrientationBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.BackfillThumbnailOrientation(ctx, rs.FactorySet, rs.Params.UploadLocation)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
+
 // StartFileChecksumBackfill computes, in the background, the SHA-256 of the
 // files that have none yet (see services.BackfillFileChecksums) and returns a
 // stop function that cancels the pass and waits for it to return.

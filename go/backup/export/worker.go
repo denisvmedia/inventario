@@ -334,16 +334,16 @@ func (w *ExportWorker) processPersonalDataExports(ctx context.Context) {
 	}
 }
 
-// personalHousekeeping queues stalled builds again and deletes expired
+// personalHousekeeping recovers stalled builds and deletes expired
 // exports every personalExpireInterval, and sweeps archives without a row
 // every personalSweepInterval.
 func (w *ExportWorker) personalHousekeeping(ctx context.Context, now time.Time) {
 	if now.Sub(w.lastExpiry) >= personalExpireInterval {
 		w.lastExpiry = now
-		if n, err := w.personal.RequeueStalled(ctx); err != nil {
-			slog.ErrorContext(ctx, "Failed to queue stalled personal data exports again", "error", err)
-		} else if n > 0 {
-			slog.WarnContext(ctx, "Queued stalled personal data exports again", "requeued", n)
+		if requeued, failed, err := w.personal.RecoverStalled(ctx); err != nil {
+			slog.ErrorContext(ctx, "Failed to recover stalled personal data exports", "error", err)
+		} else if requeued > 0 || failed > 0 {
+			slog.WarnContext(ctx, "Recovered stalled personal data exports", "requeued", requeued, "failed", failed)
 		}
 		if n, err := w.personal.ExpireDue(ctx); err != nil {
 			slog.ErrorContext(ctx, "Failed to delete expired personal data exports", "deleted", n, "error", err)

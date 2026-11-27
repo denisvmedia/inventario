@@ -108,6 +108,35 @@ func (f *SavedViewRegistryFactory) purgeUserPlacements(tenantID, userID string) 
 	}
 }
 
+// removeDepartedMember deletes the placements userID has in groupID and the
+// personal views userID created there, with their placements, as the
+// postgres membership delete does (#2892). Shared views stay.
+func (f *SavedViewRegistryFactory) removeDepartedMember(tenantID, groupID, userID string) {
+	f.writeLock.Lock()
+	defer f.writeLock.Unlock()
+	for viewID, byUser := range f.placements {
+		if p, ok := byUser[userID]; ok && p.TenantID == tenantID && p.GroupID == groupID {
+			delete(byUser, userID)
+		}
+		if len(byUser) == 0 {
+			delete(f.placements, viewID)
+		}
+	}
+	f.base.lock.Lock()
+	defer f.base.lock.Unlock()
+	var personal []string
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		v := pair.Value
+		if v.TenantID == tenantID && v.GroupID == groupID && v.CreatedByUserID == userID && !v.Shared {
+			personal = append(personal, pair.Key)
+		}
+	}
+	for _, id := range personal {
+		f.base.items.Delete(id)
+		delete(f.placements, id)
+	}
+}
+
 // rewriteTag stores, for every view of groupID, the query rewrite returns
 // when it reports a change. TagRegistry.RenameAtomic calls it under the
 // rename mutex.

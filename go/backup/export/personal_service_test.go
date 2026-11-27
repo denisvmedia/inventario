@@ -8,12 +8,14 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -21,6 +23,7 @@ import (
 	"go.5x5.cz/inventario/internal/blobkeys"
 	_ "go.5x5.cz/inventario/internal/fileblob" // register file://
 	"go.5x5.cz/inventario/internal/inb"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/memory"
@@ -306,6 +309,77 @@ func TestPersonalDataExport_HoldsOnlyTheSubjectsData(t *testing.T) {
 	}
 }
 
+// TestPersonalDataExport_ItemsInTrashKeepTheirRecords: an item in Trash is
+// exported with what belongs to it (#3035): the file that went to Trash with
+// it, with its bytes and its link to the item, and its loan, maintenance
+// schedule and service record.
+func TestPersonalDataExport_ItemsInTrashKeepTheirRecords(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	ctx := f.as(f.alice)
+	blender := f.createItem(c, ctx, "Alice's blender", *f.aliceItem.AreaID)
+	manual := f.createFile(c, ctx, f.alice, "blender-manual", "blender-bytes", blender.ID)
+	f.createLoan(c, ctx, blender.ID, "Neighbor Erin")
+	schedules, err := f.fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = schedules.Create(ctx, models.MaintenanceSchedule{
+		CommodityID: blender.ID, Title: "Descale", IntervalDays: 60, NextDueAt: "2027-01-10", Enabled: true,
+	})
+	c.Assert(err, qt.IsNil)
+	services, err := f.fs.CommodityServiceRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = services.Create(ctx, models.CommodityService{
+		CommodityID: blender.ID, ProviderName: "Blender repair", Reason: "Motor", SentAt: "2026-06-01", CostCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+
+	now := time.Now()
+	items, err := f.fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = items.Trash(ctx, blender.ID, f.alice.ID, now)
+	c.Assert(err, qt.IsNil)
+	files, err := f.fs.FileRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(files.Trash(ctx, manual.ID, f.alice.ID, blender.ID, now), qt.IsNil)
+
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+	_, _, members := buildExport(c, f, svc, f.alice)
+	var doc export.PersonalGroupDocument
+	c.Assert(json.Unmarshal(members["groups/"+f.group.UUID+"/group.json"], &doc), qt.IsNil)
+
+	var item *export.PersonalItem
+	for i := range doc.Items {
+		if doc.Items[i].ID == blender.UUID {
+			item = &doc.Items[i]
+		}
+	}
+	c.Assert(item, qt.IsNotNil)
+	c.Assert(item.InTrash, qt.IsTrue)
+
+	var file *export.PersonalFile
+	for i := range doc.Files {
+		if doc.Files[i].ID == manual.UUID {
+			file = &doc.Files[i]
+		}
+	}
+	c.Assert(file, qt.IsNotNil, qt.Commentf("the file that went to Trash with the item"))
+	c.Assert(file.InTrash, qt.IsTrue)
+	c.Assert(file.Links, qt.HasLen, 1)
+	c.Assert(file.Links[0].EntityID, qt.Equals, blender.UUID)
+	c.Assert(string(members[file.Path]), qt.Equals, "blender-bytes")
+
+	ofItem := func(ref export.PersonalItemRef) bool { return ref.ItemID == blender.UUID }
+	c.Assert(slices.ContainsFunc(doc.Loans, func(l export.PersonalLoan) bool {
+		return ofItem(l.PersonalItemRef) && l.BorrowerName == "Neighbor Erin"
+	}), qt.IsTrue, qt.Commentf("loans: %+v", doc.Loans))
+	c.Assert(slices.ContainsFunc(doc.MaintenanceSchedules, func(m export.PersonalMaintenanceSchedule) bool {
+		return ofItem(m.PersonalItemRef) && m.Title == "Descale"
+	}), qt.IsTrue, qt.Commentf("schedules: %+v", doc.MaintenanceSchedules))
+	c.Assert(slices.ContainsFunc(doc.ServiceRecords, func(r export.PersonalServiceRecord) bool {
+		return ofItem(r.PersonalItemRef) && r.ProviderName == "Blender repair"
+	}), qt.IsTrue, qt.Commentf("service records: %+v", doc.ServiceRecords))
+}
+
 func TestPersonalDataExport_OneRequestPerDay(t *testing.T) {
 	c := qt.New(t)
 	f := newPersonalFixture(c)
@@ -551,14 +625,16 @@ func TestPersonalDataExport_StalledBuildIsQueuedAgain(t *testing.T) {
 	c.Assert(claimed, qt.IsTrue)
 
 	now = now.Add(30 * time.Minute)
-	moved, err := svc.RequeueStalled(f.ctx)
+	requeued, failed, err := svc.RecoverStalled(f.ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(moved, qt.Equals, 0)
+	c.Assert(requeued, qt.Equals, 0)
+	c.Assert(failed, qt.Equals, 0)
 
 	now = now.Add(time.Hour)
-	moved, err = svc.RequeueStalled(f.ctx)
+	requeued, failed, err = svc.RecoverStalled(f.ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(moved, qt.Equals, 1)
+	c.Assert(requeued, qt.Equals, 1)
+	c.Assert(failed, qt.Equals, 0)
 	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
@@ -569,10 +645,59 @@ func TestPersonalDataExport_StalledBuildIsQueuedAgain(t *testing.T) {
 	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
 }
 
+// A build whose worker dies on each of its three builds fails for good, so
+// it is listed among the failed jobs and counted once, instead of being
+// queued again every hour.
+func TestPersonalDataExport_StalledBuildFailsAfterItsLastBuild(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+	counter := metrics.JobsDeadLetteredFor(string(models.FailedJobTypePersonalDataExport))
+	before := testutil.ToFloat64(counter)
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	// deadBuild claims the export and lets its build die.
+	deadBuild := func() (requeued, failed int) {
+		claimed, err := svc.Claim(f.ctx, requested.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(claimed, qt.IsTrue)
+		now = now.Add(2 * time.Hour)
+		requeued, failed, err = svc.RecoverStalled(f.ctx)
+		c.Assert(err, qt.IsNil)
+		return requeued, failed
+	}
+	for build := 1; build <= 2; build++ {
+		requeued, failed := deadBuild()
+		c.Assert([]int{requeued, failed}, qt.DeepEquals, []int{1, 0}, qt.Commentf("build %d is queued again", build))
+	}
+	requeued, failed := deadBuild()
+	c.Assert([]int{requeued, failed}, qt.DeepEquals, []int{0, 1}, qt.Commentf("the third build fails the export"))
+
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(got.ErrorMessage, qt.Equals, export.StalledPersonalDataExportError)
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, 1.0)
+
+	jobs, err := f.fs.FailedJobRegistry.ListFailed(f.ctx, models.FailedJobTypePersonalDataExport, registry.FailedJobScope{}, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobs, qt.HasLen, 1)
+	c.Assert(jobs[0].ID, qt.Equals, requested.ID)
+	c.Assert(jobs[0].Attempts, qt.Equals, 3)
+}
+
+// A build that fails is a failed job: it is listed among the failed jobs of
+// the installation with the user's email and the time it failed, and counts
+// once as dead-lettered.
 func TestPersonalDataExport_InactiveAccountFails(t *testing.T) {
 	c := qt.New(t)
 	f := newPersonalFixture(c)
-	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+	counter := metrics.JobsDeadLetteredFor(string(models.FailedJobTypePersonalDataExport))
+	before := testutil.ToFloat64(counter)
 
 	requested, err := svc.Request(f.ctx, f.alice)
 	c.Assert(err, qt.IsNil)
@@ -580,10 +705,81 @@ func TestPersonalDataExport_InactiveAccountFails(t *testing.T) {
 	_, err = f.fs.UserRegistry.Update(f.ctx, *f.alice)
 	c.Assert(err, qt.IsNil)
 
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	now = now.Add(time.Minute)
 	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNotNil)
 	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, 1.0)
+
+	jobs, err := f.fs.FailedJobRegistry.ListFailed(f.ctx, models.FailedJobTypePersonalDataExport, registry.FailedJobScope{}, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobs, qt.HasLen, 1)
+	job := jobs[0]
+	c.Assert(job.ID, qt.Equals, requested.ID)
+	c.Assert(job.TenantID, qt.Equals, f.alice.TenantID)
+	c.Assert(job.UserID, qt.Equals, f.alice.ID)
+	c.Assert(job.GroupID, qt.Equals, "")
+	c.Assert(job.Title, qt.Equals, "alice@example.com")
+	c.Assert(job.Error, qt.Equals, "the account is not active")
+	c.Assert(job.Attempts, qt.Equals, 1)
+	c.Assert(job.FailedAt, qt.IsNotNil)
+	c.Assert(job.FailedAt.Equal(now), qt.IsTrue, qt.Commentf("failed at %s", job.FailedAt))
+}
+
+// A retry of a failed export builds it again from the start. The row is kept
+// while it waits for the worker, and the 7 days start again when the build
+// finishes. It is no new request, so the daily limit still counts from the
+// first one.
+func TestPersonalDataExport_RetryBuildsItAgain(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	f.alice.IsActive = false
+	_, err = f.fs.UserRegistry.Update(f.ctx, *f.alice)
+	c.Assert(err, qt.IsNil)
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNotNil)
+
+	f.alice.IsActive = true
+	_, err = f.fs.UserRegistry.Update(f.ctx, *f.alice)
+	c.Assert(err, qt.IsNil)
+	// Six days later, a day before the failed row would expire.
+	now = now.Add(6 * 24 * time.Hour)
+	c.Assert(f.fs.FailedJobRegistry.Retry(f.ctx, models.FailedJobTypePersonalDataExport, registry.FailedJobScope{}, requested.ID, now), qt.IsNil)
+
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+	c.Assert(got.ErrorMessage, qt.Equals, "")
+	c.Assert(got.StartedAt, qt.IsNil)
+	c.Assert(got.CompletedAt, qt.IsNil)
+	c.Assert(got.BlobKey, qt.Equals, "")
+	c.Assert(got.ExpiresAt.After(now.Add(6*24*time.Hour)), qt.IsTrue,
+		qt.Commentf("the row waits for the build: expires at %s", got.ExpiresAt))
+	c.Assert(got.CreatedAt.Equal(requested.CreatedAt), qt.IsTrue, qt.Commentf("the request keeps its time"))
+
+	// The build after the retry is the export's second.
+	now = now.Add(2 * 24 * time.Hour)
+	claimed, err = svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
+	got, err = svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusCompleted)
+	c.Assert(got.AttemptCount, qt.Equals, 2)
+	c.Assert(got.ExpiresAt.Equal(now.Add(models.PersonalDataExportRetention)), qt.IsTrue,
+		qt.Commentf("the 7 days start when the build finishes: expires at %s", got.ExpiresAt))
 }
 
 func TestExportWorker_BuildsPersonalDataExports(t *testing.T) {

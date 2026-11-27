@@ -71,6 +71,7 @@ import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-error
 import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
 type SectionId = "info" | "sections" | "members" | "notifications" | "data" | "management"
 
@@ -420,13 +421,14 @@ function InfoSection({
             disabled={updateMutation.isPending}
             aria-invalid={!!form.formState.errors.name}
             data-testid="settings-name-input"
+            aria-describedby={form.formState.errors.name ? "settings-group-name-error" : undefined}
             {...form.register("name")}
           />
-          {form.formState.errors.name ? (
-            <p className="text-xs text-destructive" data-testid="settings-name-error">
-              {t(form.formState.errors.name.message ?? "")}
-            </p>
-          ) : null}
+          <FieldError
+            id="settings-group-name-error"
+            testId="settings-name-error"
+            message={form.formState.errors.name?.message}
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -443,11 +445,7 @@ function InfoSection({
               />
             )}
           />
-          {form.formState.errors.icon ? (
-            <p className="text-xs text-destructive" data-testid="settings-icon-error">
-              {t(form.formState.errors.icon.message ?? "")}
-            </p>
-          ) : null}
+          <FieldError testId="settings-icon-error" message={form.formState.errors.icon?.message} />
         </div>
 
         <div className="space-y-1.5">
@@ -886,13 +884,16 @@ function DeleteGroupDialog({
               disabled={deleteMutation.isPending}
               aria-invalid={!!form.formState.errors.confirmWord}
               data-testid="delete-confirm-word"
+              aria-describedby={
+                form.formState.errors.confirmWord ? "delete-group-name-error" : undefined
+              }
               {...form.register("confirmWord")}
             />
-            {form.formState.errors.confirmWord ? (
-              <p className="text-xs text-destructive" data-testid="delete-confirm-word-error">
-                {t(form.formState.errors.confirmWord.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="delete-group-name-error"
+              testId="delete-confirm-word-error"
+              message={form.formState.errors.confirmWord?.message}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="delete-group-password">
@@ -905,13 +906,16 @@ function DeleteGroupDialog({
               disabled={deleteMutation.isPending}
               aria-invalid={!!form.formState.errors.password}
               data-testid="delete-password"
+              aria-describedby={
+                form.formState.errors.password ? "delete-group-password-error" : undefined
+              }
               {...form.register("password")}
             />
-            {form.formState.errors.password ? (
-              <p className="text-xs text-destructive" data-testid="delete-password-error">
-                {t(form.formState.errors.password.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="delete-group-password-error"
+              testId="delete-password-error"
+              message={form.formState.errors.password?.message}
+            />
           </div>
           {serverError ? (
             <Alert variant="destructive" data-testid="delete-server-error">

@@ -123,7 +123,9 @@ export type paths = {
          *     tenant and ?failed_before to the jobs that failed before a time (a
          *     job without a failure time counts from its creation), the jobs a bulk
          *     discard with the same filter takes. `meta.job_types` lists the job
-         *     types with whether each can be retried.
+         *     types with whether each can be retried. A personal data export
+         *     belongs to a user, not to a group; its title is the user's email
+         *     address.
          *     An unknown ?type returns 400 with `failed_job.unknown_type`, a
          *     ?failed_before that is not a date or an RFC 3339 time 400 with
          *     `failed_job.invalid_failed_before`.
@@ -132,7 +134,7 @@ export type paths = {
             parameters: {
                 query?: {
                     /** @description Job type */
-                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Tenant ID */
                     tenantID?: string;
                     /**
@@ -233,7 +235,7 @@ export type paths = {
                      */
                     failed_before: string;
                     /** @description Job type */
-                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Tenant ID */
                     tenantID?: string;
                     /** @description Count the jobs and discard nothing */
@@ -314,7 +316,7 @@ export type paths = {
                 header?: never;
                 path: {
                     /** @description Job type */
-                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Job ID */
                     jobID: string;
                 };
@@ -377,7 +379,9 @@ export type paths = {
          * Retry a failed background job (admin)
          * @description Puts the failed job back in its queue the way its type runs it again
          *     (#1307): an export or import runs from the start, a thumbnail gets a
-         *     fresh set of attempts, an intake scan is due again at once. A restore
+         *     fresh set of attempts, an intake scan is due again at once, a personal
+         *     data export is built again from the start and kept until 7 days after
+         *     the build finishes; it does not count as a new request. A restore
          *     and a currency migration cannot be retried (409
          *     `failed_job.not_retryable`); discard them instead. 404
          *     `failed_job.unknown_type` for an unknown type, 404
@@ -390,7 +394,7 @@ export type paths = {
                 header?: never;
                 path: {
                     /** @description Job type */
-                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Job ID */
                     jobID: string;
                 };
@@ -8885,10 +8889,21 @@ export type paths = {
          * @description Move the file to Trash. It keeps its links, so restoring it
          *     puts it back where it was. An export bundle is deleted for
          *     good.
+         *
+         *     With unless_linked=true the file goes to Trash only when
+         *     nothing holds it: no link, or only links to items in Trash
+         *     (it then goes with the item linked first). The links are
+         *     checked and the file trashed in one transaction. A file that a
+         *     link holds, an export bundle included, stays and the answer is
+         *     409 file.linked; a file that is gone or in Trash already is a
+         *     404.
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Keep the file when a link holds it */
+                    unless_linked?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -8907,8 +8922,26 @@ export type paths = {
                     };
                     content?: never;
                 };
-                /** @description File not found */
+                /** @description File not found, or in Trash already */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description file.linked: with unless_linked=true, a link holds the file, so it stays */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description unless_linked is not a boolean */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -12527,6 +12560,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
             };
         };
         options?: never;
@@ -12583,6 +12625,15 @@ export type paths = {
                 };
                 /** @description User-side request problem */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -17455,10 +17506,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
@@ -20234,10 +20285,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**

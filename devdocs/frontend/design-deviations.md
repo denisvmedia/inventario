@@ -44,6 +44,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2915 by the 2026-11-27 goal to work through the backlog
 - **Reversion plan**: Drop the disabled select and keep the mock's form without a status once the edit form shows the status.
 
+#### 2026-11-27 — Item edit dialog: new files upload before Save changes
+
+- **Issue/PR**: #2916 / PR #2967
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) is for adding an item and has no upload states; editing is the mock's `ItemEditForm`, which has no files.
+- **Reality**: In edit mode (**All fields**), **Save changes** in `frontend/src/components/items/CommodityFormDialog.tsx` uploads the staged files one at a time and attaches each to the item before it sends the changes, with the per-file icons and the "Uploading 1 of 3…" button of the Add item entry below. A failure shows the same destructive `Alert` (`DraftSaveAlert`) titled "Changes not saved", naming the files not uploaded, saying that the files that made it are on the item, and offering **Retry**; the dialog opens the Files step. The attached files leave the list.
+- **Why**: The issue asks that files added while editing are uploaded before the dialog closes or kept for a retry; reusing the Add item states keeps one look for the same work.
+- **Approved by**: user (explicit) — pre-approved for #2916 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Permanent while the dialog stays the editor behind All fields.
+
 #### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
 
 - **Issue/PR**: #1626 / #2905
@@ -948,6 +957,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: #1264 is largely satisfied by the React rewrite (#1397); this is the roadmap's "#1264 start" slice (per #1651). Extracting `<FieldError>` is invisible visually but removes n copies of the same markup. The dropdown guard makes every remaining native `<select>` a conscious, documented choice ("pick one and stick with it") without a risky sweep of tested utility selectors. Converting those six is a deferred follow-up.
 - **Approved by**: user (explicit) — chose scope "Roadmap «start»" + approach "primitives-direct + FieldError" when offered the options.
 - **Reversion plan**: Permanent for `<FieldError>` + the lint guard. The six annotated native selectors are the explicit backlog: migrate them to `<Select>` (or a ported `native-select` primitive) and drop the disable comments in the post-launch design-system "finish" pass.
+- **Resolved**: 2026-11-27, PR #2972 — back to 1:1 for the six native selects: they render through `components/ui/native-select.tsx`, ported from the mock, and no `eslint-disable` remains outside the primitive. The port adds a `wrapperClassName` prop, since the mock's wrapper is `w-fit` and four of the six fill their row. `<FieldError>` and the lint guard stay as described.
 
 #### 2026-05-29 — Two intentional IconPicker components (popover vs. inline grid) kept separate
 
@@ -966,6 +976,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: A reviewed item may have an unknown purchase date or price (a gift, an inherited object), and unknown is distinct from zero. The hints tell the user how to record each case.
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
+
+#### 2026-11-27 — Send for service dialog: cost amount and currency
+
+- **Issue/PR**: #2909
+- **Mock**: The mock has no service dialog. Its money field is the purchase price row of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1173–L1195): one label, the amount with the currency symbol inside, and the `compact` `CurrencyCombobox` beside it.
+- **Reality**: `frontend/src/components/services/SendForServiceDialog.tsx` draws the cost as that row: the "Cost (optional)" label, the amount with the symbol of the picked currency inside, and the `compact` `CurrencyCombobox` named "Currency". The picker starts on the group currency, and the currency is saved only with an amount. Each part shows its own `FieldError` under the row.
+- **Why**: Not present in mock. #2909 asks for the currency picker every other currency field uses; the row copies the mock's money field.
+- **Approved by**: user (explicit) — pre-approved for #2909 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a service dialog.
 
 ### Auth & Profile
 
@@ -1632,6 +1651,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Cross-cutting (theme, density, a11y, performance)
 
+#### 2026-11-27 — Delete triggers: one red outline or ghost trigger, with the label and size of their neighbors
+
+- **Issue/PR**: #2914
+- **Mock**: On a detail surface the delete trigger is an icon-only `variant="outline" size="sm"` button with `text-destructive hover:bg-destructive/10` ([`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) L705; [`FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) L302 adds `hover:text-destructive`). On a row it is a ghost button, icon-only `size-7` in [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) L314, labeled `size="sm"` in [`FilePreviewDialog.tsx`](../../design-mocks/src/components/FilePreviewDialog.tsx) L153. The mock has no header delete on a location or area page (delete sits in the card menu) and no maintenance, supplies or reminders surface.
+- **Reality**: Every delete trigger listed in `devdocs/frontend/components.md` → Delete triggers takes `text-destructive hover:bg-destructive/10 hover:text-destructive`, the item page's included. The location and area headers keep the labeled default-size outline button, the size of Insurance report and Edit next to it. The file detail sheet's footer keeps its labeled `sm` outline button next to the labeled Edit. The maintenance schedule card keeps its labeled ghost `sm` button next to I did this and Edit. The supplies and reminders rows keep their `size="icon"` ghost button next to the same-size Edit.
+- **Why**: The triggers match the mock's variant and colors for their place. The label and size follow the buttons beside each trigger, so a row or header does not mix icon-only and labeled actions or two heights.
+- **Approved by**: user (explicit) — pre-approved for #2914 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Move the location and area delete into a menu if `inventario-design` draws one for those headers; otherwise permanent.
+
 #### 2026-11-26 — Long-form dialogs fill the screen below `sm`
 
 - **Issue/PR**: #1627 / PR #2904
@@ -1658,6 +1686,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
 - **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-27 — Every dialog card is never taller than the screen
+
+- **Issue/PR**: #2988
+- **Mock**: `design-mocks/src/components/ui/dialog.tsx` gives `DialogContent` no maximum height; the mock's `AddItemDialog.tsx` adds `max-h-[90vh] overflow-y-auto` at its call site.
+- **Reality**: `DialogContent` is never taller than the screen minus 2rem (`max-h-[calc(100dvh-2rem)]`) and scrolls as a whole (`overflow-y-auto`) in both variants; below `sm` the `fullscreen-mobile` variant still fills the screen. A dialog whose content fits looks as in the mock. The full-screen file viewers (the image viewer, the PDF preview, and the PDF readers of the file panel and the file review page) pass `max-h-none overflow-visible`, as they pass `max-w-none`.
+- **Why**: A dialog taller than the window is centered with `translate-y-[-50%]`, so without a limit its top and bottom are off-screen and cannot be scrolled to; the bulk tags dialog loses its Apply button with about 25 tags at 1280x720. The limit in the primitive covers every dialog instead of one call site at a time.
+- **Approved by**: user (explicit) — pre-approved for #2988 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: permanent; the limit belongs in the mock's primitive upstream.
 
 ### Backup & Restore
 

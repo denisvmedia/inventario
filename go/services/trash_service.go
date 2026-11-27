@@ -22,6 +22,10 @@ const DefaultTrashRetention = 30 * 24 * time.Hour
 // it comes back, or goes for good, with that item.
 var ErrTrashedWithItem = errx.NewSentinel("the file went to Trash with an item; restore or delete the item instead")
 
+// ErrFileLinked is returned by TrashService.TrashFileUnlessLinked for a file
+// it leaves live because something links to it.
+var ErrFileLinked = errx.NewSentinel("the file is linked, so it stays")
+
 // Audit actions of the Trash (#2893). A restore, a delete for good (one entry
 // or several) and an Empty Trash each write one row for the group; the purge
 // worker writes one row per run for each group it deleted entries in.
@@ -545,6 +549,38 @@ func (s *TrashService) TrashFile(ctx context.Context, id string) error {
 		return errxtrace.Wrap("failed to move file to Trash", err)
 	}
 	return nil
+}
+
+// TrashFileUnlessLinked moves a live file to Trash only when nothing holds
+// it: no link, or only links to items in Trash, in which case it goes with
+// the item linked first (registry.FileRegistry.TrashUnlessHeld). The links
+// are checked and the file trashed in one transaction, so a link made by
+// another request just before still keeps the file. ErrFileLinked when a
+// link holds the file, an export bundle's link included; registry.ErrNotFound
+// when the file does not exist or is in Trash already. Forms use it to
+// clear away their own uploads that ended up unused.
+func (s *TrashService) TrashFileUnlessLinked(ctx context.Context, id string) error {
+	regs, err := s.userRegistries(ctx)
+	if err != nil {
+		return err
+	}
+	userID, err := actorID(ctx)
+	if err != nil {
+		return err
+	}
+	trashed, err := regs.files.TrashUnlessHeld(ctx, id, "", "", userID, s.now().UTC())
+	if err != nil {
+		return errxtrace.Wrap("failed to move file to Trash", err, errx.Attrs("file_id", id))
+	}
+	if trashed {
+		return nil
+	}
+	// TrashUnlessHeld also leaves alone a file that is gone or in Trash;
+	// only a live one was kept by a link.
+	if _, err := regs.files.Get(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to get file", err)
+	}
+	return errxtrace.Classify(ErrFileLinked, errx.Attrs("file_id", id))
 }
 
 // RestoreFile brings back a file that was deleted on its own.

@@ -2577,10 +2577,10 @@ definitions:
         type: string
       cost_amount:
         description: |-
-          CostAmount is the optional repair bill. Bare decimal.Decimal —
-          zero means "no cost recorded" (per the codebase's existing
-          price-field convention). Pair-validated with CostCurrency:
-          either both unset or both set.
+          CostAmount is the optional repair bill. Bare decimal.Decimal:
+          CostCurrency, not the amount, says whether a cost is recorded, so
+          0 with a currency is a free repair and 0 without one is no cost.
+          A non-zero amount needs a currency.
         type: number
       cost_currency:
         description: |-
@@ -6470,10 +6470,10 @@ definitions:
         type: string
       cost_amount:
         description: |-
-          CostAmount is the optional repair bill. Bare decimal.Decimal —
-          zero means "no cost recorded" (per the codebase's existing
-          price-field convention). Pair-validated with CostCurrency:
-          either both unset or both set.
+          CostAmount is the optional repair bill. Bare decimal.Decimal:
+          CostCurrency, not the amount, says whether a cost is recorded, so
+          0 with a currency is a free repair and 0 without one is no cost.
+          A non-zero amount needs a currency.
         type: number
       cost_currency:
         description: |-
@@ -7989,7 +7989,9 @@ paths:
         tenant and ?failed_before to the jobs that failed before a time (a
         job without a failure time counts from its creation), the jobs a bulk
         discard with the same filter takes. `meta.job_types` lists the job
-        types with whether each can be retried.
+        types with whether each can be retried. A personal data export
+        belongs to a user, not to a group; its title is the user's email
+        address.
         An unknown ?type returns 400 with `failed_job.unknown_type`, a
         ?failed_before that is not a date or an RFC 3339 time 400 with
         `failed_job.invalid_failed_before`.
@@ -8002,6 +8004,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: query
         name: type
         type: string
@@ -8064,6 +8067,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: path
         name: jobType
         required: true
@@ -8096,7 +8100,9 @@ paths:
       description: |-
         Puts the failed job back in its queue the way its type runs it again
         (#1307): an export or import runs from the start, a thumbnail gets a
-        fresh set of attempts, an intake scan is due again at once. A restore
+        fresh set of attempts, an intake scan is due again at once, a personal
+        data export is built again from the start and kept until 7 days after
+        the build finishes; it does not count as a new request. A restore
         and a currency migration cannot be retried (409
         `failed_job.not_retryable`); discard them instead. 404
         `failed_job.unknown_type` for an unknown type, 404
@@ -8111,6 +8117,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: path
         name: jobType
         required: true
@@ -8176,6 +8183,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: query
         name: type
         type: string
@@ -13264,6 +13272,14 @@ paths:
         Move the file to Trash. It keeps its links, so restoring it
         puts it back where it was. An export bundle is deleted for
         good.
+
+        With unless_linked=true the file goes to Trash only when
+        nothing holds it: no link, or only links to items in Trash
+        (it then goes with the item linked first). The links are
+        checked and the file trashed in one transaction. A file that a
+        link holds, an export bundle included, stays and the answer is
+        409 file.linked; a file that is gone or in Trash already is a
+        404.
       parameters:
       - description: Group slug
         in: path
@@ -13275,13 +13291,26 @@ paths:
         name: fileID
         required: true
         type: string
+      - description: Keep the file when a link holds it
+        in: query
+        name: unless_linked
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:
         "204":
           description: No Content
         "404":
-          description: File not found
+          description: File not found, or in Trash already
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'file.linked: with unless_linked=true, a link holds the file,
+            so it stays'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: unless_linked is not a boolean
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a file
@@ -15805,6 +15834,10 @@ paths:
           description: Tag is in use; pass force=true to strip references
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a tag
       tags:
       - tags
@@ -15875,6 +15908,10 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a tag

@@ -14,9 +14,16 @@ on:
 # PRs cancel each other per-PR; master push and each tag have their own
 # group keyed by ref. Pull-request and push runs never collide because
 # pull_request.number and github.ref are mutually exclusive.
+#
+# A push run is never cancelled once it has started: master's consumers
+# (e2e, kind) wait for the image of their own commit, and a build cancelled
+# halfway leaves them nothing to test. A push that arrives while a build runs
+# waits as the group's one pending run; a newer push replaces it before it
+# starts, and _wait-for-docker-image.yml reads that replaced run as "no image
+# for this commit".
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

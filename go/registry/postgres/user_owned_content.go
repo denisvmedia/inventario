@@ -34,19 +34,23 @@ type userOwnedTable struct {
 type accountDeletion int
 
 const (
-	// deletionBlocks marks the user's content: items, files, places, exports
-	// and the groups they created. The account-deletion pre-check
-	// (HasRetainedOwnedContent) refuses the deletion, before anything is
-	// changed, while such a row exists in a group that stays.
+	// deletionBlocks marks the user's content: items, files, places and
+	// exports. The account-deletion pre-check (HasRetainedOwnedContent)
+	// refuses the deletion, before anything is changed, while such a row
+	// exists in a group that stays.
 	deletionBlocks accountDeletion = iota + 1
 	// deletionRemoves marks rows that are personal to the user: memberships,
 	// the invites they created, reminders that email only them, drafts,
 	// intake sessions and saved views. UserPurger deletes them.
 	deletionRemoves
-	// deletionHandsOver marks rows that belong to the group: item history,
+	// deletionHandsOver marks rows that belong to the group: the group's own
+	// row for the groups the user created, tags, sellers, item history,
 	// loans, service records, supply links, maintenance, reminder send
 	// records, item types, custom fields, delivered documents, restores and
-	// currency changes. UserPurger gives them to another member of the group.
+	// currency changes. UserPurger gives them to another member of the group
+	// and records each hand-over in the audit log. A row whose group has no
+	// other member has nobody to go to, so the pre-check refuses the deletion
+	// while one exists in a group that stays.
 	deletionHandsOver
 )
 
@@ -77,15 +81,15 @@ func (d accountDeletion) String() string {
 // whose foreign key to its parent is not ON DELETE CASCADE must come first.
 var userOwnedTables = []userOwnedTable{
 	{registry.OwnedGroupMemberships, func(t store.TableNames) store.TableName { return t.GroupMemberships() }, "member_user_id", "group_id", deletionRemoves},
-	{registry.OwnedLocationGroups, func(t store.TableNames) store.TableName { return t.LocationGroups() }, "created_by", "id", deletionBlocks},
+	{registry.OwnedLocationGroups, func(t store.TableNames) store.TableName { return t.LocationGroups() }, "created_by", "id", deletionHandsOver},
 	{registry.OwnedGroupInvites, func(t store.TableNames) store.TableName { return t.GroupInvites() }, "created_by", "group_id", deletionRemoves},
 	{registry.OwnedCommodities, func(t store.TableNames) store.TableName { return t.Commodities() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedFiles, func(t store.TableNames) store.TableName { return t.Files() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedFileLinks, func(t store.TableNames) store.TableName { return t.FileLinks() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedLocations, func(t store.TableNames) store.TableName { return t.Locations() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedAreas, func(t store.TableNames) store.TableName { return t.Areas() }, createdByUserIDColumn, "group_id", deletionBlocks},
-	{registry.OwnedTags, func(t store.TableNames) store.TableName { return t.Tags() }, createdByUserIDColumn, "group_id", deletionBlocks},
-	{registry.OwnedSellers, func(t store.TableNames) store.TableName { return t.Sellers() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedTags, func(t store.TableNames) store.TableName { return t.Tags() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedSellers, func(t store.TableNames) store.TableName { return t.Sellers() }, createdByUserIDColumn, "group_id", deletionHandsOver},
 	{registry.OwnedExports, func(t store.TableNames) store.TableName { return t.Exports() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedCommodityEvents, func(t store.TableNames) store.TableName { return t.CommodityEvents() }, createdByUserIDColumn, "group_id", deletionHandsOver},
 	{registry.OwnedCommodityLoans, func(t store.TableNames) store.TableName { return t.CommodityLoans() }, createdByUserIDColumn, "group_id", deletionHandsOver},

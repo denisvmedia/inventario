@@ -217,11 +217,11 @@ export function daysOverdue(
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
-// hasCost reports whether the service row carries a recorded cost. Both
-// fields are paired on the BE so checking either is sufficient — but
-// the FE list-page formatting reads both; this is a clarity helper.
+// hasCost reports whether the service row carries a recorded cost. The
+// currency marks it, as on the BE (models.CommodityService.HasCost): a
+// cost of 0 with a currency is a free repair and counts.
 export function hasCost(svc: Pick<ServiceEntity, "cost_amount" | "cost_currency">): boolean {
-  if (!svc.cost_amount || !svc.cost_currency) return false
-  const num = Number(svc.cost_amount)
-  return !Number.isNaN(num) && num !== 0
+  if (!svc.cost_currency) return false
+  const amount = String(svc.cost_amount ?? "").trim()
+  return amount !== "" && !Number.isNaN(Number(amount))
 }

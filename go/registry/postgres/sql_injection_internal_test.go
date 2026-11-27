@@ -157,7 +157,7 @@ func listQueries() []listQuery {
 			return page.Build()
 		}},
 		{"owned content", func(v string) (string, []any) {
-			return ownedRowExistsQuery("commodities", "created_by_user_id", "group_id", v, v, []string{v, v})
+			return ownedRowExistsQuery("commodities", "created_by_user_id", "group_id", "group_memberships", v, v, []string{v, v})
 		}},
 		{"orphan candidates", func(v string) (string, []any) {
 			return orphanCandidatesQuery(tables, now, registry.OrphanCandidateCursor{CreatedAt: now, ID: v}, 10)
