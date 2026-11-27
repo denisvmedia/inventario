@@ -947,6 +947,13 @@ when to add an entry and where it goes.
   quota reminders, so a group of many small photos uses more space than the
   card shows
   ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
+- Photo cards on the Items list load the thumbnail that fits the card. The
+  size they announced to the browser was wrong at phone widths and at several
+  tablet and desktop widths, so the browser loaded a larger thumbnail than
+  the card shows. A photo moved to Trash while the list loads is no longer
+  shown as an item's cover, and a failed cover lookup is logged as a warning
+  instead of passing unnoticed; the items still list, without those covers
+  ([#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it

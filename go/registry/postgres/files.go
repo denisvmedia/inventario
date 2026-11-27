@@ -480,7 +480,8 @@ func (r *FileRegistry) FirstPhotos(ctx context.Context, commodityIDs []string) (
 			return nil
 		}
 
-		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1)`, r.tableNames.Files()), fileIDs)
+		// A file moved to Trash after the pick above is not a cover any more.
+		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1) AND %s`, r.tableNames.Files(), liveRow), fileIDs)
 		if err != nil {
 			return err
 		}
