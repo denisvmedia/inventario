@@ -664,6 +664,17 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- Files added while editing an item are no longer lost or left without the
+  item. **Save changes** in the **All fields** dialog uploads them first, one
+  at a time, attaches each to the item, and saves the changes only once all
+  of them are on it, with the dialog open and each file's state shown, as Add
+  item does. A failed file keeps the dialog open and the changes unsaved, and
+  **Retry** goes on with the files still missing; a file whose upload worked
+  but whose attach failed is attached on Retry without sending it again, and
+  goes to the Trash if the dialog is closed instead. Before, the dialog closed
+  at once, the files uploaded in the background, a failure only showed a
+  toast, and a failed attach left the file in the group without an item
+  ([#2916](https://github.com/denisvmedia/inventario/issues/2916)).
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none

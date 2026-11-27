@@ -299,6 +299,59 @@ export function toRequest(
   }
 }
 
+export interface AttachPendingFilesOptions {
+  // Checked before each file; true stops the run before that file.
+  shouldStop?: () => boolean
+  onFileStart?: (entry: PendingFile) => void
+  // The file reached the server as fileId and is not attached yet.
+  onFileUploaded?: (entry: PendingFile, fileId: string) => void
+  // The file is titled, tagged and attached.
+  onFileAttached?: (entry: PendingFile) => void
+}
+
+export interface AttachPendingFilesResult {
+  failed: Array<{ entry: PendingFile; error: unknown }>
+  // The run stopped on shouldStop; the files from there on were not tried.
+  stopped: boolean
+}
+
+// attachPendingFiles uploads the staged files one at a time and attaches each
+// to an existing item (#2916). A file an earlier run uploaded is attached as
+// it is, unless it was deleted since; a file that fails is reported and the
+// run goes on with the next one.
+export async function attachPendingFiles(
+  pending: PendingFile[],
+  commodityId: string,
+  opts: AttachPendingFilesOptions = {}
+): Promise<AttachPendingFilesResult> {
+  const target = { entityType: "commodity" as const, entityId: commodityId }
+  const failed: AttachPendingFilesResult["failed"] = []
+  for (const entry of pending) {
+    if (opts.shouldStop?.()) return { failed, stopped: true }
+    opts.onFileStart?.(entry)
+    try {
+      let placed = false
+      if (entry.uploadedFileId) {
+        try {
+          await placePendingFile(entry, entry.uploadedFileId, target)
+          placed = true
+        } catch (err) {
+          if (!(err instanceof HttpError && err.status === 404)) throw err
+        }
+      }
+      if (!placed) {
+        const fileId = (await uploadFile(entry.file)).file.id
+        opts.onFileUploaded?.(entry, fileId)
+        await placePendingFile(entry, fileId, target)
+      }
+      opts.onFileAttached?.(entry)
+    } catch (error) {
+      failed.push({ entry, error })
+    }
+  }
+  return { failed, stopped: false }
+}
+
 // uploadPendingFiles uploads each staged file, sets its title and tags, then
 // attaches it to the freshly-created commodity (POST /uploads/file, PUT
 // /files/:id, POST /files/:id/links). Per-file failures are reported via
