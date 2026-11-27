@@ -6,6 +6,8 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -169,5 +171,73 @@ func TestGroupMembership_Postgres_RemoveMemberRemovesWhatWasPersonalToTheMember(
 		got, err := fs.APITokenRegistry.GetByTokenHash(ctx, token.TokenHash)
 		c.Assert(err, qt.IsNil)
 		c.Check(got.RevokedAt != nil, qt.Equals, token == groupToken, qt.Commentf("token %s", token.Name))
+	}
+}
+
+// A token limited to the group that is stored while a member removal holds
+// the group's membership lock waits for the removal, and is refused once the
+// removal commits. Without the wait it could land after the removal revoked
+// the group's tokens and work again after a re-invite.
+func TestAPITokens_Postgres_GroupTokenWaitsForAMemberRemoval(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkPGFixture(t)
+	ctx := context.Background()
+	fs := fx.factorySet
+	tenantID := fx.user.TenantID
+	pool, err := getOrCreatePool(skipIfNoPostgreSQL(t))
+	c.Assert(err, qt.IsNil)
+	db := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
+
+	member, err := fs.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Email:               "late-token-member@test-org.com",
+		Name:                "Late Token Member",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	membership, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		GroupID:             fx.groupID,
+		MemberUserID:        member.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+	gen, err := models.GenerateAPIToken()
+	c.Assert(err, qt.IsNil)
+
+	// The removal takes the lock DeleteWithMemberInvariants takes and
+	// deletes the membership, and has not committed yet.
+	removal, err := db.BeginTxx(ctx, nil)
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = removal.Rollback() }()
+	_, err = removal.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext('group_membership_leave'), hashtext($1))`, fx.groupID)
+	c.Assert(err, qt.IsNil)
+	_, err = removal.ExecContext(ctx, `DELETE FROM group_memberships WHERE id = $1`, membership.ID)
+	c.Assert(err, qt.IsNil)
+
+	created := make(chan error, 1)
+	go func() {
+		_, err := fs.APITokenRegistry.Create(ctx, models.APIToken{
+			TenantUserAwareEntityID: models.WithTenantUserAwareEntityID("", tenantID, member.ID),
+			Name:                    "late",
+			TokenHash:               gen.Hash,
+			TokenPrefix:             gen.DisplayPrefix,
+			Scope:                   models.APITokenScopeReadOnly,
+			GroupID:                 new(fx.groupID),
+		})
+		created <- err
+	}()
+	select {
+	case err := <-created:
+		c.Fatalf("the token was stored while the removal held the group lock (err=%v)", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	c.Assert(removal.Commit(), qt.IsNil)
+	select {
+	case err := <-created:
+		c.Assert(err, qt.ErrorIs, registry.ErrNotAGroupMember)
+	case <-time.After(30 * time.Second):
+		c.Fatal("the token create did not return after the removal committed")
 	}
 }

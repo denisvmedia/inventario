@@ -3351,6 +3351,16 @@ type RefreshTokenRegistry interface {
 // no caller can rewrite a token's scope, group or owner after creation.
 type APITokenRegistry interface {
 	// Create inserts a token. ID, UUID and CreatedAt are assigned here.
+	//
+	// A token limited to a group is inserted only while its user is a
+	// member of that group. The check and the insert are serialized with
+	// GroupMembershipRegistry.DeleteWithMemberInvariants: postgres takes
+	// the same per-group lock, memory checks under the token store lock
+	// that the removal's revocation takes after the membership is gone.
+	// A removal therefore either finds the new token and revokes it, or
+	// the insert finds the membership gone and returns
+	// ErrNotAGroupMember, so no token limited to the group outlives the
+	// membership.
 	Create(ctx context.Context, token models.APIToken) (*models.APIToken, error)
 
 	// GetByTokenHash returns the token whose digest matches, revoked or not.

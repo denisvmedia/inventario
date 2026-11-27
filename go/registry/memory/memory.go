@@ -262,6 +262,7 @@ func NewFactorySet() *registry.FactorySet {
 	// What a member leaves behind in a group lives in stores read off the
 	// FactorySet, so it is wired after every fs.* field too.
 	membershipReg.setMemberDeparture(newMemberDeparture(fs, apiTokenReg))
+	apiTokenReg.setMemberships(membershipReg)
 
 	return fs
 }

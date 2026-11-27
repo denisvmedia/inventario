@@ -175,3 +175,39 @@ func TestGroupService_RemoveMember_RemovesWhatWasPersonalToTheMember(t *testing.
 		c.Check(got.RevokedAt != nil, qt.Equals, token == groupToken, qt.Commentf("token %s", token.Name))
 	}
 }
+
+// A token limited to the group that is stored after the member was removed
+// would outlive the revocation and work again after a re-invite. The
+// registry checks the membership again when it stores the token, so a create
+// whose own membership check ran before the removal is refused.
+func TestGroupService_RemoveMember_RefusesAGroupTokenStoredAfterTheRemoval(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	fs := memory.NewFactorySet()
+	svc := services.NewGroupService(fs.LocationGroupRegistry, fs.GroupMembershipRegistry, fs.GroupInviteRegistry)
+
+	owner := seedAccountUser(c, ctx, fs, "owner@example.com")
+	member := seedAccountUser(c, ctx, fs, "member@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "late-token-group-slug-00000000", owner.ID, owner.ID, models.GroupRoleOwner)
+	_, err := svc.AddMember(ctx, "tenant-a", group.ID, member.ID, models.GroupRoleUser)
+	c.Assert(err, qt.IsNil)
+	c.Assert(svc.RemoveMember(ctx, group.ID, member.ID), qt.IsNil)
+
+	tokenFor := func(user *models.User) models.APIToken {
+		gen, err := models.GenerateAPIToken()
+		c.Assert(err, qt.IsNil)
+		return models.APIToken{
+			TenantUserAwareEntityID: models.WithTenantUserAwareEntityID("", user.TenantID, user.ID),
+			Name:                    "late",
+			TokenHash:               gen.Hash,
+			TokenPrefix:             gen.DisplayPrefix,
+			Scope:                   models.APITokenScopeReadOnly,
+			GroupID:                 new(group.ID),
+		}
+	}
+	_, err = fs.APITokenRegistry.Create(ctx, tokenFor(member))
+	c.Assert(err, qt.ErrorIs, registry.ErrNotAGroupMember)
+
+	_, err = fs.APITokenRegistry.Create(ctx, tokenFor(owner))
+	c.Assert(err, qt.IsNil)
+}

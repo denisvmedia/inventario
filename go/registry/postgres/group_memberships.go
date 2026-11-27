@@ -500,6 +500,19 @@ func (r *GroupMembershipRegistry) CountByGroups(ctx context.Context, groupIDs []
 // Used by both DeleteWithMemberInvariants and UpdateRoleWithMemberInvariants
 // so the two paths share both the lock key AND the freshly-read role
 // they branch on (#1652, Copilot review on PR #1666).
+// lockGroupMemberships takes the per-group lock that serializes removing a
+// member, changing a role and creating an API token limited to the group,
+// until tx ends.
+func lockGroupMemberships(ctx context.Context, tx *sqlx.Tx, groupID string) error {
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('group_membership_leave'), hashtext($1))`,
+		groupID,
+	); err != nil {
+		return errxtrace.Wrap("failed to acquire per-group leave lock", err)
+	}
+	return nil
+}
+
 func (r *GroupMembershipRegistry) lockGroupAndReadMembershipRole(ctx context.Context, tx *sqlx.Tx, membershipID string) (groupID, role string, err error) {
 	lookup := fmt.Sprintf(`SELECT group_id FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())
 	if scanErr := tx.QueryRowContext(ctx, lookup, membershipID).Scan(&groupID); scanErr != nil {
@@ -512,11 +525,8 @@ func (r *GroupMembershipRegistry) lockGroupAndReadMembershipRole(ctx context.Con
 		return "", "", errxtrace.Wrap("failed to look up membership group_id", scanErr)
 	}
 
-	if _, lockErr := tx.ExecContext(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('group_membership_leave'), hashtext($1))`,
-		groupID,
-	); lockErr != nil {
-		return "", "", errxtrace.Wrap("failed to acquire per-group leave lock", lockErr)
+	if lockErr := lockGroupMemberships(ctx, tx, groupID); lockErr != nil {
+		return "", "", lockErr
 	}
 
 	roleQuery := fmt.Sprintf(`SELECT role FROM %s WHERE id = $1`, r.tableNames.GroupMemberships())

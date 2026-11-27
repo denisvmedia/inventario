@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -131,7 +132,9 @@ func (d *memberDeparture) removeDrafts(ctx context.Context, tenantID, groupID, u
 }
 
 // removeIntakeSessions deletes the member's Add item sessions in the group;
-// the delete takes their sources, candidates and file links with them.
+// the delete takes their sources, candidates and file links with them. A
+// session another request deleted after the list counts as removed, so the
+// steps after this one still run.
 func (d *memberDeparture) removeIntakeSessions(ctx context.Context, tenantID, groupID, userID string) error {
 	if d.intake == nil {
 		return nil
@@ -145,7 +148,7 @@ func (d *memberDeparture) removeIntakeSessions(ctx context.Context, tenantID, gr
 		if session.TenantID != tenantID || session.GroupID != groupID || session.CreatedByUserID != userID {
 			continue
 		}
-		if err := reg.Delete(ctx, session.ID); err != nil {
+		if err := reg.Delete(ctx, session.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return err
 		}
 	}
