@@ -550,6 +550,10 @@ table "commodities" {
     type = BOOLEAN
     default = "true"
   }
+  column "revision" {
+    type = BIGINT
+    default = "1"
+  }
   column "deleted_at" {
     type = TIMESTAMP
     null = true

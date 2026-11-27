@@ -597,6 +597,16 @@ have typed so far. The dialog shows the status but does not change it.
 The edit form has its own address (the item's address followed by `/edit`), so
 reloading the page keeps you in it.
 
+If the item changes after you open the edit form, for example because a bulk
+action added a tag to it or someone saved it on another device, **Save
+changes** does not save. Saving would put back what the form shows and undo
+that change. The form says that the item changed since you opened it and
+offers **Reload**, which shows the item as it is now; make your changes again
+and save. The **All fields** dialog does the same and asks you to close it and
+reload the item. A quick edit or a status change on a page that shows an older
+version of the item is not saved either: a message says so, the page shows
+the item as it is now, and you can try again.
+
 ### Quick edits
 
 To change only the location, the tags, or the notes, you don't need the edit
@@ -615,6 +625,9 @@ from, with its search, filters, sort, and page:
 
 - The item page, the side panel, and the edit form show the item's place in
   that list (for example, "4 of 17") and arrows to the previous and next item.
+- Moving to the previous or next item keeps the tab you are on, and on the
+  **Files** tab the filter you picked, so you can check the photos of each item
+  in turn.
 - **Back to items** returns to that list, on the page you reached.
 - On the edit form, **Save and next** saves the item and opens the next item's
   edit form. It moves on to the list's next page when needed.
@@ -684,6 +697,10 @@ beside the details on the item page. If you haven't picked one, Inventario uses
 the first photo you attached. To set or change it, open the **Files** tab, find
 the image you want, and choose to set it as the cover. You can also clear the
 cover to fall back to the first photo.
+
+Only an image attached to the item as one of its photos can be the cover. An
+image the item holds as a document, for example one first attached to another
+item and then attached here as a document, has no cover button.
 
 Inventario keeps smaller copies of each photo for cards and the item page, and
 loads the one that fits your screen. A photo that has no copy at the size a
@@ -963,7 +980,10 @@ On the **All Items** page you can act on several items at once:
 Each item is changed the way a single change would change it: the same checks
 apply, and the change shows in the item's history. The action writes only
 what it sets, so a change someone saves to one of the items while it runs,
-such as a new name or another tag, is kept. An item that already has
+such as a new name or another tag, is kept. The other way round, an edit form
+opened on one of the items before the action does not undo it: its save is
+refused and the form offers to reload the item (see
+[Edit an item](#edit-an-item)). An item that already has
 what you set, such as a tag it already carries, is left as it is, and so is
 an item that does not have a tag you remove. When no item changed, a message
 says which of the two it was.

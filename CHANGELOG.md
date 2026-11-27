@@ -1076,6 +1076,15 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+- On the item page, a dialog or a confirmation open in one of the tabs, such
+  as a new reminder, a loan, a service record or **Attach an existing file**,
+  keeps you on the item after **Mark as reviewed**, as the page's own dialogs
+  do. Before, the page opened the next item and the dialog closed with what
+  you had typed. Moving to the previous or next item of a list keeps the tab
+  and the **Files** tab's filter. The cover button shows only on the images
+  the item can take as its cover; before, an image attached to the item as a
+  document offered it and setting it failed
+  ([#2881](https://github.com/denisvmedia/inventario/issues/2881)).
 - Picking **Čeština** or **Русский** as the language in Settings, or opening
   the app in a browser set to Czech or Russian, now shows the app in that
   language. It stayed in English, and the language selector switched back to
@@ -1161,6 +1170,23 @@ when to add an entry and where it goes.
   the sign-out runs waits for it and then stops. The back office had the same
   problem
   ([#3034](https://github.com/denisvmedia/inventario/issues/3034)).
+- `inventario users delete` refuses a user who is the only owner of a group
+  that has other members, before it changes anything, as deleting your own
+  account does. The message names the group, so another member can be made
+  an owner first. Before, the delete went through and left the group with
+  its members and no owner, so nobody could manage or delete it
+  ([#3051](https://github.com/denisvmedia/inventario/issues/3051)).
+
+- Saving an item from an edit form opened before someone changed the item on
+  another device, or before a tag on it was renamed, no longer puts back what
+  the form showed and drops that change. Each item now has a revision that
+  every change moves on, and a save from a form opened at an older revision
+  is refused: the form says the item changed since you opened it and offers
+  **Reload**. The same holds for a quick edit, and for a form opened before a
+  bulk change of the items. Choosing a cover photo, removing the cover photo
+  from an item and deleting an area that still holds items no longer undo a
+  change saved on the item at the same time
+  ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
 
 ### Security
 

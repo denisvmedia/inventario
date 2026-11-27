@@ -159,6 +159,7 @@ func (api *areasAPI) createArea(w http.ResponseWriter, r *http.Request) {
 // @Param strategy query string false "Non-empty-area strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty area." Enums(cascade, unlink)
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Area not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry"
 // @Failure 422 {object} jsonapi.Errors "Non-empty area (no strategy) or unknown strategy"
 // @Router /g/{groupSlug}/areas/{areaID} [delete].
 func (api *areasAPI) deleteArea(w http.ResponseWriter, r *http.Request) {

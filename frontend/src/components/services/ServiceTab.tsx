@@ -15,7 +15,7 @@ import {
   useStartService,
 } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
+import { useHoldItem, useHoldingConfirm } from "@/hooks/useItemHold"
 import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 
@@ -38,8 +38,9 @@ interface ServiceTabProps {
 export function ServiceTab({ commodityId, commodityCount, canStart = true }: ServiceTabProps) {
   const { t } = useTranslation(["services", "common"])
   const toast = useAppToast()
-  const confirm = useConfirm()
+  const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
+  useHoldItem(open)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useServicesForCommodity(commodityId)

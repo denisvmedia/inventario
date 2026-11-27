@@ -91,6 +91,7 @@ func (r *CommodityRegistry) BackfillLegacyPrices(ctx context.Context) (int, erro
 			cp.ConvertedOriginalPrice = nil
 		}
 		cp.LegacyZeroPrices = false
+		cp.Revision++
 		r.items.Set(pair.Key, &cp)
 		rewritten++
 	}
