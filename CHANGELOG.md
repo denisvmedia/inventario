@@ -1207,6 +1207,13 @@ when to add an entry and where it goes.
   change saved on the item at the same time
   ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
 
+- The password-changed, password reset, sign-in link and welcome emails are
+  sent in the language you chose in your settings. They always arrived in
+  English. The log line of a failed send now carries the request ID.
+- Opening a sign-in link while the database cannot be reached answers with a
+  server error, which can be retried, instead of "Invalid or expired sign-in
+  link". The link stays usable.
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.
