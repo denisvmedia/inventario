@@ -323,10 +323,10 @@ type OrphanFileGCWorker struct {
 	// (created_at, id) keyset order the registry guarantees.
 	//
 	// It is a liveness requirement, not an optimization. Re-verification KEEPS
-	// far more rows than it deletes, and several keep-reasons never clear on a
-	// later tick: a tenant pinned by a crashed export/restore (there is no
-	// heartbeat — see logBlocked), a suspended tenant, a pending_deletion
-	// group, a purged owner. Those rows are also, by construction, among the
+	// far more rows than it deletes, and several keep-reasons outlast many
+	// ticks or never clear: a tenant pinned by a stuck export/restore (see
+	// logBlocked), a suspended tenant, a pending_deletion group, a purged
+	// owner. Those rows are also, by construction, among the
 	// OLDEST orphans in the installation, so a non-resumable oldest-first
 	// window would be squatted on by exactly them and no other orphan would
 	// ever be enumerated again. In the shipping REPORT mode nothing is ever
@@ -661,15 +661,18 @@ func (g orphanGCGate) isBlocked(tenantID string) bool {
 	return ok
 }
 
-// logBlocked surfaces the stuck-operation fail-safe. There is no heartbeat
-// anywhere in the system: a crashed restore stays `running` forever and a
-// crashed export stays `in_progress`, which under this gate PERMANENTLY
-// disables the GC for that tenant. That is the correct direction (under-collect
-// forever beats one wrong delete), but it must be diagnosable rather than a
-// silent no-op — hence the warn plus inventario_orphan_gc_blocked_tenants.
+// logBlocked surfaces the stuck-operation fail-safe. A restore whose worker
+// crashed stays `running`, and an export `in_progress`, until the stall sweep
+// of its worker (package backup/stall) fails it or queues it again; a run
+// that hangs with its process up keeps its heartbeat and is never swept.
+// Until then this gate disables the GC for that tenant. That is the correct
+// direction (under-collect beats one wrong delete), but it must be
+// diagnosable rather than a silent no-op — hence the warn plus
+// inventario_orphan_gc_blocked_tenants.
 //
-// Do NOT "fix" this with a "stale after N hours → ignore it" rule: that
-// re-opens the exact race the gate closes.
+// Do NOT "fix" this with a "stale after N hours → ignore it" rule here: that
+// re-opens the exact race the gate closes. Whether a worker is alive is the
+// stall sweep's call, made on heartbeats.
 func (g orphanGCGate) logBlocked() {
 	for tenantID, b := range g.blocked {
 		slog.Warn("Orphan file GC: tenant skipped, operation in flight or recently finished",

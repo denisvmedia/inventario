@@ -318,11 +318,12 @@ describe("<CommodityFormDialog /> server drafts", () => {
     expect(values).toMatchObject({ name: "Couch", type: "furniture", draft: false })
     // The promotion carries the values and the revision the form loaded;
     // Add item leaves the saved draft as it was (#1626). It names its key,
-    // kept for a retry until it succeeds.
+    // kept for a retry until it succeeds, and the draft's group (#2920).
     expect(draft).toEqual({
       id: "d1",
       revision: 3,
       promotionKey: expect.stringMatching(/^promote:/),
+      group: SLUG,
     })
     expect(fake.drafts[0]).toMatchObject({ revision: 3, values: { draft: true } })
   })
@@ -957,6 +958,7 @@ describe("<CommodityFormDialog /> Add item through the draft", () => {
       id: fake.drafts[0].id,
       revision: 1,
       promotionKey: expect.stringMatching(/^promote:/),
+      group: SLUG,
     })
     await waitFor(() => expect(pendingRows()).toHaveLength(0))
     const itemId = `item-from-${fake.drafts[0].id}`

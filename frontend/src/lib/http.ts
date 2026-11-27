@@ -140,6 +140,11 @@ export interface HttpRequestInit {
   // Skip the /g/{slug}/ rewrite even if a group is active (for explicit
   // cross-group lookups; rare).
   skipGroupRewrite?: boolean
+  // The group a group-scoped path goes to. Unset, it is the group active
+  // when the request is sent. A form that sends several requests for one
+  // action names the group it opened in, so a group switch in between does
+  // not send the later ones to another group.
+  group?: string
   // Skip the 401 → refresh → retry dance. The wrapper sets this on its own
   // refresh request; callers normally never set it.
   skipAuthRefresh?: boolean
@@ -147,6 +152,10 @@ export interface HttpRequestInit {
   // "user-initiated" follows the normal flow. Default is "user-initiated".
   authCheck?: "background" | "user-initiated"
 }
+
+// InGroup is the option of an API function that can send its request to a
+// named group instead of the current one.
+export type InGroup = Pick<HttpRequestInit, "group">
 
 export interface HttpResponse<T> {
   data: T
@@ -252,8 +261,8 @@ function usesImpersonationCredential(path: string): boolean {
   )
 }
 
-function applyGroupRewrite(path: string): string {
-  const slug = getCurrentGroupSlug()
+function applyGroupRewrite(path: string, group?: string): string {
+  const slug = group || getCurrentGroupSlug()
   if (!slug) {
     if (import.meta.env.DEV) {
       for (const prefix of GROUP_SCOPED_PREFIXES) {
@@ -276,13 +285,13 @@ function applyGroupRewrite(path: string): string {
   return path
 }
 
-function buildUrl(path: string, skipGroupRewrite: boolean | undefined): string {
+function buildUrl(path: string, skipGroupRewrite: boolean | undefined, group?: string): string {
   // Accept either a path ("/commodities") or a full /api/v1-prefixed URL
   // (rare, used by tests and by the refresh helper). Strip the prefix so we
   // operate on the canonical short form throughout the rewrite logic.
   let normalized = path.startsWith(BASE_URL) ? path.slice(BASE_URL.length) : path
   if (!normalized.startsWith("/")) normalized = `/${normalized}`
-  const rewritten = skipGroupRewrite ? normalized : applyGroupRewrite(normalized)
+  const rewritten = skipGroupRewrite ? normalized : applyGroupRewrite(normalized, group)
   return `${BASE_URL}${rewritten}`
 }
 
@@ -702,7 +711,7 @@ async function performRequest<T = unknown>(
   init: HttpRequestInit
 ): Promise<HttpResponse<T>> {
   const method = (init.method ?? "GET") as HttpMethod
-  const url = buildUrl(path, init.skipGroupRewrite)
+  const url = buildUrl(path, init.skipGroupRewrite, init.group)
   const headers = buildHeaders(method, path, init)
   const body =
     init.body === undefined || method === "GET"

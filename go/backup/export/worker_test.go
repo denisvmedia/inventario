@@ -126,6 +126,7 @@ func TestExportWorkerProcessPendingExports(t *testing.T) {
 
 	exportService := NewExportService(factorySet, uploadLocation, nil)
 	worker := NewExportWorker(exportService, factorySet, 3)
+	waitForExportsOnCleanup(c, worker, 3)
 
 	ctx := newTestContext()
 

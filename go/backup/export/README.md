@@ -72,7 +72,7 @@ A row is the user's when its `created_by_user_id` is the user (or `user_id` wher
 
 ### Legacy: XML (build-tag-gated)
 
-The pre-#534 XML format (root `<inventory>` with base64-embedded file data) is **deprecated** and compiled only with `go build -tags legacy_xml_backup`. Do not write new code against it.
+The pre-#534 XML format (root `<inventory>` with base64-embedded file data) is **deprecated** and compiled only with `go build -tags legacy_xml_backup`. Do not write new code against it. The `test` job of `.github/workflows/go-test.yml` vets the tagged build and runs the backup tests under the tag, and a test file that uses an `.inb` fixture needs `//go:build !legacy_xml_backup`, as the fixtures have.
 
 ## Key Features
 
