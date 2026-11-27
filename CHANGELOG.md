@@ -509,8 +509,12 @@ when to add an entry and where it goes.
   Uploads compute a SHA-256, and when the group already holds the same content
   the upload dialog offers to attach the existing file instead. Existing
   attachments move to the new shape when the server first starts after the
-  upgrade, and existing files get their checksum in the background
-  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+  upgrade, and existing files get their checksum in the background. A backup
+  stores a shared file once, and a restore brings it back with every item that
+  uses it, also when one of those items cannot be restored; a file that only
+  such items used is left out and counted as an error
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806),
+  [#2876](https://github.com/denisvmedia/inventario/issues/2876)).
 - Editing an item in place. Edit on the item page and in its side panel opens
   a form with the item's main fields where the details were, with a tag
   palette that adds or removes a tag in one click; "All fields" opens the
@@ -757,6 +761,20 @@ when to add an entry and where it goes.
   going out without that recipient, or, for a loan, being marked as sent
   with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Switching groups in the sidebar now saves the group as your default group,
+  as the top bar switcher already did, so the next sign-in lands in the group
+  you used last whichever control you used. A switch saves only the group: it
+  no longer writes back a name you changed on another device since the page
+  loaded. The role next to the top bar switcher is the Members page badge,
+  with its icon, color and translated label, in place of the untranslated role
+  key ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
+- The users of a suspended or inactive tenant get no email from Inventario:
+  no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. Every link in those emails answered `403 Tenant suspended`. A
+  reminder still due when the tenant is reactivated goes out then, and an
+  export requested before the suspension is still built
+  ([#2949](https://github.com/denisvmedia/inventario/issues/2949)).
 - The item delete dialog and the area delete dialog showed raw keys such as
   "delete.title" instead of their text
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
@@ -826,6 +844,12 @@ when to add an entry and where it goes.
   now opens the new group. Before, the page stayed on the filled-in form, so
   it looked as if nothing had happened and a second click created another
   group ([#2815](https://github.com/denisvmedia/inventario/issues/2815)).
+- The storage card in **Group settings → Data & storage** says what its
+  number counts: each file at the size it was uploaded. The thumbnails made
+  for photos are stored apart and are not counted, there or in the storage
+  quota reminders, so a group of many small photos uses more space than the
+  card shows
+  ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it

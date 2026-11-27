@@ -860,6 +860,25 @@ Suspend and reactivate:
   and magic-link sign-ins, token refresh and access tokens check the
   user's own tenant. Impersonating one of its users is refused with `422`
   and `tenant.not_active`.
+- While a tenant is not active, the background workers send its users no
+  email: no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. They write nothing for those rows either, so after reactivation a
+  reminder that is still due goes out on the next sweep (one email, for the
+  closest lead time reached), a storage warning goes out if the group is
+  still over the threshold, and a skipped weekly digest goes out if the
+  tenant is reactivated before the end of the week it was due in (the
+  worker sends from Monday at the send hour to Sunday, and no week is
+  claimed while the tenant is not active). A personal data export
+  requested before the suspension is still built and listed; only its
+  email is skipped. The workers that send no email (thumbnails, Trash
+  purge, orphan file cleanup) keep running.
+- When the tenant cannot be read (a database error), a reminder is retried
+  on the next sweep. The weekly digest of every member of the affected
+  group, and of a group whose members cannot be listed, waits for the next
+  sweep too, without claiming the week, so the digest that goes out covers
+  all of the member's groups. The export-ready email
+  is sent anyway: it goes out once and nothing retries it.
 - Reactivating makes the tenant active again. The sessions the suspension
   ended stay ended, and the revoked API tokens stay revoked: users sign in
   again and create new tokens.

@@ -348,7 +348,7 @@
       "placeholder": "Proč je tato akce prováděna?"
     },
     "roles": {
-      "admin": "Administrátor",
+      "admin": "Správce",
       "owner": "Vlastník",
       "user": "Uživatel",
       "viewer": "Pozorovatel"
