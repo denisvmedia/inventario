@@ -780,7 +780,6 @@ when to add an entry and where it goes.
   verified, a profile Inventario cannot use, an account on another site, closed
   registration, and an account waiting for approval. Before, it showed nothing
   for them ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
-
 - An export, import or restore whose worker stopped in the middle of the
   run, because the process crashed, was killed or was shut down, no longer
   stays in progress for good. A running job records a heartbeat every
@@ -792,7 +791,6 @@ when to add an entry and where it goes.
   have written part of its backup. Each of these failures shows among the
   failed jobs and counts in `inventario_jobs_dead_lettered_total`
   ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
-
 - A deactivated user whose account is linked to Google or GitHub now lands on
   the sign-in page with that message instead of a bare "User account is not
   available" page ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
