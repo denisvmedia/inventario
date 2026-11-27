@@ -225,6 +225,14 @@ let backofficeRefreshInFlight: Promise<string> | null = null
 // closed by the hard-redirect tearing the page down, not by this guard.
 let impersonationEndInFlight: Promise<void> | null = null
 
+// Sign-outs in progress, per plane (#3026). Both logout handlers put the
+// access token on the blacklist before they revoke the refresh token, so a
+// request that carried the old token can get a 401 while the refresh cookie
+// still works. Answering that 401 with a refresh started a new session right
+// after the sign-out. While a plane's count is above zero, a 401 on that
+// plane ends in the error (see handle401).
+const signOutsInFlight: Record<AuthPlane, number> = { tenant: 0, backoffice: 0 }
+
 // The /admin/impersonation/end path — kept as a constant so handle401 can
 // recognise (and skip recovery for) the `end` call itself.
 const IMPERSONATION_END_PATH = "/admin/impersonation/end"
@@ -259,6 +267,15 @@ function usesImpersonationCredential(path: string): boolean {
     (path === IMPERSONATION_CURRENT_PATH || path === IMPERSONATION_END_PATH) &&
     getImpersonationReturn() !== null
   )
+}
+
+export type AuthPlane = "tenant" | "backoffice"
+
+// credentialPlane is the plane whose access token and CSRF token a request
+// carries: the path's own plane, except for the impersonation self-service
+// endpoints during a session (see usesImpersonationCredential).
+function credentialPlane(path: string): AuthPlane {
+  return isBackofficePath(path) && !usesImpersonationCredential(path) ? "backoffice" : "tenant"
 }
 
 function applyGroupRewrite(path: string, group?: string): string {
@@ -320,7 +337,7 @@ function buildHeaders(method: HttpMethod, path: string, init: HttpRequestInit): 
   // token), not the back-office plane — see usesImpersonationCredential. This
   // flips both the Authorization bearer and the CSRF token below to the
   // tenant pair for those requests.
-  const backoffice = isBackofficePath(path) && !usesImpersonationCredential(path)
+  const backoffice = credentialPlane(path) === "backoffice"
   const accessToken = backoffice ? getBackofficeAccessToken() : getAccessToken()
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`)
@@ -501,6 +518,21 @@ async function refreshBackofficeAccessToken(): Promise<string> {
   }
 }
 
+// withSignOut runs signOut, the call that ends the plane's session, and keeps
+// the plane from refreshing until it settles (#3026). A refresh that is
+// already running finishes first, so the logout carries the newest access
+// token and refresh cookie, and those are what the server revokes.
+export async function withSignOut<T>(plane: AuthPlane, signOut: () => Promise<T>): Promise<T> {
+  signOutsInFlight[plane]++
+  try {
+    const refresh = plane === "backoffice" ? backofficeRefreshInFlight : refreshInFlight
+    if (refresh) await refresh.catch(() => undefined)
+    return await signOut()
+  } finally {
+    signOutsInFlight[plane]--
+  }
+}
+
 interface ImpersonationEndResponse {
   access_token?: string
   csrf_token?: string
@@ -647,6 +679,14 @@ async function handle401(
     const data = await parseBody(response).catch(() => null)
     throw new HttpError("Unauthorized", 401, url, data)
   }
+  // The plane this request was credentialed from is signing out (#3026), so
+  // the 401 is the logout taking effect. A refresh here would start a new
+  // session, and the impersonation recovery below would restore the
+  // operator's. The sign-out clears the credentials itself.
+  if (signOutsInFlight[credentialPlane(originalPath)] > 0) {
+    const data = await parseBody(response).catch(() => null)
+    throw new HttpError("Unauthorized", 401, url, data)
+  }
   // Impersonation auto-expiry (#1757): if a return-slot is recorded the
   // browser is inside an impersonation session. When its short-lived
   // access token expires a normal /auth/refresh cannot help — the marker
@@ -743,11 +783,11 @@ async function performRequest<T = unknown>(
   // mutation to fail CSRF verification).
   const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
   if (newCsrf) {
-    // Recomputed with the same condition buildHeaders used. A bare
-    // isBackofficePath here sent the rotated token to back-office storage for
-    // impersonation self-service calls, which go out on the tenant pair, so
-    // the rotation landed in the plane that did not make the request (#2127).
-    if (isBackofficePath(path) && !usesImpersonationCredential(path)) {
+    // The same plane buildHeaders used. A bare isBackofficePath here sent
+    // the rotated token to back-office storage for impersonation
+    // self-service calls, which go out on the tenant pair, so the rotation
+    // landed in the plane that did not make the request (#2127).
+    if (credentialPlane(path) === "backoffice") {
       setBackofficeCsrfToken(newCsrf)
     } else {
       setCsrfToken(newCsrf)
@@ -831,4 +871,6 @@ export function __resetHttpForTests(): void {
   refreshInFlight = null
   backofficeRefreshInFlight = null
   impersonationEndInFlight = null
+  signOutsInFlight.tenant = 0
+  signOutsInFlight.backoffice = 0
 }
