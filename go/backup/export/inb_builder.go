@@ -104,6 +104,12 @@ type inbBuilder struct {
 	// emitted in the dedicated files member, never nested under a commodity.
 	entityFiles     []*entityCandidateFile
 	standaloneFiles []*entityCandidateFile
+	// recordsByCommodityID maps an item's DB id to its loans, service
+	// records, maintenance schedules, supply links and reminders, and
+	// authorUUIDByID maps the DB id of a member who recorded one to the
+	// member's UUID (see loadItemRecords).
+	recordsByCommodityID map[string]*itemRecords
+	authorUUIDByID       map[string]string
 
 	// sizeByFileID caches the resolved size of every file probed so far, so a
 	// file attached to several entities is probed once.
@@ -349,6 +355,12 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 	}
 
 	if err := b.loadSellers(); err != nil {
+		return err
+	}
+
+	// After the items: a record of an item created later is left out with
+	// its item, and one of an item deleted since stays out of the plan.
+	if err := b.loadItemRecords(); err != nil {
 		return err
 	}
 
@@ -1429,6 +1441,8 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 			inbCom.CoverFileID = coverUUID
 		}
 	}
+
+	b.archiveItemRecords(com, &inbCom)
 
 	pending := b.planCommodityFiles(locSlug, com, &inbCom)
 	return inbCom, pending

@@ -501,6 +501,19 @@ when to add an entry and where it goes.
   tokens for scripts" page of the user guide lists the endpoints worth
   scripting against
   ([#2808](https://github.com/denisvmedia/inventario/issues/2808)).
+- Backups carry each item's loans, service records, maintenance schedules,
+  supply links and reminders, as INB format 3.9, so a full replace no longer
+  deletes them for good. A selection carries the records of the items it
+  names. A restore brings them back with an item it creates and leaves the
+  records of an item the group already has as they are. A record keeps the
+  member who made it when that person is a member of the group, and is
+  recorded as the member restoring otherwise, so loan and item reminder
+  emails never go to someone outside the group. A loan's and a service
+  record's sent reminders are kept; a maintenance schedule or an item
+  reminder that is close to its date can send its closest email once more
+  after a restore. Item history and saved views stay out of backups. Older
+  backups restore as before, without these records
+  ([#2884](https://github.com/denisvmedia/inventario/issues/2884)).
 - One file can be attached to several items, locations and areas, so a receipt
   for three items is uploaded once. "Attach an existing file" on an item's
   Files tab (and "Attach existing" on a location or area) attaches a file the
