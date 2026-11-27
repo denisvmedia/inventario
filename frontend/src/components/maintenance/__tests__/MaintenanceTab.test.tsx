@@ -84,6 +84,15 @@ describe("<MaintenanceTab />", () => {
     expect(await screen.findByTestId("maintenance-list")).toBeInTheDocument()
     expect(screen.getByTestId("schedule-ms-1-done")).toBeInTheDocument()
     expect(screen.getByTestId("schedule-ms-1-next-due")).toBeInTheDocument()
+    // Delete is the red ghost trigger of a row, labeled like its neighbors (#2914).
+    const deleteTrigger = screen.getByTestId("schedule-ms-1-delete")
+    expect(deleteTrigger).toHaveAttribute("data-variant", "ghost")
+    expect(deleteTrigger).toHaveTextContent("Delete")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("renders the bundle hint instead of the form for count > 1 rows", async () => {

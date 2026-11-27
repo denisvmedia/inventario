@@ -160,6 +160,11 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
+	// LocationID, when non-empty, restricts the result to commodities in
+	// any area of that location (#2897). It is AND-ed with AreaID, so an
+	// area of another location matches nothing, and an item without an
+	// area is in no location. An unknown ID matches nothing.
+	LocationID string
 	// SellerIDs, when non-empty, restricts the result to commodities whose
 	// seller is one of the listed IDs (#2804). Empty = unrestricted.
 	SellerIDs []string
@@ -3651,6 +3656,9 @@ type FailedJobScope struct {
 	TenantID string
 	// GroupID limits the query to one group when set. It requires TenantID.
 	GroupID string
+	// FailedBefore, when set, limits the query to the jobs that failed
+	// before it. A job without a failure time counts from its creation.
+	FailedBefore time.Time
 }
 
 // FailedJobRegistry reads and acts on the jobs that failed for good, over
@@ -3684,6 +3692,12 @@ type FailedJobRegistry interface {
 	// Discard marks a failed job discarded at now. ErrNotFound when the
 	// type has no failed, undiscarded job with the id in the scope.
 	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// DiscardFailed marks every failed, undiscarded job of the type in the
+	// scope discarded at now and returns how many it marked. The scope
+	// must set FailedBefore (ErrFieldRequired otherwise), so a bulk discard
+	// always names the jobs it acts on by their failure time.
+	DiscardFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, now time.Time) (int, error)
 }
 
 // UserPurger clears what references a single user before the users row itself

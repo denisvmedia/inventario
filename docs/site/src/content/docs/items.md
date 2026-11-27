@@ -708,6 +708,10 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Type** — filter by one or more of your group's [item types](../item-types/).
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**,
   **Written Off**, **Donated**, or **Stolen**.
+- **Location** — narrow to the items in the areas of one
+  [location](../locations-and-areas/), or **All locations**. The **Area** menu
+  then lists only that location's areas. Choosing a location turns off **No
+  location**, since an item without an area is in no location.
 - **Area** — narrow to a single area, or **All areas**.
 - **Seller** — show items bought from one or more [sellers](../sellers/). The
   menu appears once your group has a seller.
@@ -717,7 +721,8 @@ The **All Items** page lists every item in your group. Across the top you have:
   menu appears once your group has a custom field.
 - **Warranty** — filter by warranty state (active, expiring, expired, or none).
 - **Lent out** — show only items currently lent out.
-- **No location** — show only items not placed in any area.
+- **No location** — show only items not placed in any area. Turning it on
+  clears the **Location** filter.
 - **Missing** — show items without a photo, without a purchase price, or
   without a purchase date. Pick more than one to find items that lack all of
   them. An unknown price or date counts as missing even after the item was
@@ -842,13 +847,14 @@ matches the view, and the **Views** menu offers **Save changes** (to update the
 view) and **Revert to saved** (to go back to it). **Close view** keeps the
 current filters and leaves the view.
 
-If a view refers to an area, a tag, a seller, an [item type](../item-types/) or
-a [custom field](../custom-fields/) that was deleted, it still opens and still
-applies that condition, so it shows what still matches (often nothing, for a
-deleted area, seller, type or field). The **Views** button shows a warning, and
-the menu says what no longer exists; on the **Saved views** page the condition
-reads **Deleted area**, **Deleted seller** or **Deleted field**, or a tag or an
-item type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
+If a view refers to a location, an area, a tag, a seller, an
+[item type](../item-types/) or a [custom field](../custom-fields/) that was
+deleted, it still opens and still applies that condition, so it shows what
+still matches (often nothing, for a deleted location, area, seller, type or
+field). The **Views** button shows a warning, and the menu says what no longer
+exists; on the **Saved views** page the condition reads **Deleted location**,
+**Deleted area**, **Deleted seller** or **Deleted field**, or a tag or an item
+type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 
 **Manage views** in the **Views** menu, or the gear next to **Saved views** in

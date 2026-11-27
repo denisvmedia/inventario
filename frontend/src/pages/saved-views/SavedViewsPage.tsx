@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAreas } from "@/features/areas/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useLocations } from "@/features/locations/hooks"
 import type { SavedView } from "@/features/saved-views/api"
 import {
   useDeleteSavedView,
@@ -83,9 +84,22 @@ export function SavedViewsPage() {
 
   const views = useMemo(() => savedViews.data?.views ?? [], [savedViews.data])
   const limits = savedViews.data?.limits
+  // Locations are read only when a view filters by one.
+  const locations = useLocations({
+    enabled: views.some((v) => !v.queryError && savedViewQuery(v).locationId !== ""),
+  })
   const areaNames = useMemo(
     () => new Map((areas.data ?? []).map((a) => [a.id ?? "", a.name ?? ""])),
     [areas.data]
+  )
+  const locationNames = useMemo(
+    () =>
+      locations.data ? new Map(locations.data.map((l) => [l.id ?? "", l.name ?? ""])) : undefined,
+    [locations.data]
+  )
+  const locationIds = useMemo(
+    () => (locationNames ? new Set(locationNames.keys()) : undefined),
+    [locationNames]
   )
   // A tag catalogue that failed to load lists no tags; reading that as
   // "every tag is deleted" would mark every tag condition. The previous
@@ -201,7 +215,8 @@ export function SavedViewsPage() {
                       tagSlugs,
                       sellers.ids,
                       itemTypes.slugs,
-                      customFields.ids
+                      customFields.ids,
+                      locationIds
                     )
                   : undefined
                 const editIndex = editable.findIndex((v) => v.id === view.id)
@@ -266,6 +281,7 @@ export function SavedViewsPage() {
                           <QueryConditions
                             query={query}
                             areaNames={areaNames}
+                            locationNames={locationNames}
                             tagLabel={(s) => tagIndex.resolve(s).label}
                             sellerNames={sellers.names}
                             typeLabel={itemTypes.label}

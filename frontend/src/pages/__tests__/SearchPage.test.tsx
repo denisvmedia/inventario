@@ -238,6 +238,33 @@ describe("<SearchPage />", () => {
     expect(screen.getByTestId("result-tag-list-t2")).toHaveTextContent("Show files")
   })
 
+  it("links a location to its items (#2897)", async () => {
+    server.use(
+      groupsHandler,
+      userHandler,
+      msw.get(api("/g/household/search"), ({ request }) => {
+        const type = new URL(request.url).searchParams.get("type")
+        if (type === "locations") {
+          return HttpResponse.json({
+            data: [{ id: "l1", name: "Garage", address: "Main street 1" }],
+            meta: { total: 1, entity_type: "locations" },
+          })
+        }
+        return HttpResponse.json({ data: [], meta: { total: 0, entity_type: type } })
+      })
+    )
+    renderSearch("/g/household/search?q=garage")
+    expect(await screen.findByTestId("result-location-l1")).toHaveAttribute(
+      "href",
+      "/g/household/locations/l1"
+    )
+    const items = screen.getByTestId("result-location-items-l1")
+    expect(items).toHaveAttribute("href", "/g/household/commodities?location=l1")
+    expect(items).toHaveAccessibleName("Show items in Garage")
+    // Below sm the button shows its icon only, so a long title keeps the row.
+    expect(screen.getByTestId("result-location-items-l1-label")).toHaveClass("hidden", "sm:inline")
+  })
+
   it("remembers an opened result for the empty page (#2801)", async () => {
     server.use(
       groupsHandler,

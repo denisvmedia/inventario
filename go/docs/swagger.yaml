@@ -73,6 +73,24 @@ definitions:
     required:
     - reason
     type: object
+  apiserver.AdminFailedJobBulkDiscardMeta:
+    properties:
+      by_type:
+        additionalProperties:
+          type: integer
+        description: ByType counts per job type; a type with none is left out.
+        type: object
+      discarded:
+        example: 12
+        type: integer
+      dry_run:
+        type: boolean
+    type: object
+  apiserver.AdminFailedJobBulkDiscardResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/apiserver.AdminFailedJobBulkDiscardMeta'
+    type: object
   apiserver.AdminFailedJobListEnvelope:
     properties:
       data:
@@ -1124,6 +1142,12 @@ definitions:
     type: object
   jsonapi.AdminGroupMemberUser:
     properties:
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the member's profile photo, valid for the
+          operator and session that requested the list. Absent when the member
+          has none.
+        type: string
       email:
         type: string
       id:
@@ -1226,6 +1250,11 @@ definitions:
     properties:
       active_session_count:
         type: integer
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the user's profile photo, valid for the
+          operator and session that requested it. Absent when the user has none.
+        type: string
       created_at:
         type: string
       email:
@@ -1269,6 +1298,12 @@ definitions:
     type: object
   jsonapi.AdminUserListItem:
     properties:
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the user's profile photo, valid for the
+          operator and session that requested the list. Absent when the user has
+          none.
+        type: string
       created_at:
         type: string
       email:
@@ -7970,10 +8005,14 @@ paths:
         Returns the background jobs that failed for good and were neither
         retried nor discarded, across every tenant, newest failure first
         (#1307). Each job is read from its type's own table; `id` is the row
-        id there. ?type limits the list to one job type and ?tenantID to one
-        tenant. `meta.job_types` lists the job types with whether each can be
-        retried.
-        An unknown ?type returns 400 with `failed_job.unknown_type`.
+        id there. ?type limits the list to one job type, ?tenantID to one
+        tenant and ?failed_before to the jobs that failed before a time (a
+        job without a failure time counts from its creation), the jobs a bulk
+        discard with the same filter takes. `meta.job_types` lists the job
+        types with whether each can be retried.
+        An unknown ?type returns 400 with `failed_job.unknown_type`, a
+        ?failed_before that is not a date or an RFC 3339 time 400 with
+        `failed_job.invalid_failed_before`.
       parameters:
       - description: Job type
         enum:
@@ -7989,6 +8028,12 @@ paths:
       - description: Tenant ID
         in: query
         name: tenantID
+        type: string
+      - description: 'Only jobs that failed before this time: a date (midnight UTC)
+          or an RFC 3339 time'
+        example: "2026-11-01"
+        in: query
+        name: failed_before
         type: string
       - description: Page number (default 1)
         in: query
@@ -8006,7 +8051,7 @@ paths:
           schema:
             $ref: '#/definitions/apiserver.AdminFailedJobListEnvelope'
         "400":
-          description: Bad Request - unknown job type
+          description: Bad Request - unknown job type or unreadable failed_before
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "401":
@@ -8115,6 +8160,74 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Retry a failed background job (admin)
+      tags:
+      - admin
+  /admin/failed-jobs/bulk-discard:
+    post:
+      description: |-
+        Marks discarded every failed job that failed before ?failed_before
+        (#2946), as the single discard does: the jobs leave the failed list
+        and the depth gauge and keep their rows and errors. A job without a
+        failure time counts from its creation. The filter is the list's:
+        ?type limits the discard to one job type and ?tenantID to one tenant,
+        and GET /admin/failed-jobs with the same query lists the jobs it
+        takes. ?dry_run=true only counts them. `meta.discarded` is how many
+        jobs were discarded; a job someone retried or discarded in the
+        meantime is not among them.
+        A discard writes one audit row that names the filter and the counts,
+        also when it is refused; a dry run writes none. Needs the
+        platform_admin role: a support_agent gets 403 `admin.role_required`.
+        A missing, unreadable or future ?failed_before returns 400
+        `failed_job.invalid_failed_before`, an unknown ?type 400
+        `failed_job.unknown_type`.
+      parameters:
+      - description: 'Discard the jobs that failed before this time: a date (midnight
+          UTC) or an RFC 3339 time, not in the future'
+        example: "2026-11-01"
+        in: query
+        name: failed_before
+        required: true
+        type: string
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: query
+        name: type
+        type: string
+      - description: Tenant ID
+        in: query
+        name: tenantID
+        type: string
+      - description: Count the jobs and discard nothing
+        in: query
+        name: dry_run
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminFailedJobBulkDiscardResponse'
+        "400":
+          description: Bad Request - missing, unreadable or future failed_before,
+            or unknown job type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - account disabled, or not a platform_admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Discard failed background jobs in bulk (admin)
       tags:
       - admin
   /admin/groups:
@@ -9471,8 +9584,10 @@ paths:
       consumes:
       - application/json
       description: |-
-        Update the authenticated user's profile. The name field is required;
-        default_group_id (#1263, #1592) is optional — send a group UUID the
+        Update the authenticated user's profile. Both fields are optional and
+        a field left out keeps its stored value. name, when sent, must not be
+        blank (at most 100 characters).
+        default_group_id (#1263, #1592): send a group UUID the
         user is a member of to set, or null to clear (only allowed when the
         user has zero memberships; otherwise rejected with 400). Email, role,
         tenant_id, and is_active are ignored even if submitted.
@@ -9902,8 +10017,9 @@ paths:
   /avatars/{userID}:
     get:
       description: |-
-        Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+        Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
         they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+        A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
       parameters:
       - description: The user whose photo it is
         in: path
@@ -9918,7 +10034,10 @@ paths:
       - description: The user the URL was issued to
         in: query
         name: uid
-        required: true
+        type: string
+      - description: The back-office operator the URL was issued to
+        in: query
+        name: op
         type: string
       - description: The group the two users share
         in: query
@@ -10542,6 +10661,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: Only commodities in an area of this location; cannot be combined
+          with unassigned
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: Filter by seller ID; repeat for several (OR)
         in: query
@@ -11888,6 +12012,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: Only commodities in an area of this location; cannot be combined
+          with unassigned
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: Filter by seller ID; repeat for several (OR)
         in: query
@@ -15155,6 +15284,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: 'Commodities only: only items in an area of this location; cannot
+          be combined with unassigned'
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: 'Commodities only: filter by seller ID; repeat for several (OR)'
         in: query
@@ -15691,6 +15825,10 @@ paths:
           description: Tag is in use; pass force=true to strip references
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a tag
       tags:
       - tags
@@ -15761,6 +15899,10 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a tag

@@ -31,8 +31,9 @@ and the **Account** section of Preferences). On the **Edit profile** page you
 can:
 
 1. Update your **Name**.
-2. Choose your **Default group** — the group you land in after signing in. You
-   can switch groups any time from the group selector.
+2. Choose your **Default group** — the group you land in after signing in.
+   Switching groups with a group selector also makes that group your default,
+   so you come back to the group you used last.
 3. Click **Save changes**.
 
 ### Profile photo
@@ -48,13 +49,14 @@ your Profile page to pick one.
   512 × 512 pixels. A photo taken sideways on a phone is turned upright first.
 - Everything stored in the file besides the picture itself, such as the camera
   model and the location where the photo was taken, is removed.
-- The photo is visible to you and to the members of the groups you belong to.
-  Nobody else can see it.
+- The photo is visible to you, to the members of the groups you belong to,
+  and to the administrators of the server on its admin pages. Nobody else can
+  see it.
 - A profile photo does not count toward any group's storage use.
 
 To go back to your initials, click **Remove photo** under the picture and
 confirm. Uploading a new photo replaces the old one. Deleting your account also
-deletes your photo.
+deletes your photo, and so does an administrator deleting it.
 
 A couple of things to know:
 
