@@ -46,6 +46,12 @@ func (s *stubFileRegistry) Delete(context.Context, string) error {
 func (s *stubFileRegistry) Count(context.Context) (int, error) {
 	panic("not implemented")
 }
+func (s *stubFileRegistry) ListCreatedBy(context.Context, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+func (s *stubFileRegistry) ListTrashedCreatedBy(context.Context, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
 func (s *stubFileRegistry) ListByType(context.Context, models.FileType) ([]*models.FileEntity, error) {
 	panic("not implemented")
 }
