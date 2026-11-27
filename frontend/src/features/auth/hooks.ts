@@ -72,29 +72,16 @@ export function useHasPassword(): boolean {
   return wire === undefined ? true : wire
 }
 
-// Optimistic logout: drop the cached user before the server confirms so the
-// UI can show the logged-out shell immediately. We `removeQueries` rather
-// than `setQueryData(..., null)` so the cache stays type-true to the query's
-// declared `CurrentUser` shape — consumers see `data === undefined`, never a
-// surprise `null`. If the request fails, restore the snapshot.
+// Sign-out. The hook does no cache work: logout() removes the stored token
+// whether or not the request succeeds, and AuthProvider then clears every
+// cached query and mutation (see onAuthIdentityChange in lib/auth-storage).
+// There is no optimistic step and no rollback. Clearing while the old token
+// is still valid would refetch every mounted query during the request, and
+// restoring the previous user after a failed request would put their data
+// back into a signed-out cache.
 export function useLogout() {
-  const queryClient = useQueryClient()
-  return useMutation<void, Error, void, { previousUser: CurrentUser | undefined }>({
+  return useMutation<void, Error, void>({
     mutationFn: () => logout(),
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: authKeys.currentUser() })
-      const previousUser = queryClient.getQueryData<CurrentUser>(authKeys.currentUser())
-      queryClient.removeQueries({ queryKey: authKeys.currentUser(), exact: true })
-      return { previousUser }
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.previousUser) {
-        queryClient.setQueryData(authKeys.currentUser(), ctx.previousUser)
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: authKeys.all })
-    },
   })
 }
 
@@ -105,8 +92,10 @@ interface LoginVars {
 
 // Login mutation: on success, seed the cached user so ProtectedRoute can
 // short-circuit the boot probe and render the protected tree without a
-// /auth/me round-trip. We invalidate the auth namespace afterward so any
-// stale "user" data anywhere in the cache settles to the new identity.
+// /auth/me round-trip. The cache is already empty by then: login() stores
+// the new token before it resolves, and AuthProvider clears every query and
+// mutation when the signed-in user changes, so nothing cached for a previous
+// user survives into this session.
 //
 // When the backend short-circuits with `mfa_required`, the mutation
 // resolves with that variant (no tokens have been stored yet) — the

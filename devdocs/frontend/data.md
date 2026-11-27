@@ -162,24 +162,26 @@ measured-flicker pain.
 
 For hot paths where the user expects an instant change (toggle a tag,
 delete a commodity, mark warranty seen). The pattern is the
-`useLogout` reference from `features/auth/hooks.ts`:
+`usePatchSetting` reference from `features/settings/hooks.ts`:
 
 ```ts
-useMutation<void, Error, void, { previousUser: CurrentUser | undefined }>({
-  mutationFn: () => logout(),
-  onMutate: async () => {
-    await queryClient.cancelQueries({ queryKey: authKeys.currentUser() })
-    const previousUser = queryClient.getQueryData<CurrentUser>(authKeys.currentUser())
-    queryClient.removeQueries({ queryKey: authKeys.currentUser(), exact: true })
-    return { previousUser }
+useMutation<SettingsObject, Error, PatchVars, { previous: SettingsObject | undefined }>({
+  mutationFn: ({ field, value }) => patchSetting(field, value),
+  onMutate: async ({ field, value }) => {
+    await qc.cancelQueries({ queryKey: settingsKeys.preferences(slug) })
+    const previous = qc.getQueryData<SettingsObject>(settingsKeys.preferences(slug))
+    if (previous) {
+      qc.setQueryData(settingsKeys.preferences(slug), applyOptimisticPatch(previous, field, value))
+    }
+    return { previous }
   },
   onError: (_err, _vars, ctx) => {
-    if (ctx?.previousUser) {
-      queryClient.setQueryData(authKeys.currentUser(), ctx.previousUser)
+    if (ctx?.previous) {
+      qc.setQueryData(settingsKeys.preferences(slug), ctx.previous)
     }
   },
-  onSettled: () => {
-    queryClient.invalidateQueries({ queryKey: authKeys.all })
+  onSuccess: (data) => {
+    qc.setQueriesData<SettingsObject>({ queryKey: settingsKeys.all }, data)
   },
 })
 ```
@@ -189,7 +191,21 @@ Required steps every time:
 - `cancelQueries` first — otherwise an in-flight refetch overwrites
   your optimistic write.
 - Return `{ previous… }` from `onMutate` so `onError` can roll back.
-- `onSettled` invalidates so the cache settles to the server's truth.
+- Settle the cache to the server's truth on success: write the response
+  back, as here, or invalidate in `onSettled`.
+
+### Signed-in user changes
+
+Most query keys do not name the user, so the cache as a whole belongs to
+whoever was signed in when it filled. `AuthProvider` subscribes to
+`onAuthIdentityChange` (`lib/auth-storage.ts`) and calls
+`queryClient.clear()` whenever the stored access token starts to belong to
+someone else: sign-in, sign-out, a forced sign-out after a failed refresh,
+and any of these in another tab (a `storage` event). The identity is the
+token's `user_id` claim, so a token refresh for the same user keeps the
+cache. Feature hooks do no cache work of their own on sign-in or sign-out;
+restoring a previous user's data after a failed sign-out request would put
+it back into a signed-out cache.
 
 ### 3. Direct cache write (rare)
 

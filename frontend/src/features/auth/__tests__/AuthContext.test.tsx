@@ -5,12 +5,18 @@ import { screen, waitFor, act } from "@testing-library/react"
 
 import { server } from "@/test/server"
 import { renderWithProviders } from "@/test/render"
+import type { QueryClient } from "@tanstack/react-query"
+
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
+import { useLogin } from "@/features/auth/hooks"
+import { authKeys } from "@/features/auth/keys"
+import { groupKeys } from "@/features/group/keys"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { __resetBootRefreshForTests } from "@/features/auth/bootRefresh"
 import { __resetGroupContextForTests } from "@/lib/group-context"
-import { __resetHttpForTests } from "@/lib/http"
+import { __resetHttpForTests, http } from "@/lib/http"
 import { clearAuth, getAccessToken, setAccessToken } from "@/lib/auth-storage"
+import { fakeAccessToken } from "@/test/handlers/auth"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -206,5 +212,183 @@ describe("useAuth", () => {
     })
     await waitFor(() => expect(screen.getByTestId("login-stub")).toBeInTheDocument())
     expect(getAccessToken()).toBeNull()
+  })
+})
+
+// A change of the signed-in user must leave nothing in the query cache that
+// the previous user fetched: most keys (["group", "list"] among them) do not
+// name the user, and a fresh entry would be shown to the next user as is.
+describe("query cache across a change of the signed-in user", () => {
+  const tokenA = fakeAccessToken("user-a")
+  const tokenB = fakeAccessToken("user-b")
+  const userA = { id: "user-a", email: "a@example.com", name: "Alice" }
+  const userB = { id: "user-b", email: "b@example.com", name: "Bob" }
+  const groupsOfA = [{ id: "g-a", slug: "alice-home", name: "Alice's home" }]
+
+  function SessionProbe() {
+    const auth = useAuth()
+    const login = useLogin()
+    return (
+      <div
+        data-testid="session"
+        data-authenticated={String(auth.isAuthenticated)}
+        data-email={auth.user?.email ?? ""}
+      >
+        <button type="button" onClick={() => void auth.logout()}>
+          sign out
+        </button>
+        <button
+          type="button"
+          onClick={() => login.mutate({ email: userB.email, password: "secret" })}
+        >
+          sign in as B
+        </button>
+      </div>
+    )
+  }
+
+  const sessionRoutes = (
+    <>
+      <Route
+        path="/"
+        element={
+          <AuthProvider>
+            <SessionProbe />
+          </AuthProvider>
+        }
+      />
+      <Route path="/login" element={<LoginEcho />} />
+    </>
+  )
+
+  function installSessionHandlers() {
+    server.use(
+      msw.get(api("/auth/me"), ({ request }) => {
+        const auth = request.headers.get("authorization")
+        if (auth === `Bearer ${tokenA}`) return HttpResponse.json(userA)
+        if (auth === `Bearer ${tokenB}`) return HttpResponse.json(userB)
+        return HttpResponse.json(null, { status: 401 })
+      }),
+      msw.post(api("/auth/logout"), () => new HttpResponse(null, { status: 204 })),
+      msw.post(api("/auth/login"), () =>
+        HttpResponse.json({ access_token: tokenB, csrf_token: "csrf-b", user: userB })
+      )
+    )
+  }
+
+  // Fills the cache the way user A's session would: a list whose key does
+  // not name the user, and a finished mutation.
+  function fillCacheAsA(queryClient: QueryClient) {
+    queryClient.setQueryData(groupKeys.list(), groupsOfA)
+    queryClient.getMutationCache().build(queryClient, { mutationKey: ["note", "save"] })
+  }
+
+  function cachedQueryData(queryClient: QueryClient): string {
+    return JSON.stringify(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((q) => q.state.data)
+        .filter((d) => d !== undefined)
+    )
+  }
+
+  async function signedInAsA() {
+    setAccessToken(tokenA)
+    installSessionHandlers()
+    const rendered = renderWithProviders({ initialPath: "/", routes: sessionRoutes })
+    await waitFor(() =>
+      expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userA.email)
+    )
+    fillCacheAsA(rendered.queryClient)
+    return rendered
+  }
+
+  function otherTabWritesToken(oldValue: string | null, newValue: string | null) {
+    if (newValue === null) window.localStorage.removeItem("inventario_token")
+    else window.localStorage.setItem("inventario_token", newValue)
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "inventario_token",
+        oldValue,
+        newValue,
+        storageArea: window.localStorage,
+      })
+    )
+  }
+
+  it("drops A's queries and mutations on sign-out and shows B only B's data", async () => {
+    const { queryClient } = await signedInAsA()
+
+    await act(async () => {
+      screen.getByRole("button", { name: "sign out" }).click()
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId("session").getAttribute("data-authenticated")).toBe("false")
+    )
+    expect(queryClient.getQueryData(groupKeys.list())).toBeUndefined()
+    expect(cachedQueryData(queryClient)).toBe("[]")
+    expect(queryClient.getMutationCache().find({ mutationKey: ["note", "save"] })).toBeUndefined()
+
+    await act(async () => {
+      screen.getByRole("button", { name: "sign in as B" }).click()
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userB.email)
+    )
+    expect(queryClient.getQueryData(authKeys.currentUser())).toMatchObject({ id: userB.id })
+    expect(queryClient.getQueryData(groupKeys.list())).toBeUndefined()
+    const remaining = cachedQueryData(queryClient)
+    expect(remaining).not.toContain(userA.email)
+    expect(remaining).not.toContain("alice-home")
+    expect(queryClient.getMutationCache().find({ mutationKey: ["note", "save"] })).toBeUndefined()
+  })
+
+  it("clears the cache when a failed refresh signs the user out", async () => {
+    const { queryClient } = await signedInAsA()
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      msw.post(api("/auth/refresh"), () => HttpResponse.json(null, { status: 401 }))
+    )
+
+    await act(async () => {
+      await http.get("/groups").catch(() => undefined)
+    })
+
+    expect(queryClient.getQueryData(groupKeys.list())).toBeUndefined()
+    expect(cachedQueryData(queryClient)).not.toContain(userA.email)
+    await waitFor(() => expect(screen.getByTestId("login-stub")).toBeInTheDocument())
+  })
+
+  it("clears the cache when another tab signs out", async () => {
+    const { queryClient } = await signedInAsA()
+
+    act(() => otherTabWritesToken(tokenA, null))
+
+    expect(queryClient.getQueryData(groupKeys.list())).toBeUndefined()
+    await waitFor(() =>
+      expect(screen.getByTestId("session").getAttribute("data-authenticated")).toBe("false")
+    )
+  })
+
+  it("clears the cache when another tab signs in as a different user", async () => {
+    const { queryClient } = await signedInAsA()
+
+    act(() => otherTabWritesToken(tokenA, tokenB))
+
+    expect(queryClient.getQueryData(groupKeys.list())).toBeUndefined()
+    await waitFor(() =>
+      expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userB.email)
+    )
+    expect(cachedQueryData(queryClient)).not.toContain(userA.email)
+  })
+
+  it("keeps the cache when another tab refreshes the same user's token", async () => {
+    const { queryClient } = await signedInAsA()
+
+    act(() => otherTabWritesToken(tokenA, fakeAccessToken("user-a", "refreshed")))
+
+    expect(queryClient.getQueryData(groupKeys.list())).toEqual(groupsOfA)
+    expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userA.email)
   })
 })

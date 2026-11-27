@@ -57,6 +57,17 @@ Three credentials, three homes:
 goes through it (it also degrades gracefully when storage is unavailable, e.g.
 SSR or a locked-down browser).
 
+### Changing the signed-in user clears the query cache
+
+`onAuthIdentityChange` (`src/lib/auth-storage.ts`) reports every change of the
+signed-in tenant user: a sign-in, a sign-out, a forced sign-out after a failed
+refresh, and the same events in another tab, which reach this one as `storage`
+events on the access-token key. The identity is the access token's `user_id`
+claim, so a refresh for the same user is not a change. `AuthProvider` answers
+each change with `queryClient.clear()`, which drops every query and mutation
+before the next user's first render. Starting and ending an impersonation
+session reload the page, which rebuilds the cache as well.
+
 ### Boot sequence
 
 On startup `AuthProvider` resolves who is signed in:
