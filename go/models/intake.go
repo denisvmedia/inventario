@@ -524,7 +524,9 @@ func IntakeDraftClientKey(candidateID string) string {
 // document another system delivered (#2809), from the document's identity.
 // The product of a delivery is the only one of its source, and the key does
 // not change when the session is deleted and made again, so a repeat of the
-// delivery finds the draft without the session.
+// delivery finds the draft without the session. The postgres promotion of a
+// draft computes the same digest in SQL to find the document of a delivered
+// draft that the document does not name yet.
 func IntakeDeliveredDraftClientKey(system, instance, documentID string) string {
 	sum := sha256.Sum256([]byte(system + "\x00" + instance + "\x00" + documentID))
 	return IntakeDeliveredDraftKeyPrefix + hex.EncodeToString(sum[:])

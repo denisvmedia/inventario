@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArchiveX, CircleCheck, RotateCcw, TriangleAlert } from "lucide-react"
+import { ArchiveX, CalendarX, CircleCheck, RotateCcw, TriangleAlert } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
@@ -44,6 +44,7 @@ import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { formatDateTime } from "@/lib/intl"
 import { getServerErrorCode } from "@/lib/server-error"
 
+import { AdminFailedJobsBulkDiscardDialog } from "./AdminFailedJobsBulkDiscardDialog"
 import { AdminPagination } from "./AdminPagination"
 
 // Page size of the server-side paginated list; the BE caps per_page at 100.
@@ -72,7 +73,9 @@ function parseType(raw: string | null): string | undefined {
 // filter and the page round-trip through the URL (?type, ?tenantID,
 // ?page). A job whose type can run again has Retry; every job has Discard,
 // which asks first and is for platform admins only: a support agent may
-// retry but not discard. Both are written to the audit log by the BE.
+// retry but not discard. Both are written to the audit log by the BE. A
+// platform admin also gets Discard older…, which discards every job of the
+// filters that failed before a day (#2946).
 export function AdminFailedJobsPage() {
   const { t } = useTranslation("admin")
   const toast = useAppToast()
@@ -102,6 +105,7 @@ export function AdminFailedJobsPage() {
   const retry = useRetryAdminFailedJob()
   const discard = useDiscardAdminFailedJob()
   const [discarding, setDiscarding] = useState<AdminFailedJob | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
   // The dialog keeps naming the job while it closes.
   const discardSubject = useValueWhileOpen(discarding !== null, discarding)
 
@@ -184,16 +188,32 @@ export function AdminFailedJobsPage() {
     <>
       <RouteTitle title={t("failedJobs.title")} />
       <div className="flex flex-col gap-6" data-testid="admin-failed-jobs-page">
-        <div className="flex items-start gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-            <TriangleAlert className="size-5 text-primary" />
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+              <TriangleAlert className="size-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
+                {t("failedJobs.title")}
+              </h1>
+              <p className="mt-1 text-muted-foreground">{t("failedJobs.subtitle")}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-              {t("failedJobs.title")}
-            </h1>
-            <p className="mt-1 text-muted-foreground">{t("failedJobs.subtitle")}</p>
-          </div>
+          {canDiscard ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => setBulkOpen(true)}
+              disabled={busy}
+              data-testid="admin-failed-jobs-bulk-open"
+            >
+              <CalendarX className="size-4" aria-hidden="true" />
+              {t("failedJobs.bulk.action")}
+            </Button>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -309,6 +329,18 @@ export function AdminFailedJobsPage() {
           </>
         )}
       </div>
+
+      {canDiscard ? (
+        <AdminFailedJobsBulkDiscardDialog
+          open={bulkOpen}
+          onOpenChange={setBulkOpen}
+          type={type}
+          tenantID={tenantID || undefined}
+          tenantName={
+            tenantOptions.find((tenant) => tenant.id === tenantID)?.name ?? missingTenant?.name
+          }
+        />
+      ) : null}
 
       <Dialog
         open={discarding !== null}

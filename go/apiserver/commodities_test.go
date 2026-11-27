@@ -149,6 +149,53 @@ func TestCommoditiesList_UnassignedFilter(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data[0].id"), loose.ID)
 }
 
+func TestCommoditiesList_LocationFilter(t *testing.T) {
+	// Issue #2897: ?location_id= returns the commodities in every area of
+	// that location, and is refused together with ?unassigned=true.
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	ctx := context.Background()
+	home := must.Must(registrySet.AreaRegistry.List(ctx))[0].LocationID
+
+	cottage := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Cottage"}))
+	boathouse := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Boathouse", LocationID: cottage.ID}))
+	paddle := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:                  "Paddle",
+		ShortName:             "PD",
+		AreaID:                new(boathouse.ID),
+		Type:                  models.CommodityTypeEquipment,
+		Count:                 1,
+		OriginalPrice:         new(must.Must(decimal.NewFromString("10.00"))),
+		OriginalPriceCurrency: models.Currency("USD"),
+		Status:                models.CommodityStatusInUse,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
+	}))
+
+	get := func(query string) *httptest.ResponseRecorder {
+		req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities?"+query, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr := httptest.NewRecorder()
+		apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr := get("location_id=" + cottage.ID)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].id"), paddle.ID)
+
+	rr = get("location_id=" + home)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 2)
+
+	rr = get("location_id=" + cottage.ID + "&unassigned=true")
+	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "query.invalid_parameter")
+}
+
 func TestCommodityCreate(t *testing.T) {
 	c := qt.New(t)
 

@@ -508,9 +508,11 @@ jobs:
           SELF_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          # 30-minute ceiling (120 * 15s), longer than a full e2e + kind pass
-          # on a busy fleet.
-          for i in $(seq 1 120); do
+          # 30-minute ceiling (30 * 60s), longer than a full e2e + kind pass
+          # on a busy fleet. Once a minute, because every request here comes
+          # out of the same hourly GITHUB_TOKEN limit as the image waits (see
+          # _wait-for-docker-image.yml).
+          for i in $(seq 1 30); do
             # gh's --jq takes a filter and nothing else — no --argjson — so
             # this run is excluded in the shell rather than in jq.
             busy="$(
@@ -524,8 +526,8 @@ jobs:
               echo "No runs left on $HEAD_SHA; safe to reclaim."
               exit 0
             fi
-            echo "Waiting for $busy run(s) on $HEAD_SHA to finish... ($i/120)"
-            sleep 15
+            echo "Waiting for $busy run(s) on $HEAD_SHA to finish... ($i/30)"
+            sleep 60
           done
 
           # Not a failure. An image left behind costs storage until the next

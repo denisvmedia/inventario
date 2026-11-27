@@ -47,6 +47,11 @@ export function areaItemsHref(slug: string, areaId: string): string {
   return commodityListHref(slug, { areaId })
 }
 
+// The items in any area of a location, on the items list.
+export function locationItemsHref(slug: string, locationId: string): string {
+  return commodityListHref(slug, { locationId })
+}
+
 // The items carrying an item tag, or the files carrying a file tag, as the
 // Tags page links them.
 export function tagListHref(slug: string, tag: Pick<TagAttrs, "slug" | "kind">): string {

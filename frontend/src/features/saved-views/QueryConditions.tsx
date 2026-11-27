@@ -12,6 +12,9 @@ interface QueryConditionsProps {
   query: CommodityQuery
   // Area names by ID, for the area condition.
   areaNames: ReadonlyMap<string, string>
+  // Location names by ID, for the location condition; undefined while they
+  // are not known.
+  locationNames?: ReadonlyMap<string, string>
   // Tag labels by slug.
   tagLabel: (slug: string) => string
   // Seller names by ID, for the seller conditions.
@@ -30,6 +33,7 @@ interface QueryConditionsProps {
 export function QueryConditions({
   query,
   areaNames,
+  locationNames,
   tagLabel,
   sellerNames,
   typeLabel,
@@ -60,6 +64,15 @@ export function QueryConditions({
   }
   for (const status of query.statuses) {
     chips.push({ key: `status-${status}`, label: t(`commodities:status.${status}`) })
+  }
+  if (query.locationId) {
+    chips.push({
+      key: "location",
+      label: stale?.location
+        ? t("commodities:savedViews.conditions.deletedLocation")
+        : (locationNames?.get(query.locationId) ?? t("commodities:filter.location")),
+      stale: stale?.location,
+    })
   }
   if (query.areaId) {
     chips.push({

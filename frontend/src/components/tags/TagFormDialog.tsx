@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldError } from "@/components/FieldError"
 
 import { TagBadge } from "./TagBadge"
 import { TagColorPicker } from "./TagColorPicker"
@@ -128,13 +129,15 @@ export function TagFormDialog({
               id="tag-form-label"
               data-testid="tag-form-label"
               placeholder={t("tags:form.labelPlaceholder")}
+              aria-invalid={!!errors.label}
+              aria-describedby={errors.label ? "tag-form-label-error" : undefined}
               {...register("label")}
             />
-            {errors.label?.message ? (
-              <p className="text-xs text-destructive" data-testid="tag-form-label-error">
-                {t(errors.label.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="tag-form-label-error"
+              testId="tag-form-label-error"
+              message={errors.label?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -143,14 +146,16 @@ export function TagFormDialog({
               id="tag-form-slug"
               data-testid="tag-form-slug"
               placeholder={t("tags:form.slugPlaceholder")}
+              aria-invalid={!!errors.slug}
+              aria-describedby={errors.slug ? "tag-form-slug-error" : undefined}
               {...register("slug")}
             />
             <p className="text-xs text-muted-foreground">{t("tags:form.slugHint")}</p>
-            {errors.slug?.message ? (
-              <p className="text-xs text-destructive" data-testid="tag-form-slug-error">
-                {t(errors.slug.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="tag-form-slug-error"
+              testId="tag-form-slug-error"
+              message={errors.slug?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -164,14 +169,16 @@ export function TagFormDialog({
                   onChange={(c) => field.onChange(c)}
                   testId="tag-form-color"
                   disabled={isPending}
+                  invalid={!!errors.color}
+                  describedBy={errors.color ? "tag-form-color-error" : undefined}
                 />
               )}
             />
-            {errors.color?.message ? (
-              <p className="text-xs text-destructive" data-testid="tag-form-color-error">
-                {t(errors.color.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="tag-form-color-error"
+              testId="tag-form-color-error"
+              message={errors.color?.message}
+            />
           </div>
 
           <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">

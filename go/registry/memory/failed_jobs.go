@@ -23,21 +23,27 @@ type FailedJobRegistry struct {
 }
 
 // memoryFailedJobAdapter is one job type over its store. retry is nil for a
-// type that cannot be retried.
+// type that cannot be retried. groupless marks a type whose jobs belong to
+// no group, which a group scope does not reach.
 type memoryFailedJobAdapter struct {
-	list    func(scope registry.FailedJobScope) []*models.FailedJob
-	retry   func(scope registry.FailedJobScope, id string, now time.Time) bool
-	discard func(scope registry.FailedJobScope, id string, now time.Time) bool
+	list      func(scope registry.FailedJobScope) []*models.FailedJob
+	retry     func(scope registry.FailedJobScope, id string, now time.Time) bool
+	discard   func(scope registry.FailedJobScope, id string, now time.Time) bool
+	groupless bool
 }
 
-// FailedJobStores are the factories whose rows the failed-jobs adapters read.
+// FailedJobStores are the factories and registries whose rows the
+// failed-jobs adapters read.
 type FailedJobStores struct {
-	Exports            *ExportRegistryFactory
-	Restores           *RestoreOperationRegistryFactory
-	Thumbnails         *ThumbnailGenerationJobRegistryFactory
-	Files              *FileRegistryFactory
-	Intake             *IntakeRegistryFactory
-	CurrencyMigrations *CurrencyMigrationRegistryFactory
+	Exports             *ExportRegistryFactory
+	Restores            *RestoreOperationRegistryFactory
+	Thumbnails          *ThumbnailGenerationJobRegistryFactory
+	Files               *FileRegistryFactory
+	Intake              *IntakeRegistryFactory
+	CurrencyMigrations  *CurrencyMigrationRegistryFactory
+	PersonalDataExports *PersonalDataExportRegistry
+	// Users gives a personal data export its title, the user's email.
+	Users *UserRegistry
 }
 
 // NewFailedJobRegistry wires the adapters to the stores. Every store is
@@ -115,8 +121,9 @@ func NewFailedJobRegistry(stores FailedJobStores) *FailedJobRegistry {
 					func(op *models.RestoreOperation) { op.DiscardedAt = models.NewPTimestamp(now) })
 			},
 		},
-		models.WorkerTypeThumbnail: newThumbnailFailedJobAdapter(stores.Thumbnails, stores.Files),
-		models.WorkerTypeIntake:    newIntakeFailedJobAdapter(stores.Intake, stores.Files),
+		models.WorkerTypeThumbnail:             newThumbnailFailedJobAdapter(stores.Thumbnails, stores.Files),
+		models.WorkerTypeIntake:                newIntakeFailedJobAdapter(stores.Intake, stores.Files),
+		models.FailedJobTypePersonalDataExport: newPersonalDataExportFailedJobAdapter(stores.PersonalDataExports, stores.Users),
 		models.WorkerTypeCurrencyMigration: {
 			list: func(scope registry.FailedJobScope) []*models.FailedJob {
 				return listFailedIn(migrations, func(m *models.CurrencyMigration) (*models.FailedJob, bool) {
@@ -275,6 +282,67 @@ func newIntakeFailedJobAdapter(intake *IntakeRegistryFactory, files *FileRegistr
 	}
 }
 
+// newPersonalDataExportFailedJobAdapter reads the failed personal data
+// exports, which belong to a user and no group, as postgres does.
+func newPersonalDataExportFailedJobAdapter(exports *PersonalDataExportRegistry, users *UserRegistry) memoryFailedJobAdapter {
+	match := func(scope registry.FailedJobScope, e models.PersonalDataExport) bool {
+		return e.Status == models.PersonalDataExportStatusFailed && e.DiscardedAt == nil &&
+			inFailedJobScope(scope, e.TenantID, "")
+	}
+	change := func(scope registry.FailedJobScope, id string, apply func(*models.PersonalDataExport)) bool {
+		exports.mu.Lock()
+		defer exports.mu.Unlock()
+		e, ok := exports.exports[id]
+		if !ok || !match(scope, e) {
+			return false
+		}
+		apply(&e)
+		exports.exports[id] = e
+		return true
+	}
+	return memoryFailedJobAdapter{
+		groupless: true,
+		list: func(scope registry.FailedJobScope) []*models.FailedJob {
+			exports.mu.Lock()
+			var jobs []*models.FailedJob
+			for _, e := range exports.exports {
+				if !match(scope, e) {
+					continue
+				}
+				jobs = append(jobs, &models.FailedJob{
+					Type: models.FailedJobTypePersonalDataExport, ID: e.ID, TenantID: e.TenantID, UserID: e.UserID,
+					Error: e.ErrorMessage, Attempts: max(e.AttemptCount, 1), CreatedAt: e.CreatedAt, FailedAt: e.CompletedAt,
+				})
+			}
+			exports.mu.Unlock()
+			// The emails are read after the export store's lock is released,
+			// so the two locks are never held together.
+			users.lock.RLock()
+			defer users.lock.RUnlock()
+			for _, job := range jobs {
+				if u, ok := users.items.Get(job.UserID); ok {
+					job.Title = u.Email
+				}
+			}
+			return jobs
+		},
+		retry: func(scope registry.FailedJobScope, id string, now time.Time) bool {
+			return change(scope, id, func(e *models.PersonalDataExport) {
+				e.Status = models.PersonalDataExportStatusPending
+				e.ErrorMessage = ""
+				e.StartedAt = nil
+				e.CompletedAt = nil
+				e.BlobKey = ""
+				e.SizeBytes = 0
+				e.ExpiresAt = now.Add(models.PersonalDataExportRetention)
+			})
+		},
+		discard: func(scope registry.FailedJobScope, id string, now time.Time) bool {
+			return change(scope, id, func(e *models.PersonalDataExport) { e.DiscardedAt = new(now) })
+		},
+	}
+}
+
 // intakeFileTitles returns the title of the first file linked to each
 // intake source, by source id.
 func intakeFileTitles(files *FileRegistryFactory) map[string]string {
@@ -302,9 +370,11 @@ func intakeFileTitles(files *FileRegistryFactory) map[string]string {
 	return out
 }
 
-func (r *FailedJobRegistry) adapter(jobType models.WorkerType) (memoryFailedJobAdapter, error) {
+// adapter returns the type's adapter for the scope. A group scope does not
+// know a type whose jobs belong to no group.
+func (r *FailedJobRegistry) adapter(jobType models.WorkerType, scope registry.FailedJobScope) (memoryFailedJobAdapter, error) {
 	a, ok := r.adapters[jobType]
-	if !ok {
+	if !ok || (scope.GroupID != "" && a.groupless) {
 		return memoryFailedJobAdapter{}, errxtrace.Classify(registry.ErrUnknownFailedJobType, errx.Attrs("job_type", string(jobType)))
 	}
 	return a, nil
@@ -318,7 +388,7 @@ func checkFailedJobScope(scope registry.FailedJobScope) error {
 }
 
 func (r *FailedJobRegistry) ListFailed(_ context.Context, jobType models.WorkerType, scope registry.FailedJobScope, limit int) ([]*models.FailedJob, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +396,11 @@ func (r *FailedJobRegistry) ListFailed(_ context.Context, jobType models.WorkerT
 		return nil, err
 	}
 	jobs := a.list(scope)
+	if !scope.FailedBefore.IsZero() {
+		jobs = slices.DeleteFunc(jobs, func(job *models.FailedJob) bool {
+			return !failedBefore(job, scope.FailedBefore)
+		})
+	}
 	slices.SortFunc(jobs, func(x, y *models.FailedJob) int {
 		// Newest failure first, a job without a time last, as postgres
 		// orders DESC NULLS LAST; the id breaks ties.
@@ -367,7 +442,7 @@ func (r *FailedJobRegistry) GetFailed(ctx context.Context, jobType models.Worker
 }
 
 func (r *FailedJobRegistry) Retry(_ context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string, now time.Time) error {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return err
 	}
@@ -384,7 +459,7 @@ func (r *FailedJobRegistry) Retry(_ context.Context, jobType models.WorkerType, 
 }
 
 func (r *FailedJobRegistry) Discard(_ context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string, now time.Time) error {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return err
 	}
@@ -395,6 +470,40 @@ func (r *FailedJobRegistry) Discard(_ context.Context, jobType models.WorkerType
 		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("job_type", string(jobType), "entity_id", id))
 	}
 	return nil
+}
+
+// DiscardFailed discards the jobs ListFailed returns for the scope, one at
+// a time under the store's lock. A job retried between the list and its
+// discard is left alone and not counted.
+func (r *FailedJobRegistry) DiscardFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, now time.Time) (int, error) {
+	a, err := r.adapter(jobType, scope)
+	if err != nil {
+		return 0, err
+	}
+	if scope.FailedBefore.IsZero() {
+		return 0, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "failed_before"))
+	}
+	jobs, err := r.ListFailed(ctx, jobType, scope, 0)
+	if err != nil {
+		return 0, err
+	}
+	discarded := 0
+	for _, job := range jobs {
+		if a.discard(scope, job.ID, now.UTC()) {
+			discarded++
+		}
+	}
+	return discarded, nil
+}
+
+// failedBefore reports whether the job failed before the time; a job
+// without a failure time counts from its creation, as in postgres.
+func failedBefore(job *models.FailedJob, before time.Time) bool {
+	at := job.CreatedAt
+	if job.FailedAt != nil {
+		at = *job.FailedAt
+	}
+	return at.Before(before)
 }
 
 // inFailedJobScope reports whether a row of tenantID and groupID is in the

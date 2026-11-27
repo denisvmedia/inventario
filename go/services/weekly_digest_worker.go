@@ -39,7 +39,7 @@ var (
 	})
 	weeklyDigestFailuresTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "inventario_weekly_digest_failures_total",
-		Help: "Number of per-user weekly digest failures (logged; retried on the next tick).",
+		Help: "Number of weekly digest failures: groups that could not be read and users whose digest was held back or not sent (logged; retried on the next tick).",
 	})
 )
 

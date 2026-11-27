@@ -71,7 +71,7 @@ Like warranties and maintenance, lending can't be tracked on a bundle (an item w
 4. Click **Lend out**. The item now shows a current-loan card on the Lend tab.
 
 :::note
-An item can only be in one place at a time: if it's currently out for repair (see Service), you'll need to mark it received back before you can lend it.
+An item can only be in one place at a time: if it's currently out for repair (see [In service](#in-service-repairs)), you'll need to mark it received back before you can lend it.
 :::
 
 ### Mark a return, edit, or remove a loan
@@ -94,6 +94,38 @@ Open **Lent out** in the sidebar for a group-wide table of every loan. Filter wi
 - **Returned** — closed loans.
 
 Each row shows the item, borrower (with contact if you added one), lent date, due date, and a status badge — **Open**, **Overdue by N days**, or **Returned** on a given date. Click an item name to open it and manage the loan from its **Lend** tab.
+
+## In service (repairs)
+
+When you hand an item to a workshop or service center, record it on the item. The item stays in your inventory, marked **In service**, until you mark it received back. As with loans, a bundle (an item with a quantity greater than 1) can't be sent for service.
+
+### Send an item for service
+
+1. Open the item and go to its **Service** tab.
+2. Click **Send for service…**.
+3. In the **Send for service** dialog, fill in:
+   - **Service provider** — the workshop or service center (required).
+   - **Provider contact** — optional, free-form (phone, email, address).
+   - **Reason** — optional, what's being fixed.
+   - **Sent on** — defaults to today.
+   - **Expected back** — optional.
+   - **Cost (optional)** — the amount, with its currency in the picker next to it. The picker starts on the group currency; pick another one when the bill is in a different currency. The cost is saved only when you enter an amount.
+4. Click **Send for service**. The Service tab now shows a card with the provider, the dates, and the cost.
+
+An item that is lent out can't be sent for service: mark the loan returned first.
+
+### Mark it received back
+
+On the item's **Service** tab, the open service appears as a card:
+
+- **Mark as received back** — closes the service and records today as the return date.
+- **Remove** — deletes the service record. This is meant for fixing a typo; the history is normally kept.
+
+Finished services move to a **Past services** list below the card.
+
+### The In service page
+
+Open **In service** in the sidebar for a group-wide table of every service record, with the item, provider, reason, dates, cost, and a status: **At provider**, **Overdue by N days** once the expected-back date has passed, or **Back** on the return date. The tabs along the top show **All**, **Open**, **Overdue**, or **Completed** records.
 
 ## Maintenance schedules
 
@@ -150,7 +182,7 @@ Each reminder on the card shows its title, its repeat rule, its lead times, and 
 
 A repeating reminder moves to its next date by itself once a date passes. A monthly reminder set on the 31st falls on the last day of shorter months (30 April, 28 or 29 February) and returns to the 31st when the month has one; a yearly reminder set on 29 February falls on 28 February in other years. A one-off reminder whose date has passed stays on the card with a **Passed** badge until you delete it.
 
-Deleting an item moves it to the [Trash](../trash/) with its reminders: they send nothing while it is there and come back when you restore it. Deleting the item for good deletes them. Deleting your account deletes the reminders you created, including those on items in a group you share.
+Deleting an item moves it to the [Trash](../trash/) with its reminders: they send nothing while it is there and come back when you restore it. Deleting the item for good deletes them. Deleting your account deletes the reminders you created, including those on items in a group you share. The loans, service records and maintenance schedules you recorded on an item in a shared group stay on the item and pass to the group's owner.
 
 ## The Upcoming page
 
@@ -200,6 +232,15 @@ Reminders are sent to the email address on your account, so make sure it's curre
 :::note
 Reminders on custom date fields are not available yet. Use an item reminder for any other date you want to track.
 :::
+
+## Backups
+
+A [backup](../backup-and-restore/) of the group carries each item's loans,
+service records, maintenance schedules, supply links and reminders, and a
+restore brings them back with the item. See
+[Loans, maintenance and reminders](../backup-and-restore/#loans-maintenance-and-reminders)
+for who becomes their author and which reminder emails a restore can send
+again.
 
 ## Related guides
 

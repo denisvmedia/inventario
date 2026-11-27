@@ -2,12 +2,18 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/postgres/store"
@@ -15,43 +21,30 @@ import (
 
 var _ registry.UserPurger = (*UserPurger)(nil)
 
-// UserPurger hard-deletes a single user's auth / identity rows and orphans the
-// few user-authorship columns that are nullable, all in one background-worker
-// transaction (#2116). It exists because the bare `DELETE FROM users` that the
-// GDPR "delete my data" path used to issue is rejected by ~43 NO ACTION child
-// FKs pointing at users(id) — the worker must clear (or null) every dependent
-// before the parent users row can be removed by the orchestration layer.
+// UserPurger clears what names a single user before the users row can be
+// deleted, all in one background-worker transaction (#2116). A bare
+// DELETE FROM users is rejected by the NO ACTION foreign keys that point at
+// users(id), so every row that references the user is either deleted, handed
+// to another member of its group, or left for the account-deletion pre-check
+// to refuse:
 //
-// IMPORTANT classification (see the migration audit in the PR description):
-//   - DELETE rows the user OWNS (auth/identity/per-user idempotency): refresh
-//     tokens, login events, email verifications, password resets, magic-link
-//     tokens, MFA secret, OAuth identities, system-admin grant (user_id),
-//     settings, group memberships, operation slots, commodity scan audits,
-//     the user_concurrency_slots / thumbnail_generation_jobs the user created,
-//     and the group_invites_audit rows that reference the user as the invite
-//     creator (created_by) or accepter (used_by) — both NOT NULL FK -> users(id)
-//     NO ACTION, so they must be cleared here or the final users delete is
-//     rejected (#2147). Also the item reminders the user created and their
-//     send records (#2805): a reminder emails only its author, so it is
-//     personal even in a shared group. And the drafts the user created
-//     (#2812): unfinished work leaves with its author; the links other
-//     members' files had to those drafts go first, so the files become
-//     standalone instead of pointing at a missing draft.
-//   - SET NULL the authorship back-refs that are NULLABLE: login_events.user_id
-//     (already nulled by the DELETE-by-user above — see note), and
-//     system_admin_grants.granted_by (the *operator* who granted someone else's
-//     grant; nullable + already ON DELETE SET NULL at the schema level, but we
-//     null it explicitly so the purge transaction owns the scoping).
-//
-// CONTENT AUTHORSHIP THAT CANNOT BE ORPHANED (flagged, NOT handled here):
-// every commodities/files/areas/locations/exports/location_groups/tags/...
-// row carries BOTH a NOT NULL user_id (the RLS owner) AND a NOT NULL
-// created_by / created_by_user_id. Neither column is nullable, so a user's
-// shared content CANNOT be orphaned without a schema migration. Deleting a
-// user who still owns content is therefore impossible by design today — the
-// orchestration layer must first re-own (transfer) or purge that content (e.g.
-// the GroupPurger path) before calling PurgeUserDependents. See the PR summary
-// table for the full list of NOT NULL created_by columns.
+//   - Rows keyed by user_id (sessions, tokens, MFA, OAuth identities,
+//     settings, notification preferences, digest claims, saved view
+//     placements, personal data exports and the like) are deleted, see
+//     userDeleteByUserID.
+//   - The userOwnedTables entries marked deletionRemoves (memberships,
+//     invites, item reminders, drafts, intake sessions, saved views) are
+//     deleted in the user's tenant.
+//   - The entries marked deletionHandsOver (item history, loans, service
+//     records, supply links, maintenance, reminder send records, item types,
+//     custom fields, delivered documents, restores, currency changes) pass to
+//     another member of their group.
+//   - The entries marked deletionBlocks (items, files, places, exports, tags,
+//     sellers, groups) are not touched. The account-deletion pre-check refuses
+//     while the user has one in a group that stays, and the final users delete
+//     fails on any that remain.
+//   - group_invites_audit and the invites the user accepted are deleted in
+//     every tenant, and system_admin_grants is cleared by user.
 //
 // It does NOT touch the users row itself — the orchestration layer
 // (services.* user-delete flow) issues the final DELETE FROM users after this
@@ -105,7 +98,7 @@ var userDeleteByUserID = []func(t store.TableNames) string{
 
 	// NB: group_memberships is intentionally NOT here — it is keyed solely by
 	// member_user_id (no plain user_id column), so it can't ride the
-	// user_id template. It is handled by its own DELETE in PurgeUserDependents.
+	// user_id template. It is a deletionRemoves entry of userOwnedTables.
 
 	// Per-user/per-group notification overrides.
 	func(t store.TableNames) string { return string(t.GroupNotificationPrefs()) },
@@ -121,19 +114,18 @@ var userDeleteByUserID = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.PersonalDataExports()) },
 }
 
-// PurgeUserDependents clears every user-scoped auth/identity row (and nulls the
-// nullable authorship back-refs) for a single user, inside one background-worker
-// transaction. All operations succeed or none do.
+// PurgeUserDependents clears every row that names the user, as the type doc
+// describes, inside one background-worker transaction. All operations succeed
+// or none do.
 //
 // Idempotent: a second call after a clean purge is a no-op (every statement
 // affects zero rows).
 //
-// PRECONDITION (not enforced here, see the type doc): the user must no longer
-// OWN any shared content (commodities/files/areas/locations/exports/groups/
-// tags/...). Those rows carry NOT NULL user_id + NOT NULL created_by columns
-// that cannot be orphaned, so this purger deliberately does not touch them; the
-// final DELETE FROM users will fail with an FK violation if any remain, which
-// is the intended loud failure rather than a silent content wipe.
+// PRECONDITION (not enforced here): the user no longer has a row in a
+// deletionBlocks table, other than in groups that are deleted before the
+// users row. The purger does not touch those rows, so the final DELETE FROM
+// users fails with an FK violation if any remain, which is the intended loud
+// failure rather than a silent content wipe.
 func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID string) error {
 	if tenantID == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
@@ -143,109 +135,43 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 	}
 
 	return store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Thumbnail chain (#2117 parity): user_concurrency_slots.job_id ->
-		// thumbnail_generation_jobs (NO ACTION) and
-		// thumbnail_generation_jobs.user_id -> users (NO ACTION). Slots carry
-		// no user_id of their own, so they're reached through the user's jobs.
-		// Order: slots (deepest child) -> jobs.
-		if err := r.purgeThumbnailChain(ctx, tx, tenantID, userID); err != nil {
-			return err
+		handed := handOvers{}
+		inTenant := []func(context.Context, *sqlx.Tx, string, string) error{
+			// Thumbnail chain (#2117 parity): user_concurrency_slots.job_id
+			// -> thumbnail_generation_jobs (NO ACTION) and
+			// thumbnail_generation_jobs.user_id -> users (NO ACTION).
+			r.purgeThumbnailChain,
+			r.purgeByUserID,
+			// The hand-over runs while the memberships it picks heirs from
+			// are still there.
+			func(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+				return r.handOverGroupRows(ctx, tx, handed, tenantID, userID)
+			},
+			func(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+				return r.reattributeIntakeDocuments(ctx, tx, handed, tenantID, userID)
+			},
+			func(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+				return r.recordHandOvers(ctx, tx, handed, tenantID, userID)
+			},
+			// The file links to the drafts and intake sources about to go.
+			r.purgeLinksToRemovedRows,
+			r.purgeRemovedRows,
 		}
-
-		// Tables keyed by user_id (+ tenant_id defense-in-depth).
-		for _, nameFn := range userDeleteByUserID {
-			table := nameFn(r.tableNames)
-			query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND user_id = $2", table)
-			if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
-				return errxtrace.Wrap(
-					"failed to purge user dependents",
-					err,
-					errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
-				)
-			}
-		}
-
-		// Item types, custom fields and their template entries are group
-		// configuration, not the author's content: the ones the user created
-		// stay with their groups. Their NOT NULL created_by_user_id FK ->
-		// users(id) NO ACTION moves to another member, so it neither blocks
-		// the final delete nor the account deletion pre-check (which leaves
-		// these tables out).
-		for _, nameFn := range groupConfigurationTables {
-			if err := r.reattributeGroupConfiguration(ctx, tx, nameFn(r.tableNames), tenantID, userID); err != nil {
+		for _, step := range inTenant {
+			if err := step(ctx, tx, tenantID, userID); err != nil {
 				return err
 			}
 		}
-		// The documents other systems delivered through the user's API
-		// tokens are group content too: the record keeps a replay from
-		// making a second draft of an item the group has.
-		if err := r.reattributeIntakeDocuments(ctx, tx, tenantID, userID); err != nil {
-			return err
-		}
 
-		// Group memberships are keyed SOLELY by member_user_id (there is no
-		// plain user_id column on this table), so this single DELETE removes
-		// every membership row that names the user as the member. It lives here
-		// rather than in the user_id loop above for exactly that reason.
-		memberships := string(r.tableNames.GroupMemberships())
-		memberQuery := fmt.Sprintf(
-			"DELETE FROM %s WHERE tenant_id = $1 AND member_user_id = $2", memberships,
-		)
-		if _, err := tx.ExecContext(ctx, memberQuery, tenantID, userID); err != nil {
-			return errxtrace.Wrap(
-				"failed to purge user memberships by member_user_id",
-				err,
-				errx.Attrs("table", memberships, "tenant_id", tenantID, "user_id", userID),
-			)
-		}
-
-		// group_invites_audit immortalises who created and who used each invite.
-		// Both created_by and used_by are NOT NULL FK -> users(id) with NO ACTION,
-		// so nothing else clears them — a user whose group ever had a USED invite
-		// would otherwise block the final DELETE FROM users with an FK violation
-		// (this is also the latent break in the admin Service.DeleteUser path).
-		// The user can appear as creator, as accepter, or both, so the DELETE
-		// matches either column, in every tenant. The table has no children, so
-		// order is free.
+		// group_invites_audit immortalises who created and who used each
+		// invite, and an accepted invite records who used it. The columns are
+		// FK -> users(id) with NO ACTION and match the user in every tenant: a
+		// user moved to another tenant (#2179) leaves them in the tenant they
+		// left.
 		if err := r.purgeGroupInvitesAudit(ctx, tx, userID); err != nil {
 			return err
 		}
-
-		// Saved views are per-user settings that carry created_by_user_id
-		// rather than user_id: a member's views, shared ones included, go
-		// with the member, and with them every member's placements (ON
-		// DELETE CASCADE). The column is NOT NULL FK -> users(id) NO ACTION.
-		savedViews := string(r.tableNames.SavedViews())
-		savedViewQuery := fmt.Sprintf(
-			"DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", savedViews,
-		)
-		if _, err := tx.ExecContext(ctx, savedViewQuery, tenantID, userID); err != nil {
-			return errxtrace.Wrap(
-				"failed to purge user saved views",
-				err,
-				errx.Attrs("table", savedViews, "tenant_id", tenantID, "user_id", userID),
-			)
-		}
-
-		// Item reminders (#2805) email only the person who created them, so
-		// they leave with the account, including in a group the user shares
-		// with others. Their created_by_user_id is a NOT NULL FK -> users(id)
-		// with NO ACTION and would otherwise block the final users delete.
-		if err := r.purgeCommodityReminders(ctx, tx, tenantID, userID); err != nil {
-			return err
-		}
-
-		// Drafts (#2812) the user created, after the links to them.
-		// created_by_user_id is a NOT NULL FK -> users(id) with NO ACTION.
-		if err := r.purgeCommodityDrafts(ctx, tx, tenantID, userID); err != nil {
-			return err
-		}
-
-		// Intake sessions (#2810) the user created, after the links to their
-		// sources, and the delivered documents (#2809) the user's API tokens
-		// created. created_by_user_id is a NOT NULL FK -> users(id) with NO
-		// ACTION on all four tables.
-		if err := r.purgeIntakeSessions(ctx, tx, tenantID, userID); err != nil {
+		if err := r.purgeAcceptedInvites(ctx, tx, userID); err != nil {
 			return err
 		}
 
@@ -255,27 +181,18 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		//   granted_by -> ON DELETE SET NULL (the operator who granted it,
 		//                 NULLABLE) — null it so deleting this user as an
 		//                 *operator* doesn't drop someone else's grant.
-		if err := r.purgeSystemAdminGrants(ctx, tx, userID); err != nil {
-			return err
-		}
-
-		return nil
+		return r.purgeSystemAdminGrants(ctx, tx, userID)
 	})
 }
 
-// purgeCommodityReminders deletes the item reminders the user created and
-// their send records. Sends go first: each one carries the reminder author as
-// created_by_user_id. Removing the reminders then cascades to any send left
-// behind through the reminder_id foreign key.
-func (r *UserPurger) purgeCommodityReminders(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
-	for _, table := range []string{
-		string(r.tableNames.CommodityReminderSends()),
-		string(r.tableNames.CommodityReminders()),
-	} {
-		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", table)
+// purgeByUserID deletes the user's rows from every userDeleteByUserID table.
+func (r *UserPurger) purgeByUserID(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	for _, nameFn := range userDeleteByUserID {
+		table := nameFn(r.tableNames)
+		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND user_id = $2", table)
 		if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
 			return errxtrace.Wrap(
-				"failed to purge the user's item reminders",
+				"failed to purge user dependents",
 				err,
 				errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
 			)
@@ -284,52 +201,61 @@ func (r *UserPurger) purgeCommodityReminders(ctx context.Context, tx *sqlx.Tx, t
 	return nil
 }
 
-// purgeCommodityDrafts deletes the drafts the user created and every file
-// link to them. The files stay: a file is content and is handled by the
-// content ownership check, not here.
-func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
-	drafts := string(r.tableNames.CommodityDrafts())
-	links := fmt.Sprintf(`
-		DELETE FROM %s
-		WHERE entity_type = $1 AND entity_id IN (
-			SELECT id FROM %s WHERE tenant_id = $2 AND created_by_user_id = $3
-		)`, r.tableNames.FileLinks(), drafts)
-	if _, err := tx.ExecContext(ctx, links, models.FileLinkDraft, tenantID, userID); err != nil {
-		return errxtrace.Wrap("failed to purge the links to the user's drafts", err,
-			errx.Attrs("tenant_id", tenantID, "user_id", userID))
-	}
-	query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", drafts)
-	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
-		return errxtrace.Wrap("failed to purge the user's drafts", err,
-			errx.Attrs("table", drafts, "tenant_id", tenantID, "user_id", userID))
+// handOverGroupRows gives the rows of every deletionHandsOver table the user
+// created to another member of the row's group, see reattributeRows, and
+// counts them in handed.
+func (r *UserPurger) handOverGroupRows(ctx context.Context, tx *sqlx.Tx, handed handOvers, tenantID, userID string) error {
+	for _, t := range userOwnedTables {
+		if t.onDeletion != deletionHandsOver {
+			continue
+		}
+		if err := r.reattributeRows(ctx, tx, t, handed, "", tenantID, userID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// purgeIntakeSessions deletes the intake sessions the user created, with
-// their sources, candidates and the file links of the sources. The files and
-// the drafts made from the sessions stay; the drafts are the user's drafts
-// and go with purgeCommodityDrafts.
-func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
-	sources := string(r.tableNames.IntakeSources())
-	links := fmt.Sprintf(`
-		DELETE FROM %s
-		WHERE entity_type = $1 AND entity_id IN (
-			SELECT id FROM %s WHERE tenant_id = $2 AND created_by_user_id = $3
-		)`, r.tableNames.FileLinks(), sources)
-	if _, err := tx.ExecContext(ctx, links, models.FileLinkIntake, tenantID, userID); err != nil {
-		return errxtrace.Wrap("failed to purge the links to the user's intake sources", err,
-			errx.Attrs("tenant_id", tenantID, "user_id", userID))
-	}
-	for _, table := range []string{
-		string(r.tableNames.IntakeCandidates()),
-		sources,
-		string(r.tableNames.IntakeSessions()),
-	} {
-		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", table)
+// purgeRemovedRows deletes the user's rows from every deletionRemoves table
+// in the tenant, in list order.
+func (r *UserPurger) purgeRemovedRows(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	for _, t := range userOwnedTables {
+		if t.onDeletion != deletionRemoves {
+			continue
+		}
+		table := string(t.table(r.tableNames))
+		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND %s = $2", table, t.userColumn)
 		if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
-			return errxtrace.Wrap("failed to purge the user's intake sessions", err,
-				errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID))
+			return errxtrace.Wrap(
+				"failed to purge the user's rows",
+				err,
+				errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
+			)
+		}
+	}
+	return nil
+}
+
+// purgeLinksToRemovedRows deletes the file links to the drafts (#2812) and
+// intake sources (#2810) the user created, which purgeRemovedRows deletes
+// next. The files stay: the ones another member uploaded become standalone
+// files, and the user's own are content the pre-check counts.
+func (r *UserPurger) purgeLinksToRemovedRows(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	for _, owner := range []struct {
+		entityType models.FileLinkEntityType
+		table      store.TableName
+	}{
+		{models.FileLinkDraft, r.tableNames.CommodityDrafts()},
+		{models.FileLinkIntake, r.tableNames.IntakeSources()},
+	} {
+		query := fmt.Sprintf(`
+			DELETE FROM %s
+			WHERE entity_type = $1 AND entity_id IN (
+				SELECT id FROM %s WHERE tenant_id = $2 AND created_by_user_id = $3
+			)`, r.tableNames.FileLinks(), owner.table)
+		if _, err := tx.ExecContext(ctx, query, owner.entityType, tenantID, userID); err != nil {
+			return errxtrace.Wrap("failed to purge the links to the user's rows", err,
+				errx.Attrs("table", string(owner.table), "tenant_id", tenantID, "user_id", userID))
 		}
 	}
 	return nil
@@ -400,6 +326,20 @@ func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, tx *sqlx.Tx, us
 	return nil
 }
 
+// purgeAcceptedInvites deletes the invites the user accepted, in every
+// tenant. used_by is nullable, but an invite with no used_by can be accepted
+// again, so the row goes rather than the column. The invites the user created
+// are a deletionRemoves table and go with purgeRemovedRows.
+func (r *UserPurger) purgeAcceptedInvites(ctx context.Context, tx *sqlx.Tx, userID string) error {
+	invites := string(r.tableNames.GroupInvites())
+	query := fmt.Sprintf("DELETE FROM %s WHERE used_by = $1", invites)
+	if _, err := tx.ExecContext(ctx, query, userID); err != nil {
+		return errxtrace.Wrap("failed to purge the invites the user accepted", err,
+			errx.Attrs("table", invites, "user_id", userID))
+	}
+	return nil
+}
+
 // purgeSystemAdminGrants handles the non-RLS system_admin_grants table, which
 // has no tenant_id column. The grant the user HAS is deleted; any grant the
 // user GRANTED to someone else has its granted_by nulled (nullable column,
@@ -433,55 +373,44 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 	return nil
 }
 
-// reattributeIntakeDocuments gives each document delivered through the
-// user's API tokens (#2809) to the member reattributeGroupConfiguration
-// picks. A document whose group has no other member is deleted: its group is
-// private and leaves with the user. The drafts the documents made go to the
-// same member, so a replay finds the draft the record names; the ones whose
-// group has no heir are purged with the user's other drafts.
-func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+// reattributeIntakeDocuments finishes the hand-over of the documents
+// delivered through the user's API tokens (#2809), which handOverGroupRows
+// gave to another member. A document left with the user has a group with no
+// other member and is deleted: its group is private and leaves with the user.
+// The drafts the documents made go to the same member, so a replay finds the
+// draft the record names; the ones whose group has no heir are purged with
+// the user's other drafts.
+func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, handed handOvers, tenantID, userID string) error {
 	docs := r.tableNames.IntakeDocuments()
-	if err := r.reattributeGroupConfiguration(ctx, tx, docs, tenantID, userID); err != nil {
-		return err
-	}
 	rest := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", docs)
 	if _, err := tx.ExecContext(ctx, rest, tenantID, userID); err != nil {
 		return errxtrace.Wrap("failed to purge the user's delivered documents", err,
 			errx.Attrs("table", string(docs), "tenant_id", tenantID, "user_id", userID))
 	}
-	return r.reattributeRows(ctx, tx, r.tableNames.CommodityDrafts(), "t.client_key LIKE $3",
+	drafts := userOwnedTable{
+		table:       func(t store.TableNames) store.TableName { return t.CommodityDrafts() },
+		userColumn:  createdByUserIDColumn,
+		groupColumn: "group_id",
+	}
+	return r.reattributeRows(ctx, tx, drafts, handed, "t.client_key LIKE $3",
 		tenantID, userID, models.IntakeDeliveredDraftKeyPrefix+"%")
 }
 
-// groupConfigurationTables lists the group-scoped tables whose rows are
-// group configuration: the user purge hands the rows a user created to
-// another member of the group instead of counting them as the user's content.
-var groupConfigurationTables = []func(t store.TableNames) store.TableName{
-	func(t store.TableNames) store.TableName { return t.ItemTypes() },
-	func(t store.TableNames) store.TableName { return t.CustomFieldDefinitions() },
-	func(t store.TableNames) store.TableName { return t.ItemTypeCustomFields() },
-}
-
-// reattributeGroupConfiguration gives each row of table the user created to
-// another member of its group: the owner first, then an admin, then the
-// member who joined first. It runs before the user's memberships are deleted,
-// though they are left out of the choice anyway. A row whose group has no
-// other member keeps its creator; such a group is private and is purged
-// before the user is.
-func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx.Tx, table store.TableName, tenantID, userID string) error {
-	return r.reattributeRows(ctx, tx, table, "", tenantID, userID)
-}
-
-// reattributeRows hands over the rows of table the user created as
-// reattributeGroupConfiguration does. A filter that is not empty further
-// limits the rows of t; its parameters start at $3.
-func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, table store.TableName, filter, tenantID, userID string, filterArgs ...any) error {
+// reattributeRows gives each row of t the user created to another member of
+// its group: the owner first, then an admin, then the member who joined
+// first. The user's own membership is left out of the choice. A row whose
+// group has no other member keeps its creator; such a group is private and is
+// purged before the user is. A filter that is not empty further limits the
+// rows of t; its parameters start at $3. Each row handed over is counted in
+// handed.
+func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, t userOwnedTable, handed handOvers, filter, tenantID, userID string, filterArgs ...any) error {
 	if filter != "" {
 		filter = " AND " + filter
 	}
+	table := string(t.table(r.tableNames))
 	memberships := string(r.tableNames.GroupMemberships())
 	query := fmt.Sprintf(`
-		UPDATE %[1]s t SET created_by_user_id = heir.member_user_id
+		UPDATE %[1]s t SET %[3]s = heir.member_user_id
 		FROM (
 			SELECT DISTINCT ON (group_id) group_id, member_user_id
 			FROM %[2]s
@@ -490,14 +419,85 @@ func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, table sto
 				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 				joined_at, member_user_id
 		) heir
-		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id%[3]s`,
-		string(table), memberships, filter)
-	if _, err := tx.ExecContext(ctx, query, append([]any{tenantID, userID}, filterArgs...)...); err != nil {
+		WHERE t.tenant_id = $1 AND t.%[3]s = $2 AND t.%[4]s = heir.group_id%[5]s
+		RETURNING heir.group_id, heir.member_user_id`,
+		table, memberships, t.userColumn, t.groupColumn, filter)
+	rows, err := tx.QueryContext(ctx, query, append([]any{tenantID, userID}, filterArgs...)...)
+	if err != nil {
 		return errxtrace.Wrap(
-			"failed to hand over the user's group configuration",
+			"failed to hand over the user's group rows",
 			err,
-			errx.Attrs("table", string(table), "tenant_id", tenantID, "user_id", userID),
+			errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
 		)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var groupID, heir string
+		if err := rows.Scan(&groupID, &heir); err != nil {
+			return errxtrace.Wrap("failed to read a handed over row", err, errx.Attrs("table", table))
+		}
+		handed.add(groupID, heir, table)
+	}
+	if err := rows.Err(); err != nil {
+		return errxtrace.Wrap("failed to read the handed over rows", err, errx.Attrs("table", table))
+	}
+	return nil
+}
+
+// handOvers counts, per group, the rows the purge gave to another member.
+type handOvers map[string]*groupHandOver
+
+// groupHandOver is what one group's heir received: the count of rows per
+// table.
+type groupHandOver struct {
+	heir string
+	rows map[string]int
+}
+
+func (h handOvers) add(groupID, heir, table string) {
+	g, ok := h[groupID]
+	if !ok {
+		g = &groupHandOver{heir: heir, rows: map[string]int{}}
+		h[groupID] = g
+	}
+	g.rows[table]++
+}
+
+// recordHandOvers writes one audit row per group whose rows the purge handed
+// over, in the purge transaction: the deleted user as the actor, the group
+// as the entity, and the member who received the rows with the count per
+// table in the breadcrumb. The rows keep the request id and the impersonator
+// of the request that deleted the account, when there is one.
+func (r *UserPurger) recordHandOvers(ctx context.Context, tx *sqlx.Tx, handed handOvers, tenantID, userID string) error {
+	groupIDs := slices.Sorted(maps.Keys(handed))
+	audit := store.NewTxRegistry[models.AuditLog](tx, r.tableNames.AuditLogs())
+	for _, groupID := range groupIDs {
+		g := handed[groupID]
+		breadcrumb, err := json.Marshal(map[string]any{"to_user_id": g.heir, "rows": g.rows})
+		if err != nil {
+			return errxtrace.Wrap("failed to encode the hand-over", err)
+		}
+		entry := models.AuditLog{
+			ID:         uuid.NewString(),
+			UUID:       uuid.NewString(),
+			Timestamp:  time.Now(),
+			UserID:     new(userID),
+			TenantID:   new(tenantID),
+			Action:     registry.AuditActionAccountDeletionHandOver,
+			EntityType: new("location_group"),
+			EntityID:   new(groupID),
+			UserAgent:  string(breadcrumb),
+			Success:    true,
+		}
+		if id := appctx.RequestIDFromContext(ctx); id != "" {
+			entry.RequestID = new(id)
+		}
+		if by := appctx.ImpersonatorID(ctx); by != "" {
+			entry.ImpersonatedBy = new(by)
+		}
+		if err := audit.Insert(ctx, entry); err != nil {
+			return errxtrace.Wrap("failed to record the hand-over", err, errx.Attrs("group_id", groupID))
+		}
 	}
 	return nil
 }

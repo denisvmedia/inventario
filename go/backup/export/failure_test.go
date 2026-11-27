@@ -3,6 +3,7 @@ package export_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -13,9 +14,9 @@ import (
 	"go.5x5.cz/inventario/registry/memory"
 )
 
-// A run that fails marks the export failed for good (#1307): the run is
-// counted on the row, the row records when it ended, and the dead-letter
-// counter goes up once.
+// A run that fails marks the export failed for good (#1307): the claim
+// counted the run on the row, the row records when it ended, and the
+// dead-letter counter goes up once.
 func TestProcessExport_FailureIsCountedOnce(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -45,6 +46,10 @@ func TestProcessExport_FailureIsCountedOnce(t *testing.T) {
 
 	counter := metrics.JobsDeadLetteredFor(string(models.WorkerTypeExport))
 	before := testutil.ToFloat64(counter)
+
+	claimed, err := fs.ExportRegistryFactory.CreateServiceRegistry().ClaimPending(ctx, created.ID, time.Now())
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
 
 	// Neither build can export without a signer and a bucket.
 	service := export.NewExportService(fs, "nowhere://bucket", nil)

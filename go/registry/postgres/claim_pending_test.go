@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -32,7 +33,7 @@ func TestExportRegistry_ClaimPending_Postgres(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	won := raceToClaimPg(c, 32, func() (bool, error) {
-		return set.ExportRegistry.ClaimPending(ctx, export.ID)
+		return set.ExportRegistry.ClaimPending(ctx, export.ID, time.Now())
 	})
 	c.Assert(won, qt.Equals, int32(1), qt.Commentf("32 callers, one winner"))
 
@@ -42,7 +43,7 @@ func TestExportRegistry_ClaimPending_Postgres(t *testing.T) {
 
 	// And a second pass over the same row claims nothing: the status no
 	// longer satisfies the condition.
-	claimed, err := set.ExportRegistry.ClaimPending(ctx, export.ID)
+	claimed, err := set.ExportRegistry.ClaimPending(ctx, export.ID, time.Now())
 	c.Assert(err, qt.IsNil)
 	c.Check(claimed, qt.IsFalse)
 }
@@ -72,7 +73,7 @@ func TestRestoreOperationRegistry_ClaimPending_Postgres(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	won := raceToClaimPg(c, 32, func() (bool, error) {
-		return set.RestoreOperationRegistry.ClaimPending(ctx, op.ID)
+		return set.RestoreOperationRegistry.ClaimPending(ctx, op.ID, time.Now())
 	})
 	c.Assert(won, qt.Equals, int32(1),
 		qt.Commentf("a restore replayed twice overwrites live data"))
@@ -99,7 +100,7 @@ func TestExportRegistry_ClaimPending_Postgres_OnlyFromPending(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	claimed, err := set.ExportRegistry.ClaimPending(ctx, export.ID)
+	claimed, err := set.ExportRegistry.ClaimPending(ctx, export.ID, time.Now())
 	c.Assert(err, qt.IsNil)
 	c.Check(claimed, qt.IsFalse)
 
@@ -107,7 +108,7 @@ func TestExportRegistry_ClaimPending_Postgres_OnlyFromPending(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Check(after.Status, qt.Equals, models.ExportStatusCompleted)
 
-	claimed, err = set.ExportRegistry.ClaimPending(ctx, "00000000-0000-0000-0000-000000000000")
+	claimed, err = set.ExportRegistry.ClaimPending(ctx, "00000000-0000-0000-0000-000000000000", time.Now())
 	c.Assert(err, qt.IsNil)
 	c.Check(claimed, qt.IsFalse, qt.Commentf("a missing row is not an error, just not claimable"))
 }

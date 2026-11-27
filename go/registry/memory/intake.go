@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"math"
 	"slices"
@@ -702,12 +703,19 @@ func (r *IntakeRegistry) scanning(sourceID string, attempt int) (*models.IntakeS
 	return src, nil
 }
 
-func (r *IntakeRegistry) StoreScan(_ context.Context, sourceID string, attempt int, scan registry.IntakeScan, now time.Time) error {
+func (r *IntakeRegistry) StoreScan(ctx context.Context, sourceID string, attempt int, scan registry.IntakeScan, now time.Time) error {
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	src, err := r.inScan(sourceID, attempt)
 	if err != nil {
+		return err
+	}
+	// The files change first, under st.mu, so a reader that sees the source
+	// scanned sees its files changed. The memory backend has no rollback: a
+	// failure leaves the source in its scan, and the files changed so far
+	// keep the change, which a scan makes only once.
+	if err := r.updateScannedFiles(ctx, src, scan.Files); err != nil {
 		return err
 	}
 	for cid, cand := range st.candidates {
@@ -724,6 +732,43 @@ func (r *IntakeRegistry) StoreScan(_ context.Context, sourceID string, attempt i
 	src.WaitReason = ""
 	src.ErrorCode = ""
 	src.UpdatedAt = now
+	return nil
+}
+
+// updateScannedFiles writes a scan's file updates. The memory file registry
+// does not check tags, so Tags need no work here. The caller holds st.mu.
+func (r *IntakeRegistry) updateScannedFiles(ctx context.Context, src *models.IntakeSource, updates []registry.IntakeFileUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	files := r.factory.fileFactory.CreateServiceRegistry()
+	for _, u := range updates {
+		file, err := files.Get(ctx, u.FileID)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to read a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
+		if file.TenantID != src.TenantID || file.GroupID != src.GroupID || file.IsTrashed() {
+			continue
+		}
+		next, changed := u.Apply(*file)
+		if !changed {
+			continue
+		}
+		stored := *file
+		stored.Title = next.Title
+		stored.Tags = next.Tags
+		stored.UpdatedAt = next.UpdatedAt
+		_, err = files.Update(ctx, stored)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to update a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
+	}
 	return nil
 }
 

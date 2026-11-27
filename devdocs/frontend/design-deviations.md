@@ -581,6 +581,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2809 by the 2026-11-24 goal to implement the open enhancements; the row's place and the link agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an item's source; otherwise permanent.
 
+#### 2026-11-27 — Location filter on the items toolbar
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) filters the items by a text search only; it has no area or location filter.
+- **Reality**: `frontend/src/pages/commodities/CommoditiesListPage.tsx` adds a **Location** `DropdownMenu` before the **Area** menu, with the same outline trigger, **All locations** first and one entry per location (`commodities-filter-location`). The page URL keeps it as `location=<id>` and the list sends `location_id`. While a location is chosen the **Area** menu lists only that location's areas, plus the chosen area if it is in another location, so it can still be cleared. Choosing a location clears an area of another location and turns off **No location**; turning on **No location** clears the location, because the server refuses the two together. A saved view keeps the location: the **Saved views** page names it on its condition badge, and a deleted location reads **Deleted location** in the `status-expiring` stale style and adds a line to the view's stale notice.
+- **Why**: not present in mock. #2897 asks for "Show items" on locations in search, which needs a location filter on the items list. The menu follows the toolbar's Area menu.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a location filter; otherwise permanent.
+
 ### Dashboard / Overview
 
 #### 2026-11-26 — Warranty cards leave the dashboard while warranties are hidden
@@ -948,6 +957,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: #1264 is largely satisfied by the React rewrite (#1397); this is the roadmap's "#1264 start" slice (per #1651). Extracting `<FieldError>` is invisible visually but removes n copies of the same markup. The dropdown guard makes every remaining native `<select>` a conscious, documented choice ("pick one and stick with it") without a risky sweep of tested utility selectors. Converting those six is a deferred follow-up.
 - **Approved by**: user (explicit) — chose scope "Roadmap «start»" + approach "primitives-direct + FieldError" when offered the options.
 - **Reversion plan**: Permanent for `<FieldError>` + the lint guard. The six annotated native selectors are the explicit backlog: migrate them to `<Select>` (or a ported `native-select` primitive) and drop the disable comments in the post-launch design-system "finish" pass.
+- **Resolved**: 2026-11-27, PR #2972 — back to 1:1 for the six native selects: they render through `components/ui/native-select.tsx`, ported from the mock, and no `eslint-disable` remains outside the primitive. The port adds a `wrapperClassName` prop, since the mock's wrapper is `w-fit` and four of the six fill their row. `<FieldError>` and the lint guard stay as described.
 
 #### 2026-05-29 — Two intentional IconPicker components (popover vs. inline grid) kept separate
 
@@ -966,6 +976,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: A reviewed item may have an unknown purchase date or price (a gift, an inherited object), and unknown is distinct from zero. The hints tell the user how to record each case.
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
+
+#### 2026-11-27 — Send for service dialog: cost amount and currency
+
+- **Issue/PR**: #2909
+- **Mock**: The mock has no service dialog. Its money field is the purchase price row of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1173–L1195): one label, the amount with the currency symbol inside, and the `compact` `CurrencyCombobox` beside it.
+- **Reality**: `frontend/src/components/services/SendForServiceDialog.tsx` draws the cost as that row: the "Cost (optional)" label, the amount with the symbol of the picked currency inside, and the `compact` `CurrencyCombobox` named "Currency". The picker starts on the group currency, and the currency is saved only with an amount. Each part shows its own `FieldError` under the row.
+- **Why**: Not present in mock. #2909 asks for the currency picker every other currency field uses; the row copies the mock's money field.
+- **Approved by**: user (explicit) — pre-approved for #2909 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a service dialog.
 
 ### Auth & Profile
 
@@ -1009,7 +1028,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #1382 / PR (pending)
 - **Mock**: Every avatar in the mock is an initials tile: the sidebar user menu ([`AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx)), the account card in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx), the identity card in [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) and the member rows in [`MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx).
-- **Reality**: All of them render `frontend/src/components/UserAvatar.tsx` (the vendored shadcn `Avatar`). It shows the user's photo, cropped to the tile's shape, and the initials tile when there is no photo or it fails to load. The admin user detail and admin group membership editor use it too, but always show initials, because the admin API does not hand out photo URLs. The initials follow one rule everywhere: the first letters of the first two words of the name, else the first letter of the email.
+- **Reality**: All of them render `frontend/src/components/UserAvatar.tsx` (the vendored shadcn `Avatar`). It shows the user's photo, cropped to the tile's shape, and the initials tile when there is no photo or it fails to load. The admin user detail and admin group membership editor use it too, with the photo URL the admin API signs for the operator (#2894). The initials follow one rule everywhere: the first letters of the first two words of the name, else the first letter of the email.
 - **Why**: #1382 adds profile photos and asks for them wherever a user is drawn. The mock's initials are the no-photo state.
 - **Approved by**: user (explicit) — pre-approved for #1382 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent.
@@ -1026,6 +1045,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent. If the upstream mock ever ships its own layout primitive, swap the token values to match and drop this entry. Pages requesting an exemption (centered error/auth/empty-state cards, print pages) are listed in the convention guard's `SPECIAL_PURPOSE_PAGES` allow list — those stay bespoke by design.
 
 ### Settings & Preferences
+
+#### 2026-11-27 — Storage card: what the usage counts
+
+- **Issue/PR**: #2896 / PR #2975
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (Data & Storage) shows "Storage used", the amount of the quota, the bar and one muted line, "97.6 MB available on free plan". It does not say what the number counts.
+- **Reality**: `frontend/src/features/storage/StorageCard.tsx` adds a muted `text-xs` line under the usage and the breakdown: "Counts each file at the size it was uploaded. The thumbnails made for photos are not counted."
+- **Why**: The usage sums the size of the uploaded files. The three JPEG thumbnails rendered for each JPEG and PNG upload are stored apart with no file row, so neither the card nor the storage quota reminders count them. The issue asks for the usage to include them or for the card to say it counts originals only; counting them would need their sizes stored and a backfill over every existing thumbnail, so the card says what it counts.
+- **Approved by**: user (explicit) — pre-approved for #2896 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the line if the usage starts counting thumbnails, or follow the mock if `inventario-design` words the card's scope.
 
 #### 2026-11-26 — Account: "Download my data" card and the delete dialog's link to it
 
@@ -1380,6 +1408,23 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
 - **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
 
+#### 2026-11-27 — "Show items" on locations, and result rows at phone width
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) rows put the title and the subtitle side by side and have no second action. The search page is not in the mock.
+- **Reality**: Location rows in `frontend/src/components/CommandPalette.tsx` and location cards in `frontend/src/pages/SearchPage.tsx` get the "Show items" action that area and tag rows have (`palette-location-items-<id>`, `result-location-items-<id>`); it opens the items list filtered by `location=<id>`, and its accessible name is "Show items in {name}". Below the `sm` breakpoint a palette row stacks the subtitle under the title (`flex-col`, `sm:flex-row`), and the "Show items" / "Show files" action of the palette and the search page shows its icon only, with the label in `title` and the accessible name, so the title keeps the row's width at 360 px.
+- **Why**: #2897 asks for the action on locations, which #2801 left out because the items list had no location filter, and for result titles that a 360 px screen does not cut to a few letters.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a palette with live results.
+#### 2026-11-27 — Group switcher and role badge in the top bar
+
+- **Issue/PR**: #1258 / #2910
+- **Mock**: The header in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) (L258–L302) holds the page title, search and the toggles, with no group or role control. The group switcher is only in the sidebar ([`design-mocks/src/components/LocationGroupSwitcher.tsx`](../../design-mocks/src/components/LocationGroupSwitcher.tsx)). A role is always the `RoleBadge` of [`design-mocks/src/views/MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx) (L410–L419).
+- **Reality**: `frontend/src/components/GroupRoleCluster.tsx` puts a compact group switcher (an `h-7` outline trigger with the group name and `ChevronsUpDown`) and the caller's role between the search and the toggles. The role is the shared `frontend/src/components/RoleBadge.tsx` that the Members page and the admin pages draw: the mock's icon, tint and translated `members:roles.*` label, here at the trigger's `h-7`, `rounded-md` and `text-xs` so the pair reads as one unit. Both switchers go through `useSwitchGroup` (`frontend/src/features/group/useSwitchGroup.ts`): a switch opens `/g/<slug>` and saves the group as the user's default group.
+- **Why**: Not present in mock. #1258 asks for the active group and the caller's role side by side in the header, so a member sees which group and which rights a page shows while the sidebar is collapsed to icons or closed on a phone. #2910 asks for one badge and one switch handler.
+- **Approved by**: user (explicit) — pre-approved for #2910 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the cluster if the owner decides the sidebar switcher is enough, or follow the mock if `inventario-design` draws a group control in its header.
+
 ### i18n & Formatting
 
 #### 2026-05-16 — Dashboard hero: K/M/B compact-notation fallback at ≥1e7
@@ -1400,6 +1445,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reality**: `frontend/src/pages/admin/AdminFailedJobsPage.tsx` at `/admin/failed-jobs`, reached from a third **Failed jobs** pill in the `AdminLayout` secondary nav. It follows `AdminGroupsPage`: the icon tile (`TriangleAlert`), title and subtitle, a row of two `Select` filters (job type, tenant), a bordered `Table` and `AdminPagination`. The columns are the job (type `Badge`, title, id in mono), the tenant with the group below it, the last error (muted, up to three lines), the failure time, the attempt count, and outline **Retry** (`RotateCcw`, only for a type that can run again) and **Discard** (`ArchiveX`, only for a `platform_admin`; a support agent may retry but not discard) buttons. Discard opens a `Dialog` that asks first and names the job in a muted bordered block: type `Badge`, title, tenant · group, id in mono. The filters and the page round-trip through `?type`, `?tenantID` and `?page`. With filters on, the empty state says that nothing matches them.
 - **Why**: not present in mock. The owner decision on #1307 gives system admins a Failed jobs page in the back office with type and tenant filters; the page reuses the admin list anatomy so it reads like its siblings. Discard for platform admins only and the job named in the dialog are the owner's decisions in the review of #2938. The discard confirmation, the job id in the row (the CLI takes it) and the filtered empty state are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the role split and the named job by the review of 2026-11-26; the confirmation, the id and the filtered empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
+
+#### 2026-11-27 — Admin Failed jobs bulk discard
+
+- **Issue/PR**: #2946
+- **Mock**: [`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) has no page for background jobs and no bulk action of this kind; the header button follows **New tenant** in [`TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx).
+- **Reality**: For a `platform_admin`, the header of `frontend/src/pages/admin/AdminFailedJobsPage.tsx` gets an outline **Discard older…** button (`CalendarX`) on the right, as **New tenant** sits on the Tenants page. It opens `AdminFailedJobsBulkDiscardDialog.tsx`: the title and a body that says what a discard does, a muted bordered block that names the job type and tenant of the page's filters ("All job types" and "All tenants" without them), a **Failed before** date input (`Input type="date"`, at most today in UTC) with a hint that the day starts at 00:00 UTC, and a live line with the dry-run count. The destructive confirm button names the count ("Discard 12 jobs") and stays disabled until a day is picked and the count is above zero. A support agent does not get the button.
+- **Why**: not present in mock. #2946 asks for a bulk discard in the back office; the dialog takes the page's filters so the operator sees which jobs it takes, and confirms a count the server counted for that filter. The header placement, the date input instead of a date-and-time picker and the count in the confirm button are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2946 by the 2026-11-27 goal to work through the backlog.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
 
 #### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
@@ -1596,6 +1650,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If the upstream design adds a dedicated 403/forbidden empty state, port it and resolve this entry.
 
 ### Cross-cutting (theme, density, a11y, performance)
+
+#### 2026-11-27 — Delete triggers: one red outline or ghost trigger, with the label and size of their neighbors
+
+- **Issue/PR**: #2914
+- **Mock**: On a detail surface the delete trigger is an icon-only `variant="outline" size="sm"` button with `text-destructive hover:bg-destructive/10` ([`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) L705; [`FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) L302 adds `hover:text-destructive`). On a row it is a ghost button, icon-only `size-7` in [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) L314, labeled `size="sm"` in [`FilePreviewDialog.tsx`](../../design-mocks/src/components/FilePreviewDialog.tsx) L153. The mock has no header delete on a location or area page (delete sits in the card menu) and no maintenance, supplies or reminders surface.
+- **Reality**: Every delete trigger listed in `devdocs/frontend/components.md` → Delete triggers takes `text-destructive hover:bg-destructive/10 hover:text-destructive`, the item page's included. The location and area headers keep the labeled default-size outline button, the size of Insurance report and Edit next to it. The file detail sheet's footer keeps its labeled `sm` outline button next to the labeled Edit. The maintenance schedule card keeps its labeled ghost `sm` button next to I did this and Edit. The supplies and reminders rows keep their `size="icon"` ghost button next to the same-size Edit.
+- **Why**: The triggers match the mock's variant and colors for their place. The label and size follow the buttons beside each trigger, so a row or header does not mix icon-only and labeled actions or two heights.
+- **Approved by**: user (explicit) — pre-approved for #2914 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Move the location and area delete into a menu if `inventario-design` draws one for those headers; otherwise permanent.
 
 #### 2026-11-26 — Long-form dialogs fill the screen below `sm`
 

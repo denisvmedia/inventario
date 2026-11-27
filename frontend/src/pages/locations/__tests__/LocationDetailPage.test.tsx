@@ -126,6 +126,14 @@ describe("<LocationDetailPage />", () => {
     expect(within(kitchen).getByText("2 items")).toBeInTheDocument()
     const workshop = tiles.find((t) => within(t).queryByText("Workshop"))!
     expect(within(workshop).getByText("1 item")).toBeInTheDocument()
+    // Delete is the red outline trigger of a detail surface (#2914).
+    const deleteTrigger = screen.getByTestId("location-detail-delete")
+    expect(deleteTrigger).toHaveAttribute("data-variant", "outline")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("surfaces the warranty-expiring pill when an area carries expiring items", async () => {

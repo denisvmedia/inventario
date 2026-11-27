@@ -540,9 +540,31 @@ export function CommodityFormDialog({
   // staged file are saved as the draft first, and the draft is promoted only
   // once it holds them all, so the item never misses a file the user picked.
   const saveThroughDraft = serverMode && !!localKey
+  // `useOptionalCurrentGroup` returns undefined when the dialog is mounted
+  // outside a GroupProvider (the unit-test harness does this for the non-AI
+  // flow). The AI step gates its scan button behind a non-empty slug.
+  const groupContext = useOptionalCurrentGroup()
+  const activeSlug = groupContext?.currentGroup?.slug ?? null
+  // The group the form opened in (#2920). The form reads its draft there and
+  // sends the requests of a save, a discard or a file change there, so one
+  // still running when the member moves to another group, with browser Back
+  // for example, ends in the group it started in. An opening takes the group
+  // current when it starts, or the first one known after. It is set while
+  // rendering, so the first render of an opening has it, and kept after the
+  // dialog closes for the requests still running then.
+  const [openedIn, setOpenedIn] = useState(() => ({ open, group: open ? activeSlug : null }))
+  let opened = openedIn
+  if (open !== opened.open) opened = { open, group: open ? activeSlug : opened.group }
+  else if (open && opened.group === null && activeSlug !== null) {
+    opened = { open, group: activeSlug }
+  }
+  if (opened !== openedIn) setOpenedIn(opened)
+  const formSlug = opened.group ?? activeSlug
+  // formGroup is the group the form's requests go to.
+  const formGroup = () => formSlug ?? undefined
   // Server draft session (#2812): the draft this form saves to, with the
   // revision its values are based on.
-  const resumedQuery = useDraft(resumeId)
+  const resumedQuery = useDraft(resumeId, formSlug ?? undefined)
   const resumed = resumedQuery.data
   const resumeLoading = !!resumeId && resumedQuery.isPending
   const [serverDraft, setServerDraft] = useState<DraftRef | null>(null)
@@ -556,7 +578,7 @@ export function CommodityFormDialog({
   // True when the form opened with input kept on this device that the
   // server does not have.
   const [restoredUnsaved, setRestoredUnsaved] = useState(false)
-  const draftFilesQuery = useDraftFiles(serverMode ? serverDraft?.id : null)
+  const draftFilesQuery = useDraftFiles(serverMode ? serverDraft?.id : null, formSlug ?? undefined)
   const invalidateDrafts = useInvalidateDrafts()
   // The resumed draft seeds the form once per opening; a refetch must not
   // wipe what the user typed since.
@@ -1000,7 +1022,7 @@ export function CommodityFormDialog({
     const results = await Promise.allSettled(fileIds.map((id) => trashUnlinkedFile(id, { group })))
     outcome.failedFiles = results.filter((r) => r.status === "rejected").length
     const slug = group ?? ""
-    void invalidateDrafts()
+    void invalidateDrafts(group)
     void queryClient.invalidateQueries({ queryKey: trashKeys.group(slug) })
     void queryClient.invalidateQueries({ queryKey: fileKeys.group(slug) })
     void queryClient.invalidateQueries({ queryKey: storageKeys.group(slug) })
@@ -1021,7 +1043,7 @@ export function CommodityFormDialog({
     if (entryIds.length === 0) return
     try {
       await queryClient.fetchQuery({
-        queryKey: draftKeys.files(activeSlug ?? "", draftId),
+        queryKey: draftKeys.files(formSlug ?? "", draftId),
         queryFn: ({ signal }) => listDraftFiles(draftId, { signal, group: formGroup() }),
       })
     } catch {
@@ -1170,7 +1192,7 @@ export function CommodityFormDialog({
           mark(entry.id, "uploaded")
         },
       })
-      void invalidateDrafts()
+      void invalidateDrafts(formGroup())
       if (result.stopped || over()) {
         // The dialog closed while Add item ran, after its last file too: no
         // item is made. The draft keeps the files that reached it, the local
@@ -1299,7 +1321,7 @@ export function CommodityFormDialog({
       clearDraftSession(localKey)
     }
     onOpenChange(false)
-    const slug = activeSlug ?? ""
+    const slug = formSlug ?? ""
     navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityId)}`)
   }
 
@@ -1347,7 +1369,7 @@ export function CommodityFormDialog({
         if (ordinaryLinks(rest).length === 0) await deleteFile(row.file.id, { group })
       }
       void draftFilesQuery.refetch()
-      void invalidateDrafts()
+      void invalidateDrafts(group)
     } catch (err) {
       toast.error(classifyServerError(err, t("commodities:drafts.removeFileFailed")).message)
     }
@@ -1356,15 +1378,18 @@ export function CommodityFormDialog({
   // updateSavedFile saves a saved file's title and tags (#1626). The saves
   // of one file run one after the other, in the order the user made the
   // changes: two quick edits would otherwise race, and the first PUT landing
-  // last would undo the second.
+  // last would undo the second. Each save goes to the group and the draft
+  // the form had when the change was made, even when it waits until after
+  // the form opened again elsewhere (#2920).
   const savedFileSaves = useRef(new Map<string, Promise<boolean>>())
   function updateSavedFile(
     row: ListedFile,
     change: { title: string; tags: string[] }
   ): Promise<boolean> {
     const id = row.file.id
+    const target = { group: formGroup(), draftId: serverDraft?.id ?? "" }
     const before = savedFileSaves.current.get(id) ?? Promise.resolve(true)
-    const run = before.then(() => putSavedFile(row, change))
+    const run = before.then(() => putSavedFile(row, change, target))
     savedFileSaves.current.set(id, run)
     void run.then(() => {
       if (savedFileSaves.current.get(id) === run) savedFileSaves.current.delete(id)
@@ -1378,9 +1403,10 @@ export function CommodityFormDialog({
   // without reading the list again.
   async function putSavedFile(
     row: ListedFile,
-    change: { title: string; tags: string[] }
+    change: { title: string; tags: string[] },
+    { group, draftId }: { group: string | undefined; draftId: string }
   ): Promise<boolean> {
-    const key = draftKeys.files(activeSlug ?? "", serverDraft?.id ?? "")
+    const key = draftKeys.files(group ?? "", draftId)
     const current =
       queryClient.getQueryData<ListedFile[]>(key)?.find((r) => r.file.id === row.file.id)?.file ??
       row.file
@@ -1389,7 +1415,7 @@ export function CommodityFormDialog({
       saved = await updateFile(
         row.file.id,
         { title: change.title, description: current.description ?? "", tags: change.tags },
-        { group: formGroup() }
+        { group }
       )
     } catch (err) {
       toast.error(classifyServerError(err, t("commodities:drafts.updateFileFailed")).message)
@@ -1398,7 +1424,7 @@ export function CommodityFormDialog({
     queryClient.setQueryData<ListedFile[]>(key, (rows) =>
       rows?.map((r) => (r.file.id === saved.id ? { ...r, file: { ...r.file, ...saved } } : r))
     )
-    void queryClient.invalidateQueries({ queryKey: fileKeys.group(activeSlug ?? "") })
+    void queryClient.invalidateQueries({ queryKey: fileKeys.group(group ?? "") })
     return true
   }
 
@@ -1576,32 +1602,6 @@ export function CommodityFormDialog({
     if (target && target !== step) setStep(target)
   }
   const submitForm = () => void handleSubmit(submit, onInvalid)()
-
-  // Slug + currency list for the AI scan step. `useOptionalCurrentGroup`
-  // returns undefined when the dialog is mounted outside a GroupProvider
-  // (the unit-test harness does this for the non-AI flow). The AI step
-  // gates its scan button behind a non-empty slug, so the empty-string
-  // fallback is safe — the wire request would just 404, which the
-  // typed error banner surfaces. The currencies query reuses the same
-  // `/currencies` endpoint the CurrencyCombobox queries, so the
-  // unknown-currency rejection in AiScanStep matches what the user
-  // sees in the manual currency picker.
-  const groupContext = useOptionalCurrentGroup()
-  const activeSlug = groupContext?.currentGroup?.slug ?? null
-  // The group the form opened in (#2920). The requests of a save, a discard
-  // or a file change go there, so one still running when the member moves
-  // to another group, with browser Back for example, ends in the group it
-  // started in.
-  const openedInRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!open) {
-      openedInRef.current = null
-      return
-    }
-    openedInRef.current ??= activeSlug
-  }, [open, activeSlug])
-  // formGroup is the group the form's requests go to.
-  const formGroup = () => openedInRef.current ?? activeSlug ?? undefined
 
   // enteredScanValues lists what the form holds that the user entered, for
   // the review of an AI scan (#1626): such a field shows both values and

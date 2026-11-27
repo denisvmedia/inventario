@@ -47,6 +47,25 @@ func tagCtx() func(http.Handler) http.Handler {
 	}
 }
 
+// itemTagMigrationLock refuses a change to an item tag with 423 while a
+// currency migration of the group runs, as /commodities does. Renaming or
+// deleting an item tag rewrites the items that carry it, and the registry
+// waits for the migration before it does; without this check the request
+// waits until it times out. File tags touch no item and are not refused.
+func itemTagMigrationLock(opts GroupMigrationLockOptions) func(http.Handler) http.Handler {
+	lock := requireGroupNotMigrating(opts)
+	return func(next http.Handler) http.Handler {
+		locked := lock(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tag := tagFromContext(r.Context()); tag != nil && tag.Kind == models.TagKindCommodity {
+				locked.ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 type tagsAPI struct {
 	factorySet *registry.FactorySet
 	tagService *services.TagService
@@ -308,6 +327,7 @@ func (api *tagsAPI) createTag(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Tag not found"
 // @Failure 409 {object} jsonapi.Errors "Slug already in use"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
+// @Failure 423 {object} jsonapi.Errors "An item tag, while a currency migration runs in the group"
 // @Router /g/{groupSlug}/tags/{tagID} [patch].
 func (api *tagsAPI) updateTag(w http.ResponseWriter, r *http.Request) {
 	tag := tagFromContext(r.Context())
@@ -356,6 +376,7 @@ func (api *tagsAPI) updateTag(w http.ResponseWriter, r *http.Request) {
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Tag not found"
 // @Failure 409 {object} jsonapi.Errors "Tag is in use; pass force=true to strip references"
+// @Failure 423 {object} jsonapi.Errors "An item tag, while a currency migration runs in the group"
 // @Router /g/{groupSlug}/tags/{tagID} [delete].
 func (api *tagsAPI) deleteTag(w http.ResponseWriter, r *http.Request) {
 	tag := tagFromContext(r.Context())
@@ -396,6 +417,7 @@ func Tags(params Params) func(r chi.Router) {
 		r.Get("/stats", api.getTagStats)
 		r.Route("/{tagID}", func(r chi.Router) {
 			r.Use(tagCtx())
+			r.Use(itemTagMigrationLock(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration}))
 			r.Get("/", api.getTag)
 			r.Patch("/", api.updateTag)
 			r.Delete("/", api.deleteTag)
