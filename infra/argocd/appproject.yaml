@@ -1,6 +1,31 @@
-# AppProject for all preview environments — PR-driven and the static master.
-# Scopes the source repo and destination namespaces so a misconfigured
-# Application can't reach outside `inv-vcl01-*`.
+# AppProject for the per-PR previews (`inv-vcl01-pr<N>`).
+#
+# A PR preview renders helm/inventario at the PR's head commit, so the chart
+# is whatever the pull request says, fork pull requests included. The
+# `preview` label is the only gate in front of it. This project is what keeps
+# such a chart inside its own namespace and to the kinds the chart renders:
+#
+#   - destinations: only `inv-vcl01-pr*`. A chart can hard-code
+#     `metadata.namespace` on any object, and ArgoCD applies it wherever the
+#     project allows. inv-vcl01-master and inv-vcl01-longevity hold Secrets
+#     from the sops bundle, so they live in the separate `master-previews`
+#     project (appproject-master.yaml) and are out of reach from here.
+#   - clusterResourceWhitelist: Namespace only, and only by the preview name.
+#     `CreateNamespace=true` goes through this check too, so the entry cannot
+#     be dropped. A chart that renders its own Namespace object would replace
+#     the Pod Security labels from managedNamespaceMetadata; the
+#     preview-namespace-pod-security ValidatingAdmissionPolicy
+#     (infra/vm/cluster-extras/) refuses that at the API server.
+#   - namespaceResourceWhitelist: exactly the kinds `helm template
+#     helm/inventario` renders with the PR preview values. No RBAC, no
+#     webhooks, no PriorityClass, no Pods outside a workload. A chart change
+#     that adds a kind fails that PR's sync with "resource ... is not
+#     permitted in project previews" until the kind is added here. The Helm
+#     Lint workflow renders the preview values and fails when this list and
+#     the chart disagree.
+#
+# Applied by infra/vm/bootstrap.sh, not synced by ArgoCD: a change here takes
+# effect on the next bootstrap run.
 
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -8,26 +33,37 @@ metadata:
   name: previews
   namespace: argocd
 spec:
-  description: Inventario preview environments (PR-previews + master)
+  description: Inventario PR previews (chart and values from the pull request)
 
   # Only this repo, no forks / other sources.
   sourceRepos:
     - https://github.com/denisvmedia/inventario
 
-  # All ephemeral previews land under inv-vcl01-* namespaces; ArgoCD itself
-  # lives in argocd, so we don't need to list it as a destination.
   destinations:
-    - namespace: inv-vcl01-*
+    - namespace: inv-vcl01-pr*
       server: https://kubernetes.default.svc
 
-  # Each Application creates its own namespace via `CreateNamespace=true`.
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+      name: inv-vcl01-pr*
 
-  # Everything inside an inv-vcl01-* namespace is fair game (Deployments,
-  # Services, ConfigMaps, Secrets, the Tailscale Ingress, the chart's setup
-  # Job, etc.).
   namespaceResourceWhitelist:
-    - group: "*"
-      kind: "*"
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: LimitRange
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: batch
+      kind: Job
+    - group: networking.k8s.io
+      kind: Ingress

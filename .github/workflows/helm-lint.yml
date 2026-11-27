@@ -627,6 +627,13 @@ jobs:
             fi
           done
 
+      - name: Verify the preview AppProjects allow what the chart renders
+        # A PR preview syncs only the kinds its AppProject lists. The script
+        # renders the chart with each ApplicationSet's value files and inline
+        # values and fails on a kind the project refuses (that preview would
+        # not sync) and on a kind the project allows that nothing renders.
+        run: .github/scripts/preview-manifests.py kinds
+
       - name: Render chart with setupJob.argocdMode (combined + demo)
         run: |
           set -euo pipefail

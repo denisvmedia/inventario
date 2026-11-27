@@ -1,0 +1,64 @@
+# AppProject for the two environments that deploy master commits:
+# inv-vcl01-master (applicationset-master.yaml) and inv-vcl01-longevity
+# (applicationset-longevity.yaml).
+#
+# They are kept out of the `previews` project (appproject.yaml) because their
+# namespaces hold Secrets from the sops bundle (inventario-admin), and a PR
+# chart in `previews` may write to any namespace its project allows. Here the
+# chart comes from a master commit only, through the CI-maintained
+# `argocd/master-pin` branch.
+#
+# The kind list is what `helm template helm/inventario` renders with the
+# master and longevity values: the PR preview kinds plus the
+# PersistentVolumeClaims of the longevity demo stores. The Helm Lint workflow
+# fails when this list and the chart disagree.
+#
+# Applied by infra/vm/bootstrap.sh before the ApplicationSets (the
+# `appproject*.yaml` glob), not synced by ArgoCD.
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: master-previews
+  namespace: argocd
+spec:
+  description: Inventario master and longevity environments (chart from master)
+
+  sourceRepos:
+    - https://github.com/denisvmedia/inventario
+
+  destinations:
+    - namespace: inv-vcl01-master
+      server: https://kubernetes.default.svc
+    - namespace: inv-vcl01-longevity
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+      name: inv-vcl01-master
+    - group: ""
+      kind: Namespace
+      name: inv-vcl01-longevity
+
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: LimitRange
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: batch
+      kind: Job
+    - group: networking.k8s.io
+      kind: Ingress

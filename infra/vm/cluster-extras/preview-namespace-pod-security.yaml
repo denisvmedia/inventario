@@ -1,0 +1,68 @@
+# Keeps the Pod Security labels on every preview namespace that ArgoCD
+# creates or updates (inv-vcl01-pr<N>, inv-vcl01-master, inv-vcl01-longevity).
+#
+# The ApplicationSets in infra/argocd/ put `pod-security.kubernetes.io/enforce:
+# baseline` on these namespaces through managedNamespaceMetadata. That alone
+# does not hold against a PR chart: ArgoCD applies a Namespace object the
+# chart renders for its own namespace instead of the managed one, so a chart
+# could ship `enforce: privileged` and then any pod it likes. The AppProject
+# has to allow the Namespace kind for CreateNamespace to work at all, so the
+# check sits here, at the API server, where it covers both paths.
+#
+# Scope: requests from the service accounts in the `argocd` namespace only.
+# ArgoCD is the only route by which a pull request's content reaches the
+# cluster. apply-secrets.sh creates inv-vcl01-master and inv-vcl01-longevity without
+# labels before ArgoCD first syncs them, and a Velero restore recreates the
+# longevity namespace as it was backed up; both run as the cluster admin and
+# are not affected. ArgoCD adds the labels on its next sync of each namespace.
+#
+# Allowed: `enforce` set to `baseline` or `restricted`, with no
+# `enforce-version` or `enforce-version: latest`. `warn` and `audit` are not
+# checked; they cannot let a pod in.
+#
+# bootstrap.sh applies this directory only when the Tailscale operator is
+# installed. Without it the previews still deploy and still get their labels
+# from ArgoCD; only this guard against a chart-rendered Namespace is missing.
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: preview-namespace-pod-security
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["namespaces"]
+  matchConditions:
+    - name: preview-namespace
+      expression: object.metadata.name.startsWith('inv-vcl01-')
+    - name: applied-by-argocd
+      expression: request.userInfo.groups.exists(g, g == 'system:serviceaccounts:argocd')
+  validations:
+    - expression: >-
+        has(object.metadata.labels) &&
+        'pod-security.kubernetes.io/enforce' in object.metadata.labels &&
+        object.metadata.labels['pod-security.kubernetes.io/enforce'] in ['baseline', 'restricted']
+      message: >-
+        A preview namespace applied by ArgoCD must carry
+        pod-security.kubernetes.io/enforce set to baseline or restricted.
+      reason: Forbidden
+    - expression: >-
+        !has(object.metadata.labels) ||
+        !('pod-security.kubernetes.io/enforce-version' in object.metadata.labels) ||
+        object.metadata.labels['pod-security.kubernetes.io/enforce-version'] == 'latest'
+      message: >-
+        A preview namespace applied by ArgoCD must not pin
+        pod-security.kubernetes.io/enforce-version to an older policy version.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: preview-namespace-pod-security
+spec:
+  policyName: preview-namespace-pod-security
+  validationActions: [Deny]

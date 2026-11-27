@@ -164,12 +164,17 @@ image_inputs:
 
 # ---- Helm chart and the monitoring stack it renders ----------------------
 # helm-lint does more than lint the chart: it renders the alert rules and runs
-# promtool and amtool over them, so the inputs live outside helm/ too.
+# promtool and amtool over them, and checks the preview AppProjects against
+# the chart rendered with the preview values, so the inputs live outside helm/
+# too.
 helm:
   - 'helm/**'
   - 'deploy/monitoring/**'
   - 'scripts/test-alert-rules.sh'
   - 'scripts/test-alert-routing.sh'
+  - 'infra/argocd/**'
+  - 'infra/helm-overlays/**'
+  - '.github/scripts/preview-manifests.py'
 
 # ---- Renovate configuration ----------------------------------------------
 # The only input renovate-config-validator reads.
