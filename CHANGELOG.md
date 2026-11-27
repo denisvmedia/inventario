@@ -723,7 +723,9 @@ when to add an entry and where it goes.
   item does. A failed file keeps the dialog open and the changes unsaved, and
   **Retry** goes on with the files still missing; a file whose upload worked
   but whose attach failed is attached on Retry without sending it again, and
-  goes to the Trash if the dialog is closed instead. Before, the dialog closed
+  goes to the Trash if the dialog is closed instead. A file still being sent
+  when the user leaves the dialog is not attached and goes to the Trash once
+  its upload ends. Before, the dialog closed
   at once, the files uploaded in the background, a failure only showed a
   toast, and a failed attach left the file in the group without an item
   ([#2916](https://github.com/denisvmedia/inventario/issues/2916)).

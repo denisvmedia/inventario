@@ -12,7 +12,13 @@
 // move. The dialog re-imports every symbol below.
 import type { DeepPartial } from "react-hook-form"
 
-import { attachFile, uploadFile, updateFile, type FileLinkEntityType } from "@/features/files/api"
+import {
+  attachFile,
+  trashUnlinkedFile,
+  uploadFile,
+  updateFile,
+  type FileLinkEntityType,
+} from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { HttpError } from "@/lib/http"
 import type { CommodityStatusValue } from "@/features/commodities/constants"
@@ -300,7 +306,8 @@ export function toRequest(
 }
 
 export interface AttachPendingFilesOptions {
-  // Checked before each file; true stops the run before that file.
+  // Checked before each file and after each upload. True stops the run; a
+  // file uploaded once it is true goes to Trash instead of onto the item.
   shouldStop?: () => boolean
   onFileStart?: (entry: PendingFile) => void
   // The file reached the server as fileId and is not attached yet.
@@ -310,7 +317,8 @@ export interface AttachPendingFilesOptions {
 }
 
 export interface AttachPendingFilesResult {
-  failed: Array<{ entry: PendingFile; error: unknown }>
+  // fileId is the upload the file has on the server, not on the item.
+  failed: Array<{ entry: PendingFile; error: unknown; fileId?: string }>
   // The run stopped on shouldStop; the files from there on were not tried.
   stopped: boolean
 }
@@ -329,24 +337,32 @@ export async function attachPendingFiles(
   for (const entry of pending) {
     if (opts.shouldStop?.()) return { failed, stopped: true }
     opts.onFileStart?.(entry)
+    let fileId = entry.uploadedFileId
     try {
       let placed = false
-      if (entry.uploadedFileId) {
+      if (fileId) {
         try {
-          await placePendingFile(entry, entry.uploadedFileId, target)
+          await placePendingFile(entry, fileId, target)
           placed = true
         } catch (err) {
           if (!(err instanceof HttpError && err.status === 404)) throw err
+          fileId = undefined
         }
       }
       if (!placed) {
-        const fileId = (await uploadFile(entry.file)).file.id
+        fileId = (await uploadFile(entry.file)).file.id
         opts.onFileUploaded?.(entry, fileId)
+        // The form was left while the file was on its way: nothing will
+        // attach it, so it goes to Trash rather than stay without an item.
+        if (opts.shouldStop?.()) {
+          await trashUnlinkedFile(fileId).catch(() => false)
+          return { failed, stopped: true }
+        }
         await placePendingFile(entry, fileId, target)
       }
       opts.onFileAttached?.(entry)
     } catch (error) {
-      failed.push({ entry, error })
+      failed.push({ entry, error, fileId })
     }
   }
   return { failed, stopped: false }

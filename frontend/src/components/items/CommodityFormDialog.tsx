@@ -840,9 +840,10 @@ export function CommodityFormDialog({
   }, [open, persistDrafts, localKey, pendingFiles, pendingFilesLoaded])
 
   // A file an edit save uploaded but could not attach goes to Trash when the
-  // dialog closes without it, however it closes (#2916). The file being
-  // placed when the dialog closes is left to finish. Trash takes only a file
-  // nothing links, so one whose attach went through after all stays.
+  // dialog closes without it, however it closes (#2916). The file being sent
+  // when the dialog closes is left to the save, which stops after its upload
+  // and sends it to Trash, or trashes it when its attach fails. Trash takes
+  // only a file nothing links, so one whose attach went through stays.
   const editLeftoversRef = useRef<string[]>([])
   useEffect(() => {
     editLeftoversRef.current =
@@ -1058,7 +1059,18 @@ export function CommodityFormDialog({
       },
     })
     if (attached.size > 0) void queryClient.invalidateQueries({ queryKey: fileKeys.all })
-    if (over()) return false
+    if (over()) {
+      // Nobody is left to retry: the uploads of the files that failed go to
+      // Trash, as the dialog's close does with the ones it knows of.
+      const left = result.failed.flatMap((failure) => failure.fileId ?? [])
+      if (left.length > 0) {
+        void Promise.allSettled(left.map((id) => trashUnlinkedFile(id))).then(() => {
+          void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+          void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+        })
+      }
+      return false
+    }
     setPendingFiles((prev) => prev.filter((pending) => !attached.has(pending.id)))
     setFileStatus((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([id]) => !attached.has(id)))

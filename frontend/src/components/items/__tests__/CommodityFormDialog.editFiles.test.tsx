@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
-import { screen, waitFor, within } from "@testing-library/react"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 
@@ -51,7 +51,8 @@ function itemFiles(fake: FakeBackend) {
 
 // renderEdit opens the item in the dialog's edit mode inside a host that
 // closes it the way the item page does. onSubmit records which files the
-// item had when the changes were sent.
+// item had when the changes were sent. leave takes the dialog off the page,
+// as browser Back does, and keeps the group.
 function renderEdit(fake: FakeBackend) {
   setAccessToken("good-token")
   const filesAtSave: string[][] = []
@@ -59,8 +60,14 @@ function renderEdit(fake: FakeBackend) {
     filesAtSave.push(itemFiles(fake).map((f) => f.id))
   })
   const onOpenChange = vi.fn()
+  const host = { leave: () => {} }
   function Host() {
     const [open, setOpen] = useState(true)
+    const [shown, setShown] = useState(true)
+    useEffect(() => {
+      host.leave = () => setShown(false)
+    }, [])
+    if (!shown) return null
     return (
       <CommodityFormDialog
         open={open}
@@ -90,7 +97,24 @@ function renderEdit(fake: FakeBackend) {
       />
     ),
   })
-  return { onSubmit, onOpenChange, filesAtSave }
+  return { onSubmit, onOpenChange, filesAtSave, leave: () => act(() => host.leave()) }
+}
+
+// held answers a request only once release is called, then goes on to the
+// next handler, or answers with status when one is given.
+function held(status?: number) {
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const state = { reached: false, release: () => release() }
+  const resolver = async () => {
+    state.reached = true
+    await gate
+    if (status) return HttpResponse.json({ errors: [{ status: String(status) }] }, { status })
+    return undefined
+  }
+  return { state, resolver }
 }
 
 async function stageOnFiles(user: ReturnType<typeof userEvent.setup>, files: File[]) {
@@ -224,5 +248,48 @@ describe("<CommodityFormDialog /> files added while editing (#2916)", () => {
     // Only the file still missing stays on the form.
     await waitFor(() => expect(pendingRows()).toHaveLength(1))
     expect(pendingRows()[0]).toHaveTextContent("b.png")
+  })
+
+  // The dialog unmounts (browser Back) while a file is on its way: the save
+  // stops, and the file reaches neither the item nor stays without one.
+  it("moves a file uploaded after the dialog went away to Trash, not onto the item", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    const upload = held()
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    server.use(http.post(apiUrl(`/g/${SLUG}/uploads/file`), upload.resolver))
+    const user = userEvent.setup()
+    const { onSubmit, leave } = renderEdit(fake)
+    await stageOnFiles(user, [png("receipt.png")])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(upload.state.reached).toBe(true))
+
+    leave()
+    upload.state.release()
+    await waitFor(() => expect(fake.trashed).toHaveLength(1))
+    // The one upload went to Trash; nothing is left in the group.
+    expect(fake.uploads).toBe(1)
+    expect(fake.files).toEqual([])
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("moves an upload whose attach fails after the dialog went away to Trash", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    const attach = held(500)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    server.use(http.post(apiUrl(`/g/${SLUG}/files/:id/links`), attach.resolver))
+    const user = userEvent.setup()
+    const { onSubmit, leave } = renderEdit(fake)
+    await stageOnFiles(user, [png("receipt.png")])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(attach.state.reached).toBe(true))
+    const uploaded = fake.files[0].id
+
+    leave()
+    attach.state.release()
+    await waitFor(() => expect(fake.trashed).toEqual([uploaded]))
+    expect(fake.files).toEqual([])
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 })

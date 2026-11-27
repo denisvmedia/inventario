@@ -6,6 +6,8 @@
  *      says so; Retry attaches it and saves the changes.
  *   2. Cancel after a failed attach moves the upload to Trash, so no file is
  *      left in the group without an item.
+ *   3. A file still being sent when browser Back takes the member off the
+ *      item is not attached; once its upload ends it goes to Trash.
  *
  * Names carry a suffix unique to the run, so rows from parallel specs in
  * the same group do not match.
@@ -182,5 +184,72 @@ test.describe("Files added while editing an item (#2916)", () => {
         })
         .catch(() => {});
     }
+  });
+
+  test("moves a file still being sent when Back leaves the item to Trash", async ({
+    page,
+    request,
+  }) => {
+    const id = await create(request, `Kettle ${run}`);
+    // The upload answers once the member has left the dialog.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let uploading = false;
+    await page.route(`**/api/v1/g/${slug}/uploads/file`, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      uploading = true;
+      await held;
+      await route.continue();
+    });
+    const uploaded = page.waitForResponse(
+      (r) => r.url().includes(`/g/${slug}/uploads/file`) && r.request().method() === "POST",
+    );
+
+    // The item opens from the Items list inside the app, so Back stays in it.
+    await page.goto(`/g/${encodeURIComponent(slug)}/commodities?q=${run}`);
+    await page
+      .getByTestId("commodity-card")
+      .filter({ hasText: `Kettle ${run}` })
+      .getByTestId("commodity-card-link")
+      .click();
+    await expect(page.getByTestId("commodity-detail-sheet")).toBeVisible();
+    await page.getByTestId("commodity-detail-edit").click();
+    await page.waitForURL((url) => url.pathname.endsWith("/edit"));
+    await page.getByTestId("commodity-edit-all-fields").click();
+    const form = page.getByTestId("commodity-form-dialog");
+    await form
+      .getByRole("list", { name: /form steps/i })
+      .getByRole("button", { name: "Files" })
+      .click();
+    await form
+      .locator('[data-testid="commodity-files-dropzone"] input[type="file"]')
+      .setInputFiles(["fixtures/files/image.jpg"]);
+    await form.getByTestId("commodity-form-submit").click();
+    await expect.poll(() => uploading).toBe(true);
+
+    // Back to the item, then Back to the list: the item, with its dialog,
+    // goes away.
+    await page.goBack();
+    await page.waitForURL((url) => !url.pathname.endsWith("/edit"));
+    await page.goBack();
+    await page.waitForURL((url) => url.pathname.endsWith("/commodities"));
+    await expect(form).toBeHidden();
+    release();
+
+    const body = (await (await uploaded).json()) as { data?: { id: string }; id?: string };
+    const fileId = body.data?.id ?? body.id;
+    expect(fileId, "upload answer carries the file id").toBeTruthy();
+    await expect
+      .poll(async () => (await trashedFiles(request, auth, slug)).some((f) => f.id === fileId))
+      .toBe(true);
+    expect(await itemFileTitles(request, auth, slug, id)).toEqual([]);
+
+    await request
+      .delete(`/api/v1/g/${encodeURIComponent(slug)}/trash/files/${encodeURIComponent(fileId!)}`, {
+        headers: headers(auth),
+      })
+      .catch(() => {});
   });
 });
