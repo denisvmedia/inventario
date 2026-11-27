@@ -572,6 +572,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2809 by the 2026-11-24 goal to implement the open enhancements; the row's place and the link agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an item's source; otherwise permanent.
 
+#### 2026-11-27 — Location filter on the items toolbar
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) filters the items by a text search only; it has no area or location filter.
+- **Reality**: `frontend/src/pages/commodities/CommoditiesListPage.tsx` adds a **Location** `DropdownMenu` before the **Area** menu, with the same outline trigger, **All locations** first and one entry per location (`commodities-filter-location`). The page URL keeps it as `location=<id>` and the list sends `location_id`. While a location is chosen the **Area** menu lists only that location's areas, plus the chosen area if it is in another location, so it can still be cleared. Choosing a location clears an area of another location and turns off **No location**; turning on **No location** clears the location, because the server refuses the two together. A saved view keeps the location: the **Saved views** page names it on its condition badge, and a deleted location reads **Deleted location** in the `status-expiring` stale style and adds a line to the view's stale notice.
+- **Why**: not present in mock. #2897 asks for "Show items" on locations in search, which needs a location filter on the items list. The menu follows the toolbar's Area menu.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a location filter; otherwise permanent.
+
 ### Dashboard / Overview
 
 #### 2026-11-26 — Warranty cards leave the dashboard while warranties are hidden
@@ -1379,6 +1388,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Help leads to Settings → Help & support, where the What's new row is. The task for the owner's decisions of 2026-11-26 on #1386 asks for the dot on the entry and on the menu that leads to it.
 - **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
 - **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-27 — "Show items" on locations, and result rows at phone width
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) rows put the title and the subtitle side by side and have no second action. The search page is not in the mock.
+- **Reality**: Location rows in `frontend/src/components/CommandPalette.tsx` and location cards in `frontend/src/pages/SearchPage.tsx` get the "Show items" action that area and tag rows have (`palette-location-items-<id>`, `result-location-items-<id>`); it opens the items list filtered by `location=<id>`, and its accessible name is "Show items in {name}". Below the `sm` breakpoint a palette row stacks the subtitle under the title (`flex-col`, `sm:flex-row`), and the "Show items" / "Show files" action of the palette and the search page shows its icon only, with the label in `title` and the accessible name, so the title keeps the row's width at 360 px.
+- **Why**: #2897 asks for the action on locations, which #2801 left out because the items list had no location filter, and for result titles that a 360 px screen does not cut to a few letters.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a palette with live results.
 
 ### i18n & Formatting
 

@@ -4836,6 +4836,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
@@ -5378,6 +5380,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Include drafts and non-in_use commodities (default true) */
@@ -11530,6 +11534,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Commodities only: only items with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Commodities only: only items in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Commodities only: filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */

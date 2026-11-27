@@ -27,6 +27,7 @@ const FULL: CommodityQuery = {
   types: ["equipment", "other"],
   statuses: ["in_use", "sold"],
   areaId: "a1",
+  locationId: "",
   unassigned: true,
   sellerIds: ["s2", "s1"],
   includeInactive: true,
@@ -264,6 +265,29 @@ describe("hasCommodityFilters", () => {
     expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, noPurchasePrice: true })).toBe(true)
     expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, noPurchaseDate: true })).toBe(true)
     expect(hasCommodityFilters(FULL)).toBe(true)
+  })
+})
+
+describe("the location filter (#2897)", () => {
+  const query: CommodityQuery = { ...DEFAULT_COMMODITY_QUERY, locationId: "l1", areaId: "a1" }
+
+  it("keeps the location in the page URL", () => {
+    const params = writeCommodityQuery(new URLSearchParams(), query)
+    expect(params.get("location")).toBe("l1")
+    expect(parseCommodityQuery(new URLSearchParams(params.toString()))).toEqual(query)
+    expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, locationId: "l1" })).toBe(true)
+  })
+
+  it("sends it as location_id and reads it back from a saved view", () => {
+    const api = commodityQueryToApiQuery(query)
+    expect(new URLSearchParams(api).get("location_id")).toBe("l1")
+    expect(commodityQueryFromApiQuery(api).locationId).toBe("l1")
+  })
+
+  it("links to the items of a location", () => {
+    expect(commodityListHref("home", { locationId: "l 1" })).toBe(
+      "/g/home/commodities?location=l+1"
+    )
   })
 })
 

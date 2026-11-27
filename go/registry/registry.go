@@ -160,6 +160,11 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
+	// LocationID, when non-empty, restricts the result to commodities in
+	// any area of that location (#2897). It is AND-ed with AreaID, so an
+	// area of another location matches nothing, and an item without an
+	// area is in no location. An unknown ID matches nothing.
+	LocationID string
 	// SellerIDs, when non-empty, restricts the result to commodities whose
 	// seller is one of the listed IDs (#2804). Empty = unrestricted.
 	SellerIDs []string

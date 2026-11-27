@@ -3696,6 +3696,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -4249,6 +4255,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Only commodities with no area",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
                         "in": "query"
                     },
                     {
@@ -10097,6 +10109,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Commodities only: only items with no area (ignored when area_id is set)",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodities only: only items in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
                         "in": "query"
                     },
                     {

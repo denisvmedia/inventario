@@ -476,6 +476,12 @@ when to add an entry and where it goes.
   are in. Only you and the members of your groups can load it, it does not
   count toward a group's storage, and deleting your account deletes it
   ([#1382](https://github.com/denisvmedia/inventario/issues/1382)).
+- A **Location** filter on All Items, and **Show items** next to a location in
+  the search window and on the search page. The filter lists the items in every
+  area of the location, and the **Area** menu then offers only that location's
+  areas. Saved views keep it. The API takes it as `location_id` on the item
+  list, its tag counts and search; it cannot be combined with `unassigned=true`
+  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
 - A file edit page with the preview beside the details form. Opened from the
   Files page, it keeps the list you came from: the header shows the file's
   place in it with previous and next arrows, "Save and next" saves and opens
@@ -831,6 +837,11 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- On a 360 px wide screen the titles in the search window and on the search
+  page were cut to a few letters, because the subtitle and the **Show items**
+  label took the row. On a narrow screen the subtitle now goes under the title
+  and the button shows only its icon
+  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
 - Documents delivered by other systems stay consistent after rare failures.
   An item made from a delivered draft now shows its **Source** also when the
   delivery stopped before it recorded the draft and was never sent again. A
