@@ -800,6 +800,10 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
     --env=INVENTARIO_DB_DSN="$MIGRATOR_DSN" -- inventario db status
   ```
 
+  The same pod with `inventario db migrate up --dry-run` runs the checks `migrate up`
+  makes before it applies anything: that the extensions the migrations need are
+  installed, and that no two tenants share a domain. Each failure names what to fix.
+
 - [ ] The setup hook re-runs migrations idempotently. ⚠️ **Migrations must be
   backward-compatible** (expand-contract): during the rolling update, old-image pods
   serve traffic against the newly migrated schema. This holds in `argocdMode` too — it

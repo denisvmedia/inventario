@@ -807,6 +807,24 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- A tenant domain is unique in the database. The upgrade runs a migration
+  that replaces the index on `tenants.domain` with a unique one, so two
+  creates or edits that give one domain to two tenants at the same time no
+  longer both succeed; the second gets `409 tenant.domain_taken`. Tenants
+  written before domains were checked can share one, and the index cannot
+  be built over them: `inventario db migrate up` then stops before it
+  applies anything and names each shared domain with the slugs of its
+  tenants. Leave each domain with one tenant, with
+  `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes
+  it) or in the back office, and run the migrations again.
+  `db migrate up --dry-run` runs the same check before the upgrade
+  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
+- `inventario tenants update` accepts `--name`, `--slug`, `--domain`,
+  `--status`, `--settings`, `--dry-run` and `--interactive`. Only
+  `--registration-mode` was registered, so the commands README and the
+  command's help showed, such as `--domain=inventory.acme.com`, failed with
+  `unknown flag`
+  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
 - The server ignores table columns it does not know. A rolling upgrade from
   this release to a later one whose migration adds a column no longer fails
   the pods that still run this release. The upgrade to this release does not
