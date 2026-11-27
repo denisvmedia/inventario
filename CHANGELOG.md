@@ -1014,6 +1014,10 @@ when to add an entry and where it goes.
   migration and ended in a timeout or a server error when the migration
   took longer than a minute. File tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+- A dialog taller than the window stays inside it and scrolls, so its buttons
+  can be reached. With about 25 tags in a group the bulk tags dialog was
+  taller than a 1280x720 window and its Apply button was off-screen
+  ([#2988](https://github.com/denisvmedia/inventario/issues/2988)).
 - You can delete your account after you hand a group you created to someone
   else, whether you stay in it or leave. The group passes to its owner, and
   the audit log records the hand-over. Before, the deletion was refused with

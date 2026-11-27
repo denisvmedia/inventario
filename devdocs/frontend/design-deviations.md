@@ -1687,6 +1687,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
 
+#### 2026-11-27 — Every dialog card is never taller than the screen
+
+- **Issue/PR**: #2988
+- **Mock**: `design-mocks/src/components/ui/dialog.tsx` gives `DialogContent` no maximum height; the mock's `AddItemDialog.tsx` adds `max-h-[90vh] overflow-y-auto` at its call site.
+- **Reality**: `DialogContent` is never taller than the screen minus 2rem (`max-h-[calc(100dvh-2rem)]`) and scrolls as a whole (`overflow-y-auto`) in both variants; below `sm` the `fullscreen-mobile` variant still fills the screen. A dialog whose content fits looks as in the mock. The full-screen file viewers (the image viewer, the PDF preview, and the PDF readers of the file panel and the file review page) pass `max-h-none overflow-visible`, as they pass `max-w-none`.
+- **Why**: A dialog taller than the window is centered with `translate-y-[-50%]`, so without a limit its top and bottom are off-screen and cannot be scrolled to; the bulk tags dialog loses its Apply button with about 25 tags at 1280x720. The limit in the primitive covers every dialog instead of one call site at a time.
+- **Approved by**: user (explicit) — pre-approved for #2988 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: permanent; the limit belongs in the mock's primitive upstream.
+
 ### Backup & Restore
 
 #### 2026-11-26 — Restore upload names a personal data export

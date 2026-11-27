@@ -108,7 +108,7 @@ export function FilePreviewDialog({ file, onClose, onDelete, tagLabel }: FilePre
         }}
       >
         <DialogContent
-          className="h-screen w-screen max-w-none gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+          className="h-screen max-h-none w-screen max-w-none gap-0 overflow-visible rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
           data-testid="file-preview-dialog-pdf"
         >
           <DialogHeader className="sr-only">
