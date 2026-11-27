@@ -825,6 +825,15 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- Deleting your account finishes when you recorded something on another
+  member's item in a shared group. Item history, loans, service records,
+  supply links, maintenance schedules and the restores and currency changes
+  you ran there stay with the group and pass to its owner, and the invites you
+  created or accepted are deleted. Before, the deletion refused with "You
+  still own content shared with other people" after it had already deleted
+  your private groups, memberships and sessions. Every check that can refuse
+  a deletion now runs before anything is deleted
+  ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
 
 ### Security
 

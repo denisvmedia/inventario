@@ -150,7 +150,7 @@ Each reminder on the card shows its title, its repeat rule, its lead times, and 
 
 A repeating reminder moves to its next date by itself once a date passes. A monthly reminder set on the 31st falls on the last day of shorter months (30 April, 28 or 29 February) and returns to the 31st when the month has one; a yearly reminder set on 29 February falls on 28 February in other years. A one-off reminder whose date has passed stays on the card with a **Passed** badge until you delete it.
 
-Deleting an item moves it to the [Trash](../trash/) with its reminders: they send nothing while it is there and come back when you restore it. Deleting the item for good deletes them. Deleting your account deletes the reminders you created, including those on items in a group you share.
+Deleting an item moves it to the [Trash](../trash/) with its reminders: they send nothing while it is there and come back when you restore it. Deleting the item for good deletes them. Deleting your account deletes the reminders you created, including those on items in a group you share. The loans, service records and maintenance schedules you recorded on an item in a shared group stay on the item and pass to the group's owner.
 
 ## The Upcoming page
 
