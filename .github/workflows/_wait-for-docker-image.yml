@@ -87,32 +87,61 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # 40-minute ceiling (160 * 15s), against a build that usually
-          # takes 5-8. The ceiling is not sized for the build; it is sized
-          # for the queue in front of it. A backed-up fleet has put the
-          # manifest job 20 minutes out, and timing out there costs a full
-          # re-run of every lane downstream, while waiting costs one runner
-          # idling at four API calls a minute.
+          # 40-minute ceiling, against a build that usually takes 5-8. The
+          # ceiling is not sized for the build; it is sized for the queue in
+          # front of it. A backed-up fleet has put the manifest job 20 minutes
+          # out, and timing out there costs a full re-run of every lane
+          # downstream.
+          #
+          # The polling is sized for the API budget. Every pull request push
+          # starts three of these waits, and the repository's GITHUB_TOKEN
+          # shares one hourly request limit across all of them. Polling every
+          # 15 seconds through `gh run list` and `gh run view` (four requests
+          # a poll, counting the workflow lookup and the run lookup gh does
+          # first) spent that limit with a dozen pull requests in flight, and
+          # every lane that called the API afterwards failed with "API rate
+          # limit exceeded for installation". So each poll is one request
+          # while the run is missing or queued and two while it runs, made
+          # with `gh api` directly, once a minute. A minute of extra latency
+          # is small next to the build. A failed API call (a rate limit, a
+          # 5xx) is waited out until the ceiling instead of failing the lane.
           MERGE_JOB="Merge multi-arch manifest"
           DARWIN_JOB="Build darwin/arm64 binary for e2e"
-          for i in $(seq 1 160); do
-            RUN_JSON="$(
-              gh run list \
-                --repo "$REPO" \
-                --workflow "docker.yml" \
-                --commit "$COMMIT_SHA" \
-                --limit 1 \
-                --json databaseId,status,conclusion
-            )"
-            STATUS="$(echo "$RUN_JSON" | jq -r '.[0].status // empty')"
-            CONCLUSION="$(echo "$RUN_JSON" | jq -r '.[0].conclusion // empty')"
-            RUN_ID="$(echo "$RUN_JSON" | jq -r '.[0].databaseId // empty')"
+          DEADLINE=$(( $(date +%s) + 40 * 60 ))
+          i=0
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            i=$((i + 1))
+            # Runs come newest first, so the first one is the latest run for
+            # this commit.
+            if ! RUN_JSON="$(
+              gh api "repos/$REPO/actions/workflows/docker.yml/runs?head_sha=$COMMIT_SHA&per_page=1" \
+                --jq '.workflow_runs[0] // {} | {id, status, conclusion}'
+            )"; then
+              echo "::warning::listing docker.yml runs failed (attempt $i); retrying in 60s"
+              sleep 60
+              continue
+            fi
+            STATUS="$(echo "$RUN_JSON" | jq -r '.status // empty')"
+            CONCLUSION="$(echo "$RUN_JSON" | jq -r '.conclusion // empty')"
+            RUN_ID="$(echo "$RUN_JSON" | jq -r '.id // empty')"
+
+            case "${STATUS:-none}" in
+              none | queued | waiting | pending | requested)
+                echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... (poll $i)"
+                sleep 60
+                continue
+                ;;
+            esac
 
             if [ -n "$RUN_ID" ]; then
-              JOBS="$(
-                gh run view "$RUN_ID" --repo "$REPO" --json jobs \
+              if ! JOBS="$(
+                gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
                   --jq '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv'
-              )"
+              )"; then
+                echo "::warning::reading the jobs of docker.yml run $RUN_ID failed (attempt $i); retrying in 60s"
+                sleep 60
+                continue
+              fi
               # A skipped producer is a verdict, not a stall — but it is the
               # opposite verdict from a successful one, and reading the two as
               # the same is how a consumer ends up pulling a tag that was
@@ -186,8 +215,8 @@ jobs:
               exit 1
             fi
 
-            echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... ($i/160)"
-            sleep 15
+            echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... (poll $i)"
+            sleep 60
           done
           # Say which of the three it was. "did not complete" reads as a build
           # failure, and the usual cause is the opposite: the build is fine and

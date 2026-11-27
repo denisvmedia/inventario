@@ -85,6 +85,16 @@ jobs:
             | tee test-output.txt
         working-directory: go
 
+      # The deprecated XML backup format is compiled only with this tag, so
+      # the run above never builds it. Vet every package that has tagged
+      # files, and run the backup tests that the tag changes. The backup_test
+      # package of go/backup has no file under the tag, so it is left out.
+      - name: Check the legacy XML backup build
+        run: |
+          go vet -tags legacy_xml_backup ./backup/... ./integration/...
+          go test -tags legacy_xml_backup ./backup/export/... ./backup/import/... ./backup/restore/...
+        working-directory: go
+
       - name: Coverage summary
         # Runs on failure too: a red suite is when "which package is untested"
         # is most worth seeing.

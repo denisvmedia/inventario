@@ -480,7 +480,9 @@ async function trashUploads(
   ids: string[]
 ): Promise<void> {
   if (!target || ids.length === 0) return
-  const results = await Promise.allSettled(ids.map((id) => trashUnlinkedFile(id, target.filesPath)))
+  const results = await Promise.allSettled(
+    ids.map((id) => trashUnlinkedFile(id, { filesPath: target.filesPath }))
+  )
   const failed = results.filter((r) => r.status === "rejected").length
   if (failed > 0) console.warn(`[intake] ${failed} uploaded files could not be moved to Trash`)
   void queryClient.invalidateQueries({ queryKey: trashKeys.all })

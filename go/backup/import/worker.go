@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -39,6 +40,9 @@ type ImportWorker struct {
 	// See ExportWorker.inFlight: a per-process short-circuit on top of the
 	// registry claim, not the guarantee itself (#2472).
 	inFlight sync.Map
+
+	// lastStallSweep is when recoverStalledImports last swept.
+	lastStallSweep time.Time
 }
 
 // WorkerOption customizes an ImportWorker constructed via NewImportWorker.
@@ -149,8 +153,28 @@ func (w *ImportWorker) run(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
+			w.recoverStalledImports(ctx, time.Now())
 			w.processPendingImports(ctx)
 		}
+	}
+}
+
+// recoverStalledImports sweeps, every stall.SweepInterval, for the imports
+// whose worker stopped in the middle of a run. It runs while the worker is
+// paused too: a pause stops new runs, and the sweep only moves the dead ones
+// on.
+func (w *ImportWorker) recoverStalledImports(ctx context.Context, now time.Time) {
+	if now.Sub(w.lastStallSweep) < stall.SweepInterval {
+		return
+	}
+	w.lastStallSweep = now
+	out, err := w.importService.RecoverStalled(ctx, now)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to recover stalled imports", "error", err)
+		return
+	}
+	if out.Requeued > 0 || out.Failed > 0 {
+		slog.WarnContext(ctx, "Recovered imports whose worker stopped", "requeued", out.Requeued, "failed", out.Failed)
 	}
 }
 
@@ -192,7 +216,7 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 
 		// Claim the row before dispatching: the condition is in the write, so
 		// exactly one caller wins it however many replicas are polling (#2472).
-		claimed, claimErr := expReg.ClaimPending(ctx, export.ID)
+		claimed, claimErr := expReg.ClaimPending(ctx, export.ID, time.Now())
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(export.ID)
@@ -209,6 +233,10 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 		go func(exportID, sourceFilePath string) {
 			defer w.semaphore.Release(1)
 			defer w.inFlight.Delete(exportID)
+			stopBeat := stall.Beat(ctx, stall.HeartbeatInterval, func(ctx context.Context, now time.Time) error {
+				return expReg.Heartbeat(ctx, exportID, now)
+			})
+			defer stopBeat()
 			w.processImport(ctx, exportID, sourceFilePath)
 		}(export.ID, export.FilePath)
 	}

@@ -134,8 +134,24 @@ func (s *StorageQuotaReminderService) RemindOnce(ctx context.Context, now time.T
 	}
 
 	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
+	tenants := newTenantGate(s.factorySet.TenantRegistry)
 	for _, g := range groups {
 		if g == nil {
+			continue
+		}
+		active, err := tenants.active(ctx, g.TenantID)
+		if err != nil {
+			stats.Failed++
+			slog.ErrorContext(ctx, "storage quota reminder: tenant lookup failed",
+				"group_id", g.ID,
+				"tenant_id", g.TenantID,
+				"error", err,
+			)
+			continue
+		}
+		if !active {
+			// Neither a warning nor a reset while the tenant is not
+			// active: the next sweep after it is active again does both.
 			continue
 		}
 		s.processGroup(ctx, fileReg, g, &stats, now)

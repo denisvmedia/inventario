@@ -12066,7 +12066,8 @@ export type paths = {
         };
         /**
          * Get storage usage for a group
-         * @description Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         * @description Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         *     Each file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.
          */
         get: {
             parameters: {

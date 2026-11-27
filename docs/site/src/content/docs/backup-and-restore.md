@@ -46,6 +46,8 @@ A backup keeps an unknown price or purchase date unknown and a zero price zero, 
 
 The export job runs in the background. Inventario takes you to the export's detail page, where the status badge updates on its own — **Pending**, then **In progress**, then **Completed**. The detail page also shows the scope, file size, attachments size, and counts of locations, areas, items, and files included.
 
+If the server stops while an export is in progress, for example because it is restarted for an update, the export is started again about ten minutes later. An export that the server stopped during its third try is marked **Failed** with "the worker stopped before the export finished"; the group's owners and administrators can retry it from the [failed background jobs](../groups-and-sharing/#failed-background-jobs). An uploaded backup that was being read when the server stopped is read again the same way.
+
 ## Download a backup
 
 1. Open the export from the list (or stay on its detail page after creating it).
@@ -216,6 +218,13 @@ A dry run never touches your live data, so make a habit of previewing first, rea
 Every restore — dry run or real — produces a step-by-step log. It opens automatically when the run finishes, and you can reopen it later from the **Restore history** on the export's detail page (**View log**).
 
 The log walks through each step with a result marker so you can see what was created, updated, or skipped, and it flags anything that errored. For a dry run the header reminds you that **No changes were made**; for a real restore it confirms the operation finished.
+
+If the server stops while a restore runs, the restore is marked **Failed** about ten minutes later with "the worker stopped before the restore finished". It is not run again on its own, because it may have changed part of your data already: look at what it restored, then start a new restore.
+
+An item the restore cannot bring back, for example one edited by hand in the
+backup file, counts as an error, and the rest of the restore goes on. A file
+that item shared with other items still comes back with them. A file that only
+such items used is left out and counts as an error too.
 
 ## Manage and delete exports
 

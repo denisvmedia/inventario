@@ -138,3 +138,25 @@ export async function clearPendingFiles(key: string): Promise<void> {
     console.warn("[pending-files] clear failed", err)
   }
 }
+
+// clearPendingFilesWhere drops the staged files of every key match accepts.
+export async function clearPendingFilesWhere(match: (key: string) => boolean): Promise<void> {
+  try {
+    const db = await openDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite")
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error ?? new Error("IDB clear failed"))
+      tx.onabort = () => reject(tx.error ?? new Error("IDB clear aborted"))
+      const store = tx.objectStore(STORE_NAME)
+      const req = store.getAllKeys()
+      req.onsuccess = () => {
+        for (const key of req.result) {
+          if (typeof key === "string" && match(key)) store.delete(key)
+        }
+      }
+    })
+  } catch (err) {
+    console.warn("[pending-files] clear failed", err)
+  }
+}
