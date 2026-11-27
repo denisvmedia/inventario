@@ -23,16 +23,23 @@ import (
 // them there, standing in for the cascades of the postgres registry. The
 // template entries live on the stored definitions, and an entry whose item
 // type is gone is left out when it is read, standing in for the cascade of
-// an item type delete.
+// an item type delete. The open drafts of the draft factory, when one is
+// attached, count as users of a field and lose their entry with it.
 type CustomFieldRegistryFactory struct {
 	base        *Registry[models.CustomFieldDefinition, *models.CustomFieldDefinition]
 	commodities *CommodityRegistryFactory
 	itemTypes   *ItemTypeRegistryFactory
+	drafts      *CommodityDraftRegistryFactory
 	// mu serializes the writes of fields (Lock) against each other and
 	// against the item writes that check values (RLock), as the postgres
-	// row locks do. Lock order: the item type lock, then mu, then the
-	// commodity map's lock.
+	// row locks do. Lock order: the draft writes lock, then the item type
+	// lock, then mu, then the commodity map's lock.
 	mu *sync.RWMutex
+}
+
+// SetDraftFactory attaches the drafts whose values hold field values.
+func (f *CustomFieldRegistryFactory) SetDraftFactory(drafts *CommodityDraftRegistryFactory) {
+	f.drafts = drafts
 }
 
 // CustomFieldRegistry is the context-aware in-memory registry of custom
@@ -542,21 +549,24 @@ func clearRemovedDefaults(templates []models.CustomFieldTemplate, removed []stri
 	return out
 }
 
-// Delete deletes a field no item has a value of.
+// Delete deletes a field that no item and no open draft has a value of.
 func (r *CustomFieldRegistry) Delete(ctx context.Context, id string) error {
 	_, err := r.deleteField(ctx, id, 0)
 	return err
 }
 
-// DeleteWithValues deletes the field with its values.
+// DeleteWithValues deletes the field with its values; the drafts lose their
+// entry of the field.
 func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string, expected int) (int, error) {
 	return r.deleteField(ctx, id, expected)
 }
 
-// deleteField deletes the field and returns how many items had a value of
-// it; when another number of items than expected has one, it fails with
-// ErrCustomFieldInUse instead.
+// deleteField deletes the field and returns how many items and open drafts
+// had a value of it; when another number than expected has one, it fails
+// with ErrCustomFieldInUse instead.
 func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, expected int) (int, error) {
+	unlockDrafts := r.factory.drafts.lockWrites()
+	defer unlockDrafts()
 	r.factory.mu.Lock()
 	defer r.factory.mu.Unlock()
 
@@ -575,14 +585,25 @@ func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, expect
 		}
 		base.lock.RUnlock()
 	}
-	if err := registry.CheckCustomFieldValueCount(id, items, expected); err != nil {
+	drafts := r.factory.drafts.countOpen(stored.GroupID, func(v models.CommodityDraftValues) bool {
+		return models.DraftCustomFieldHasValue(v.DraftCustomFields()[id])
+	})
+	if err := registry.CheckCustomFieldValueCount(id, items, drafts, expected); err != nil {
 		return 0, err
 	}
 	r.factory.dropFieldValues(stored.GroupID, id, nil)
+	r.factory.drafts.rewriteOpen(stored.GroupID, func(v models.CommodityDraftValues) bool {
+		fields := v.DraftCustomFields()
+		if _, ok := fields[id]; !ok {
+			return false
+		}
+		delete(fields, id)
+		return true
+	})
 	if err := r.Registry.Delete(ctx, id); err != nil {
 		return 0, errxtrace.Wrap("failed to delete custom field", err)
 	}
-	return items, nil
+	return items + drafts, nil
 }
 
 func (r *CustomFieldRegistry) Usage(ctx context.Context) (map[string]registry.CustomFieldUsage, error) {
@@ -624,5 +645,15 @@ func (r *CustomFieldRegistry) Usage(ctx context.Context) (map[string]registry.Cu
 			usage[id] = u
 		}
 	}
+	r.factory.drafts.eachOpen(r.groupID, func(v models.CommodityDraftValues) {
+		for id, entry := range v.DraftCustomFields() {
+			if byID[id] == nil || !models.DraftCustomFieldHasValue(entry) {
+				continue
+			}
+			u := usage[id]
+			u.Drafts++
+			usage[id] = u
+		}
+	})
 	return usage, nil
 }

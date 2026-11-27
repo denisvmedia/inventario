@@ -24,6 +24,7 @@ export function field(
     templates: [],
     item_count: 0,
     trashed_item_count: 0,
+    draft_count: 0,
     ...overrides,
   }
 }
@@ -80,14 +81,14 @@ export function remove(
   slug: string,
   fieldID: string,
   calls: string[] = [],
-  counts?: { live: number; trashed: number }
+  counts?: { live: number; trashed: number; drafts?: number }
 ) {
   return [
     http.delete(groupPath(slug, `/${encodeURIComponent(fieldID)}`), ({ request }) => {
       const params = new URL(request.url).searchParams
       calls.push(params.toString())
       const expected = params.get("expected_values")
-      const total = counts ? counts.live + counts.trashed : 0
+      const total = counts ? counts.live + counts.trashed + (counts.drafts ?? 0) : 0
       if (
         counts &&
         (params.get("delete_values") !== "true" ||
@@ -100,7 +101,11 @@ export function remove(
                 status: "Conflict",
                 code: "custom_field.in_use",
                 detail: "items have values for this field",
-                meta: { item_count: counts.live, trashed_item_count: counts.trashed },
+                meta: {
+                  item_count: counts.live,
+                  trashed_item_count: counts.trashed,
+                  draft_count: counts.drafts ?? 0,
+                },
               },
             ],
           },
@@ -108,7 +113,7 @@ export function remove(
         )
       }
       return HttpResponse.json({
-        meta: { deleted_values: counts ? counts.live + counts.trashed : 0 },
+        meta: { deleted_values: total },
       })
     }),
   ]

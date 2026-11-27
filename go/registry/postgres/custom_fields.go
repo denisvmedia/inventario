@@ -329,52 +329,72 @@ func (r *CustomFieldRegistry) dropRemovedOptionsInTx(ctx context.Context, tx *sq
 	return nil
 }
 
-// Delete deletes a field no item has a value of.
+// Delete deletes a field that no item and no open draft has a value of.
 func (r *CustomFieldRegistry) Delete(ctx context.Context, id string) error {
 	_, err := r.deleteField(ctx, id, 0)
 	return err
 }
 
 // DeleteWithValues deletes the field, its values and its template entries;
-// the foreign keys cascade.
+// the foreign keys cascade. The drafts lose their entry of the field.
 func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string, expected int) (int, error) {
 	return r.deleteField(ctx, id, expected)
 }
 
-// deleteField deletes the field and returns how many items had a value of
-// it. When another number of items than expected has one, it fails with
-// ErrCustomFieldInUse and deletes nothing. The field's row is locked FOR
+// deleteField deletes the field and returns how many items and open drafts
+// had a value of it. When another number than expected has one, it fails
+// with ErrCustomFieldInUse and deletes nothing. The rows of the open drafts
+// that have an entry of the field are locked first, as a promotion locks its
+// draft before the fields of the item; then the field's row is locked FOR
 // UPDATE before the values are counted, so an item write that sets a value
 // of the field either commits first and is counted, or waits and then finds
 // the field gone.
 func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, expected int) (int, error) {
-	items := 0
+	used := 0
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		var stored models.CustomFieldDefinition
-		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.CustomFieldDefinitions())
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, r.tableNames.CustomFieldDefinitions())
+		if err := scanOne(ctx, tx, &stored, query, id); err != nil {
+			return errxtrace.Wrap("failed to get custom field", err, errx.Attrs("custom_field_id", id))
+		}
+		drafts := r.tableNames.CommodityDrafts()
+		if err := lockDraftsWithFieldInTx(ctx, tx, drafts, stored.GroupID, id); err != nil {
+			return err
+		}
+		query = fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.CustomFieldDefinitions())
 		if err := scanOne(ctx, tx, &stored, query, id); err != nil {
 			return errxtrace.Wrap("failed to lock custom field", err, errx.Attrs("custom_field_id", id))
 		}
+		items := 0
 		count := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE field_id = $1`, r.tableNames.CustomFieldValues())
 		if err := tx.GetContext(ctx, &items, count, id); err != nil {
 			return errxtrace.Wrap("failed to count custom field values", err)
 		}
-		if err := registry.CheckCustomFieldValueCount(id, items, expected); err != nil {
+		draftValues, err := countDraftValuesInTx(ctx, tx, drafts, stored.GroupID, id)
+		if err != nil {
+			return err
+		}
+		if err := registry.CheckCustomFieldValueCount(id, items, draftValues, expected); err != nil {
+			return err
+		}
+		if err := dropDraftFieldInTx(ctx, tx, drafts, stored.GroupID, id); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, r.tableNames.CustomFieldDefinitions()), id); err != nil {
 			return errxtrace.Wrap("failed to delete custom field", err)
 		}
+		used = items + draftValues
 		return nil
 	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to delete custom field", err)
 	}
-	return items, nil
+	return used, nil
 }
 
 // Usage counts, per field, the items with a value, apart for live and
-// trashed items, and per option of a select field.
+// trashed items, and per option of a select field, and the open drafts with
+// a value.
 func (r *CustomFieldRegistry) Usage(ctx context.Context) (map[string]registry.CustomFieldUsage, error) {
 	usage := map[string]registry.CustomFieldUsage{}
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -399,6 +419,15 @@ func (r *CustomFieldRegistry) Usage(ctx context.Context) (map[string]registry.Cu
 		}
 		if err := rows.Err(); err != nil {
 			return err
+		}
+		drafts, err := countDraftValuesPerFieldInTx(ctx, tx, r.tableNames.CommodityDrafts())
+		if err != nil {
+			return err
+		}
+		for id, n := range drafts {
+			u := usage[id]
+			u.Drafts = n
+			usage[id] = u
 		}
 		return r.countOptionsInTx(ctx, tx, usage)
 	})

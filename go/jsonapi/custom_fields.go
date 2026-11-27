@@ -32,10 +32,13 @@ type CustomFieldView struct {
 	Templates []models.CustomFieldTemplate `json:"templates"`
 	// ItemCount and TrashedItemCount are the items with a value of the
 	// field. Deleting the field deletes those values.
-	ItemCount        int       `json:"item_count" example:"3" format:"int64"`
-	TrashedItemCount int       `json:"trashed_item_count" example:"0" format:"int64"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ItemCount        int `json:"item_count" example:"3" format:"int64"`
+	TrashedItemCount int `json:"trashed_item_count" example:"0" format:"int64"`
+	// DraftCount is the number of unfinished drafts with a value of the
+	// field. Deleting the field takes the value out of them too.
+	DraftCount int       `json:"draft_count" example:"0" format:"int64"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func newCustomFieldView(d *models.CustomFieldDefinition, usage registry.CustomFieldUsage) CustomFieldView {
@@ -54,6 +57,7 @@ func newCustomFieldView(d *models.CustomFieldDefinition, usage registry.CustomFi
 		Templates:        templates,
 		ItemCount:        usage.Live,
 		TrashedItemCount: usage.Trashed,
+		DraftCount:       usage.Drafts,
 		CreatedAt:        d.CreatedAt,
 		UpdatedAt:        d.UpdatedAt,
 	}

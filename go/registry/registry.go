@@ -2038,18 +2038,28 @@ type SellerRegistry interface {
 	ItemCounts(ctx context.Context) (map[string]int, error)
 }
 
-// ItemTypeUsage counts the items of a group that have one item type.
+// ItemTypeUsage counts the items and the open drafts of a group that have
+// one item type.
 type ItemTypeUsage struct {
 	// Live counts the items outside Trash, drafts and inactive items
 	// included.
 	Live int
 	// Trashed counts the items in Trash.
 	Trashed int
+	// Drafts counts the open drafts (CommodityDraftRegistry) whose values
+	// name the type.
+	Drafts int
 }
 
 // Total is the number of items, in Trash or not, that have the type.
 func (u ItemTypeUsage) Total() int {
 	return u.Live + u.Trashed
+}
+
+// InUse reports whether an item, in Trash or not, or an open draft has the
+// type.
+func (u ItemTypeUsage) InUse() bool {
+	return u.Total() > 0 || u.Drafts > 0
 }
 
 // ItemTypeRegistry is the group-scoped registry of item types (#2802).
@@ -2077,17 +2087,20 @@ type ItemTypeRegistry interface {
 	// English default name.
 	GetByName(ctx context.Context, name string) (*models.ItemType, error)
 
-	// ItemCounts returns, per type slug, how many items of the group have
-	// that type. A slug without items is absent from the map.
+	// ItemCounts returns, per type slug, how many items and open drafts of
+	// the group have that type. A slug that neither has is absent from the
+	// map.
 	ItemCounts(ctx context.Context) (map[models.CommodityType]ItemTypeUsage, error)
 
 	// DeleteReassigning deletes the type with id. When items of the group,
-	// those in Trash included, have it, they are first given the type
-	// reassignTo, in the same transaction, and the count of moved items is
-	// returned; with an empty reassignTo the delete fails with
-	// ErrItemTypeInUse instead. A reassignTo that is not another type of
-	// the group fails with ErrInvalidInput. The last type of a group cannot
-	// be deleted (ErrLastItemType).
+	// those in Trash included, or its open drafts have it, they are first
+	// given the type reassignTo, in the same transaction, and the count of
+	// moved items is returned; each moved draft gets a new revision, so a
+	// save from a tab that loaded it before is refused. With an empty
+	// reassignTo the delete fails with ErrItemTypeInUse instead. A
+	// reassignTo that is not another type of the group fails with
+	// ErrInvalidInput. The last type of a group cannot be deleted
+	// (ErrLastItemType).
 	DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error)
 
 	// EnsureBuiltins seeds the built-in types into the registry's group when
@@ -2100,14 +2113,17 @@ type ItemTypeRegistry interface {
 	BackfillBuiltins(ctx context.Context) (int, error)
 }
 
-// CustomFieldUsage counts the items of a group that have a value for one
-// custom field.
+// CustomFieldUsage counts the items and the open drafts of a group that
+// have a value for one custom field.
 type CustomFieldUsage struct {
 	// Live counts the items outside Trash, drafts and inactive items
 	// included.
 	Live int
 	// Trashed counts the items in Trash.
 	Trashed int
+	// Drafts counts the open drafts (CommodityDraftRegistry) that hold a
+	// value of the field (models.DraftCustomFieldHasValue).
+	Drafts int
 	// Options counts, for a select field, the items with each option ID,
 	// those in Trash included. Nil for other types.
 	Options map[string]int
@@ -2116,6 +2132,12 @@ type CustomFieldUsage struct {
 // Total is the number of items, in Trash or not, that have a value.
 func (u CustomFieldUsage) Total() int {
 	return u.Live + u.Trashed
+}
+
+// InUse reports whether an item, in Trash or not, or an open draft has a
+// value of the field.
+func (u CustomFieldUsage) InUse() bool {
+	return u.Total() > 0 || u.Drafts > 0
 }
 
 // CustomFieldRegistry is the group-scoped registry of custom field
@@ -2132,9 +2154,9 @@ func (u CustomFieldUsage) Total() int {
 // template defaults that name them. Get and List return the definitions
 // with their templates; List orders them by name key, then ID.
 //
-// Delete deletes a field no item has a value of; a field that items, those
-// in Trash included, have a value of fails with ErrCustomFieldInUse and
-// nothing is deleted.
+// Delete deletes a field that no item and no open draft has a value of; a
+// field that items, those in Trash included, or open drafts have a value of
+// fails with ErrCustomFieldInUse and nothing is deleted.
 type CustomFieldRegistry interface {
 	Registry[models.CustomFieldDefinition]
 
@@ -2142,15 +2164,19 @@ type CustomFieldRegistry interface {
 	// or ErrNotFound.
 	GetByName(ctx context.Context, name string) (*models.CustomFieldDefinition, error)
 
-	// Usage returns, per field ID, how many items of the group have a
-	// value for the field. A field without values is absent from the map.
+	// Usage returns, per field ID, how many items and open drafts of the
+	// group have a value for the field. A field without values is absent
+	// from the map.
 	Usage(ctx context.Context) (map[string]CustomFieldUsage, error)
 
 	// DeleteWithValues deletes the field with id together with its values
 	// and template entries, in one transaction, and returns how many items
-	// had a value. expected is how many items the caller confirmed to lose
-	// a value, or AnyValueCount; when another number of items has a value,
-	// it fails with ErrCustomFieldInUse and nothing is deleted.
+	// and open drafts had a value. It also takes the field's entry out of
+	// every open draft that has one, value or not, and gives each such
+	// draft a new revision. expected is how many items and drafts together
+	// the caller confirmed to lose a value, or AnyValueCount; when another
+	// number has a value, it fails with ErrCustomFieldInUse and nothing is
+	// deleted.
 	DeleteWithValues(ctx context.Context, id string, expected int) (int, error)
 
 	// AddTemplates puts the field with id on the template of each item

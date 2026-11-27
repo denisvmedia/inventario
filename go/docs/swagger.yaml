@@ -3042,6 +3042,13 @@ definitions:
     properties:
       created_at:
         type: string
+      draft_count:
+        description: |-
+          DraftCount is the number of unfinished drafts with a value of the
+          field. Deleting the field takes the value out of them too.
+        example: 0
+        format: int64
+        type: integer
       item_count:
         description: |-
           ItemCount and TrashedItemCount are the items with a value of the
@@ -4208,6 +4215,13 @@ definitions:
           taken.
         example: 5d2e...
         type: string
+      draft_count:
+        description: |-
+          DraftCount is the number of unfinished drafts with a value of the
+          field.
+        example: 0
+        format: int64
+        type: integer
       field_type:
         description: |-
           FieldType is the type of the group's field, or the set's type for a
@@ -4224,8 +4238,8 @@ definitions:
       keep_reason:
         description: |-
           KeepReason says why removing the set keeps a field the group has:
-          own or in_use (items have a value of it). Absent when the field is
-          removable or missing.
+          own or in_use (items or drafts have a value of it). Absent when the
+          field is removable or missing.
         enum:
         - own
         - in_use
@@ -4275,6 +4289,11 @@ definitions:
     type: object
   jsonapi.ItemSetItemTypeView:
     properties:
+      draft_count:
+        description: DraftCount is the number of unfinished drafts that have the type.
+        example: 0
+        format: int64
+        type: integer
       icon:
         example: coins
         type: string
@@ -4291,9 +4310,9 @@ definitions:
       keep_reason:
         description: |-
           KeepReason says why removing the set keeps a type the group has:
-          own (a member made it), in_use (items have it, in Trash or not) or
-          last_type (a group keeps at least one type). Absent when the type is
-          removable or missing.
+          own (a member made it), in_use (items, in Trash or not, or drafts have
+          it) or last_type (a group keeps at least one type). Absent when the
+          type is removable or missing.
         enum:
         - own
         - in_use
@@ -4536,6 +4555,13 @@ definitions:
         type: boolean
       created_at:
         type: string
+      draft_count:
+        description: |-
+          DraftCount is the number of unfinished drafts with this type.
+          Deleting the type moves them along with the items.
+        example: 0
+        format: int64
+        type: integer
       icon:
         example: laptop
         type: string
@@ -12268,7 +12294,7 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+        The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;
         each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
       parameters:
       - description: Group slug
@@ -12328,8 +12354,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
-        unless delete_values=true; then its values are deleted with it, in the same transaction.
+        Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,
+        unless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.
       parameters:
       - description: Group slug
         in: path
@@ -12345,9 +12371,9 @@ paths:
         in: query
         name: delete_values
         type: boolean
-      - description: 'With delete_values=true: how many items the member confirmed
-          to lose a value. When another number of items has one, the delete is refused
-          with 409 custom_field.in_use and the counts in meta'
+      - description: 'With delete_values=true: how many items and drafts together
+          the member confirmed to lose a value. When another number has one, the delete
+          is refused with 409 custom_field.in_use and the counts'
         in: query
         name: expected_values
         type: integer
@@ -12355,7 +12381,8 @@ paths:
       - application/vnd.api+json
       responses:
         "200":
-          description: Deleted; meta.deleted_values counts the values removed
+          description: Deleted; meta.deleted_values counts the values removed, those
+            of drafts included
           schema:
             $ref: '#/definitions/jsonapi.CustomFieldDeleteResponse'
         "404":
@@ -12363,8 +12390,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "409":
-          description: Items have a value of the field and delete_values was not true,
-            or expected_values is not how many items have one
+          description: Items or drafts have a value of the field and delete_values
+            was not true, or expected_values is not how many have one
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -14244,7 +14271,7 @@ paths:
       - application/vnd.api+json
       description: |-
         The item types of the group: the built-in ones first in their fixed order, then the others by name.
-        Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+        Each carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.
       parameters:
       - description: Group slug
         in: path
@@ -14304,8 +14331,9 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
-        then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+        Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta
+        unless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,
+        and each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).
       parameters:
       - description: Group slug
         in: path
@@ -14333,8 +14361,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "409":
-          description: The type is in use and no reassign_to was given, or it is the
-            group's last type
+          description: Items or drafts have the type and no reassign_to was given,
+            or it is the group's last type
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":

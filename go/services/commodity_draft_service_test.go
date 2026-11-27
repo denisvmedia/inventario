@@ -122,20 +122,21 @@ func TestCommodityDraftService_Create_AcceptsIncompleteValues(t *testing.T) {
 	c.Assert(draft.Values.Title(), qt.Equals, "")
 }
 
-// TestCommodityDraftService_Create_ReplayAfterTheTypeWasDeleted: a repeated
+// TestCommodityDraftService_Create_ReplayWithATypeTheGroupLacks: a repeated
 // create with a key the group already has returns that draft, even when the
-// type in its values was deleted since. A new draft with that type is
-// refused, and a key whose draft is being discarded stays refused.
-func TestCommodityDraftService_Create_ReplayAfterTheTypeWasDeleted(t *testing.T) {
+// group has no type of the slug in its values. A save that raced the type's
+// delete leaves such a draft; the delete itself moves or refuses the drafts
+// that name the type. A new draft with that type is refused, and a key whose
+// draft is being discarded stays refused.
+func TestCommodityDraftService_Create_ReplayWithATypeTheGroupLacks(t *testing.T) {
 	c := qt.New(t)
 	f := newDraftFixture(c)
-	boat := must.Must(f.regs.ItemTypeRegistry.Create(f.ctx, models.ItemType{Name: "Boat"}))
-	values := models.CommodityDraftValues{"name": "Dinghy", "type": string(boat.Slug)}
-	first, created, err := f.drafts.Create(f.ctx, "replayed-key", values)
+	values := models.CommodityDraftValues{"name": "Dinghy", "type": "boat"}
+	_, err := f.regs.ItemTypeRegistry.GetBySlug(f.ctx, "boat")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	first, created, err := f.regs.CommodityDraftRegistry.CreateOrGet(f.ctx, models.CommodityDraft{ClientKey: "replayed-key", Values: values})
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsTrue)
-
-	c.Assert(f.regs.ItemTypeRegistry.Delete(f.ctx, boat.ID), qt.IsNil)
 
 	replayed, created, err := f.drafts.Create(f.ctx, "replayed-key", values)
 	c.Assert(err, qt.IsNil)
