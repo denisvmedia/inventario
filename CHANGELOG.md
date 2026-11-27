@@ -743,6 +743,12 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `inventario run apiserver` and `inventario run all` exit with status 1 and
+  the bind error when the API address or the probe address is already taken.
+  They logged the error and then panicked with `close of closed channel`,
+  exiting with status 2, so the panic is what log alerting and the pod's last
+  state showed
+  ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
   each retry and discard to the audit log. Two metrics come with it:
