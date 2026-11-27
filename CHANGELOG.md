@@ -606,6 +606,18 @@ when to add an entry and where it goes.
   `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
   `failed_before` filter
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
+- Custom field values from a batch scan. **Add from files** offers the
+  group's custom fields to the AI scan, as **Fill with AI** does, and the
+  review page lists the values it read for each product after the item
+  fields, with their confidence. A value read with a confidence of 30% or
+  more starts ticked, and each draft gets the ticked values. A value the
+  field cannot hold is not listed, and neither is a value of a field
+  deleted after the scan or of a choice removed since; no draft gets it.
+  A NUL character in scanned text is dropped, since PostgreSQL cannot
+  store it. In the API, an intake candidate carries `custom_fields` and
+  `accepted_custom_fields`, and a candidate review takes
+  `accepted_custom_fields`
+  ([#2880](https://github.com/denisvmedia/inventario/issues/2880)).
 - Failed personal data exports are failed jobs too. The back office
   **Failed jobs** page and `inventario jobs failed` list them as
   `personal-data-export`, with the user's email address as the title and no

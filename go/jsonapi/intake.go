@@ -208,12 +208,15 @@ type IntakeCandidateReviewRequestData struct {
 }
 
 // IntakeCandidateReviewAttrs is a member's review of a detected product:
-// whether to keep it, the scanned fields that go into its draft, and the
-// number of identical units it covers.
+// whether to keep it, the scanned fields and custom fields that go into its
+// draft, and the number of identical units it covers.
 type IntakeCandidateReviewAttrs struct {
 	Selected       *bool     `json:"selected,omitempty" example:"true"`
 	AcceptedFields *[]string `json:"accepted_fields,omitempty"`
-	Quantity       *int      `json:"quantity,omitempty" example:"1"`
+	// AcceptedCustomFields are the IDs of the custom fields whose scanned
+	// value goes into the draft; each must be one the scan read a value for.
+	AcceptedCustomFields *[]string `json:"accepted_custom_fields,omitempty"`
+	Quantity             *int      `json:"quantity,omitempty" example:"1"`
 }
 
 func (d *IntakeCandidateReviewRequestData) ValidateWithContext(ctx context.Context) error {

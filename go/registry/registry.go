@@ -1817,7 +1817,10 @@ type IntakeFileUpdate struct {
 type IntakeCandidateReview struct {
 	Selected       *bool
 	AcceptedFields *[]string
-	Quantity       *int
+	// AcceptedCustomFields are the IDs of the custom fields whose scanned
+	// value goes into the draft.
+	AcceptedCustomFields *[]string
+	Quantity             *int
 }
 
 // IntakeSweep is what one SweepStuckSources changed.

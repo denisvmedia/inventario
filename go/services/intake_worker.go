@@ -262,10 +262,12 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		return
 	}
 
+	scanFields, fieldDefs := w.customFields(author.ctx, log)
 	input := ScanInput{
 		Photos:                files.photos,
 		PreferredCurrencyCode: string(author.group.GroupCurrency),
 		ItemTypes:             w.itemTypes(author.ctx, log),
+		CustomFields:          scanFields,
 	}
 	if src.OneItem {
 		input.HintFromUser = intakeOneItemHint
@@ -276,7 +278,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		return
 	}
 
-	candidates := intakeCandidatesFromScan(result)
+	candidates := intakeCandidatesFromScan(result, fieldDefs)
 	if src.OneItem && len(candidates) > 1 {
 		// The files show one item: keep the most prominent product.
 		candidates = candidates[:1]
@@ -358,6 +360,26 @@ func (w *IntakeWorker) itemTypes(ctx context.Context, log *slog.Logger) []ScanIt
 	}
 	log.WarnContext(ctx, "Intake worker: item types unavailable, offering the built-in ones", "error", err)
 	return nil
+}
+
+// customFields lists the group's custom fields for the scan to fill, as the
+// single-item scan offers them, with the definitions by ID that check the
+// values it reads. When the list cannot be read the scan goes on without
+// them.
+func (w *IntakeWorker) customFields(ctx context.Context, log *slog.Logger) ([]ScanCustomField, map[string]*models.CustomFieldDefinition) {
+	reg, err := w.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(ctx)
+	if err == nil {
+		var defs []*models.CustomFieldDefinition
+		if defs, err = reg.List(ctx); err == nil {
+			byID := make(map[string]*models.CustomFieldDefinition, len(defs))
+			for _, d := range defs {
+				byID[d.ID] = d
+			}
+			return ScanCustomFields(defs), byID
+		}
+	}
+	log.WarnContext(ctx, "Intake worker: custom fields unavailable, scanning without them", "error", err)
+	return nil, nil
 }
 
 // intakeFiles are the files of a source as the scan gets them.

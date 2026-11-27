@@ -397,7 +397,9 @@ func (api *intakeAPI) reviewCandidate(w http.ResponseWriter, r *http.Request) {
 	}
 	attrs := input.Data.Attributes
 	cand, err := api.service.ReviewCandidate(r.Context(), chi.URLParam(r, "sessionID"), chi.URLParam(r, "candidateID"),
-		registry.IntakeCandidateReview{Selected: attrs.Selected, AcceptedFields: attrs.AcceptedFields, Quantity: attrs.Quantity})
+		registry.IntakeCandidateReview{
+			Selected: attrs.Selected, AcceptedFields: attrs.AcceptedFields, AcceptedCustomFields: attrs.AcceptedCustomFields, Quantity: attrs.Quantity,
+		})
 	if err != nil {
 		renderIntakeError(w, r, err)
 		return

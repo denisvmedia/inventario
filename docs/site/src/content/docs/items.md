@@ -142,7 +142,10 @@ of the whole line.
 
 - Tick the products you want to keep. Every product starts ticked.
 - Change the **Quantity** if the scan read it wrong.
-- Open **N fields used** to see each value the scan read, with its confidence.
+- Open **N fields used** to see each value the scan read, with its confidence,
+  then the values it read for your group's
+  [custom fields](../custom-fields/#custom-fields-read-by-ai) under each
+  field's name. A value read with a confidence under 30% starts unticked.
   Untick a value to leave that field empty in the draft. A value the scan did
   not read stays empty too: an unknown price is not a price of 0. See
   [Unknown is not zero](#unknown-is-not-zero).

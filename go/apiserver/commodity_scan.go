@@ -422,15 +422,7 @@ func scanCustomFieldsFromContext(ctx context.Context) []services.ScanCustomField
 		slog.WarnContext(ctx, "commodity scan: custom fields unavailable, scanning without them", "error", err.Error())
 		return nil
 	}
-	out := make([]services.ScanCustomField, 0, len(defs))
-	for _, d := range defs {
-		f := services.ScanCustomField{ID: d.ID, Name: d.Name, Type: string(d.Type)}
-		for _, o := range d.Options {
-			f.Options = append(f.Options, services.ScanCustomFieldOption{ID: o.ID, Label: o.Label})
-		}
-		out = append(out, f)
-	}
-	return out
+	return services.ScanCustomFields(defs)
 }
 
 // errBadMultipart is the sentinel wrapper for multipart-parsing errors.
