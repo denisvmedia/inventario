@@ -1146,6 +1146,15 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- Item status labels are easier to read in light mode: on the status pills,
+  the status card on an item page and the Change Status buttons. Their colors
+  reached 1.9:1 to 3.2:1 against the pill, below the 4.5:1 that text needs,
+  and Lost fell short in dark mode too. Each status now has a color of its
+  own that reaches 4.5:1 in both modes, the same on the pill and the button:
+  In Use green, Sold teal, Lost amber, Disposed gray, Written Off red,
+  Donated blue, Stolen pink. Before, Disposed and Written Off looked the
+  same, and the buttons colored Sold, Lost and Written Off differently from
+  the pills ([#2926](https://github.com/denisvmedia/inventario/issues/2926)).
 
 ### Security
 

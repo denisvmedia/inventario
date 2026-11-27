@@ -973,16 +973,16 @@ describe("<CommodityDetailPage />", () => {
         .map((b) => b.textContent)
     ).toEqual(["Sold", "Lost", "Disposed", "Written Off", "Donated", "Stolen"])
     expect(within(bar).getByTestId("commodity-detail-transition-donated")).toHaveClass(
-      "text-chart-3"
+      "text-item-status-donated"
     )
     expect(within(bar).getByTestId("commodity-detail-transition-stolen")).toHaveClass(
-      "text-chart-4"
+      "text-item-status-stolen"
     )
   })
 
   it.each([
-    ["donated", "Donated", "text-chart-3"],
-    ["stolen", "Stolen", "text-chart-4"],
+    ["donated", "Donated", "text-item-status-donated"],
+    ["stolen", "Stolen", "text-item-status-stolen"],
   ])("shows a %s item's status card in its own tone", async (status, label, tone) => {
     server.use(
       ...groupHandlers.list(groupFixture),

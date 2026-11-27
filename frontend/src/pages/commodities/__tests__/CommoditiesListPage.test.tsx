@@ -528,8 +528,8 @@ describe("<CommoditiesListPage />", () => {
     )
     renderList()
     const cards = await screen.findAllByTestId("commodity-card")
-    expect(within(cards[0]).getByText("Donated")).toHaveClass("text-chart-3")
-    expect(within(cards[1]).getByText("Stolen")).toHaveClass("text-chart-4")
+    expect(within(cards[0]).getByText("Donated")).toHaveClass("text-item-status-donated")
+    expect(within(cards[1]).getByText("Stolen")).toHaveClass("text-item-status-stolen")
 
     await user.click(screen.getByTestId("commodities-filter-status"))
     const options = await screen.findAllByRole("menuitemcheckbox")
