@@ -607,6 +607,13 @@ func TestCommodityCoverPatch_KeepsAChangeSavedMeanwhile(t *testing.T) {
 	c.Assert(got.CoverFileID, qt.IsNotNil)
 	c.Check(*got.CoverFileID, qt.Equals, target.ID)
 	c.Check(got.Comments, qt.Equals, "saved meanwhile")
+
+	// The history records the cover change only: the comment written
+	// meanwhile is not this request's change.
+	events, _ := must.Must2(registrySet.CommodityEventRegistry.ListByCommodity(context.Background(), commodity.ID, 0, 50, registry.CommodityEventListOptions{}))
+	c.Assert(events, qt.HasLen, 1)
+	c.Check(events[0].Kind, qt.Equals, models.CommodityEventKindCoverChanged)
+	c.Check(events[0].After["cover_file_id"], qt.Equals, target.ID)
 }
 
 func TestCommodityCoverPatch_RejectsForeignFile(t *testing.T) {

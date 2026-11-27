@@ -3711,6 +3711,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Non-empty area (no strategy) or unknown strategy",
                         "schema": {
@@ -4706,6 +4712,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Commodity or file not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item was written meanwhile and kept changing on every retry",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7900,6 +7912,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Export or intake link",
                         "schema": {
@@ -9281,6 +9299,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

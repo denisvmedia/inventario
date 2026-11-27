@@ -172,6 +172,7 @@ func (api *locationsAPI) createLocation(w http.ResponseWriter, r *http.Request) 
 // @Param strategy query string false "Non-empty-location strategy: cascade deletes the commodities, unlink keeps them area-less. Omit to reject a non-empty location." Enums(cascade, unlink)
 // @Success 204 "No content"
 // @Failure 404 {object} jsonapi.Errors "Location not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry"
 // @Failure 422 {object} jsonapi.Errors "Non-empty location (no strategy) or unknown strategy"
 // @Router /g/{groupSlug}/locations/{locationID} [delete].
 func (api *locationsAPI) deleteLocation(w http.ResponseWriter, r *http.Request) {

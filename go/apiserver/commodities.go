@@ -623,6 +623,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Param body body jsonapi.CommodityCoverRequest true "Cover photo file id (null to clear)"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or file not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item was written meanwhile and kept changing on every retry"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/commodities/{commodityID}/cover [patch].
 func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Request) {

@@ -4904,6 +4904,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Non-empty area (no strategy) or unknown strategy */
                 422: {
                     headers: {
@@ -5797,6 +5806,15 @@ export type paths = {
                 };
                 /** @description Commodity or file not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: the item was written meanwhile and kept changing on every retry */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -9139,6 +9157,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Export or intake link */
                 422: {
                     headers: {
@@ -10730,6 +10757,15 @@ export type paths = {
                 };
                 /** @description Location not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };

@@ -10547,6 +10547,11 @@ paths:
           description: Area not found
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: with strategy=unlink, an item
+            of the area was written meanwhile and kept changing on every retry'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Non-empty area (no strategy) or unknown strategy
           schema:
@@ -10945,6 +10950,11 @@ paths:
             $ref: '#/definitions/jsonapi.CommodityResponse'
         "404":
           description: Commodity or file not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item was written meanwhile
+            and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -13510,6 +13520,11 @@ paths:
           description: File or link not found
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item that has the file as
+            its cover was written meanwhile and kept changing on every retry'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Export or intake link
           schema:
@@ -14582,6 +14597,11 @@ paths:
           description: No content
         "404":
           description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: with strategy=unlink, an item
+            of the location was written meanwhile and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
