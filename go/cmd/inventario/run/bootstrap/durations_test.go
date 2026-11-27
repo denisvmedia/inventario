@@ -53,6 +53,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 		MaintenanceReminderInterval:      "55m",
 		ItemReminderInterval:             "35m",
 		CurrencyMigrationInterval:        "8s",
+		CurrencyMigrationRetention:       "720h",
 		BusinessMetricsInterval:          "90s",
 		OrphanFileGCInterval:             "12h",
 		OrphanFileGCMinAge:               "48h",
@@ -86,6 +87,7 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.MaintenanceReminderInterval, qt.Equals, 55*time.Minute)
 	c.Assert(got.ItemReminderInterval, qt.Equals, 35*time.Minute)
 	c.Assert(got.CurrencyMigrationInterval, qt.Equals, 8*time.Second)
+	c.Assert(got.CurrencyMigrationRetention, qt.Equals, 720*time.Hour)
 	c.Assert(got.BusinessMetricsInterval, qt.Equals, 90*time.Second)
 	c.Assert(got.OrphanFileGCInterval, qt.Equals, 12*time.Hour)
 	c.Assert(got.OrphanFileGCMinAge, qt.Equals, 48*time.Hour)
@@ -271,4 +273,44 @@ func TestParseWorkerDurations_TrashRetentionMustBePositive(t *testing.T) {
 	_, err := bootstrap.ParseWorkerDurations(cfg)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "trash-retention")
+}
+
+func TestParseWorkerDurations_CurrencyMigrationRetentionDefault(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+
+	got, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.CurrencyMigrationRetention, qt.Equals, 90*24*time.Hour)
+}
+
+// The daily cap counts a group's completed migrations since UTC midnight, so
+// a retention under a day is refused at startup (#2944).
+func TestParseWorkerDurations_CurrencyMigrationRetentionIsAtLeastADay(t *testing.T) {
+	for _, value := range []string{"1h", "23h59m59s"} {
+		t.Run(value, func(t *testing.T) {
+			c := qt.New(t)
+
+			cfg := &bootstrap.Config{}
+			cfg.SetDefaults()
+			cfg.CurrencyMigrationRetention = value
+
+			_, err := bootstrap.ParseWorkerDurations(cfg)
+			c.Assert(err, qt.ErrorMatches, `invalid --currency-migration-retention .*: must be at least 24h0m0s`)
+		})
+	}
+}
+
+func TestParseWorkerDurations_CurrencyMigrationRetentionFloorIsInclusive(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+	cfg.CurrencyMigrationRetention = "24h"
+
+	got, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.CurrencyMigrationRetention, qt.Equals, 24*time.Hour)
 }
