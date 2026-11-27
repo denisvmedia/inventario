@@ -189,6 +189,7 @@ func (r *CommodityRegistry) SetDraft(_ context.Context, id string, draft bool, c
 	}
 	next := copyOut(c)
 	next.Draft = draft
+	next.Revision++
 	if check != nil {
 		if err := check(*copyOut(next)); err != nil {
 			return nil, nil, err
@@ -276,6 +277,7 @@ func (r *CommodityRegistry) rewriteTrashedTags(fn func(models.ValuerSlice[string
 		if changed, tags := fn(c.Tags); changed {
 			next := *c
 			next.Tags = tags
+			next.Revision++
 			r.items.Set(c.ID, &next)
 		}
 	}

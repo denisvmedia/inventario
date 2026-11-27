@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-27 — Item edit form: a save refused because the item changed meanwhile
+
+- **Issue/PR**: #2981
+- **Mock**: `ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (L429–L593) saves with **Save Changes** and has no error state; the mock never refuses a save.
+- **Reality**: When the server refuses a save with 409 `commodity.revision_conflict` (the item was written after the form opened), `frontend/src/components/items/CommodityEditForm.tsx` keeps what was typed and shows a destructive `Alert` above the hidden-field alert: "This item changed since you opened it, so your changes were not saved. Reload it to see the item as it is now, then make your changes again." with an outline `sm` **Reload** button (`RefreshCw` icon). Reload reads the item again and opens a fresh form on it. The **All fields** dialog shows the same refusal in its server-error banner and asks to close the dialog and reload; the edit form under it shows the alert. A quick edit or a status change refused this way shows an error toast instead, and the page shows the item as it is now.
+- **Why**: Not present in mock. A save from a form opened before a bulk change would undo that change; the refusal needs a visible state and a way out. Fallback: the destructive `Alert` of [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (L629–L633), with an outline `sm` button as the form's other alert has.
+- **Approved by**: user (explicit) — pre-approved for #2981 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a conflict state for the edit form; otherwise permanent.
+
 #### 2026-11-27 — Item edit dialog: status shown, not changed
 
 - **Issue/PR**: #2915 / PR #2954

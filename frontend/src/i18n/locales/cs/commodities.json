@@ -418,6 +418,7 @@
     "filesNotUploaded": "Nenahráno: {{names}}",
     "fileUploadFailed": "Soubor {{name}} se nepodařilo nahrát. Můžete jej připojit později ze stránky s podrobnostmi položky.",
     "fillManually": "Vyplnit ručně",
+    "itemChanged": "Položka se od otevření formuláře změnila, proto se nic neuložilo. Zavřete tento dialog a položku načtěte znovu.",
     "leftoverFilesFailed_few": "{{count}} nahrané soubory se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
     "leftoverFilesFailed_many": "{{count}} nahraného souboru se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
     "leftoverFilesFailed_one": "{{count}} nahraný soubor se nepodařilo přesunout do koše. Najdete jej na stránce Soubory.",
@@ -865,6 +866,7 @@
     "bulkUpdated_many": "{{count}} položky upraveno.",
     "bulkUpdated_other": "{{count}} položek upraveno.",
     "bulkUpdateError": "Vybrané položky se nepodařilo upravit.",
+    "changedMeanwhile": "Položka se od načtení stránky změnila, proto se vaše změna neuložila. Stránka teď ukazuje aktuální stav položky; zkuste to znovu.",
     "created": "Položka přidána.",
     "deleted": "Položka přesunuta do koše.",
     "deleteError": "Položku se nepodařilo smazat.",
@@ -922,8 +924,10 @@
   },
   "editForm": {
     "allFields": "Všechna pole",
+    "changedSinceOpened": "Položka se od otevření formuláře změnila, proto se vaše změny neuložily. Načtěte ji znovu, abyste viděli její aktuální stav, a změny proveďte znovu.",
     "editing": "Úpravy",
     "hiddenFieldError": "Je třeba opravit pole, které tento formulář nezobrazuje. Otevřete všechna pole a opravte ho.",
+    "reload": "Načíst znovu",
     "save": "Uložit změny",
     "saveAndNext": "Uložit a další",
     "sections": {

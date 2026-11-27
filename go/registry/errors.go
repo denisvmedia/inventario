@@ -194,6 +194,12 @@ var (
 	// newer input (#2812).
 	ErrDraftRevisionConflict = errx.NewSentinel("the draft was changed by another save")
 
+	// ErrRevisionConflict is returned by CommodityRegistry.Update when the
+	// context names an expected revision (WithExpectedRevision) and the item
+	// has been written since: the caller's edit started from an older state
+	// and would undo the change made in between (#2981).
+	ErrRevisionConflict = errx.NewSentinel("the item changed since it was read")
+
 	// ErrDraftPromoted is returned when a save, a discard, an attachment or
 	// a promotion with another promotion key reaches a draft that has
 	// already become an item (#2812).

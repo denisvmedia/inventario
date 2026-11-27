@@ -90,11 +90,12 @@ import {
   type LocationOption,
 } from "@/components/locations/LocationAreaFields"
 import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
-import type {
-  Commodity,
-  CreateCommodityRequest,
-  LinkedItemSummary,
-  UpdateCommodityRequest,
+import {
+  isCommodityRevisionConflict,
+  type Commodity,
+  type CreateCommodityRequest,
+  type LinkedItemSummary,
+  type UpdateCommodityRequest,
 } from "@/features/commodities/api"
 import { CustomFieldsEditor } from "@/components/customFields/CustomFieldsEditor"
 import { useCustomFieldsBinding } from "@/components/customFields/useCustomFieldsBinding"
@@ -1462,11 +1463,16 @@ export function CommodityFormDialog({
       const statusRefused = Object.keys(fieldResult?.unmapped ?? {}).some((path) =>
         STATUS_DETAIL_FIELDS.has(path.split(".")[0])
       )
-      setServerError(
-        statusRefused
-          ? { kind: "validation", message: t("commodities:form.statusChanged") }
-          : classifyServerError(err, t("commodities:form.serverError"))
-      )
+      // In edit mode the save names the revision the edit form was opened
+      // at; the server refuses it when the item was written since, and the
+      // edit form under the dialog offers to reload it (#2981).
+      if (isCommodityRevisionConflict(err)) {
+        setServerError({ kind: "validation", message: t("commodities:form.itemChanged") })
+      } else if (statusRefused) {
+        setServerError({ kind: "validation", message: t("commodities:form.statusChanged") })
+      } else {
+        setServerError(classifyServerError(err, t("commodities:form.serverError")))
+      }
     } finally {
       addingRef.current = false
       setAdding(false)

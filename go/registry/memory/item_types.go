@@ -347,6 +347,7 @@ func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo
 			if c := pair.Value; c.GroupID == src.GroupID && c.Type == src.Slug {
 				cp := *c
 				cp.Type = target.Slug
+				cp.Revision++
 				pair.Value = &cp
 				moved++
 			}

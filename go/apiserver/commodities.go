@@ -465,7 +465,12 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 
 // updateCommodity updates a commodity.
 // @Summary Update a commodity
-// @Description Update a commodity
+// @Description Replace the item with the values sent. attributes.revision is the revision
+// @Description the values were based on, as the client read it: when the item has been written
+// @Description since (an edit, a bulk change, a tag rename), the save is refused with 409
+// @Description commodity.revision_conflict and nothing is written, so it cannot undo that
+// @Description write. Without it, or with 0, the save is not checked. The response carries
+// @Description the item's new revision.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -474,6 +479,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Param commodity body jsonapi.CommodityRequest true "Commodity object"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item was written after the revision sent"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/commodities/{commodityID} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
@@ -564,8 +570,12 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Use UpdateWithUser to ensure proper user context and validation
 	ctx := r.Context()
+	// A client that names the revision its edit started from gets the save
+	// refused when the item was written since, instead of undoing that write.
+	if updateData.Revision > 0 {
+		ctx = registry.WithExpectedRevision(ctx, updateData.Revision)
+	}
 	commodityReg := registrySet.CommodityRegistry
 	updatedCommodity, err := commodityReg.Update(ctx, updateData)
 	if err != nil {

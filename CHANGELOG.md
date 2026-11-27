@@ -909,6 +909,14 @@ when to add an entry and where it goes.
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
 
+- Saving an item from an edit form opened before a bulk action no longer
+  drops what the action set, such as a tag, a status or an area. Each item now
+  has a revision that every change moves on, and a save from a form opened at
+  an older revision is refused: the form says the item changed since you
+  opened it and offers **Reload**. The same holds for a change saved on
+  another device, a tag rename and a quick edit
+  ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.

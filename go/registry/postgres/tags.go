@@ -129,6 +129,16 @@ func (r *TagRegistry) tableForKind(kind models.TagKind) store.TableName {
 	return r.tableNames.Commodities()
 }
 
+// tagRewriteSet is the SET list of a rewrite of the tags column of the
+// kind's table to expr. An item's tags are a column its edit form sends
+// back, so the rewrite moves its revision on (see models.Commodity.Revision).
+func tagRewriteSet(kind models.TagKind, expr string) string {
+	if kind == models.TagKindFile {
+		return "tags = " + expr
+	}
+	return "tags = " + expr + ", revision = revision + 1"
+}
+
 func (r *TagRegistry) List(ctx context.Context) ([]*models.Tag, error) {
 	var tags []*models.Tag
 	for tag, err := range r.newSQLRegistry().Scan(ctx) {
@@ -497,8 +507,8 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.Tag
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2),
+			`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(kind), tagRewriteSet(kind, jsonbReplaceSlugExpr(1, 2)),
 		)
 		res, execErr := tx.ExecContext(ctx, query, oldSlug, newSlug)
 		if execErr != nil {
@@ -718,8 +728,8 @@ func (r *TagRegistry) renameRewriteSlug(
 	// Rewrite references only on the kind's own table — a commodity-tag
 	// rename must not touch files (those slugs belong to file tags).
 	rewriteQuery := fmt.Sprintf(
-		`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-		r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2))
+		`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+		r.tableForKind(kind), tagRewriteSet(kind, jsonbReplaceSlugExpr(1, 2)))
 	if _, err := tx.ExecContext(ctx, rewriteQuery, oldSlug, newSlug); err != nil {
 		return errxtrace.Wrap("failed to rewrite tag references", err)
 	}
@@ -939,8 +949,8 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		// The strip covers trashed rows too, so a restored item does not
 		// bring back a tag that no longer exists.
 		stripQuery := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableForKind(current.Kind), jsonbStripSlugExpr(1))
+			`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(current.Kind), tagRewriteSet(current.Kind, jsonbStripSlugExpr(1)))
 		if _, err := tx.ExecContext(ctx, stripQuery, current.Slug); err != nil {
 			return errxtrace.Wrap("failed to strip tag references", err)
 		}
@@ -962,8 +972,8 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableForKind(kind), jsonbStripSlugExpr(1),
+			`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(kind), tagRewriteSet(kind, jsonbStripSlugExpr(1)),
 		)
 		res, execErr := tx.ExecContext(ctx, query, slug)
 		if execErr != nil {

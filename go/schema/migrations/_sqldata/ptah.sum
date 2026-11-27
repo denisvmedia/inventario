@@ -1,4 +1,4 @@
-h1:i9M7hK21eJjVErKEZoEdsKFOVTocoTewGlWbgXmV25A=
+h1:YXKwMftQXM6Mvu1yk0KtYmgFNRGcExDvNSc38J7etIg=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -57,3 +57,5 @@ h1:i9M7hK21eJjVErKEZoEdsKFOVTocoTewGlWbgXmV25A=
 1795785551_make_tenant_domain_unique.up.sql h1:Iz9oR20/4uVFYpN0fUIYJf1lc8ZmUV/vlzjKc84fGJk=
 1795791207_add_job_heartbeat.down.sql h1:TJjjeIo7OKKXKdd/hjXrDjSfiNZ42hbGIx/AFWrw7oU=
 1795791207_add_job_heartbeat.up.sql h1:YBZjnbB0ediAqxJJmqFm9m5mYd6epkLNC3uAqrqli1o=
+1795799822_add_commodity_revision.down.sql h1:Ow+FyiM5VO6thABYpNq0dYip3wDyg2hdI8lbeAfygxE=
+1795799822_add_commodity_revision.up.sql h1:UiDhskpaiZXrA7SMles83pc6JMAzapHEjaqYtlTjVHU=
