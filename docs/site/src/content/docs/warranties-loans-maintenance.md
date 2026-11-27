@@ -201,6 +201,15 @@ Reminders are sent to the email address on your account, so make sure it's curre
 Reminders on custom date fields are not available yet. Use an item reminder for any other date you want to track.
 :::
 
+## Backups
+
+A [backup](../backup-and-restore/) of the group carries each item's loans,
+service records, maintenance schedules, supply links and reminders, and a
+restore brings them back with the item. See
+[Loans, maintenance and reminders](../backup-and-restore/#loans-maintenance-and-reminders)
+for who becomes their author and which reminder emails a restore can send
+again.
+
 ## Related guides
 
 - [Items](../items/) — adding items and editing their details, including the Warranty step.

@@ -330,7 +330,11 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 
 	// Item links last for the same reason: only now is every item the
 	// archive carries restored, so a link can name one that came after it.
-	return walker.applyPendingLinks()
+	if err := walker.applyPendingLinks(); err != nil {
+		return err
+	}
+	walker.writeItemRecordsStep()
+	return nil
 }
 
 // applyPendingCovers resolves each queued commodity → cover-photo reference and
@@ -470,6 +474,13 @@ type inbWalker struct {
 	// same client key that a merge kept instead. Only the delivered documents
 	// read it; file links to a kept draft stay out as above.
 	keptDrafts map[string]*models.CommodityDraft
+
+	// records counts the item records for their log step. recordAuthors
+	// maps a user UUID to the member of the destination group with that
+	// UUID; it is read the first time a record names someone other than
+	// the member restoring (see recordAuthor).
+	records       itemRecordTally
+	recordAuthors map[string]*models.User
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -793,7 +804,7 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	}
 
 	existingCommodity := w.existing.Commodities[c.ID]
-	if err := l.applyStrategyForCommodityModel(createCtx, commodity, existingCommodity, c.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {
+	if err := w.applyCommodityStrategy(createCtx, commodity, existingCommodity, c); err != nil {
 		return err
 	}
 
