@@ -668,6 +668,15 @@ when to add an entry and where it goes.
   includes inactive items, as the search does
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
+- A tag or seller you created in a group someone else owns no longer blocks
+  deleting your account. It stays with the group, which other members may
+  rely on, and passes to the group's owner (or an administrator, or the
+  member who joined first). The server's audit log gets one
+  `account_deletion_handover` row per group, naming the member who received
+  the rows and counting them per table, with the operator when the deletion
+  runs in an impersonation session
+  ([#2883](https://github.com/denisvmedia/inventario/issues/2883)).
+
 ### Fixed
 
 - Reminder emails go out only for items in use. An item marked Sold, Lost,
@@ -932,6 +941,19 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+
+- A web address custom field value of up to 2,048 characters saves whatever
+  its alphabet. A long address written in Cyrillic or another script with
+  two- or more-byte letters failed with a server error, because the database
+  kept the whole value in an index whose entries have a size limit. That
+  index served no search or filter and is removed
+  ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
+- Editing or deleting an item tag while a currency migration runs in the
+  group is refused at once with "Locked while a currency migration is
+  running.", as an item change is. Before, the request waited for the
+  migration and ended in a timeout or a server error when the migration
+  took longer than a minute. File tags are not affected
+  ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
 
 ### Security
 
