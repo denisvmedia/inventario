@@ -826,13 +826,21 @@ type FileRegistry interface {
 	// NativePhotoFilterer.
 	CommodityIDsWithPhotos(ctx context.Context) ([]string, error)
 
-	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
-	// Meta come from the argument; the registry sets the ids, tenant, group,
-	// creator and created_at. Idempotent: when the file is already linked to
-	// that entity the stored link is returned with created=false and left
-	// unchanged. The caller is responsible for checking that the target exists
-	// in the file's group.
+	// AddLink attaches a live file to an entity. FileID, EntityType, EntityID
+	// and Meta come from the argument; the registry sets the ids, tenant,
+	// group, creator and created_at. Idempotent: when the file is already
+	// linked to that entity the stored link is returned with created=false and
+	// left unchanged. ErrNotFound when the file does not exist or is in Trash;
+	// the state is read under the file's row lock, so a file that goes to
+	// Trash after the caller read it takes no new link. The caller is
+	// responsible for checking that the target exists in the file's group.
 	AddLink(ctx context.Context, link models.FileLink) (stored *models.FileLink, created bool, err error)
+
+	// AddLinkIncludingTrashed is AddLink that also links a file in Trash.
+	// A restore uses it for a file it created in Trash, because every link
+	// known at that point was to an item in Trash, when a later reference in
+	// the archive links that file again. Every other caller uses AddLink.
+	AddLinkIncludingTrashed(ctx context.Context, link models.FileLink) (stored *models.FileLink, created bool, err error)
 
 	// RemoveLink removes one link of a file and returns it. ErrNotFound when
 	// the file carries no link with that id. Removing a file's last link
