@@ -1459,6 +1459,18 @@ when to add an entry and where it goes.
   registration and a request that reaches a tenant-only route without a
   tenant are now logged
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- Email log lines carry an email address only for the sign-in, registration
+  and recovery emails (verification, password reset, sign-in link, password
+  changed, welcome), under `email` instead of `to`. The reminder, digest,
+  invite, export and feedback lines drop the address. The stub email service
+  no longer logs names, item names, group names or maintenance titles, and the
+  stub transport no longer logs the recipient or the subject. The reminder
+  lines that dropped the address carry `user_id` and `group_id`. A failed
+  audit event for a sent loan reminder is logged as an error, and a Redis
+  email queue that cannot be created, so the server falls back to the
+  in-memory queue, as a warning. The stub's weekly digest line is
+  `STUB email: weekly digest`
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

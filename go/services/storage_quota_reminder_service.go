@@ -375,7 +375,7 @@ func (s *StorageQuotaReminderService) processCrossed(
 			}
 			slog.ErrorContext(ctx, "storage quota reminder: enqueue failed",
 				"group_id", g.ID,
-				"to", r.email,
+				"user_id", r.userID,
 				"error", sendErr,
 			)
 		}
@@ -418,8 +418,9 @@ func (s *StorageQuotaReminderService) commitReminderRow(
 }
 
 type storageQuotaRecipient struct {
-	email string
-	name  string
+	userID string
+	email  string
+	name   string
 }
 
 // recipientsForGroup returns every admin user that should receive a
@@ -455,14 +456,14 @@ func (s *StorageQuotaReminderService) recipientsForGroup(ctx context.Context, g 
 				continue
 			}
 			seen[user.Email] = struct{}{}
-			out = append(out, storageQuotaRecipient{email: user.Email, name: user.Name})
+			out = append(out, storageQuotaRecipient{userID: user.ID, email: user.Email, name: user.Name})
 		}
 	}
 
 	if len(out) == 0 && g.CreatedBy != "" {
 		user, err := s.factorySet.UserRegistry.Get(ctx, g.CreatedBy)
 		if err == nil && user != nil && strings.TrimSpace(user.Email) != "" {
-			out = append(out, storageQuotaRecipient{email: user.Email, name: user.Name})
+			out = append(out, storageQuotaRecipient{userID: user.ID, email: user.Email, name: user.Name})
 		}
 	}
 	return out, nil

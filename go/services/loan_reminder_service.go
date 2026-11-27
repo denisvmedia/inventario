@@ -249,7 +249,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 			if emitErr := s.emitAuditEvent(ctx, l, kind, ""); emitErr != nil {
 				// Non-fatal — the flag flip is the source of truth for
 				// idempotency. Log and move on.
-				slog.WarnContext(ctx, "loan reminder: emit audit event failed (no recipient)",
+				slog.ErrorContext(ctx, "loan reminder: emit audit event failed (no recipient)",
 					"loan_id", l.ID,
 					"error", emitErr,
 				)
@@ -285,7 +285,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 		}
 		if flipped {
 			if emitErr := s.emitAuditEvent(ctx, l, kind, recipientEmail); emitErr != nil {
-				slog.WarnContext(ctx, "loan reminder: emit audit event failed (stub mode)",
+				slog.ErrorContext(ctx, "loan reminder: emit audit event failed (stub mode)",
 					"loan_id", l.ID,
 					"error", emitErr,
 				)
@@ -326,7 +326,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 		return false, nil
 	}
 	if emitErr := s.emitAuditEvent(ctx, l, kind, recipientEmail); emitErr != nil {
-		slog.WarnContext(ctx, "loan reminder: emit audit event failed",
+		slog.ErrorContext(ctx, "loan reminder: emit audit event failed",
 			"loan_id", l.ID,
 			"kind", string(kind),
 			"error", emitErr,
