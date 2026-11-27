@@ -113,7 +113,7 @@ func (s *LoanReminderService) RemindOnce(ctx context.Context, now time.Time) (Lo
 	if s.factorySet == nil {
 		return stats, errxtrace.Wrap("loan reminder service: factorySet is required", registry.ErrFieldRequired)
 	}
-	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}, sections: newSectionGate(s.factorySet)}
+	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}, gate: newReminderGate(s.factorySet)}
 	for _, kind := range []registry.LoanReminderKind{
 		registry.LoanReminderKindOverdue,
 		registry.LoanReminderKindDueSoon,
@@ -147,20 +147,21 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		return 0, 0, errxtrace.Wrap("loan reminder: list pending", err)
 	}
 	for _, l := range loans {
-		hidden, hideErr := sweep.sections.hides(ctx, l.GroupID, models.GroupSectionLoans)
-		if hideErr != nil {
+		skipped, skipErr := sweep.gate.skips(ctx, l.TenantID, l.GroupID, models.GroupSectionLoans)
+		if skipErr != nil {
 			failed++
 			slog.ErrorContext(ctx, "loan reminder failed",
 				"loan_id", l.ID,
 				"commodity_id", l.CommodityID,
 				"kind", string(kind),
-				"error", hideErr,
+				"error", skipErr,
 			)
 			continue
 		}
-		if hidden {
-			// The flag stays unset, so the reminder goes out if the
-			// section is shown again while the loan is still due.
+		if skipped {
+			// The tenant is not active or the group hides loans. The flag
+			// stays unset, so the reminder goes out if that changes while
+			// the loan is still due.
 			continue
 		}
 		ok, processErr := s.processOne(ctx, loanReg, l, kind, now, sweep)
@@ -360,8 +361,9 @@ func (s *LoanReminderService) dueItem(ctx context.Context, l *models.CommodityLo
 type loanSweep struct {
 	prefs   *notifications.Cache
 	lenders map[string]loanLender
-	// sections skips the loans of groups that hide the loans section.
-	sections *sectionGate
+	// gate skips the loans of a tenant that is not active and of groups
+	// that hide the loans section.
+	gate *reminderGate
 }
 
 type loanLender struct {
