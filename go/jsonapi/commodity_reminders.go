@@ -121,7 +121,7 @@ func (d CommodityReminderRequestData) Validate() error {
 
 func (d CommodityReminderRequestData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &d,
-		validation.Field(&d.Title, validation.Required, validation.Length(1, models.ReminderTitleMaxLength)),
+		validation.Field(&d.Title, validation.Required, validation.RuneLength(1, models.ReminderTitleMaxLength)),
 		validation.Field(&d.DueOn, validation.Required, models.DateFormat),
 		validation.Field(&d.RemindDaysBefore, models.ReminderLeadTimesRule),
 		validation.Field(&d.RepeatUnit, models.ReminderRepeatUnitRule),

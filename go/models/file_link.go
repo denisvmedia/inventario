@@ -186,7 +186,7 @@ func (l *FileLink) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&l.EntityType, rules.NotEmpty, validation.In(
 			FileLinkCommodity, FileLinkLocation, FileLinkArea, FileLinkExport, FileLinkDraft, FileLinkIntake,
 		)),
-		validation.Field(&l.EntityID, rules.NotEmpty, validation.Length(1, 255)),
+		validation.Field(&l.EntityID, rules.NotEmpty, validation.RuneLength(1, 255)),
 		validation.Field(&l.Meta, rules.NotEmpty, validation.In(metas...)),
 	)
 }

@@ -448,6 +448,23 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(shortInput.value).toHaveLength(40)
   })
 
+  it("counts the short_name cap in characters, as the server does (#2919)", async () => {
+    // One emoji is two UTF-16 units; the server allows 40 of them.
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { short_name: { value: "📦".repeat(60), confidence: 0.9 } },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makePdf("x.pdf"))
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    const shortInput = (await screen.findByLabelText(/^Short name$/i)) as HTMLInputElement
+    expect(shortInput.value).toBe("📦".repeat(40))
+  })
+
   it("shows a chooser for a multi-item scan and the pick drives the review", async () => {
     server.use(
       ...commodityScanHandlers.ok(SLUG, {

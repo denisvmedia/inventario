@@ -349,7 +349,6 @@ export function CommodityEditForm({
               >
                 <Input
                   id="edit-short-name"
-                  maxLength={40}
                   className="font-mono text-sm"
                   {...register("short_name")}
                   aria-invalid={!!errors.short_name}
