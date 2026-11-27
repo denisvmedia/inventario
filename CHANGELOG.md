@@ -1163,6 +1163,13 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- Signing out in one tab while another tab renewed its session no longer
+  signs you back in, and no longer makes the server take the renewal for a
+  stolen session and sign you out on your other devices. A sign-out now waits
+  for a renewal another tab has started, and a tab that needs a renewal while
+  the sign-out runs waits for it and then stops. The back office had the same
+  problem
+  ([#3034](https://github.com/denisvmedia/inventario/issues/3034)).
 - `inventario users delete` refuses a user who is the only owner of a group
   that has other members, before it changes anything, as deleting your own
   account does. The message names the group, so another member can be made
