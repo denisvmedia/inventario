@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -205,7 +206,7 @@ func (r *ExportRegistry) ListDeleted(ctx context.Context) ([]*models.Export, err
 // lock, so two callers racing for the same row get one true and one false —
 // the in-memory equivalent of the conditional UPDATE the postgres registry
 // issues (#2472).
-func (r *ExportRegistry) ClaimPending(_ context.Context, id string) (bool, error) {
+func (r *ExportRegistry) ClaimPending(_ context.Context, id string, at time.Time) (bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -214,8 +215,61 @@ func (r *ExportRegistry) ClaimPending(_ context.Context, id string) (bool, error
 		return false, nil
 	}
 	export.Status = models.ExportStatusInProgress
+	export.HeartbeatAt = models.NewPTimestamp(at)
+	export.AttemptCount++
 	r.items.Set(id, export)
 	return true, nil
+}
+
+func (r *ExportRegistry) Heartbeat(_ context.Context, id string, at time.Time) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	export, ok := r.items.Get(id)
+	if !ok || export.Status != models.ExportStatusInProgress {
+		return nil
+	}
+	export.HeartbeatAt = models.NewPTimestamp(at)
+	return nil
+}
+
+func (r *ExportRegistry) RecoverStalled(_ context.Context, jobType models.WorkerType, sweep registry.StalledJobSweep) (registry.StalledJobs, error) {
+	if jobType != models.WorkerTypeExport && jobType != models.WorkerTypeImport {
+		return registry.StalledJobs{}, errxtrace.Classify(registry.ErrUnknownFailedJobType, errx.Attrs("job_type", string(jobType)))
+	}
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	var out registry.StalledJobs
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		export := pair.Value
+		imported := export.Type == models.ExportTypeImported
+		if imported != (jobType == models.WorkerTypeImport) || export.Status != models.ExportStatusInProgress ||
+			export.IsDeleted() || !runStalled(export.HeartbeatAt, export.CreatedDate, sweep) {
+			continue
+		}
+		export.HeartbeatAt = nil
+		if export.AttemptCount >= sweep.MaxRuns {
+			export.Status = models.ExportStatusFailed
+			export.ErrorMessage = sweep.ErrorMessage
+			export.CompletedDate = models.NewPTimestamp(sweep.Now)
+			out.Failed++
+			continue
+		}
+		export.Status = models.ExportStatusPending
+		out.Requeued++
+	}
+	return out, nil
+}
+
+// runStalled reports whether the sweep takes a run for dead: its latest
+// heartbeat is older than the cutoff, or it has none and its job is older
+// than the cutoff for runs without one.
+func runStalled(heartbeatAt, createdAt models.PTimestamp, sweep registry.StalledJobSweep) bool {
+	if heartbeatAt != nil {
+		return heartbeatAt.ToTime().Before(sweep.HeartbeatBefore)
+	}
+	return createdAt != nil && createdAt.ToTime().Before(sweep.CreatedBefore)
 }
 
 // HardDelete permanently deletes an export from the database

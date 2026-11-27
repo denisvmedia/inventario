@@ -58,6 +58,7 @@ func (*CommodityRegistry) SupportsNativePhotoFilter() {}
 // the loans, file links and custom field values their subqueries join.
 type commodityTables struct {
 	commodities       string
+	areas             string
 	loans             string
 	fileLinks         string
 	files             string
@@ -67,6 +68,7 @@ type commodityTables struct {
 func (r *CommodityRegistry) whereTables() commodityTables {
 	return commodityTables{
 		commodities:       string(r.tableNames.Commodities()),
+		areas:             string(r.tableNames.Areas()),
 		loans:             string(r.tableNames.CommodityLoans()),
 		fileLinks:         string(r.tableNames.FileLinks()),
 		files:             string(r.tableNames.Files()),
@@ -645,6 +647,7 @@ func commodityWhere(opts registry.CommodityListOptions, tables commodityTables) 
 		add(cond.In("status", anyStrings(opts.Statuses)...))
 	}
 	add(commodityAreaExpr(cond, opts))
+	add(commodityLocationExpr(cond, opts.LocationID, tables.areas))
 	if len(opts.SellerIDs) > 0 {
 		add(cond.In("seller_id", anyStrings(opts.SellerIDs)...))
 	}
@@ -744,6 +747,17 @@ func commodityAreaExpr(cond *sqlb.Cond, opts registry.CommodityListOptions) stri
 	default:
 		return ""
 	}
+}
+
+// commodityLocationExpr keeps the items in an area of the location (#2897),
+// empty when no location is asked for. Row-level security on the areas
+// table keeps the subquery to the caller's group, so an area of another
+// group never matches.
+func commodityLocationExpr(cond *sqlb.Cond, locationID, areasTable string) string {
+	if locationID == "" {
+		return ""
+	}
+	return fmt.Sprintf("area_id IN (SELECT id FROM %s WHERE %s)", areasTable, cond.Equal("location_id", locationID))
 }
 
 // warrantyStatusExpr builds the computed-warranty-status disjunction, empty

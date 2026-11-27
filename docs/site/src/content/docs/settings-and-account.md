@@ -31,8 +31,9 @@ and the **Account** section of Preferences). On the **Edit profile** page you
 can:
 
 1. Update your **Name**.
-2. Choose your **Default group** — the group you land in after signing in. You
-   can switch groups any time from the group selector.
+2. Choose your **Default group** — the group you land in after signing in.
+   Switching groups with a group selector also makes that group your default,
+   so you come back to the group you used last.
 3. Click **Save changes**.
 
 ### Profile photo
@@ -75,10 +76,17 @@ A couple of things to know:
   and if you created anything inside a group someone else owns (items, files,
   places, exports, tags or sellers), it needs to be removed first. This
   includes a tag or a seller you added there, even when other members use it on
-  their own items. [Item types](../item-types/) you added to a shared group
+  their own items. Both checks run before anything is deleted, so a blocked
+  deletion leaves your account, your groups and your sessions as they were.
+  [Item types](../item-types/) you added to a shared group
   stay with the group and pass to its owner, so they don't block deletion. So
   does the record of the [documents other systems sent](../documents-from-other-systems/)
   with one of your API tokens, together with the drafts those documents made.
+  What you recorded on the items of a shared group stays there too and passes
+  to its owner: the [history entries](../items/#the-item-detail-page) of your changes, loans,
+  service records, supply links and maintenance schedules, and the restores
+  and currency changes you ran. The item history then names the owner for the
+  changes you made. Invites you created for a shared group stop working.
   Item reminders you set in a shared group are deleted with your account,
   since they only ever emailed you. So are the other
   [drafts of new items](../items/#drafts-of-a-new-item) you started there. A

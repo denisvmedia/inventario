@@ -283,7 +283,7 @@ function MemberRow({
   const role = member.role
   // `role` is free-form TEXT on the BE and the enum can evolve, so a value
   // outside viewer|user|admin|owner leaves `ROLE_CONFIG[role]` undefined.
-  // Guard both — mirrors RoleBadge in admin-shared.tsx — so an unknown role
+  // Guard both, as RoleBadge (@/components/RoleBadge) does, so an unknown role
   // renders the em-dash fallback instead of crashing on `.i18nKey`.
   const roleConfig = role ? ROLE_CONFIG[role] : undefined
 

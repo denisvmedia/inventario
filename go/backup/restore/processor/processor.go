@@ -255,6 +255,7 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		options:   options,
 		fileRefs:  map[string]*inbPendingFile{},
 		delivered: map[string]string{},
+		deferred:  map[string]*inbDeferredFile{},
 		parked:    map[string]bool{},
 
 		draftIDs:   map[string]string{},
@@ -262,6 +263,7 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 
 		priceReading: types.PricesOmitZero,
 	}
+	defer walker.removeSpools()
 
 	// Open the destination bucket once for the whole walk rather than per file
 	// member. Skipped for dry-run / no upload location, where file bytes are
@@ -321,6 +323,12 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		return errx.Classify(ErrMissingFileMembers, errx.Attrs("count", len(missing), "members", missing))
 	}
 
+	// Every reference is known now, so the files whose bytes waited for one
+	// can be restored or left out.
+	if err := walker.restoreDeferredFiles(); err != nil {
+		return err
+	}
+
 	// Patch cover-photo cross-references last: only now is idMapping.Files fully
 	// populated, so a cover that points at one of the just-restored files can be
 	// resolved to its new DB id.
@@ -378,7 +386,8 @@ func (w *inbWalker) applyPendingCovers() error {
 // inbPendingFile records the metadata a file member needs once its bytes
 // arrive. A file attached to several entities is referenced once per entity,
 // every reference naming the same archive path; links collects one entry per
-// reference registered before the bytes arrived.
+// reference registered before the bytes arrived. A commodity's files are
+// registered before the commodity restores, so an entry can have no link.
 type inbPendingFile struct {
 	ref   types.INBFileRef
 	links []inbFileLink
@@ -398,6 +407,15 @@ type inbFileLink struct {
 	meta       string
 	fileType   string
 	category   string
+}
+
+// inbDeferredFile is a file member whose bytes wait for the end of the walk.
+// Outside a dry run the bytes wait in spool, a temporary file; a dry run
+// writes no bytes and keeps only their size.
+type inbDeferredFile struct {
+	pending *inbPendingFile
+	spool   *os.File
+	size    int64
 }
 
 // inbPendingCover records a commodity → cover-photo cross-reference that can
@@ -433,6 +451,14 @@ type inbWalker struct {
 	// second entity of a shared file, in a later document) becomes a link on
 	// the restored file instead of a pending member.
 	delivered map[string]string
+
+	// deferred holds the file members whose bytes arrived before any
+	// reference the restore could use, keyed by archive path, and
+	// deferredOrder their paths in archive order. A later reference adds its
+	// link to the entry, and restoreDeferredFiles restores each file once the
+	// walk has seen every reference.
+	deferred      map[string]*inbDeferredFile
+	deferredOrder []string
 
 	// parked holds the UUIDs of the files this restore created in Trash
 	// because every link they had pointed at an item in Trash. A later
@@ -697,6 +723,7 @@ func (w *inbWalker) applyArea(a *types.INBArea) error {
 // applyCommodity recreates one area-bound commodity (resolving its area UUID →
 // DB ID) and registers its file references for the later file members.
 func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
+	w.expectFiles(c)
 	actualAreaID, ok := w.idMapping.Areas[c.AreaID]
 	if !ok || actualAreaID == "" {
 		return fmt.Errorf("commodity %s references unmapped area %s", c.ID, c.AreaID)
@@ -709,7 +736,27 @@ func (w *inbWalker) applyCommodity(c *types.INBCommodity) error {
 // created — the row is persisted with a nil AreaID, and no synthetic
 // location/area is fabricated in the restored data.
 func (w *inbWalker) applyUnassignedCommodity(c *types.INBCommodity) error {
+	w.expectFiles(c)
 	return w.applyCommodityModel(c, nil)
+}
+
+// expectFiles registers the files a commodity references before the
+// commodity is restored, without a link to it. The bytes of a shared file
+// follow the first document that references it, so when that commodity fails
+// to restore, the bytes still find their entry and wait for a later reference.
+func (w *inbWalker) expectFiles(c *types.INBCommodity) {
+	for _, refs := range [][]types.INBFileRef{c.Images, c.Documents} {
+		for _, ref := range refs {
+			key := blobkeys.SanitizeArchivePath(ref.Path)
+			if w.fileRefs[key] != nil || w.deferred[key] != nil {
+				continue
+			}
+			if _, done := w.delivered[key]; done {
+				continue
+			}
+			w.fileRefs[key] = &inbPendingFile{ref: ref}
+		}
+	}
 }
 
 // applyCommodityModel is the shared restore body for a commodity. actualAreaID is
@@ -870,6 +917,10 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 		pending.links = append(pending.links, link)
 		return nil
 	}
+	if d, ok := w.deferred[key]; ok {
+		d.pending.links = append(d.pending.links, link)
+		return nil
+	}
 	if fileUUID, ok := w.delivered[key]; ok {
 		return w.linkDeliveredFile(fileUUID, ref, link)
 	}
@@ -882,9 +933,6 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 // retried restore never duplicates a link.
 func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
 	if fileUUID == "" || link.linkedType == "" || w.isUnrestoredDraft(link) {
-		// fileUUID is empty, in a dry run only, for bytes that arrived
-		// before any reference could use them; they were dropped with a
-		// counted error.
 		return nil
 	}
 	dbID, ok := w.resolveLinkedDBID(link)
@@ -1028,19 +1076,10 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	pending, ok := w.fileRefs[hdr.Name]
 	if !ok {
 		// A file member with no matching reference is rejected — restoring it
-		// would create an orphan blob with no owning row.
+		// would create an orphan blob with no owning row. A later reference
+		// to it then waits for bytes that never come, and the restore fails
+		// with ErrMissingFileMembers, dry run or not.
 		_, _ = io.Copy(io.Discard, r)
-		if w.options.DryRun {
-			// A dry run of a full replace restores no item, so the bytes of
-			// an item's file match no reference. They still count as
-			// delivered there, so a later reference to the same file (a
-			// draft's) does not fail the run as a missing member. A real
-			// restore leaves them out: a later reference then waits for
-			// bytes that never come and fails the restore with
-			// ErrMissingFileMembers, rather than restoring that entity
-			// without its file.
-			w.delivered[hdr.Name] = ""
-		}
 		w.stats.ErrorCount++
 		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file member %s has no matching reference", hdr.Name))
 		return nil
@@ -1048,11 +1087,104 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// The declared reference WAS delivered as a member, so it must not later be
 	// reported as missing — drop it from the pending set regardless of whether
 	// it ultimately links/streams below. The missing-member check only flags
-	// refs whose member never appeared in the archive (e.g. dry-run, where the
-	// commodity isn't persisted, still delivers and consumes the member here).
+	// refs whose member never appeared in the archive.
 	delete(w.fileRefs, hdr.Name)
+	if !w.hasUsableLink(pending) {
+		// Only entities that failed to restore, or none yet, reference the
+		// file. A later document may still reference it, so the bytes wait
+		// for the end of the walk.
+		return w.deferFile(hdr, pending, r)
+	}
 	w.delivered[hdr.Name] = pending.ref.ID
+	return w.restoreFile(hdr.Name, pending, r, hdr.Size)
+}
 
+// hasUsableLink reports whether the file can be restored with the references
+// known so far: one is to an entity the restore brought back, to an item in
+// Trash, or to nothing (a standalone file, or a draft the restore did not
+// recreate, whose file stays as a standalone one).
+func (w *inbWalker) hasUsableLink(pending *inbPendingFile) bool {
+	for _, link := range pending.links {
+		if link.linkedType == "" || w.isUnrestoredDraft(link) {
+			return true
+		}
+		if _, ok := w.resolveLinkedDBID(link); ok {
+			return true
+		}
+		if w.trashedItemID(link) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// deferFile keeps a file member's bytes until the end of the walk. A dry run
+// writes no bytes, so it drains them and keeps their size.
+func (w *inbWalker) deferFile(hdr *tar.Header, pending *inbPendingFile, r io.Reader) error {
+	d := &inbDeferredFile{pending: pending}
+	w.deferred[hdr.Name] = d
+	w.deferredOrder = append(w.deferredOrder, hdr.Name)
+	dst := io.Discard
+	if !w.options.DryRun {
+		spool, err := os.CreateTemp("", "inventario-inb-restore-*.file")
+		if err != nil {
+			return errxtrace.Wrap("failed to create temp file for file member", err, errx.Attrs("member", hdr.Name))
+		}
+		d.spool = spool
+		dst = spool
+	}
+	n, err := io.Copy(dst, io.LimitReader(r, hdr.Size))
+	if err != nil {
+		return errxtrace.Wrap("failed to keep file member", err, errx.Attrs("member", hdr.Name))
+	}
+	d.size = n
+	return nil
+}
+
+// restoreDeferredFiles restores each file whose bytes waited for the end of
+// the walk, with every reference the archive has to it, in archive order. A
+// file that no restored entity references is left out with a counted error.
+func (w *inbWalker) restoreDeferredFiles() error {
+	for _, name := range w.deferredOrder {
+		d := w.deferred[name]
+		w.delivered[name] = d.pending.ref.ID
+		r := io.LimitReader(zeroReader{}, d.size)
+		if d.spool != nil {
+			if _, err := d.spool.Seek(0, io.SeekStart); err != nil {
+				return errxtrace.Wrap("failed to rewind spooled file member", err, errx.Attrs("member", name))
+			}
+			r = d.spool
+		}
+		if err := w.restoreFile(name, d.pending, r, d.size); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// removeSpools deletes the temporary files of the deferred file members.
+func (w *inbWalker) removeSpools() {
+	for _, d := range w.deferred {
+		if d.spool == nil {
+			continue
+		}
+		_ = d.spool.Close()
+		_ = os.Remove(d.spool.Name())
+	}
+}
+
+// zeroReader stands in for the bytes of a deferred file in a dry run, which
+// drained them, so the byte count matches the real restore's.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+// restoreFile streams a delivered file member's bytes into a re-minted tenant
+// blob key and creates the file row with the links pending resolves to.
+func (w *inbWalker) restoreFile(name string, pending *inbPendingFile, r io.Reader, size int64) error {
 	// Resolve every archived link (commodity / location / area) to a
 	// destination DB id. A link whose entity never landed is dropped with a
 	// counted error — a dangling link must never be persisted. A file whose
@@ -1060,7 +1192,13 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// resolve and always lands.
 	links, standalone, holderID := w.resolveLinks(pending)
 	if !standalone && len(links) == 0 {
-		_, _ = io.Copy(io.Discard, r)
+		_, _ = io.Copy(io.Discard, io.LimitReader(r, size))
+		if len(pending.links) == 0 {
+			// Only entities that failed to restore referenced the file; their
+			// errors do not say the file is left out.
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file %s is left out: nothing the restore brought back references it", pending.ref.ID))
+		}
 		return nil
 	}
 
@@ -1073,7 +1211,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// the archive path or the source OriginalPath as a key.
 	ext := pending.ref.Extension
 	if ext == "" {
-		ext = path.Ext(hdr.Name)
+		ext = path.Ext(name)
 	}
 	blobKey := blobkeys.BuildFileBlobKey(user.TenantID, pending.ref.ID, ext)
 
@@ -1084,7 +1222,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	if err != nil {
 		// A malformed timestamp is archive corruption — drain the member and
 		// abort the restore (handleFileMember errors already propagate hard).
-		_, _ = io.Copy(io.Discard, r)
+		_, _ = io.Copy(io.Discard, io.LimitReader(r, size))
 		return errx.Classify(
 			errxtrace.Wrap("failed to convert file entity", err, errx.Attrs("file_id", pending.ref.ID)),
 			ErrMalformedEntity,
@@ -1099,12 +1237,12 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// shouldWriteFileBlob guard, which already gates the blob write.
 	if w.existing.TrashedFiles[pending.ref.ID] {
 		// The file is in Trash: a merge leaves it there.
-		return w.skipFileMember(r, hdr.Size, blobKey)
+		return w.skipFileMember(r, size, blobKey)
 	}
 	action := decideFileStrategyAction(w.options.Strategy, w.existing.Files[pending.ref.ID])
 
 	if action == fileActionSkip {
-		if err := w.skipFileMember(r, hdr.Size, blobKey); err != nil {
+		if err := w.skipFileMember(r, size, blobKey); err != nil {
 			return err
 		}
 		// The file is already here; a merge still brings over the links the
@@ -1117,7 +1255,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 		return nil
 	}
 
-	written, checksum, err := w.streamFileBytes(blobKey, r, hdr.Size)
+	written, checksum, err := w.streamFileBytes(blobKey, r, size)
 	if err != nil {
 		return err
 	}

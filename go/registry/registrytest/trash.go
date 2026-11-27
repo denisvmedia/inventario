@@ -22,6 +22,11 @@ type TrashEnv struct {
 	ServiceFiles registry.FileRegistry
 	AreaID       string
 	OtherAreaID  string
+	// LocationID is the location of AreaID and OtherAreaID;
+	// ElsewhereAreaID is an area of a second location, ElsewhereLocationID.
+	LocationID          string
+	ElsewhereLocationID string
+	ElsewhereAreaID     string
 }
 
 // RunTrashContract checks how a backend's FileRegistry splits trashed files

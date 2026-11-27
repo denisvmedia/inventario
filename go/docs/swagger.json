@@ -2098,7 +2098,7 @@
                 }
             },
             "put": {
-                "description": "Update the authenticated user's profile. The name field is required;\ndefault_group_id (#1263, #1592) is optional — send a group UUID the\nuser is a member of to set, or null to clear (only allowed when the\nuser has zero memberships; otherwise rejected with 400). Email, role,\ntenant_id, and is_active are ignored even if submitted.",
+                "description": "Update the authenticated user's profile. Both fields are optional and\na field left out keeps its stored value. name, when sent, must not be\nblank (at most 100 characters).\ndefault_group_id (#1263, #1592): send a group UUID the\nuser is a member of to set, or null to clear (only allowed when the\nuser has zero memberships; otherwise rejected with 400). Email, role,\ntenant_id, and is_active are ignored even if submitted.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3694,6 +3694,12 @@
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -4247,6 +4253,12 @@
                         "type": "boolean",
                         "description": "Only commodities with no area",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
                         "in": "query"
                     },
                     {
@@ -10098,6 +10110,12 @@
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Commodities only: only items in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -10636,7 +10654,7 @@
         },
         "/g/{groupSlug}/storage-usage": {
             "get": {
-                "description": "Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data \u0026 storage card.",
+                "description": "Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data \u0026 storage card.\nEach file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.",
                 "produces": [
                     "application/json"
                 ],

@@ -261,7 +261,9 @@ On any other host, the authenticated routes, token refresh, the MFA and
 magic-link sign-ins and impersonation start check the user's own tenant
 and refuse it while it is not active; API tokens authenticate only on
 their own tenant's host. Covered by `tenant_suspension_auth_test.go` and
-`admin_tenant_writes_test.go`.
+`admin_tenant_writes_test.go`. The notification workers send the tenant's
+users no email while it is not active, so no reminder or digest names their
+items or links to a page that answers 403 (`notification_tenants_test.go`).
 
 **Residual risk.** A status change made with `inventario tenants update`
 cannot stamp the running server's blacklist. Its access tokens are refused

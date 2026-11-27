@@ -502,10 +502,12 @@ never evaluated the gate (paused worker, `mode=off`, or a gate-build failure)
 resets it to `0` rather than leaving the previous tick's value standing and
 faking a pinned tenant forever.
 
-There is no heartbeat on exports/restores, so a **crashed** operation stays
-`running` / `in_progress` forever and pins its tenant permanently. That is
-the correct direction (under-collecting forever beats one wrong delete),
-but it needs manual attention: investigate and resolve the stuck operation.
+An export or restore whose worker crashed pins its tenant until the sweep
+in §10 takes the worker for dead, ten minutes after its last heartbeat,
+and fails the job or queues it again (a queued export pins the tenant
+until it has run). That is the correct direction (under-collecting beats
+one wrong delete). A blocker that stays in progress longer is one of the
+cases §10 lists that the sweep does not catch: investigate and resolve it.
 **Do not add a "stale after N hours → ignore it" escape hatch** — that
 re-opens exactly the race the gate closes.
 
@@ -599,17 +601,56 @@ uses.
 
 | Type | Table | Failed when | Retry |
 | ---- | ----- | ----------- | ----- |
-| `export` | `exports` (`type <> 'imported'`) | the export run returns an error | yes: runs again from the start |
-| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated | yes: reads the uploaded file again |
-| `restore` | `restore_operations` | the restore run returns an error | no: it may have written part of the backup; start a new restore |
+| `export` | `exports` (`type <> 'imported'`) | the export run returns an error, or its worker stops during its third run | yes: runs again from the start |
+| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated, or its worker stops during its third run | yes: reads the uploaded file again |
+| `restore` | `restore_operations` | the restore run returns an error, or its worker stops while it runs | no: it may have written part of the backup; start a new restore |
 | `thumbnail` | `thumbnail_generation_jobs` | the last of its attempts fails | yes: gets a fresh set of attempts |
 | `intake` | `intake_sources` | the scan fails for good, or the sweep gives up on it | yes: due at once, with its attempt count kept |
 | `currency-migration` | `currency_migrations` | the recovery sweep finds it stuck | no: the rate was confirmed for that moment; start a new migration |
 
 The email queue, the reminder sweeps, group purge and the cleanup sweepers
-keep no failed jobs: they retry on their next run. An export, import or
-restore whose process died while it ran stays in progress and never shows
-up here ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
+keep no failed jobs: they retry on their next run.
+
+### Runs whose worker stopped
+
+An export, import or restore whose worker stops in the middle of the run,
+because the process crashed, was killed or was shut down, would otherwise
+stay in progress for good. While a job runs, its worker records a heartbeat
+on the job's row every minute (`heartbeat_at`). Every minute the export,
+import and restore workers each sweep their table for jobs in progress
+whose heartbeat is more than **10 minutes** old, and take their worker for
+dead. How long a job runs does not matter, only whether its worker is
+alive:
+
+- An export or an import goes back to the queue and the next worker runs
+  it again from the start. Each claim counts a run in the job's attempts
+  (the attempts column of `inventario jobs failed list`), a retry's too.
+  A job whose worker stops during its **third** run fails for good with
+  "the worker stopped before the export finished" (or "the import"), so a
+  job that kills its worker every time does not run forever.
+- A restore fails for good at once with "the worker stopped before the
+  restore finished": it may have written part of its backup, so it is not
+  run again.
+
+Each of these failures is listed here and counts once in
+`inventario_jobs_dead_lettered_total`. The sweeps run while a worker type is
+paused, too. A job in progress without any heartbeat was claimed by a
+version that recorded none. Upgrading from such a version stops its pods
+first (`PRODUCTION.md`, Appendix C), so no worker is left on the job; it is
+taken for dead once the job is a day old, since the job's creation is the
+only time it carries.
+
+The sweep does not catch two cases:
+
+- An export or import worker that waits for a free slot to start a queued
+  job does not sweep until it gets one: the sweep runs in the same loop.
+  On a replica whose slots are all taken by long runs, a dead run waits
+  for one of them to end, or for the sweep of another replica. The restore
+  worker does not wait for a slot, so it always sweeps.
+- A run that hangs while its process stays up keeps its heartbeat, which
+  is recorded apart from the run, and is never taken for dead. It stays in
+  progress until the process is restarted; the job then has no heartbeat
+  younger than ten minutes, and the sweep moves it on.
 
 Only the newest thumbnail job of a file counts. While that job is failed and
 nobody has retried or discarded it, viewing the file starts no new job, so a
@@ -800,6 +841,25 @@ Suspend and reactivate:
   and magic-link sign-ins, token refresh and access tokens check the
   user's own tenant. Impersonating one of its users is refused with `422`
   and `tenant.not_active`.
+- While a tenant is not active, the background workers send its users no
+  email: no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. They write nothing for those rows either, so after reactivation a
+  reminder that is still due goes out on the next sweep (one email, for the
+  closest lead time reached), a storage warning goes out if the group is
+  still over the threshold, and a skipped weekly digest goes out if the
+  tenant is reactivated before the end of the week it was due in (the
+  worker sends from Monday at the send hour to Sunday, and no week is
+  claimed while the tenant is not active). A personal data export
+  requested before the suspension is still built and listed; only its
+  email is skipped. The workers that send no email (thumbnails, Trash
+  purge, orphan file cleanup) keep running.
+- When the tenant cannot be read (a database error), a reminder is retried
+  on the next sweep. The weekly digest of every member of the affected
+  group, and of a group whose members cannot be listed, waits for the next
+  sweep too, without claiming the week, so the digest that goes out covers
+  all of the member's groups. The export-ready email
+  is sent anyway: it goes out once and nothing retries it.
 - Reactivating makes the tenant active again. The sessions the suspension
   ended stay ended, and the revoked API tokens stay revoked: users sign in
   again and create new tokens.

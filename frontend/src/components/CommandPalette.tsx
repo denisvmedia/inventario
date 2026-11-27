@@ -50,6 +50,7 @@ import { getRecent, pushRecent, type RecentEntry } from "@/features/search/recen
 import {
   areaHref,
   areaItemsHref,
+  locationItemsHref,
   commodityHref,
   commoditySubtitle,
   fileHref,
@@ -233,8 +234,8 @@ interface ResultRowProps {
   subtitle?: string
   onSelect: () => void
   testId: string
-  // A second action on the row: the items in an area, the items or files
-  // carrying a tag. It is an option of its own, so arrow keys, a click and
+  // A second action on the row: the items in a location or an area, the
+  // items or files carrying a tag. It is an option of its own, so arrow keys, a click and
   // a tap reach it like the row.
   related?: RelatedAction
 }
@@ -258,7 +259,9 @@ function ResultRow({
       <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
         <Icon className="size-3.5 text-muted-foreground" />
       </div>
-      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+      {/* Below sm the subtitle goes under the title, so a narrow screen
+          gives the title the whole row. */}
+      <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
         <span className="truncate text-sm font-medium">{title}</span>
         {subtitle ? (
           <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
@@ -267,6 +270,8 @@ function ResultRow({
     </CommandItem>
   )
   if (!related) return row
+  // Below sm the second action is its icon alone; its name stays in
+  // aria-label and title.
   return (
     <div className="flex items-center gap-1">
       {row}
@@ -274,11 +279,14 @@ function ResultRow({
         value={`${value}:related`}
         onSelect={related.onSelect}
         aria-label={related.ariaLabel}
+        title={related.ariaLabel}
         className="shrink-0 gap-1.5 text-xs text-muted-foreground"
         data-testid={related.testId}
       >
         <ListFilter className="size-3.5" />
-        <span>{related.label}</span>
+        <span className="hidden sm:inline" data-testid={`${related.testId}-label`}>
+          {related.label}
+        </span>
       </CommandItem>
     </div>
   )
@@ -509,6 +517,12 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                     })
                   }
                   testId={`palette-result-location-${r.id}`}
+                  related={{
+                    label: t("search:resultCard.showItems"),
+                    ariaLabel: t("search:resultCard.showItemsInLocation", { name: title }),
+                    onSelect: () => go(locationItemsHref(groupSlug, r.id)),
+                    testId: `palette-location-items-${r.id}`,
+                  }}
                 />
               )
             })}

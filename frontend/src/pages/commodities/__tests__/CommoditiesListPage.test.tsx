@@ -623,6 +623,47 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("filters by location from the Location menu and narrows the area menu (#2897)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, [
+        ...areaFixture,
+        { id: "a3", type: "areas", attributes: { id: "a3", name: "Boathouse", location_id: "l2" } },
+      ]),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+        { id: "l2", type: "locations", attributes: { id: "l2", name: "Cottage" } },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?unassigned=1`)
+    await screen.findByTestId("commodity-card")
+
+    await user.click(screen.getByTestId("commodities-filter-location"))
+    await user.click(await screen.findByTestId("commodities-filter-location-l2"))
+    await waitFor(() => {
+      expect(queries.some((q) => /[?&]location_id=l2\b/.test(q))).toBe(true)
+    })
+    // An item without an area is in no location, so the location ends
+    // "No location", which the server refuses alongside it.
+    expect(screen.getByTestId("commodities-filter-unassigned")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    )
+    expect(/[?&]unassigned=/.test(queries[queries.length - 1] ?? "")).toBe(false)
+
+    // The area menu offers the areas of that location only.
+    await user.click(screen.getByTestId("commodities-filter-area"))
+    const menu = await screen.findByRole("menu")
+    expect(within(menu).getByRole("menuitemradio", { name: "Boathouse" })).toBeInTheDocument()
+    expect(within(menu).queryByRole("menuitemradio", { name: "Garage" })).not.toBeInTheDocument()
+  })
+
   it("filters by missing details from the Missing menu and keeps them in the URL (#2794)", async () => {
     const user = userEvent.setup()
     const queries: string[] = []

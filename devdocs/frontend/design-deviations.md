@@ -572,6 +572,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2809 by the 2026-11-24 goal to implement the open enhancements; the row's place and the link agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an item's source; otherwise permanent.
 
+#### 2026-11-27 — Location filter on the items toolbar
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) filters the items by a text search only; it has no area or location filter.
+- **Reality**: `frontend/src/pages/commodities/CommoditiesListPage.tsx` adds a **Location** `DropdownMenu` before the **Area** menu, with the same outline trigger, **All locations** first and one entry per location (`commodities-filter-location`). The page URL keeps it as `location=<id>` and the list sends `location_id`. While a location is chosen the **Area** menu lists only that location's areas, plus the chosen area if it is in another location, so it can still be cleared. Choosing a location clears an area of another location and turns off **No location**; turning on **No location** clears the location, because the server refuses the two together. A saved view keeps the location: the **Saved views** page names it on its condition badge, and a deleted location reads **Deleted location** in the `status-expiring` stale style and adds a line to the view's stale notice.
+- **Why**: not present in mock. #2897 asks for "Show items" on locations in search, which needs a location filter on the items list. The menu follows the toolbar's Area menu.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a location filter; otherwise permanent.
+
 ### Dashboard / Overview
 
 #### 2026-11-26 — Warranty cards leave the dashboard while warranties are hidden
@@ -1018,6 +1027,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-27 — Storage card: what the usage counts
+
+- **Issue/PR**: #2896 / PR #2975
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (Data & Storage) shows "Storage used", the amount of the quota, the bar and one muted line, "97.6 MB available on free plan". It does not say what the number counts.
+- **Reality**: `frontend/src/features/storage/StorageCard.tsx` adds a muted `text-xs` line under the usage and the breakdown: "Counts each file at the size it was uploaded. The thumbnails made for photos are not counted."
+- **Why**: The usage sums the size of the uploaded files. The three JPEG thumbnails rendered for each JPEG and PNG upload are stored apart with no file row, so neither the card nor the storage quota reminders count them. The issue asks for the usage to include them or for the card to say it counts originals only; counting them would need their sizes stored and a backfill over every existing thumbnail, so the card says what it counts.
+- **Approved by**: user (explicit) — pre-approved for #2896 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the line if the usage starts counting thumbnails, or follow the mock if `inventario-design` words the card's scope.
+
 #### 2026-11-26 — Account: "Download my data" card and the delete dialog's link to it
 
 - **Issue/PR**: #2177 / PR #2925 (backend), UI PR stacked on it
@@ -1370,6 +1388,23 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Help leads to Settings → Help & support, where the What's new row is. The task for the owner's decisions of 2026-11-26 on #1386 asks for the dot on the entry and on the menu that leads to it.
 - **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
 - **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-27 — "Show items" on locations, and result rows at phone width
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) rows put the title and the subtitle side by side and have no second action. The search page is not in the mock.
+- **Reality**: Location rows in `frontend/src/components/CommandPalette.tsx` and location cards in `frontend/src/pages/SearchPage.tsx` get the "Show items" action that area and tag rows have (`palette-location-items-<id>`, `result-location-items-<id>`); it opens the items list filtered by `location=<id>`, and its accessible name is "Show items in {name}". Below the `sm` breakpoint a palette row stacks the subtitle under the title (`flex-col`, `sm:flex-row`), and the "Show items" / "Show files" action of the palette and the search page shows its icon only, with the label in `title` and the accessible name, so the title keeps the row's width at 360 px.
+- **Why**: #2897 asks for the action on locations, which #2801 left out because the items list had no location filter, and for result titles that a 360 px screen does not cut to a few letters.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a palette with live results.
+#### 2026-11-27 — Group switcher and role badge in the top bar
+
+- **Issue/PR**: #1258 / #2910
+- **Mock**: The header in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) (L258–L302) holds the page title, search and the toggles, with no group or role control. The group switcher is only in the sidebar ([`design-mocks/src/components/LocationGroupSwitcher.tsx`](../../design-mocks/src/components/LocationGroupSwitcher.tsx)). A role is always the `RoleBadge` of [`design-mocks/src/views/MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx) (L410–L419).
+- **Reality**: `frontend/src/components/GroupRoleCluster.tsx` puts a compact group switcher (an `h-7` outline trigger with the group name and `ChevronsUpDown`) and the caller's role between the search and the toggles. The role is the shared `frontend/src/components/RoleBadge.tsx` that the Members page and the admin pages draw: the mock's icon, tint and translated `members:roles.*` label, here at the trigger's `h-7`, `rounded-md` and `text-xs` so the pair reads as one unit. Both switchers go through `useSwitchGroup` (`frontend/src/features/group/useSwitchGroup.ts`): a switch opens `/g/<slug>` and saves the group as the user's default group.
+- **Why**: Not present in mock. #1258 asks for the active group and the caller's role side by side in the header, so a member sees which group and which rights a page shows while the sidebar is collapsed to icons or closed on a phone. #2910 asks for one badge and one switch handler.
+- **Approved by**: user (explicit) — pre-approved for #2910 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the cluster if the owner decides the sidebar switcher is enough, or follow the mock if `inventario-design` draws a group control in its header.
 
 ### i18n & Formatting
 

@@ -476,6 +476,12 @@ when to add an entry and where it goes.
   are in. Only you and the members of your groups can load it, it does not
   count toward a group's storage, and deleting your account deletes it
   ([#1382](https://github.com/denisvmedia/inventario/issues/1382)).
+- A **Location** filter on All Items, and **Show items** next to a location in
+  the search window and on the search page. The filter lists the items in every
+  area of the location, and the **Area** menu then offers only that location's
+  areas. Saved views keep it. The API takes it as `location_id` on the item
+  list, its tag counts and search; it cannot be combined with `unassigned=true`
+  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
 - A file edit page with the preview beside the details form. Opened from the
   Files page, it keeps the list you came from: the header shows the file's
   place in it with previous and next arrows, "Save and next" saves and opens
@@ -506,8 +512,12 @@ when to add an entry and where it goes.
   Uploads compute a SHA-256, and when the group already holds the same content
   the upload dialog offers to attach the existing file instead. Existing
   attachments move to the new shape when the server first starts after the
-  upgrade, and existing files get their checksum in the background
-  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+  upgrade, and existing files get their checksum in the background. A backup
+  stores a shared file once, and a restore brings it back with every item that
+  uses it, also when one of those items cannot be restored; a file that only
+  such items used is left out and counted as an error
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806),
+  [#2876](https://github.com/denisvmedia/inventario/issues/2876)).
 - Editing an item in place. Edit on the item page and in its side panel opens
   a form with the item's main fields where the details were, with a tag
   palette that adds or removes a tag in one click; "All fields" opens the
@@ -743,6 +753,20 @@ when to add an entry and where it goes.
   going out without that recipient, or, for a loan, being marked as sent
   with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Switching groups in the sidebar now saves the group as your default group,
+  as the top bar switcher already did, so the next sign-in lands in the group
+  you used last whichever control you used. A switch saves only the group: it
+  no longer writes back a name you changed on another device since the page
+  loaded. The role next to the top bar switcher is the Members page badge,
+  with its icon, color and translated label, in place of the untranslated role
+  key ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
+- The users of a suspended or inactive tenant get no email from Inventario:
+  no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. Every link in those emails answered `403 Tenant suspended`. A
+  reminder still due when the tenant is reactivated goes out then, and an
+  export requested before the suspension is still built
+  ([#2949](https://github.com/denisvmedia/inventario/issues/2949)).
 - The item delete dialog and the area delete dialog showed raw keys such as
   "delete.title" instead of their text
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
@@ -780,6 +804,17 @@ when to add an entry and where it goes.
   verified, a profile Inventario cannot use, an account on another site, closed
   registration, and an account waiting for approval. Before, it showed nothing
   for them ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+- An export, import or restore whose worker stopped in the middle of the
+  run, because the process crashed, was killed or was shut down, no longer
+  stays in progress for good. A running job records a heartbeat every
+  minute, and a job whose heartbeat is ten minutes old is taken for dead. An
+  export or an import goes back to the queue and runs again, three runs at
+  most: a worker that stops during the third fails it with "the worker
+  stopped before the export finished" (or "the import"). A restore fails at
+  once with "the worker stopped before the restore finished", since it may
+  have written part of its backup. Each of these failures shows among the
+  failed jobs and counts in `inventario_jobs_dead_lettered_total`
+  ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
 - A deactivated user whose account is linked to Google or GitHub now lands on
   the sign-in page with that message instead of a bare "User account is not
   available" page ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
@@ -801,6 +836,12 @@ when to add an entry and where it goes.
   now opens the new group. Before, the page stayed on the filled-in form, so
   it looked as if nothing had happened and a second click created another
   group ([#2815](https://github.com/denisvmedia/inventario/issues/2815)).
+- The storage card in **Group settings → Data & storage** says what its
+  number counts: each file at the size it was uploaded. The thumbnails made
+  for photos are stored apart and are not counted, there or in the storage
+  quota reminders, so a group of many small photos uses more space than the
+  card shows
+  ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it
@@ -820,6 +861,35 @@ when to add an entry and where it goes.
   server's upload location. The admin user page and the admin membership
   editor show the users' photos instead of their initials
   ([#2894](https://github.com/denisvmedia/inventario/issues/2894)).
+- On a 360 px wide screen the titles in the search window and on the search
+  page were cut to a few letters, because the subtitle and the **Show items**
+  label took the row. On a narrow screen the subtitle now goes under the title
+  and the button shows only its icon
+  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
+- Documents delivered by other systems stay consistent after rare failures.
+  An item made from a delivered draft now shows its **Source** also when the
+  delivery stopped before it recorded the draft and was never sent again. A
+  delivery refused with `intake.document_conflict` keeps neither its record
+  nor its file, also when the conflicting batch appeared while it was being
+  stored. A second batch that a delivery made and could not delete is
+  deleted by the next delivery of the document, and running a merge restore
+  again records the item on a delivered document that the first restore left
+  without it ([#2879](https://github.com/denisvmedia/inventario/issues/2879)).
+- A group with more than 50 locations or more than 50 areas showed only the
+  first 50 in the location and area pickers of the item form, on the
+  Locations page, in the backup item picker and wherever an item's location
+  is named, so an item in a later area showed a blank location and could not
+  be moved there from the form. Every location and area now appears
+  ([#2885](https://github.com/denisvmedia/inventario/issues/2885)).
+- Deleting your account finishes when you recorded something on another
+  member's item in a shared group. Item history, loans, service records,
+  supply links, maintenance schedules and the restores and currency changes
+  you ran there stay with the group and pass to its owner, and the invites you
+  created or accepted are deleted. Before, the deletion refused with "You
+  still own content shared with other people" after it had already deleted
+  your private groups, memberships and sessions. Every check that can refuse
+  a deletion now runs before anything is deleted
+  ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
 
 ### Security
 
@@ -867,6 +937,13 @@ when to add an entry and where it goes.
   exiting with status 2, so the panic is what log alerting and the pod's last
   state showed
   ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
+- The upgrade runs one more database migration, which adds `heartbeat_at`
+  to `exports` and `restore_operations`. A run a previous version started
+  has no heartbeat, and the upgrade stops the pod that worked on it. Such a
+  run is taken for dead once its job is a day old, so the exports, imports
+  and restores that were stuck in progress before the upgrade fail or run
+  again then. See the admin runbook §10
+  ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
   each retry and discard to the audit log. Two metrics come with it:
