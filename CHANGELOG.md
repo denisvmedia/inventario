@@ -998,6 +998,11 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+- Picking **Čeština** or **Русский** as the language in Settings, or opening
+  the app in a browser set to Czech or Russian, now shows the app in that
+  language. It stayed in English, and the language selector switched back to
+  English, although both translations ship with the app
+  ([#3018](https://github.com/denisvmedia/inventario/issues/3018)).
 
 - A web address custom field value of up to 2,048 characters saves whatever
   its alphabet. A long address written in Cyrillic or another script with

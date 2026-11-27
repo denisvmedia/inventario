@@ -34,8 +34,8 @@ import enTags from "./locales/en/tags.json"
 import enTrash from "./locales/en/trash.json"
 import enWarranties from "./locales/en/warranties.json"
 
-// Locales we ship today. `cs` and `ru` are present as namespace stubs (mostly
-// empty objects) and fall back to `en`; real translations land in follow-ups.
+// Locales we ship. A key missing from `cs` or `ru` falls back to `en`; the
+// catalog parity test in __tests__/i18n.test.ts keeps every en key present.
 export const SUPPORTED_LANGUAGES = ["en", "cs", "ru"] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
 
@@ -123,7 +123,9 @@ type LocaleLoaders = Record<string, () => Promise<{ default: unknown }>>
 const csLoaders = import.meta.glob<{ default: unknown }>("./locales/cs/*.json") as LocaleLoaders
 const ruLoaders = import.meta.glob<{ default: unknown }>("./locales/ru/*.json") as LocaleLoaders
 
-const lazyBackend = resourcesToBackend(async (lng: string, ns: string) => {
+// Exported so tests can init a fresh instance through the real backend; the
+// object is stateless, so instances can share it.
+export const lazyBackend = resourcesToBackend(async (lng: string, ns: string) => {
   if (lng === "en") return enResources[ns as I18nNamespace] ?? {}
   const loaders: LocaleLoaders | null = lng === "cs" ? csLoaders : lng === "ru" ? ruLoaders : null
   if (!loaders) return {}
@@ -161,13 +163,18 @@ export function buildOptions(opts: CreateI18nOptions = {}): InitOptions {
       escapeValue: false,
     },
     react: {
-      // We don't need Suspense for the en bundle (it's static); cs/ru
-      // resolve before render via the languagedetector pre-init. Disabling
-      // Suspense lets us reuse the same boot path in tests where waiting
-      // on Suspense without a SuspenseList would make assertions awkward.
+      // We don't need Suspense: the en bundle is static, init (which main.tsx
+      // awaits before the first render) waits for the detected cs/ru bundle,
+      // and changeLanguage emits languageChanged only after the new bundle
+      // has loaded, so the old language stays on screen until then.
+      // Disabling Suspense also lets tests reuse the same boot path without
+      // waiting on a Suspense boundary.
       useSuspense: false,
     },
     resources: { en: enResources },
+    // Without this, i18next treats `resources` as the complete set and never
+    // calls the lazy backend, so cs and ru would render the en fallback.
+    partialBundledLanguages: true,
     // Surface missing keys early in dev. The `parseMissingKeyHandler` is
     // what i18next renders for an unresolved key — we leave it as the key
     // itself in prod (that's the i18next default) and tag it with a
