@@ -1,6 +1,7 @@
 // Pure data-layer for areas. An area belongs to exactly one location
 // (`location_id` on the BE model). Hooks live in `./hooks.ts`.
 import { http } from "@/lib/http"
+import { listAllPages } from "@/lib/list-all-pages"
 import type { Schema } from "@/types"
 
 export type Area = Schema<"models.Area">
@@ -29,19 +30,26 @@ function envelope(attrs: Partial<Area>) {
   return { data: { type: "areas", attributes: attrs } }
 }
 
+// Returns every area of the active group, or of one location with
+// `locationId`. The endpoint pages its result, so this reads page after
+// page until it has them all; pickers and name lookups need the whole set.
 export async function listAreas(
-  options: { perPage?: number; locationId?: string; signal?: AbortSignal } = {}
+  options: { locationId?: string; signal?: AbortSignal } = {}
 ): Promise<Area[]> {
-  const params = new URLSearchParams()
-  if (options.perPage !== undefined) params.set("per_page", String(options.perPage))
-  // `?location_id=` (#1473) restricts the result to a single location;
-  // unknown / cross-tenant ids return an empty list, not a 4xx, so callers
-  // don't need to special-case errors here.
-  if (options.locationId) params.set("location_id", options.locationId)
-  const qs = params.toString()
-  const path = qs ? `/areas?${qs}` : "/areas"
-  const body = await http.get<AreasListResponse>(path, { signal: options.signal })
-  return (body.data ?? []).map((item) => ({ ...item.attributes, id: item.id }))
+  return listAllPages(async (page, perPage) => {
+    const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+    // `?location_id=` restricts the result to a single location; unknown
+    // or cross-tenant ids return an empty list, not a 4xx, so callers
+    // don't need to special-case errors here.
+    if (options.locationId) params.set("location_id", options.locationId)
+    const body = await http.get<AreasListResponse>(`/areas?${params.toString()}`, {
+      signal: options.signal,
+    })
+    return {
+      rows: (body.data ?? []).map((item) => ({ ...item.attributes, id: item.id })),
+      total: body.meta?.areas,
+    }
+  })
 }
 
 export async function getArea(id: string, signal?: AbortSignal): Promise<Area> {

@@ -156,6 +156,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
 	currencyMigrationFactory := NewCurrencyMigrationRegistryFactory()
+	currencyMigrationFactory.SetLocationGroupRegistry(groupReg)
 	fs.CurrencyMigrationRegistryFactory = currencyMigrationFactory
 	// Failed jobs (#1307) read the job rows of these stores directly.
 	fs.FailedJobRegistry = NewFailedJobRegistry(FailedJobStores{
@@ -250,6 +251,13 @@ func NewFactorySet() *registry.FactorySet {
 	// UserTenantMover (#2179) counts with the same stores, so it is wired
 	// after every fs.* field too.
 	fs.UserTenantMover = NewUserTenantMover(fs, userReg, membershipReg, userPurger)
+
+	// The group rows the user purge hands over live in stores read off the
+	// FactorySet, so they are wired after every fs.* field too.
+	userPurger.setGroupRowStores(groupRowStores(fs))
+	if invites, ok := fs.GroupInviteRegistry.(*GroupInviteRegistry); ok {
+		userPurger.setGroupInviteRegistry(invites)
+	}
 
 	return fs
 }

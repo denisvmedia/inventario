@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
@@ -104,7 +105,7 @@ func (r *RestoreOperationRegistry) HasActive(_ context.Context) (bool, error) {
 // lock, so two callers racing for the same row get one true and one false —
 // the in-memory equivalent of the conditional UPDATE the postgres registry
 // issues (#2472).
-func (r *RestoreOperationRegistry) ClaimPending(_ context.Context, id string) (bool, error) {
+func (r *RestoreOperationRegistry) ClaimPending(_ context.Context, id string, at time.Time) (bool, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -113,8 +114,40 @@ func (r *RestoreOperationRegistry) ClaimPending(_ context.Context, id string) (b
 		return false, nil
 	}
 	op.Status = models.RestoreStatusRunning
+	op.HeartbeatAt = models.NewPTimestamp(at)
 	r.items.Set(id, op)
 	return true, nil
+}
+
+func (r *RestoreOperationRegistry) Heartbeat(_ context.Context, id string, at time.Time) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	op, ok := r.items.Get(id)
+	if !ok || op.Status != models.RestoreStatusRunning {
+		return nil
+	}
+	op.HeartbeatAt = models.NewPTimestamp(at)
+	return nil
+}
+
+func (r *RestoreOperationRegistry) FailStalled(_ context.Context, sweep registry.StalledJobSweep) (int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	failed := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		op := pair.Value
+		if op.Status != models.RestoreStatusRunning || !runStalled(op.HeartbeatAt, op.CreatedDate, sweep) {
+			continue
+		}
+		op.Status = models.RestoreStatusFailed
+		op.ErrorMessage = sweep.ErrorMessage
+		op.CompletedDate = models.NewPTimestamp(sweep.Now)
+		op.HeartbeatAt = nil
+		failed++
+	}
+	return failed, nil
 }
 
 func (r *RestoreOperationRegistry) ListByExport(ctx context.Context, exportID string) ([]*models.RestoreOperation, error) {

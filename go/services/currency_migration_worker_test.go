@@ -3,6 +3,7 @@ package services_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,6 +36,34 @@ type fakeMigrationRegistry struct {
 
 	claimCalls atomic.Int32
 	sweepCalls atomic.Int32
+
+	// deleteReturns are the counts DeleteFinishedBefore returns, one per
+	// call; once empty it returns 0.
+	deleteReturns []int
+	deleteCalls   []deleteFinishedCall
+}
+
+type deleteFinishedCall struct {
+	Before time.Time
+	Limit  int
+}
+
+func (f *fakeMigrationRegistry) DeleteFinishedBefore(_ context.Context, before time.Time, limit int) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleteCalls = append(f.deleteCalls, deleteFinishedCall{Before: before, Limit: limit})
+	if len(f.deleteReturns) == 0 {
+		return 0, nil
+	}
+	n := f.deleteReturns[0]
+	f.deleteReturns = f.deleteReturns[1:]
+	return n, nil
+}
+
+func (f *fakeMigrationRegistry) deletes() []deleteFinishedCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.deleteCalls)
 }
 
 func (f *fakeMigrationRegistry) ClaimNextPending(_ context.Context) (*models.CurrencyMigration, error) {
@@ -321,4 +350,96 @@ func eventually(c *qt.C, deadline time.Duration, cond func() bool) bool {
 		time.Sleep(5 * time.Millisecond)
 	}
 	return cond()
+}
+
+// A full batch means more may be left, so the worker deletes again until a
+// batch comes back short. The cutoff is the retention period before now.
+func TestCurrencyMigrationWorker_DeletesOldMigrationsInBatches(t *testing.T) {
+	c := qt.New(t)
+
+	now := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	reg := &fakeMigrationRegistry{deleteReturns: []int{100, 100, 7}}
+	worker := services.NewCurrencyMigrationWorker(reg, &fakeProcessor{},
+		services.WithCurrencyMigrationActiveInterval(10*time.Millisecond),
+		services.WithCurrencyMigrationIdleInterval(10*time.Millisecond),
+		services.WithCurrencyMigrationClock(func() time.Time { return now }),
+		services.WithCurrencyMigrationRetention(48*time.Hour),
+	)
+	worker.Start(t.Context())
+	defer worker.Stop()
+
+	c.Assert(eventually(c, time.Second, func() bool { return len(reg.deletes()) >= 3 }), qt.IsTrue)
+	want := deleteFinishedCall{Before: now.Add(-48 * time.Hour), Limit: 100}
+	c.Assert(reg.deletes(), qt.DeepEquals, []deleteFinishedCall{want, want, want})
+
+	// The clock has not moved, so the next ticks delete nothing more.
+	claims := reg.claimCalls.Load()
+	c.Assert(eventually(c, time.Second, func() bool { return reg.claimCalls.Load() >= claims+3 }), qt.IsTrue)
+	c.Assert(reg.deletes(), qt.HasLen, 3)
+}
+
+// The cleanup runs once an hour, not on every tick.
+func TestCurrencyMigrationWorker_DeletesOldMigrationsAgainAfterAnHour(t *testing.T) {
+	c := qt.New(t)
+
+	start := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	var now atomic.Int64
+	now.Store(start.UnixNano())
+	reg := &fakeMigrationRegistry{}
+	worker := services.NewCurrencyMigrationWorker(reg, &fakeProcessor{},
+		services.WithCurrencyMigrationActiveInterval(10*time.Millisecond),
+		services.WithCurrencyMigrationIdleInterval(10*time.Millisecond),
+		services.WithCurrencyMigrationClock(func() time.Time { return time.Unix(0, now.Load()).UTC() }),
+	)
+	worker.Start(t.Context())
+	defer worker.Stop()
+
+	c.Assert(eventually(c, time.Second, func() bool { return len(reg.deletes()) >= 1 }), qt.IsTrue)
+	now.Store(start.Add(59 * time.Minute).UnixNano())
+	claims := reg.claimCalls.Load()
+	c.Assert(eventually(c, time.Second, func() bool { return reg.claimCalls.Load() >= claims+3 }), qt.IsTrue)
+	c.Assert(reg.deletes(), qt.HasLen, 1)
+
+	later := start.Add(time.Hour)
+	now.Store(later.UnixNano())
+	c.Assert(eventually(c, time.Second, func() bool { return len(reg.deletes()) >= 2 }), qt.IsTrue)
+	c.Assert(reg.deletes()[0].Before, qt.Equals, start.Add(-services.DefaultCurrencyMigrationRetention))
+	c.Assert(reg.deletes()[1].Before, qt.Equals, later.Add(-services.DefaultCurrencyMigrationRetention))
+}
+
+// A pause stops new migrations, not the cleanup of finished ones.
+func TestCurrencyMigrationWorker_DeletesOldMigrationsWhilePaused(t *testing.T) {
+	c := qt.New(t)
+
+	reg := &fakeMigrationRegistry{}
+	pause := &fakePauseChecker{}
+	pause.paused.Store(true)
+	worker := services.NewCurrencyMigrationWorker(reg, &fakeProcessor{},
+		services.WithCurrencyMigrationIdleInterval(10*time.Millisecond),
+		services.WithCurrencyMigrationPauseController(pause),
+	)
+	worker.Start(t.Context())
+	defer worker.Stop()
+
+	c.Assert(eventually(c, time.Second, func() bool { return len(reg.deletes()) >= 1 }), qt.IsTrue)
+	c.Assert(reg.claimCalls.Load(), qt.Equals, int32(0))
+}
+
+// The daily cap counts the completed migrations of the current UTC day, so
+// the worker never deletes a migration that finished less than a day ago.
+func TestCurrencyMigrationWorker_RetentionIsAtLeastADay(t *testing.T) {
+	c := qt.New(t)
+
+	now := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+	reg := &fakeMigrationRegistry{}
+	worker := services.NewCurrencyMigrationWorker(reg, &fakeProcessor{},
+		services.WithCurrencyMigrationIdleInterval(10*time.Millisecond),
+		services.WithCurrencyMigrationClock(func() time.Time { return now }),
+		services.WithCurrencyMigrationRetention(time.Hour),
+	)
+	worker.Start(t.Context())
+	defer worker.Stop()
+
+	c.Assert(eventually(c, time.Second, func() bool { return len(reg.deletes()) >= 1 }), qt.IsTrue)
+	c.Assert(reg.deletes()[0].Before, qt.Equals, now.Add(-services.MinCurrencyMigrationRetention))
 }
