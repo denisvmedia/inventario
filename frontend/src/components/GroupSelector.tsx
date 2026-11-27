@@ -12,23 +12,23 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSwitchGroup } from "@/features/group/useSwitchGroup"
 import { withGroupQuery } from "@/lib/group-aware-url"
 
 // GroupSelector shows the currently-active LocationGroup in the sidebar
-// header and lets the user switch groups. Switching navigates to
-// /g/{newSlug}/, which is the URL-as-source-of-truth contract from #1404 —
-// the GroupProvider's slug-mirror effect feeds the http rewrite from
-// there, and two browser tabs at different groups stay isolated.
+// header and lets the user switch groups. Switching goes through
+// useSwitchGroup, the handler the top bar switcher uses too: it navigates to
+// /g/{newSlug}/, the URL-as-source-of-truth contract from #1404, and saves
+// the group as the user's default_group_id (#1300).
 //
 // "Create new group" routes to /groups/new, the existing onboarding/empty
-// state. Persisting the choice as the user's default_group_id (#1263) is
-// out of scope for the shell PR; that lands when the Settings page (#1414)
-// or the legacy debounced PUT /auth/me is ported.
+// state.
 export function GroupSelector() {
   const { groups, currentGroup } = useCurrentGroup()
   const navigate = useNavigate()
   const params = useParams<{ groupSlug?: string }>()
   const { t } = useTranslation()
+  const switchGroup = useSwitchGroup()
   const [open, setOpen] = useState(false)
 
   const activeSlug = currentGroup?.slug ?? params.groupSlug ?? null
@@ -40,13 +40,6 @@ export function GroupSelector() {
   // per group switch — `useMembers` stays scoped to surfaces that need
   // the actual list (Members page, Group Settings membership panel).
   const memberCount = currentGroup?.members_count
-
-  function handleSwitch(slug: string | undefined) {
-    setOpen(false)
-    if (!slug) return
-    if (slug === activeSlug) return
-    navigate(`/g/${encodeURIComponent(slug)}`)
-  }
 
   // Absent groups data → render nothing rather than a flicker. The shell's
   // ProtectedRoute keeps the user on the boot fallback while groups load
@@ -88,7 +81,10 @@ export function GroupSelector() {
             {groups.map((group) => (
               <DropdownMenuItem
                 key={group.id}
-                onSelect={() => handleSwitch(group.slug)}
+                onSelect={() => {
+                  setOpen(false)
+                  switchGroup(group)
+                }}
                 className="gap-2 p-2"
               >
                 <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 shrink-0">
