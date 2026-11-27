@@ -1561,7 +1561,12 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
         "Item 50 of 52 to review"
       )
     )
-    await user.click(screen.getByTestId("commodity-review-mark"))
+    // The position comes from page 1, but the next item is on page 2, and
+    // both review actions stay disabled until that page has loaded. A click
+    // before then lands on a disabled button and does nothing.
+    const mark = screen.getByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    await user.click(mark)
     await waitFor(() =>
       expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c51?`)
     )

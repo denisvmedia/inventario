@@ -42,13 +42,14 @@ func (s *CommodityEventService) EmitCreated(ctx context.Context, after *models.C
 	s.emit(ctx, after.ID, models.CommodityEventKindCreated, nil, snapshotCreated(after))
 }
 
-// EmitUpdated diffs before vs after and emits one or more events. Specific
-// kinds (status_changed, moved, price_changed, cover_changed) take
-// precedence over the generic "updated" kind: the timeline reads better
-// when the user sees "moved Living Room → Storage Unit" rather than a
-// vague "edited". If multiple aspects shifted in one write, multiple
-// events emit — one per detected aspect — so the timeline stays sparse
-// and per-row meaningful.
+// EmitUpdated diffs before vs after and emits one event per aspect that
+// changed. The status, the area, the prices and the cover each have their
+// own kind (status_changed, moved, price_changed, cover_changed): the
+// timeline reads better when the user sees "moved Living Room → Storage
+// Unit" rather than a vague "edited". Every other field the timeline knows
+// (genericUpdateChanged) goes into one "updated" event, whether or not a
+// specific event emits in the same write. Its snapshot holds none of the
+// fields a specific kind covers, so no change is recorded twice.
 //
 // When no meaningful field changed (e.g. saving the same row, refreshing
 // last_modified_date with no actual edit), nothing emits.
@@ -57,14 +58,11 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 		return
 	}
 
-	emittedSpecific := false
-
 	if before.Status != after.Status {
 		s.emit(ctx, after.ID, models.CommodityEventKindStatusChanged,
 			models.CommodityEventPayload{"status": string(before.Status)},
 			models.CommodityEventPayload{"status": string(after.Status)},
 		)
-		emittedSpecific = true
 	}
 
 	if !ptrEq(before.AreaID, after.AreaID) {
@@ -72,7 +70,6 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 			models.CommodityEventPayload{"area_id": ptrString(before.AreaID)},
 			models.CommodityEventPayload{"area_id": ptrString(after.AreaID)},
 		)
-		emittedSpecific = true
 	}
 
 	if priceChanged(before, after) {
@@ -90,7 +87,6 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 				"current_price":            priceValue(after.CurrentPrice),
 			},
 		)
-		emittedSpecific = true
 	}
 
 	if !ptrEq(before.CoverFileID, after.CoverFileID) {
@@ -98,11 +94,6 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 			models.CommodityEventPayload{"cover_file_id": ptrString(before.CoverFileID)},
 			models.CommodityEventPayload{"cover_file_id": ptrString(after.CoverFileID)},
 		)
-		emittedSpecific = true
-	}
-
-	if emittedSpecific {
-		return
 	}
 
 	if !genericUpdateChanged(before, after) {
@@ -280,7 +271,7 @@ func priceChanged(before, after *models.Commodity) bool {
 }
 
 // genericUpdateChanged reports whether any user-meaningful field changed
-// outside the specific-kind fields already handled above. Excludes
+// outside the fields the specific kinds cover. Excludes
 // last_modified_date because the registry refreshes it on every write
 // regardless of intent — counting it would emit "updated" events with
 // no visible diff.
@@ -328,7 +319,9 @@ func snapshotCreated(c *models.Commodity) models.CommodityEventPayload {
 // snapshotForUpdate captures the fields of a generic "updated" diff: every
 // field genericUpdateChanged compares, so the timeline can tell which ones
 // changed (it names the sellers of an edit that changed only the seller).
-// A field missing here would make an edit of it look like no change.
+// A field missing here would make an edit of it look like no change. The
+// fields of the specific kinds (status, area, prices, cover) stay out: their
+// own events record them, also when they change in the same write.
 // Empty lists are stored as null, so an empty list and a missing one
 // compare equal.
 func snapshotForUpdate(c *models.Commodity) models.CommodityEventPayload {
