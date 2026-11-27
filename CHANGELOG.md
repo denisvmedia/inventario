@@ -951,7 +951,8 @@ when to add an entry and where it goes.
   account's groups, item lists and saved views until the app reloaded them,
   and a sign-out or a change of account in another tab left the previous
   account's data on screen in this one. The same now holds when a session
-  ends because it could not be renewed
+  ends because it could not be renewed, and a change the previous account
+  saved that finishes after the switch no longer shows up for the next one
   ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
 
 ### Operators

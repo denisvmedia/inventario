@@ -82,6 +82,7 @@ export function useHasPassword(): boolean {
 export function useLogout() {
   return useMutation<void, Error, void>({
     mutationFn: () => logout(),
+    meta: { changesIdentity: true },
   })
 }
 
@@ -105,6 +106,7 @@ export function useLogin() {
   const queryClient = useQueryClient()
   return useMutation<LoginOutcome, Error, LoginVars>({
     mutationFn: ({ email, password }) => login(email, password),
+    meta: { changesIdentity: true },
     onSuccess: (outcome) => {
       if (outcome.kind === "ok") {
         if (outcome.user) {
@@ -124,6 +126,7 @@ export function useCompleteLoginMFA() {
   const queryClient = useQueryClient()
   return useMutation<CurrentUser | undefined, Error, CompleteLoginMFARequest>({
     mutationFn: (req) => completeLoginMFA(req),
+    meta: { changesIdentity: true },
     onSuccess: (user) => {
       if (user) {
         queryClient.setQueryData(authKeys.currentUser(), user)
@@ -158,6 +161,7 @@ export function useMagicLinkVerify() {
   const queryClient = useQueryClient()
   return useMutation<LoginOutcome, Error, string>({
     mutationFn: (token) => verifyMagicLink(token),
+    meta: { changesIdentity: true },
     onSuccess: (outcome) => {
       if (outcome.kind === "ok") {
         if (outcome.user) {

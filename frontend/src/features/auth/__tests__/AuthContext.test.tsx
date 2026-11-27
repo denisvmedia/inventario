@@ -8,7 +8,7 @@ import { renderWithProviders } from "@/test/render"
 import type { QueryClient } from "@tanstack/react-query"
 
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
-import { useLogin } from "@/features/auth/hooks"
+import { useLogin, useUpdateProfile } from "@/features/auth/hooks"
 import { authKeys } from "@/features/auth/keys"
 import { groupKeys } from "@/features/group/keys"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
@@ -17,6 +17,7 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests, http } from "@/lib/http"
 import { clearAuth, getAccessToken, setAccessToken } from "@/lib/auth-storage"
 import { fakeAccessToken } from "@/test/handlers/auth"
+import { createQueryClient } from "@/lib/query-client"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -228,6 +229,7 @@ describe("query cache across a change of the signed-in user", () => {
   function SessionProbe() {
     const auth = useAuth()
     const login = useLogin()
+    const updateProfile = useUpdateProfile()
     return (
       <div
         data-testid="session"
@@ -242,6 +244,9 @@ describe("query cache across a change of the signed-in user", () => {
           onClick={() => login.mutate({ email: userB.email, password: "secret" })}
         >
           sign in as B
+        </button>
+        <button type="button" onClick={() => updateProfile.mutate({ name: "Alice (edited)" })}>
+          save profile
         </button>
       </div>
     )
@@ -293,10 +298,10 @@ describe("query cache across a change of the signed-in user", () => {
     )
   }
 
-  async function signedInAsA() {
+  async function signedInAsA(queryClient?: QueryClient) {
     setAccessToken(tokenA)
     installSessionHandlers()
-    const rendered = renderWithProviders({ initialPath: "/", routes: sessionRoutes })
+    const rendered = renderWithProviders({ initialPath: "/", routes: sessionRoutes, queryClient })
     await waitFor(() =>
       expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userA.email)
     )
@@ -381,6 +386,52 @@ describe("query cache across a change of the signed-in user", () => {
       expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userB.email)
     )
     expect(cachedQueryData(queryClient)).not.toContain(userA.email)
+  })
+
+  // The app's client drops the callbacks of a mutation that finishes for a
+  // user who is no longer signed in; the bare test client does not.
+  it("keeps A's late profile save out of B's session", async () => {
+    let releaseSave!: () => void
+    const saveGate = new Promise<void>((resolve) => {
+      releaseSave = resolve
+    })
+    let saveReceived = false
+    const { queryClient } = await signedInAsA(createQueryClient())
+    server.use(
+      msw.put(api("/auth/me"), async () => {
+        saveReceived = true
+        await saveGate
+        return HttpResponse.json({ ...userA, name: "Alice (edited)" })
+      })
+    )
+    const currentUserWrites: unknown[] = []
+    queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === "updated" &&
+        event.action.type === "success" &&
+        JSON.stringify(event.query.queryKey) === JSON.stringify(authKeys.currentUser())
+      ) {
+        currentUserWrites.push(event.action.data)
+      }
+    })
+
+    await act(async () => {
+      screen.getByRole("button", { name: "save profile" }).click()
+    })
+    await waitFor(() => expect(saveReceived).toBe(true))
+    act(() => otherTabWritesToken(tokenA, tokenB))
+    await waitFor(() =>
+      expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userB.email)
+    )
+
+    await act(async () => {
+      releaseSave()
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(JSON.stringify(currentUserWrites)).not.toContain("Alice (edited)")
+    expect(queryClient.getQueryData(authKeys.currentUser())).toMatchObject({ id: userB.id })
+    expect(screen.getByTestId("session").getAttribute("data-email")).toBe(userB.email)
   })
 
   it("keeps the cache when another tab refreshes the same user's token", async () => {

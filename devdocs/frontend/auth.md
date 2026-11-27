@@ -68,6 +68,13 @@ each change with `queryClient.clear()`, which drops every query and mutation
 before the next user's first render. Starting and ending an impersonation
 session reload the page, which rebuilds the cache as well.
 
+A mutation that is still running at the change finishes into nothing: the
+mutation cache drops its callbacks and never settles its promise (see
+"Signed-in user changes" in [data.md](data.md)). The mutations that make the
+change themselves (`useLogin`, `useCompleteLoginMFA`, `useMagicLinkVerify`,
+`useLogout`, `useStartImpersonation`, `useEndImpersonation`) carry
+`meta: { changesIdentity: true }` and run their callbacks as usual.
+
 ### Boot sequence
 
 On startup `AuthProvider` resolves who is signed in:

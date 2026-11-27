@@ -207,6 +207,18 @@ cache. Feature hooks do no cache work of their own on sign-in or sign-out;
 restoring a previous user's data after a failed sign-out request would put
 it back into a signed-out cache.
 
+Clearing the cache does not stop a mutation that is already running. The
+mutation cache in `createQueryClient` (`lib/query-client.ts`) records
+`authIdentityGeneration()` when a mutation starts. If the generation differs
+when the mutation finishes, the mutation stops there: its hook callbacks,
+the callbacks passed to `mutate()` and the `mutateAsync()` promise never
+run or settle, so a late response cannot write the previous user's data
+into the next user's cache. A mutation that changes the signed-in user
+itself (sign-in, sign-out, impersonation) sets
+`meta: { changesIdentity: true }` so that its callbacks still run. A new
+mutation of that kind needs the flag too; without it, its `onSuccess` never
+runs.
+
 ### 3. Direct cache write (rare)
 
 When the server response IS the new state and you don't want a refetch,

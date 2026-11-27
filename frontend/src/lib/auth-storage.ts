@@ -71,7 +71,17 @@ type IdentityListener = () => void
 
 const identityListeners = new Set<IdentityListener>()
 
+// Counts the changes of the signed-in user this tab has seen. Work that
+// started under one value and finishes under another belongs to a user who is
+// no longer signed in (see the mutation cache in lib/query-client.ts).
+let identityGeneration = 0
+
+export function authIdentityGeneration(): number {
+  return identityGeneration
+}
+
 function notifyIdentityChange(): void {
+  identityGeneration += 1
   for (const listener of [...identityListeners]) listener()
 }
 
