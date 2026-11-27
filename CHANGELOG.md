@@ -1559,9 +1559,11 @@ when to add an entry and where it goes.
   until it timed out. It is now an ordinary release object on install, and
   stays a `pre-upgrade` hook on upgrade
   ([#2773](https://github.com/denisvmedia/inventario/pull/2773)).
-- The chart's pods pass Pod Security `restricted`: `podSecurityContext` now
-  sets the `RuntimeDefault` seccomp profile, without which a `restricted`
-  namespace refused every pod but the demo ones
+- The chart's own pods pass Pod Security `restricted`: `podSecurityContext`
+  now sets the `RuntimeDefault` seccomp profile, without which a `restricted`
+  namespace refused them. The demo Redis and the demo MinIO bucket Job run as
+  root, so a release with `demo.redis.enabled` or `demo.minio.enabled` needs
+  a namespace that enforces `baseline`
   ([#2774](https://github.com/denisvmedia/inventario/pull/2774)).
 - `helm install --wait` no longer deadlocks with `demo.postgresql.enabled`: the
   setup Job is applied alongside the database rather than as a post-install
