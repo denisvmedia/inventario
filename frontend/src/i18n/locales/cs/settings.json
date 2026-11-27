@@ -526,6 +526,7 @@
       "other": "Ostatní",
       "trash": "Koš"
     },
+    "countsNote": "Každý soubor se počítá ve velikosti, ve které byl nahrán. Náhledy vytvořené k fotografiím se nezapočítávají.",
     "errorBody": "Využití úložiště se nyní nepodařilo načíst. Zkuste to za chvíli znovu.",
     "free": "Volné",
     "manageFiles": "Spravovat soubory",

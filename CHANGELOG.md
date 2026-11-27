@@ -648,6 +648,13 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- The storage card in **Group settings → Data & storage** says what its
+  number counts: each file at the size it was uploaded. The thumbnails made
+  for photos are stored apart and are not counted, there or in the storage
+  quota reminders, so a group of many small photos uses more space than the
+  card shows
+  ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
+
 - Saving an item from the **All fields** dialog keeps its status date, status
   note and sale price. The dialog sent the item without them, and the save
   cleared them. The dialog also offered a status change it could not finish:

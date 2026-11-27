@@ -20,7 +20,8 @@ func StorageUsage() func(r chi.Router) {
 
 // handleStorageUsage returns per-group storage totals (#1388).
 // @Summary Get storage usage for a group
-// @Description Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+// @Description Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+// @Description Each file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.
 // @Tags storage
 // @Produce json
 // @Param groupSlug path string true "Group slug"
