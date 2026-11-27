@@ -3,10 +3,13 @@ package services_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
+	"github.com/golang-jwt/jwt/v5"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -580,4 +583,57 @@ func TestAccountDeletionService_DeleteAccount_HandsTheMembersItemRecordsToTheOwn
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = fs.GroupInviteRegistry.GetByToken(ctx, accepted.Token)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// A tag or seller a member created in a shared group is the group's (#2883):
+// the deletion hands it to the owner instead of refusing, and records the
+// hand-over in the audit log, naming the operator when the deletion runs in
+// an impersonation session.
+func TestAccountDeletionService_DeleteAccount_HandsTheMembersTagsAndSellersToTheOwner(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "catalog-group-slug-00000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	tags := must.Must(fs.TagRegistryFactory.CreateUserRegistry(leavingCtx))
+	tag, err := tags.Create(leavingCtx, models.Tag{Kind: models.TagKindCommodity, Slug: "garage", Label: "Garage", Color: models.TagColorBlue})
+	c.Assert(err, qt.IsNil)
+	sellers := must.Must(fs.SellerRegistryFactory.CreateUserRegistry(leavingCtx))
+	seller, err := sellers.Create(leavingCtx, models.Seller{Name: "Hardware store"})
+	c.Assert(err, qt.IsNil)
+
+	deleteCtx := appctx.WithJWTClaims(ctx, jwt.MapClaims{"imp": true, "impersonator_id": "operator-1"})
+	c.Assert(svc.DeleteAccount(deleteCtx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	keptTag, err := fs.TagRegistryFactory.CreateServiceRegistry().Get(ctx, tag.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptTag.CreatedByUserID, qt.Equals, staying.ID)
+	keptSeller, err := fs.SellerRegistryFactory.CreateServiceRegistry().Get(ctx, seller.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptSeller.CreatedByUserID, qt.Equals, staying.ID)
+
+	entries, err := fs.AuditLogRegistry.ListByAction(ctx, registry.AuditActionAccountDeletionHandOver)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	entry := entries[0]
+	c.Assert(entry.UserID, qt.DeepEquals, &leaving.ID)
+	c.Assert(entry.EntityID, qt.DeepEquals, &group.ID)
+	c.Assert(entry.ImpersonatedBy, qt.DeepEquals, new("operator-1"))
+	var handOver struct {
+		ToUserID string         `json:"to_user_id"`
+		Rows     map[string]int `json:"rows"`
+	}
+	c.Assert(json.Unmarshal([]byte(entry.UserAgent), &handOver), qt.IsNil)
+	c.Assert(handOver.ToUserID, qt.Equals, staying.ID)
+	c.Assert(handOver.Rows, qt.DeepEquals, map[string]int{"tags": 1, "sellers": 1})
 }

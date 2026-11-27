@@ -254,13 +254,15 @@ func (f *CustomFieldRegistryFactory) groupsCreatedBy(tenantID, userID string) []
 }
 
 // reattributeCreator gives the fields userID created in tenantID to the heir
-// of their group in heirs; a group without an heir keeps the creator. The
-// template entries live on the fields, so they move with them.
-func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// of their group in heirs and returns how many each group handed over; a
+// group without an heir keeps the creator. The template entries live on the
+// fields, so they move with them.
+func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.base.lock.Lock()
 	defer f.base.lock.Unlock()
+	moved := map[string]int{}
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		d := pair.Value
 		heir := heirs[d.GroupID]
@@ -270,7 +272,9 @@ func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string,
 		cp := *d
 		cp.CreatedByUserID = heir
 		pair.Value = &cp
+		moved[d.GroupID]++
 	}
+	return moved
 }
 
 // purgeWhere removes the fields match selects, for the group and tenant
