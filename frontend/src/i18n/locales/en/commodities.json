@@ -305,8 +305,10 @@
   },
   "editForm": {
     "allFields": "All fields",
+    "changedSinceOpened": "This item changed since you opened it, so your changes were not saved. Reload it to see the item as it is now, then make your changes again.",
     "editing": "Editing",
     "hiddenFieldError": "A field this form does not show needs fixing. Open all fields to correct it.",
+    "reload": "Reload",
     "save": "Save changes",
     "saveAndNext": "Save and next",
     "sections": {
@@ -441,6 +443,7 @@
     "filesNotUploaded": "Not uploaded: {{names}}",
     "fileUploadFailed": "Couldn't upload {{name}}. You can attach it later from the item's detail page.",
     "fillManually": "Fill manually",
+    "itemChanged": "This item changed since you opened it, so nothing was saved. Close this dialog and reload the item.",
     "leftoverFilesFailed_one": "{{count}} uploaded file could not be moved to the trash. You can find it on the Files page.",
     "leftoverFilesFailed_other": "{{count}} uploaded files could not be moved to the trash. You can find them on the Files page.",
     "serverError": "Something went wrong. Please try again.",
@@ -1006,6 +1009,7 @@
     "bulkUpdated_one": "{{count}} item updated.",
     "bulkUpdated_other": "{{count}} items updated.",
     "bulkUpdateError": "Couldn't update the selected items.",
+    "changedMeanwhile": "This item changed since the page loaded it, so your change was not saved. The page now shows the item as it is; try again.",
     "created": "Item added.",
     "deleted": "Item moved to the trash.",
     "deleteError": "Couldn't delete the item.",

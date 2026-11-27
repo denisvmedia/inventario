@@ -60,6 +60,7 @@ import type { CustomField } from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
 import {
   toFormValue,
+  customFieldGuessText,
   type CustomFieldFormValue,
   type CustomFieldFormValues,
 } from "@/features/customFields/values"
@@ -1169,7 +1170,7 @@ function ReviewPanel({
               key={def.id}
               fieldKey={`custom-${def.id}`}
               label={def.name}
-              display={customGuessText(def, guess.value, t)}
+              display={customFieldGuessText(def, guess.value, t)}
               yours={yours ? customFormText(def, yours, t) : undefined}
               guess={guess as ScanFieldGuess}
               checked={acceptedCustom.has(def.id)}
@@ -1512,17 +1513,6 @@ function sellerIntoComments(result: ScanResult, sellerLine: (name: string) => st
 // defaultAcceptedFor pre-checks every field the model is reasonably sure
 // about (confidence ≥ 0.3 — below that it's essentially guessing). Used
 // both for a single-item scan and after the user picks a candidate.
-// customGuessText shows a custom field value read by the scan.
-function customGuessText(def: CustomField, value: unknown, t: (key: string) => string): string {
-  if (def.type === "select") {
-    return def.options.find((o) => o.id === value)?.label ?? String(value)
-  }
-  if (def.type === "boolean") {
-    return value === true ? t("customFields:detail.yes") : t("customFields:detail.no")
-  }
-  return String(value)
-}
-
 // customFormText shows a custom field value the form holds, in the form's
 // shape (a select field's option id, "true"/"false", an amount and its
 // currency).

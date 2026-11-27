@@ -102,7 +102,7 @@ func TestIsPlaceholderSecret(t *testing.T) {
 		{"root placeholder uppercased", "PLEASE-CHANGE-THIS-TO-A-SECURE-RANDOM-VALUE-USE-OPENSSL-RAND-HEX-32", true},
 		{"override jwt placeholder", "your-secure-32-byte-jwt-secret-here-replace-this-value", true},
 		{"override file placeholder", "your-secure-32-byte-file-signing-key-here-replace-this-value", true},
-		// Labelled CI test fixtures (.github/workflows/e2e-tests.yml) must NOT be
+		// Labelled CI test fixtures (the e2e jobs of .github/workflows/docker.yml) must NOT be
 		// rejected — otherwise the e2e stack can't start. Regression guard for the
 		// over-broad "please-change" marker that previously matched these.
 		{"e2e jwt fixture", "e2e-jwt-secret-please-change-for-prod", false},

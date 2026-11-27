@@ -17,7 +17,7 @@ import { daysOverdue, isOpen, type LoanEntity, type UpdateLoanRequest } from "@/
 import { isOpen as serviceIsOpen } from "@/features/services/api"
 import { useServicesForCommodity } from "@/features/services/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
+import { useHoldItem, useHoldingConfirm } from "@/hooks/useItemHold"
 import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 
@@ -44,9 +44,10 @@ interface LendTabProps {
 export function LendTab({ commodityId, commodityCount, canStart = true }: LendTabProps) {
   const { t } = useTranslation(["loans", "common"])
   const toast = useAppToast()
-  const confirm = useConfirm()
+  const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<(LoanEntity & { id: string }) | null>(null)
+  useHoldItem(open || editing !== null)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useLoansForCommodity(commodityId)

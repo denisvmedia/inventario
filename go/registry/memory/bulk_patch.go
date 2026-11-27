@@ -81,6 +81,7 @@ func (r *CommodityRegistry) writePatch(id string, patched models.Commodity) (*mo
 	if err != nil {
 		return nil, "", err
 	}
+	next.Revision = c.Revision + 1
 	r.items.Set(id, &next)
 	return copyOut(&next), commodityAreaID(c), nil
 }

@@ -125,12 +125,12 @@ e2e:
 #     for the What's new page: see the `frontend` filter for why. Pushes to
 #     master and tags build the image whatever changed, so a published image
 #     always carries the current file.
-#   - `e2e/**` and `docker-compose.e2e.yaml` because e2e-tests waits for
-#     docker.yml to publish a sha-<HEAD> image; if docker.yml is skipped
-#     the consumer will fail at `docker pull`. Aligning the gates avoids
-#     the silent-deadlock failure mode.
-#   - `k8s/dev/**` because kind-smoke-test consumes the same image; same
-#     deadlock risk if the gates disagree.
+#   - `e2e/**` and `docker-compose.e2e.yaml` because the e2e lanes in
+#     docker.yml test the image of this commit and run only when it is
+#     built. Without them an e2e-only PR would report green without running
+#     a single test.
+#   - `k8s/dev/**` for the same reason: the kind smoke test in docker.yml
+#     runs only against an image built for the commit.
 image_inputs:
   - 'Dockerfile'
   - '.dockerignore'

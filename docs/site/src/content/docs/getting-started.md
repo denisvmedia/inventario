@@ -35,6 +35,11 @@ An **item** is anything you want to keep track of — an appliance, a laptop, a 
 Items don't have to be placed in a location to be saved. If you skip that, the item appears with a small banner offering to **Place in location** — you can do that whenever you like, or leave it unassigned.
 :::
 
+On a phone, the **Add item** dialog and the other long forms fill the screen, with
+their buttons at the bottom. While you type, the buttons stay above the on-screen
+keyboard. The back gesture closes the form as its close button does and keeps
+you on the page, so **Add item** still asks whether to save what you entered.
+
 If you're trying Inventario from the public landing page before creating an account, you can draft your first item right there. Until you sign up, it is kept in this browser only: closing the form offers **Keep on this device**, which takes you to sign in. After you sign up, the app finishes adding it for you — your draft is never lost.
 
 See [Items](../items/) for a full reference to every field.
@@ -75,7 +80,8 @@ result, or move to it with the arrow keys and press `Enter`, to open it.
 
 With nothing typed, the window lists the results you opened recently, from
 there or from the search page, followed by links to the main pages. The recent
-list is kept in your browser, separately for each group.
+list is kept in your browser, for you and separately for each group; someone
+else who signs in on this browser does not see it, and signing out removes it.
 
 Items are matched on more than their name: serial and part numbers, tags, and
 notes count too. See [Searching for items](../items/#searching-for-items).

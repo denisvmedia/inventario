@@ -301,6 +301,16 @@ type Commodity struct {
 	// write, and the flag never leaves the server.
 	//ptah:schema:field name="legacy_zero_prices" type="BOOLEAN" not_null="true" default="true"
 	LegacyZeroPrices bool `json:"-" db:"legacy_zero_prices"`
+	// Revision counts the writes to the item: a new item has revision 1, and
+	// every registry write of a column an edit form sends back adds one (an
+	// edit, a bulk change, the draft mark, a tag rename or delete, an item
+	// type delete that moves the item, a currency migration). An edit form
+	// sends the revision it was opened at with its save, and the save is
+	// refused when the item was written since (registry.WithExpectedRevision),
+	// so it cannot undo a change it never showed. Server-managed: Create and
+	// Update ignore the caller's value.
+	//ptah:schema:field name="revision" type="BIGINT" not_null="true" default="1"
+	Revision int64 `json:"revision" db:"revision"`
 	// DeletedAt is when the item was moved to Trash, nil while it is live. A
 	// trashed item keeps its id, asset number, history, loans, service
 	// records, maintenance schedules and attachments, and is left out of every
@@ -420,6 +430,16 @@ func SamePrice(a, b *decimal.Decimal) bool {
 //ptah:schema:function name="commodity_search_text" params="name TEXT, short_name TEXT, serial_number TEXT, extra_serial_numbers JSONB, part_numbers JSONB, tags JSONB, comments TEXT, warranty_notes TEXT, status_note TEXT" returns="TEXT" language="sql" volatility="IMMUTABLE" body="SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')" comment="Builds commodities.search_text, the text the item search matches"
 type CommoditySearchFunctions struct {
 	_ int
+}
+
+// GetRevision returns the item's Revision.
+func (a *Commodity) GetRevision() int64 {
+	return a.Revision
+}
+
+// SetRevision sets the item's Revision. Only the registries call it.
+func (a *Commodity) SetRevision(revision int64) {
+	a.Revision = revision
 }
 
 // IsTrashed reports whether the item is in Trash.

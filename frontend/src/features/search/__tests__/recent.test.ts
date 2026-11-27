@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest"
 
-import { clearRecent, getRecent, pushRecent } from "@/features/search/recent"
+import {
+  clearAllRecent,
+  clearRecent,
+  getRecent,
+  pushRecent,
+  recentScope,
+} from "@/features/search/recent"
 
 afterEach(() => {
   // Stay tidy: each test sets up its own scope; clearing all known
@@ -57,6 +63,33 @@ describe("recent items helper", () => {
     expect(getRecent("scope-b")).toHaveLength(1)
     expect(getRecent("scope-a")[0].id).toBe("c1")
     expect(getRecent("scope-b")[0].id).toBe("l1")
+  })
+
+  it("keeps the recents of two users in one group apart (#3023)", () => {
+    pushRecent(recentScope("u1", "household"), {
+      type: "commodity",
+      id: "c1",
+      title: "A",
+      url: "/a",
+    })
+    expect(getRecent(recentScope("u2", "household"))).toEqual([])
+    expect(getRecent(recentScope("u1", "household"))[0].id).toBe("c1")
+  })
+
+  it("clearAllRecent wipes every scope and nothing else", () => {
+    pushRecent(recentScope("u1", "household"), {
+      type: "commodity",
+      id: "c1",
+      title: "A",
+      url: "/a",
+    })
+    pushRecent(recentScope("u2", "office"), { type: "location", id: "l1", title: "B", url: "/b" })
+    localStorage.setItem("inventario_theme", "dark")
+    clearAllRecent()
+    expect(getRecent(recentScope("u1", "household"))).toEqual([])
+    expect(getRecent(recentScope("u2", "office"))).toEqual([])
+    expect(localStorage.getItem("inventario_theme")).toBe("dark")
+    localStorage.removeItem("inventario_theme")
   })
 
   it("clearRecent wipes the scope", () => {

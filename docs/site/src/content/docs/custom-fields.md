@@ -100,7 +100,7 @@ Point at a row and click the bin.
 
 - When no item and no [draft](../items/#save-as-draft) has a value for the
   field, confirm and the field is removed. A field a draft shows empty does not
-  count.
+  count, and that draft is left as it is: a member editing it can keep going.
 - When items or drafts have a value, the dialog says how many items, Trash
   included, and how many drafts. Tick **Delete the values too** and click
   **Delete field**: the field and every one of its values are deleted, and the
@@ -194,6 +194,13 @@ reads a photo or a document, it can also fill in up to 25 of your group's
 custom fields. **Money** and **Link to an item** fields are not filled in. The
 values it read appear in the review list under the field's name, and only the
 ones you keep ticked are filled in.
+
+A batch of [files added for the AI scan](../items/#add-items-from-files) reads
+the same fields for each product. The values are listed after the item fields
+under **N fields used** on the review page, and each draft gets the ones you
+keep ticked. A value the field cannot hold, such as a date that is not a real
+date, is not listed. Neither is a value of a field deleted after the scan, or a
+choice removed from its field since, and no draft gets it.
 
 ## Custom fields in reports and backups
 

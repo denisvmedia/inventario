@@ -3739,6 +3739,13 @@ definitions:
     type: object
   jsonapi.IntakeCandidateReviewAttrs:
     properties:
+      accepted_custom_fields:
+        description: |-
+          AcceptedCustomFields are the IDs of the custom fields whose scanned
+          value goes into the draft; each must be one the scan read a value for.
+        items:
+          type: string
+        type: array
       accepted_fields:
         items:
           type: string
@@ -6314,6 +6321,17 @@ definitions:
         x-nullable: "true"
       registered_date:
         type: string
+      revision:
+        description: |-
+          Revision counts the writes to the item: a new item has revision 1, and
+          every registry write of a column an edit form sends back adds one (an
+          edit, a bulk change, the draft mark, a tag rename or delete, an item
+          type delete that moves the item, a currency migration). An edit form
+          sends the revision it was opened at with its save, and the save is
+          refused when the item was written since (registry.WithExpectedRevision),
+          so it cannot undo a change it never showed. Server-managed: Create and
+          Update ignore the caller's value.
+        type: integer
       sale_price:
         description: |-
           SalePrice is the realised proceeds for a `sold` transition. NULL
@@ -7052,12 +7070,25 @@ definitions:
     - GroupSectionUpcoming
   models.IntakeCandidate:
     properties:
+      accepted_custom_fields:
+        description: |-
+          AcceptedCustomFields are the IDs of the custom fields whose scanned
+          value goes into the draft.
+        items:
+          type: string
+        type: array
       accepted_fields:
         items:
           type: string
         type: array
       created_at:
         type: string
+      custom_fields:
+        allOf:
+        - $ref: '#/definitions/models.IntakeFields'
+        description: |-
+          CustomFields is what the scan read for the group's custom fields, by
+          field ID, a select field's value as its option ID.
       draft_id:
         description: |-
           DraftID is the draft made for the candidate. The draft can be
@@ -10562,6 +10593,11 @@ paths:
           description: Area not found
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: with strategy=unlink, an item
+            of the area was written meanwhile and kept changing on every retry'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Non-empty area (no strategy) or unknown strategy
           schema:
@@ -10878,7 +10914,13 @@ paths:
     put:
       consumes:
       - application/vnd.api+json
-      description: Update a commodity
+      description: |-
+        Replace the item with the values sent. attributes.revision is the revision
+        the values were based on, as the client read it: when the item has been written
+        since (an edit, a bulk change, a tag rename), the save is refused with 409
+        commodity.revision_conflict and nothing is written, so it cannot undo that
+        write. Without it, or with 0, the save is not checked. The response carries
+        the item's new revision.
       parameters:
       - description: Group slug
         in: path
@@ -10905,6 +10947,11 @@ paths:
             $ref: '#/definitions/jsonapi.CommodityResponse'
         "404":
           description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item was written after the
+            revision sent'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -10949,6 +10996,11 @@ paths:
             $ref: '#/definitions/jsonapi.CommodityResponse'
         "404":
           description: Commodity or file not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item was written meanwhile
+            and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -13536,6 +13588,11 @@ paths:
           description: File or link not found
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item that has the file as
+            its cover was written meanwhile and kept changing on every retry'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Export or intake link
           schema:
@@ -14609,6 +14666,11 @@ paths:
           description: No content
         "404":
           description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: with strategy=unlink, an item
+            of the location was written meanwhile and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":

@@ -178,6 +178,9 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// The trash fields belong to Trash and Restore; a new item is live.
 	commodity.ClearTrashState()
 
+	// So is the revision: a new item starts at 1.
+	commodity.Revision = 1
+
 	// The asset number is server-managed, as in the postgres registry: the
 	// caller's value is dropped and the number is picked while holding the
 	// lock that also covers storing the row.

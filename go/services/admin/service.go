@@ -702,16 +702,24 @@ func (s *Service) moveUserToTenant(ctx context.Context, user *models.User, tenan
 // places, exports, or a group they created. The delete changes nothing.
 var ErrUserOwnsContent = errx.NewSentinel("the user still owns content")
 
+// ErrUserSoleOwnerOfSharedGroup is returned by DeleteUser for a user who is
+// the only owner of a group that has other members: the delete would leave
+// that group with members and no owner. It is the rule of self-service
+// account deletion, so it matches services.ErrAccountSoleOwnerOfSharedGroup
+// too. The delete changes nothing.
+var ErrUserSoleOwnerOfSharedGroup = errx.NewSentinel("the user is the only owner of a shared group", services.ErrAccountSoleOwnerOfSharedGroup)
+
 // DeleteUser hard-deletes a user's account along with its auth / identity rows.
 //
 // Order:
 //
-//	a) refuse, before anything is changed, a user who still authored content
-//	   (items, files, places, exports, groups they created) in any group:
-//	   those rows carry a NOT NULL created_by_user_id (or created_by) and
-//	   cannot be orphaned. Unlike self-service account deletion, an operator's
-//	   delete purges no group, so content in the user's private groups counts
-//	   too;
+//	a) refuse, before anything is changed, a user who is the only owner of a
+//	   group that has other members (as self-service account deletion
+//	   does), and a user who still authored content (items, files, places,
+//	   exports, groups they created) in any group: those rows carry a NOT
+//	   NULL created_by_user_id (or created_by) and cannot be orphaned. Unlike
+//	   self-service account deletion, an operator's delete purges no group,
+//	   so content in the user's private groups counts too;
 //	b) purge the user's auth/identity dependent rows (UserPurger): refresh
 //	   tokens, login events, MFA secret, OAuth identities, memberships, …,
 //	   and hand the group rows they created to another member;
@@ -723,9 +731,17 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 		return err
 	}
 
-	// (a) The final delete would fail on owned content after (b) had
-	// removed the user from every group. Ask first, so a refused delete
-	// leaves the user as they were.
+	// (a) Removing the memberships in (b) would leave a group the user
+	// alone owns with members and no owner, and the final delete would fail
+	// on owned content after (b) had removed the user from every group. Ask
+	// first, so a refused delete leaves the user as they were.
+	soleOwnedGroupID, err := services.SoleOwnedSharedGroup(ctx, s.factorySet.GroupMembershipRegistry, user.TenantID, user.ID)
+	if err != nil {
+		return errxtrace.Wrap("failed to check the user's groups", err)
+	}
+	if soleOwnedGroupID != "" {
+		return s.soleOwnerError(ctx, user, soleOwnedGroupID)
+	}
 	if s.factorySet.UserContentOwnershipChecker == nil {
 		return errxtrace.Wrap("the content ownership check is not configured", registry.ErrFieldRequired)
 	}
@@ -759,15 +775,6 @@ func (s *Service) DeleteUser(ctx context.Context, idOrEmail string) error {
 	return nil
 }
 
-// ResetUserMFA removes the user's `user_mfa_secrets` row (if any) and
-// emits a `login_events` row with outcome=mfa_admin_reset so the user
-// later sees "an administrator removed your second factor" in their
-// login history. Idempotent — calling on a user without MFA enrolled
-// returns nil with a flag indicating no row was touched.
-//
-// The recovery story per #1380 v1 is "contact support"; this is the
-// support-side action. The user can re-enroll afterwards through the
-// normal Settings → Privacy & Security flow.
 // userOwnsContentError tells the operator what keeps the user and what to do.
 func userOwnsContentError(user *models.User) error {
 	return errxtrace.Wrap(
@@ -779,6 +786,32 @@ func userOwnsContentError(user *models.User) error {
 	)
 }
 
+// soleOwnerError names the group the user alone owns, so the operator knows
+// whom to make an owner. The name is best effort: a group that cannot be read
+// is named by its ID only.
+func (s *Service) soleOwnerError(ctx context.Context, user *models.User, groupID string) error {
+	group := groupID
+	if g, err := s.factorySet.LocationGroupRegistry.Get(ctx, groupID); err == nil {
+		group = fmt.Sprintf("%q (%s)", g.Name, g.ID)
+	}
+	return errxtrace.Wrap(
+		fmt.Sprintf(
+			"cannot delete user %s (%s): they are the only owner of the group %s, which has other members — make another member an owner first",
+			user.ID, user.Email, group,
+		),
+		ErrUserSoleOwnerOfSharedGroup,
+	)
+}
+
+// ResetUserMFA removes the user's `user_mfa_secrets` row (if any) and
+// emits a `login_events` row with outcome=mfa_admin_reset so the user
+// later sees "an administrator removed your second factor" in their
+// login history. Idempotent — calling on a user without MFA enrolled
+// returns nil with a flag indicating no row was touched.
+//
+// The recovery story per #1380 v1 is "contact support"; this is the
+// support-side action. The user can re-enroll afterwards through the
+// normal Settings → Privacy & Security flow.
 func (s *Service) ResetUserMFA(ctx context.Context, idOrEmail string) (resetUser *models.User, hadEnrollment bool, err error) {
 	user, err := s.GetUser(ctx, idOrEmail)
 	if err != nil {

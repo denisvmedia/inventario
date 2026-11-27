@@ -16,7 +16,7 @@ import {
   useUpdateReminder,
 } from "@/features/reminders/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
+import { useHoldItem, useHoldingConfirm } from "@/hooks/useItemHold"
 import { formatDate } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
@@ -38,9 +38,10 @@ export function CommodityRemindersSection({
 }: CommodityRemindersSectionProps) {
   const { t } = useTranslation(["reminders", "common"])
   const toast = useAppToast()
-  const confirm = useConfirm()
+  const confirm = useHoldingConfirm()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Reminder | null>(null)
+  useHoldItem(dialogOpen)
 
   const list = useRemindersForCommodity(commodityId)
   const create = useCreateReminder(commodityId)
