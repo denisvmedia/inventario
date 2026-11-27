@@ -77,6 +77,8 @@ A couple of things to know:
   else owns, they need to be removed first. Both checks run before anything is
   deleted, so a blocked deletion leaves your account, your groups and your
   sessions as they were.
+  A shared group you created doesn't block deletion once someone else owns
+  it: the group stays with its members and passes to its owner.
   [Tags](../tags/), [sellers](../sellers/) and [item types](../item-types/)
   you added to a shared group stay with the group and pass to its owner, so
   they don't block deletion and other members keep using them. So
