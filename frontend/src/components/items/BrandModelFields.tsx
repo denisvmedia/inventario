@@ -55,6 +55,7 @@ export function BrandModelFields({
         />
         {errors.brand?.message ? (
           <p className="text-xs text-destructive" role="alert">
+            {/* eslint-disable-next-line no-restricted-syntax -- the Add item dialog's own error line (design-mocks/src/components/AddItemDialog.tsx) */}
             {t(errors.brand.message)}
           </p>
         ) : null}
@@ -72,6 +73,7 @@ export function BrandModelFields({
         />
         {errors.model?.message ? (
           <p className="text-xs text-destructive" role="alert">
+            {/* eslint-disable-next-line no-restricted-syntax -- the Add item dialog's own error line (design-mocks/src/components/AddItemDialog.tsx) */}
             {t(errors.model.message)}
           </p>
         ) : null}

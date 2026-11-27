@@ -59,6 +59,14 @@ export default [
           message:
             "Use the shadcn <Select> primitive (@/components/ui/select) for form & settings dropdowns. Native <select> is allowed only for utility/compact/mobile selectors — annotate with `// eslint-disable-next-line no-restricted-syntax -- <reason>`. See devdocs/frontend/forms.md.",
         },
+        {
+          // A field error rendered by hand: `{t(errors.name.message)}` or
+          // `{t(form.formState.errors.name.message ?? "")}` inside JSX.
+          selector:
+            "JSXExpressionContainer > CallExpression[callee.name='t'] MemberExpression[property.name='message']:matches([object.object.name='errors'], [object.object.property.name='errors'])",
+          message:
+            "Render a field error with <FieldError message={errors.<field>?.message} /> (@/components/FieldError), and set aria-invalid and aria-describedby on the input. See devdocs/frontend/forms.md → Field components.",
+        },
       ],
       // eslint-plugin-react-hooks 5.x added a React-Compiler ruleset that
       // flags `form.watch(cb)` from React Hook Form because the callback
