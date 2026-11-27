@@ -17,14 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { FieldError } from "@/components/FieldError"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
-import {
-  SELLER_CONTACT_MAX,
-  SELLER_NAME_MAX,
-  SELLER_NAME_TAKEN,
-  SELLER_NOTE_MAX,
-  SELLER_WEBSITE_MAX,
-  type Seller,
-} from "@/features/sellers/api"
+import { SELLER_NAME_TAKEN, type Seller } from "@/features/sellers/api"
 import {
   EMPTY_SELLER_FORM,
   sellerFormSchema,
@@ -163,7 +156,6 @@ export function SellerFormDialog({
               id="seller-name"
               placeholder={t("sellers:dialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={SELLER_NAME_MAX}
               disabled={isPending}
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? "seller-name-error" : undefined}
@@ -200,7 +192,6 @@ export function SellerFormDialog({
               inputMode="url"
               placeholder="https://"
               autoComplete="off"
-              maxLength={SELLER_WEBSITE_MAX}
               disabled={isPending}
               aria-invalid={!!errors.website}
               aria-describedby={errors.website ? "seller-website-error" : undefined}
@@ -220,7 +211,6 @@ export function SellerFormDialog({
               id="seller-contact"
               placeholder={t("sellers:dialog.contactPlaceholder")}
               autoComplete="off"
-              maxLength={SELLER_CONTACT_MAX}
               disabled={isPending}
               aria-invalid={!!errors.contact}
               aria-describedby={errors.contact ? "seller-contact-error" : undefined}
@@ -240,7 +230,6 @@ export function SellerFormDialog({
               id="seller-note"
               placeholder={t("sellers:dialog.notePlaceholder")}
               rows={3}
-              maxLength={SELLER_NOTE_MAX}
               disabled={isPending}
               aria-invalid={!!errors.note}
               aria-describedby={errors.note ? "seller-note-error" : undefined}
