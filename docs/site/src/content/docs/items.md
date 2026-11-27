@@ -682,6 +682,11 @@ Once an item is in one of these end states, the detail page shows that status
 (with the captured date, note, and sale price) and a **Revert to In Use**
 button so you can put it back into active use at any time.
 
+An item in an end state gets no reminder emails and is left out of the
+Upcoming page and of the weekly digest's coming-up list. Reverting it to In
+Use brings back the reminders that are still due. See [Reminder
+emails](../warranties-loans-maintenance/#reminder-emails).
+
 ## The All Items page: search, filter, sort
 
 The **All Items** page lists every item in your group. Across the top you have:

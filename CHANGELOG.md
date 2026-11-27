@@ -648,6 +648,13 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Reminder emails go out only for items in use. An item marked Sold, Lost,
+  Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
+  loan and item reminders, and its reminders, loans and maintenance stayed on
+  the Upcoming page; the weekly digest listed its warranty and maintenance as
+  coming up, and the maintenance of an item in Trash too. Reverting the item
+  to In Use brings back the reminders that are still due
+  ([#2908](https://github.com/denisvmedia/inventario/issues/2908)).
 - A request that waits for a free database connection stops waiting when the
   client gives up or the request times out. Before, it stayed in the queue
   with no deadline, so under load the queue grew instead of shedding
@@ -699,9 +706,6 @@ when to add an entry and where it goes.
   JSON:API `attributes`, which the search endpoint does not send, and failed to
   render as soon as a search matched an item
   ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
-- Opening or closing a file's panel on the Files page keeps the search, tag
-  filter, page and layout of the list
-  ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
 - The users of a suspended or inactive tenant get no email from Inventario:
   no item, warranty, loan or maintenance reminders, no storage quota
   warnings, no weekly digest and no "your personal data export is ready"
@@ -709,6 +713,9 @@ when to add an entry and where it goes.
   reminder still due when the tenant is reactivated goes out then, and an
   export requested before the suspension is still built
   ([#2949](https://github.com/denisvmedia/inventario/issues/2949)).
+- Opening or closing a file's panel on the Files page keeps the search, tag
+  filter, page and layout of the list
+  ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
