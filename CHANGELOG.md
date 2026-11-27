@@ -664,6 +664,14 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- A bulk action on items or files no longer undoes a change someone saves to
+  one of them while it runs. Changing the tags, type or status of selected
+  items, moving them, or changing the tags of selected files read each one,
+  changed it and wrote the whole record back, so a new name, a note or a tag
+  saved in between was lost. Each record is now read and written under its
+  row lock, and only the fields the action sets are written
+  ([#2891](https://github.com/denisvmedia/inventario/issues/2891)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none

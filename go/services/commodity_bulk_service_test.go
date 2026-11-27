@@ -600,29 +600,47 @@ func TestCommodityBulkService_UpdateKeepsAnEditSavedAfterTheSelection(t *testing
 	c.Assert(got.Comments, qt.Equals, "saved by someone else")
 }
 
-// lateCustomFieldEdit is a commodity registry where another member saves a
-// custom field value right after each Get, so the copy a bulk action read is
-// stale by the time it writes.
-type lateCustomFieldEdit struct {
+// editBeforeWrite is a commodity registry where another member saves an
+// edit of an item right before each bulk write takes the item, after the
+// bulk action resolved its selection.
+type editBeforeWrite struct {
 	registry.CommodityRegistry
-	fieldID string
+	edit func(*models.Commodity)
 }
 
-func (r lateCustomFieldEdit) Get(ctx context.Context, id string) (*models.Commodity, error) {
+func (r editBeforeWrite) Patch(ctx context.Context, id string, addTags []string, change func(models.Commodity) (models.Commodity, bool, error)) (before, after *models.Commodity, err error) {
 	read, err := r.CommodityRegistry.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	edit := *read
-	edit.CustomFields = models.CustomFieldValues{r.fieldID: json.RawMessage(`"saved later"`)}
+	r.edit(&edit)
 	if _, err := r.CommodityRegistry.Update(ctx, edit); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return read, nil
+	return r.CommodityRegistry.Patch(ctx, id, addTags, change)
+}
+
+// A bulk tag change starts from the item as stored when it writes it: the
+// name and the tag another member saved stay, and the bulk tag is added.
+func TestCommodityBulkService_UpdateKeepsAnEditSavedBeforeTheWrite(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	drill := f.item(c, "Drill", withTags("garage"))
+	items := editBeforeWrite{CommodityRegistry: f.set.CommodityRegistry, edit: func(c *models.Commodity) {
+		c.Name = "Cordless drill"
+		c.Tags = append(c.Tags, "power-tools")
+	}}
+
+	out := f.svc.Update(f.ctx, items, byID(drill.ID), parsePatch(c, services.CommodityPatchInput{AddTags: []string{"insured"}}))
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{drill.ID})
+	got := f.get(c, drill.ID)
+	c.Assert(got.Name, qt.Equals, "Cordless drill")
+	c.Assert([]string(got.Tags), qt.DeepEquals, []string{"garage", "power-tools", "insured"})
 }
 
 // A bulk action edits no custom field, so it keeps a value saved after it
-// read the item.
+// resolved its selection.
 func TestCommodityBulkService_KeepsACustomFieldValueSavedMeanwhile(t *testing.T) {
 	c := qt.New(t)
 	f := newBulkFixture(c)
@@ -630,7 +648,9 @@ func TestCommodityBulkService_KeepsACustomFieldValueSavedMeanwhile(t *testing.T)
 	plate := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Plate", Type: models.CustomFieldTypeText}))
 	location := must.Must(f.set.LocationRegistry.Create(f.ctx, models.Location{Name: "Home"}))
 	area := must.Must(f.set.AreaRegistry.Create(f.ctx, models.Area{Name: "Garage", LocationID: location.ID}))
-	items := lateCustomFieldEdit{CommodityRegistry: f.set.CommodityRegistry, fieldID: plate.ID}
+	items := editBeforeWrite{CommodityRegistry: f.set.CommodityRegistry, edit: func(c *models.Commodity) {
+		c.CustomFields = models.CustomFieldValues{plate.ID: json.RawMessage(`"saved later"`)}
+	}}
 	withPlate := func(c *models.Commodity) {
 		c.CustomFields = models.CustomFieldValues{plate.ID: json.RawMessage(`"read first"`)}
 	}
