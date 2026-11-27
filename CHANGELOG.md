@@ -648,13 +648,6 @@ when to add an entry and where it goes.
 
 ### Fixed
 
-- Renaming or deleting a tag while someone saves an item or file that
-  carries it no longer fails one of the two with a server error. The save
-  and the tag change could each wait for the other until the database gave
-  up on one of them. A tag rename or delete, and an item type delete that
-  moves items to another type, now also wait for a running currency
-  migration of the group instead of rewriting the items it is converting
-  ([#2874](https://github.com/denisvmedia/inventario/issues/2874)).
 - A request that waits for a free database connection stops waiting when the
   client gives up or the request times out. Before, it stayed in the queue
   with no deadline, so under load the queue grew instead of shedding
@@ -670,6 +663,13 @@ when to add an entry and where it goes.
   with the server's English text. It now shows the status without changing
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
+- Renaming or deleting a tag while someone saves an item or file that
+  carries it no longer fails one of the two with a server error. The save
+  and the tag change could each wait for the other until the database gave
+  up on one of them. A tag rename or delete, and an item type delete that
+  moves items to another type, now also wait for a running currency
+  migration of the group instead of rewriting the items it is converting
+  ([#2874](https://github.com/denisvmedia/inventario/issues/2874)).
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
