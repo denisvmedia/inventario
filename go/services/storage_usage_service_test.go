@@ -129,6 +129,14 @@ func (s *stubFileRegistry) SetChecksum(context.Context, string, string) error {
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) ListPendingThumbnailOrientation(context.Context, string, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) SetThumbnailsOriented(context.Context, string) error {
+	panic("not implemented")
+}
+
 func (s *stubFileRegistry) MoveLegacyLinks(context.Context, int) (int, error) {
 	panic("not implemented")
 }

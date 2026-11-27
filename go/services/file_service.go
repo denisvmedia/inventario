@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -42,7 +43,15 @@ func NewFileService(factorySet *registry.FactorySet, uploadLocation string) *Fil
 	}
 }
 
-// GenerateThumbnails generates thumbnails for an image file
+// exifHeadBytes is how much of a JPEG GenerateThumbnails reads ahead for its
+// EXIF block. The block is at most 64 KiB and comes before the image data,
+// usually right after the start of the file.
+const exifHeadBytes = 256 << 10
+
+// GenerateThumbnails writes the thumbnails of a JPEG or PNG file and marks
+// the file ThumbnailsOriented. A JPEG is turned the way its EXIF orientation
+// says first, as a browser turns the full photo, because a thumbnail is
+// re-encoded without the tag. Other types are skipped.
 func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileEntity) error {
 	// Only generate thumbnails for supported image types
 	if !mimekit.IsImage(file.MIMEType) {
@@ -69,9 +78,14 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 
 	// Decode the image
 	var img image.Image
+	orientation := imageprocessor.OrientationNormal
 	switch file.MIMEType {
 	case "image/jpeg":
-		img, err = jpeg.Decode(reader)
+		buffered := bufio.NewReaderSize(reader, exifHeadBytes)
+		// A file shorter than the buffer returns all of it with io.EOF.
+		head, _ := buffered.Peek(exifHeadBytes)
+		orientation = imageprocessor.JPEGOrientation(head)
+		img, err = jpeg.Decode(buffered)
 	case "image/png":
 		img, err = png.Decode(reader)
 	default:
@@ -81,18 +95,21 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 		return errxtrace.Wrap("failed to decode image", err)
 	}
 
-	// Generate thumbnails for each size
+	// Generate thumbnails for each size. Scaling fits the longer side, so
+	// turning the small result gives the same picture as turning the photo.
 	for sizeName, maxSize := range s.thumbnailSizes {
 		thumbnailPath := s.getThumbnailPath(file.TenantID, file.ID, sizeName)
-
-		// Create thumbnail
-		thumbnail := s.imageProcessor.CreateThumbnail(img, maxSize)
-
+		thumbnail := imageprocessor.Orient(s.imageProcessor.CreateThumbnail(img, maxSize), orientation)
 		if err := writeThumbnail(ctx, b, thumbnailPath, thumbnail); err != nil {
 			return err
 		}
 	}
 
+	// The thumbnail worker has no user, so the mark goes through the service
+	// registry; the row is the one the caller read.
+	if err := s.factorySet.FileRegistryFactory.CreateServiceRegistry().SetThumbnailsOriented(ctx, file.ID); err != nil {
+		return errxtrace.Wrap("failed to mark thumbnails oriented", err)
+	}
 	return nil
 }
 
