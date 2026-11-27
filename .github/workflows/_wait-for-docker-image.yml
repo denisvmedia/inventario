@@ -95,35 +95,35 @@ jobs:
           #
           # The polling is sized for the API budget. Every pull request push
           # starts three of these waits, and the repository's GITHUB_TOKEN
-          # shares one hourly request limit across all of them. Polling twice
-          # every 15 seconds spent that limit with a dozen pull requests in
-          # flight, and every lane that called the API afterwards failed with
-          # "API rate limit exceeded for installation". So: while the run is
-          # missing or queued nothing can have finished, and the jobs are not
-          # read; the interval is 60 seconds then and 20 seconds while the
-          # build runs. A failed API call (a rate limit, a 5xx) is waited out
-          # until the ceiling instead of failing the lane.
+          # shares one hourly request limit across all of them. Polling every
+          # 15 seconds through `gh run list` and `gh run view` (four requests
+          # a poll, counting the workflow lookup and the run lookup gh does
+          # first) spent that limit with a dozen pull requests in flight, and
+          # every lane that called the API afterwards failed with "API rate
+          # limit exceeded for installation". So each poll is one request
+          # while the run is missing or queued and two while it runs, made
+          # with `gh api` directly, once a minute. A minute of extra latency
+          # is small next to the build. A failed API call (a rate limit, a
+          # 5xx) is waited out until the ceiling instead of failing the lane.
           MERGE_JOB="Merge multi-arch manifest"
           DARWIN_JOB="Build darwin/arm64 binary for e2e"
           DEADLINE=$(( $(date +%s) + 40 * 60 ))
           i=0
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
             i=$((i + 1))
+            # Runs come newest first, so the first one is the latest run for
+            # this commit.
             if ! RUN_JSON="$(
-              gh run list \
-                --repo "$REPO" \
-                --workflow "docker.yml" \
-                --commit "$COMMIT_SHA" \
-                --limit 1 \
-                --json databaseId,status,conclusion
+              gh api "repos/$REPO/actions/workflows/docker.yml/runs?head_sha=$COMMIT_SHA&per_page=1" \
+                --jq '.workflow_runs[0] // {} | {id, status, conclusion}'
             )"; then
               echo "::warning::listing docker.yml runs failed (attempt $i); retrying in 60s"
               sleep 60
               continue
             fi
-            STATUS="$(echo "$RUN_JSON" | jq -r '.[0].status // empty')"
-            CONCLUSION="$(echo "$RUN_JSON" | jq -r '.[0].conclusion // empty')"
-            RUN_ID="$(echo "$RUN_JSON" | jq -r '.[0].databaseId // empty')"
+            STATUS="$(echo "$RUN_JSON" | jq -r '.status // empty')"
+            CONCLUSION="$(echo "$RUN_JSON" | jq -r '.conclusion // empty')"
+            RUN_ID="$(echo "$RUN_JSON" | jq -r '.id // empty')"
 
             case "${STATUS:-none}" in
               none | queued | waiting | pending | requested)
@@ -135,7 +135,7 @@ jobs:
 
             if [ -n "$RUN_ID" ]; then
               if ! JOBS="$(
-                gh run view "$RUN_ID" --repo "$REPO" --json jobs \
+                gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
                   --jq '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv'
               )"; then
                 echo "::warning::reading the jobs of docker.yml run $RUN_ID failed (attempt $i); retrying in 60s"
@@ -216,7 +216,7 @@ jobs:
             fi
 
             echo "Waiting for docker.yml run on $COMMIT_SHA (status=${STATUS:-none})... (poll $i)"
-            sleep 20
+            sleep 60
           done
           # Say which of the three it was. "did not complete" reads as a build
           # failure, and the usual cause is the opposite: the build is fine and
