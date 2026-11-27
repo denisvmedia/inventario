@@ -1,7 +1,11 @@
 name: Wait for Docker image
 
-# Reusable helper consumer workflows (kind-smoke-test, e2e-tests) call to
-# synchronise with docker.yml. The naive "does the tag resolve on GHCR?"
+# Reusable helper a consumer workflow outside docker.yml calls to synchronise
+# with docker.yml; helm-kind-smoke-test.yml is the one left. The e2e lanes
+# and the kind smoke test run inside docker.yml and wait through `needs:
+# merge` instead, which costs no API requests (devdocs/ci/github-api-budget.md).
+#
+# The naive "does the tag resolve on GHCR?"
 # approach doesn't distinguish "image built for this commit" from "image
 # left over from the previous push to the same PR" — so kind could happily
 # load the previous commit's image and report a green run that never

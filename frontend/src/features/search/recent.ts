@@ -1,7 +1,9 @@
 // Client-side cache of the search results a user opened, from the search
 // page or the command palette, shown when either is empty. Stored in
-// localStorage scoped per group slug so two browser tabs at different
-// groups don't pollute each other's recents.
+// localStorage under a scope that names the user and the group
+// (recentScope), so two browser tabs at different groups don't pollute
+// each other's recents, and the next person to sign in on this browser
+// does not see what the last one opened. Signing out clears them all.
 //
 // Entries are append-with-dedupe + cap at MAX_RECENT, newest first.
 // An entry's URL is the in-app path the cards link to; the type lets
@@ -37,6 +39,11 @@ function storageKey(scope: string): string {
   return `${KEY_PREFIX}${scope || "default"}`
 }
 
+// recentScope is the scope of a user's recent items in a group.
+export function recentScope(userId: string, groupSlug: string): string {
+  return `${userId}:${groupSlug}`
+}
+
 export function getRecent(scope: string): RecentEntry[] {
   const s = safeStorage()
   if (!s) return []
@@ -69,6 +76,23 @@ export function pushRecent(scope: string, entry: Omit<RecentEntry, "visitedAt">)
 
 export function clearRecent(scope: string): void {
   safeStorage()?.removeItem(storageKey(scope))
+}
+
+// clearAllRecent removes the recent items of every user and group on this
+// browser. Signing out calls it.
+export function clearAllRecent(): void {
+  const s = safeStorage()
+  if (!s) return
+  try {
+    const keys: string[] = []
+    for (let i = 0; i < s.length; i++) {
+      const key = s.key(i)
+      if (key !== null && key.startsWith(KEY_PREFIX)) keys.push(key)
+    }
+    for (const key of keys) s.removeItem(key)
+  } catch {
+    // Disabled storage holds nothing to clear.
+  }
 }
 
 function isValidEntry(value: unknown): value is RecentEntry {

@@ -400,24 +400,45 @@ function hasTypedProductError(body: unknown): boolean {
   })
 }
 
-// Name of the cross-tab lock. Tabs share one access token in localStorage, so
-// on a simultaneous expiry two of them present the same refresh cookie. The
-// first rotates and revokes that row; the second is then replaying a revoked
-// row, which reuse detection treats as theft and answers by revoking every
-// session the user has — both tabs land on /login (#2166, #967 H4).
-const AUTH_REFRESH_LOCK = "inventario-auth-refresh"
+// Names of the cross-tab locks, one per plane. Tabs share one access token in
+// localStorage, so on a simultaneous expiry two of them present the same
+// refresh cookie. The first rotates and revokes that row; the second is then
+// replaying a revoked row, which reuse detection treats as theft and answers
+// by revoking every session the user has — both tabs land on /login (#2166,
+// #967 H4). The planes have separate cookies, so they have separate locks.
+const AUTH_REFRESH_LOCKS: Record<AuthPlane, string> = {
+  tenant: "inventario-auth-refresh",
+  backoffice: "inventario-backoffice-auth-refresh",
+}
 
-// withAuthRefreshLock serializes refresh across tabs.
+// withAuthRefreshLock serializes a plane's refresh and sign-out across tabs.
 //
 // Web Locks is the primitive that actually serializes. BroadcastChannel can
 // only announce a result, which does not help: by the time the first tab has
 // something to announce, the second has already sent its request. Where the
 // API is missing the behavior is what it was before — per-tab single-flight,
 // and the race stays possible.
-async function withAuthRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+async function withAuthRefreshLock<T>(plane: AuthPlane, fn: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks
   if (!locks) return fn()
-  return locks.request(AUTH_REFRESH_LOCK, fn) as Promise<T>
+  return locks.request(AUTH_REFRESH_LOCKS[plane], fn) as Promise<T>
+}
+
+// What a refresh does after it waited for the lock, given the access token it
+// saw before queueing and the one stored now.
+//   - "signed-out": a peer tab signed out (or its refresh failed) meanwhile.
+//     The refresh cookie may still be valid if the logout request did not get
+//     through, and sending it would bring the session back, so this tab stops.
+//   - "adopt": a peer rotated meanwhile. Our cookie is the one it revoked, so
+//     sending it is the replay that would end every session. Adopt instead.
+//   - "refresh": nothing changed; refresh as usual.
+function afterRefreshLock(
+  tokenBeforeLock: string | null,
+  current: string | null
+): "signed-out" | "adopt" | "refresh" {
+  if (tokenBeforeLock && !current) return "signed-out"
+  if (current && current !== tokenBeforeLock) return "adopt"
+  return "refresh"
 }
 
 async function refreshAccessToken(): Promise<string> {
@@ -425,15 +446,18 @@ async function refreshAccessToken(): Promise<string> {
   // Read before queueing for the lock: if it has changed by the time we hold
   // the lock, a peer tab rotated while we waited.
   const tokenBeforeLock = getAccessToken()
-  refreshInFlight = withAuthRefreshLock(async () => {
+  refreshInFlight = withAuthRefreshLock("tenant", async () => {
+    const url = `${BASE_URL}/auth/refresh`
     const current = getAccessToken()
-    if (current && current !== tokenBeforeLock) {
-      // A peer already rotated. Our cookie is the one it revoked, so sending
-      // it is the replay that would end every session. Adopt instead.
-      return current
+    switch (afterRefreshLock(tokenBeforeLock, current)) {
+      case "signed-out":
+        throw new HttpError("Signed out in another tab", 401, url, null)
+      case "adopt":
+        return current as string
+      case "refresh":
+        break
     }
 
-    const url = `${BASE_URL}/auth/refresh`
     const response = await fetch(url, {
       method: "POST",
       credentials: "include",
@@ -476,8 +500,19 @@ async function refreshAccessToken(): Promise<string> {
 // /auth/refresh. The dispatcher in `handle401` picks the right one.
 async function refreshBackofficeAccessToken(): Promise<string> {
   if (backofficeRefreshInFlight) return backofficeRefreshInFlight
-  backofficeRefreshInFlight = (async () => {
+  // The same cross-tab lock and checks as refreshAccessToken (#3034).
+  const tokenBeforeLock = getBackofficeAccessToken()
+  backofficeRefreshInFlight = withAuthRefreshLock("backoffice", async () => {
     const url = `${BASE_URL}/backoffice/auth/refresh`
+    const current = getBackofficeAccessToken()
+    switch (afterRefreshLock(tokenBeforeLock, current)) {
+      case "signed-out":
+        throw new HttpError("Signed out in another tab", 401, url, null)
+      case "adopt":
+        return current as string
+      case "refresh":
+        break
+    }
     const response = await fetch(url, {
       method: "POST",
       credentials: "include",
@@ -510,7 +545,7 @@ async function refreshBackofficeAccessToken(): Promise<string> {
     const csrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
     if (csrf) setBackofficeCsrfToken(csrf)
     return payload.access_token
-  })()
+  })
   try {
     return await backofficeRefreshInFlight
   } finally {
@@ -522,12 +557,21 @@ async function refreshBackofficeAccessToken(): Promise<string> {
 // the plane from refreshing until it settles (#3026). A refresh that is
 // already running finishes first, so the logout carries the newest access
 // token and refresh cookie, and those are what the server revokes.
+//
+// signOut then runs under the plane's cross-tab refresh lock (#3034). The
+// server blacklists the access token before it revokes the refresh token, so
+// a peer tab can get a 401 in between; its refresh queues behind the
+// sign-out and runs after the logout response has deleted the cookie and
+// signOut has cleared the stored token, so it sends nothing that could bring
+// the session back or trip reuse detection. Waiting for this tab's own
+// refresh first is what keeps the lock from deadlocking: that refresh holds
+// it, and no new one starts here while the sign-out runs (see handle401).
 export async function withSignOut<T>(plane: AuthPlane, signOut: () => Promise<T>): Promise<T> {
   signOutsInFlight[plane]++
   try {
     const refresh = plane === "backoffice" ? backofficeRefreshInFlight : refreshInFlight
     if (refresh) await refresh.catch(() => undefined)
-    return await signOut()
+    return await withAuthRefreshLock(plane, signOut)
   } finally {
     signOutsInFlight[plane]--
   }

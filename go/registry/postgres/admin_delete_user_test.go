@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/postgres"
+	"go.5x5.cz/inventario/services"
 	"go.5x5.cz/inventario/services/admin"
 )
 
@@ -97,4 +99,52 @@ func TestAdminDeleteUser_Postgres_DeletesAMemberWhoOwnsNothing(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = fs.GroupMembershipRegistry.Get(ctx, membership.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// An operator's delete of the only owner of a group that has other members
+// is refused before anything changes: the group's creator handed it over and
+// left, and the delete would leave it with a member and no owner.
+func TestAdminDeleteUser_Postgres_RefusesTheOnlyOwnerOfASharedGroup(t *testing.T) {
+	c := qt.New(t)
+	f := newLoanPGFixture(t)
+	ctx := context.Background()
+	fs := f.factorySet
+
+	heir := createPGTenantUser(c, fs, f.user.TenantID, "handed-over-owner@test-org.com")
+	member := createPGTenantUser(c, fs, f.user.TenantID, "remaining-member@test-org.com")
+	slug, err := models.GenerateGroupSlug()
+	c.Assert(err, qt.IsNil)
+	group, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: f.user.TenantID},
+		Name:                "Handed over",
+		Slug:                slug,
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           f.user.ID,
+		GroupCurrency:       "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	ownership := addPGMember(c, fs, group, heir.ID, models.GroupRoleOwner)
+	addPGMember(c, fs, group, member.ID, models.GroupRoleUser)
+
+	err = admin.NewServiceWithFactorySet(fs).DeleteUser(ctx, heir.Email)
+	c.Assert(err, qt.ErrorIs, admin.ErrUserSoleOwnerOfSharedGroup)
+	c.Assert(err, qt.ErrorIs, services.ErrAccountSoleOwnerOfSharedGroup)
+	c.Assert(err.Error(), qt.Contains, fmt.Sprintf("the group %q (%s)", group.Name, group.ID))
+
+	_, err = fs.UserRegistry.Get(ctx, heir.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = fs.GroupMembershipRegistry.Get(ctx, ownership.ID)
+	c.Assert(err, qt.IsNil, qt.Commentf("a refused delete must leave the group its owner"))
+}
+
+func createPGTenantUser(c *qt.C, fs *registry.FactorySet, tenantID, email string) *models.User {
+	c.Helper()
+	u, err := fs.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Email:               email,
+		Name:                email,
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	return u
 }

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -545,8 +545,7 @@ describe("<CommodityFormDialog /> files the server draft holds (#2941)", () => {
     })
     await walkToFiles(user)
 
-    await waitFor(() => expect(stagedNames()).toContain("IMG_0001.jpg"))
-    expect(stagedNames()).toEqual(["IMG_0001.jpg"])
+    await waitFor(() => expect(stagedNames()).toEqual(["IMG_0001.jpg"]))
     expect(savedRows()).toHaveLength(1)
     expect(savedRows()[0]).toHaveTextContent("scan-17.pdf")
   })
@@ -563,8 +562,43 @@ describe("<CommodityFormDialog /> files the server draft holds (#2941)", () => {
       .getByTestId("commodity-files-dropzone")
       .querySelector("input[type=file]") as HTMLInputElement
     await user.upload(input, [receipt, label])
-    await waitFor(() => expect(stagedNames()).toContain("label.png"))
-    expect(stagedNames()).toEqual(["label.png"])
+    await waitFor(() => expect(stagedNames()).toEqual(["label.png"]))
     expect(savedRows()).toHaveLength(1)
+  })
+
+  // #3023: finding the files the draft holds reads each picked file, which
+  // takes a while for a large one. An Add item clicked meanwhile still saves
+  // the file.
+  it("saves a file picked just before Add item while it is still being read", async () => {
+    const fake = draftWithReceipt()
+    let release = () => {}
+    const reading = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const digest = crypto.subtle.digest.bind(crypto.subtle)
+    const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation(async (algorithm, data) => {
+      await reading
+      return digest(algorithm, data)
+    })
+    onTestFinished(() => spy.mockRestore())
+    const user = userEvent.setup()
+    await openDraft()
+    for (let i = 0; i < 3; i++) await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-files-step")
+    await waitFor(() => expect(savedRows()).toHaveLength(1))
+
+    const input = screen
+      .getByTestId("commodity-files-dropzone")
+      .querySelector("input[type=file]") as HTMLInputElement
+    await user.upload(input, [label])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    release()
+
+    await waitFor(() => expect(fake.uploads).toBe(1))
+    await waitFor(() =>
+      expect(
+        fake.files.filter((f) => f.links.some((link) => link.entity_id === "d1")).map((f) => f.id)
+      ).toHaveLength(2)
+    )
   })
 })

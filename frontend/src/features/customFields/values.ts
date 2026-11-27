@@ -66,6 +66,29 @@ export function toFormValue(raw: unknown): CustomFieldFormValue {
   return { value: formText(raw), currency: "" }
 }
 
+// customFieldGuessUsable reports whether an item can take a value an AI scan
+// read for field def: a select field's option may be gone since the scan.
+export function customFieldGuessUsable(def: CustomField, value: unknown): boolean {
+  if (def.type === "select") return def.options.some((o) => o.id === value)
+  return true
+}
+
+// customFieldGuessText shows a value an AI scan read for field def: a select
+// field's option by its label, yes/no in words, anything else as it is.
+export function customFieldGuessText(
+  def: CustomField,
+  value: unknown,
+  t: (key: string) => string
+): string {
+  if (def.type === "select") {
+    return def.options.find((o) => o.id === value)?.label ?? String(value)
+  }
+  if (def.type === "boolean") {
+    return value === true ? t("customFields:detail.yes") : t("customFields:detail.no")
+  }
+  return String(value)
+}
+
 // toFormValues reads an item's stored values. A value of a field this
 // client does not know yet is read too; the form shows only the fields it
 // knows, and never sends the others.

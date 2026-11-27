@@ -179,6 +179,8 @@ func prepareNewCommodity(ctx context.Context, commodity *models.Commodity) int {
 	// dropped and the number is assigned inside the insert transaction.
 	// Only the backup restore may ask for a specific (archived) number.
 	commodity.AssetNumber = nil
+	// So is the revision: a new item starts at 1.
+	commodity.Revision = 1
 	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
 	return requested
 }
@@ -979,11 +981,19 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		// row is locked after the item's, and a type delete locks the
 		// deleted type before the items it moves; an update never waits for
 		// the type it leaves, so the orders cannot deadlock.
-		current, err := lockedCommodityType(ctx, tx, r.tableNames.Commodities(), stored.ID)
+		current, err := lockedCommodityState(ctx, tx, r.tableNames.Commodities(), stored.ID)
 		if err != nil {
 			return err
 		}
-		if row.Type != current {
+		// The revision is compared and moved on under the same lock, so a
+		// write that committed after the caller read the item is seen.
+		if expected, ok := registry.ExpectedRevisionFromContext(ctx); ok && expected != current.Revision {
+			return errxtrace.Classify(registry.ErrRevisionConflict,
+				errx.Attrs("commodity_id", stored.ID, "expected_revision", expected, "revision", current.Revision))
+		}
+		row.Revision = current.Revision + 1
+		commodity.Revision = row.Revision
+		if row.Type != current.Type {
 			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
 				return err
 			}
@@ -1009,12 +1019,19 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	return &commodity, nil
 }
 
-// lockedCommodityType returns the type of the commodity id, which the
-// caller's transaction has already locked.
-func lockedCommodityType(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (models.CommodityType, error) {
-	var current models.CommodityType
-	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type FROM %s WHERE id = $1`, table), id); err != nil {
-		return "", errxtrace.Wrap("failed to read commodity type", err, errx.Attrs("commodity_id", id))
+// lockedCommodity is the type and revision of an item as its row lock
+// holder reads them.
+type lockedCommodity struct {
+	Type     models.CommodityType `db:"type"`
+	Revision int64                `db:"revision"`
+}
+
+// lockedCommodityState returns the type and revision of the commodity id,
+// which the caller's transaction has already locked.
+func lockedCommodityState(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (lockedCommodity, error) {
+	var current lockedCommodity
+	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type, revision FROM %s WHERE id = $1`, table), id); err != nil {
+		return lockedCommodity{}, errxtrace.Wrap("failed to read commodity type and revision", err, errx.Attrs("commodity_id", id))
 	}
 	return current, nil
 }
@@ -1263,7 +1280,7 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 				return err
 			}
 		}
-		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2 WHERE id = $1`, table), id, draft)
+		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2, revision = revision + 1 WHERE id = $1`, table), id, draft)
 		return err
 	})
 	if err != nil {
@@ -1271,6 +1288,7 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 	}
 	next := locked
 	next.Draft = draft
+	next.Revision = locked.Revision + 1
 	next.CustomFields = locked.CustomFields.Clone()
 	return &locked, &next, nil
 }

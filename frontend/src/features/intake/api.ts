@@ -94,6 +94,11 @@ export interface IntakeCandidate {
   sortOrder: number
   fields: Record<string, IntakeFieldGuess>
   acceptedFields: string[]
+  // What the scan read for the group's custom fields, by field id; a select
+  // field's value is its option id.
+  customFields: Record<string, IntakeFieldGuess>
+  // The ids of the custom fields whose value goes into the draft.
+  acceptedCustomFields: string[]
   quantity: number
   selected: boolean
   outcome: IntakeCandidateOutcome
@@ -236,17 +241,25 @@ function toSource(view: SourceView): IntakeSource {
   }
 }
 
-function toCandidate(view: CandidateView | undefined, id?: string): IntakeCandidate {
-  const fields: Record<string, IntakeFieldGuess> = {}
-  for (const [key, guess] of Object.entries(view?.fields ?? {})) {
-    fields[key] = { value: guess?.value, confidence: guess?.confidence ?? 0 }
+function toGuesses(
+  view: Record<string, { value?: unknown; confidence?: number }> | undefined
+): Record<string, IntakeFieldGuess> {
+  const out: Record<string, IntakeFieldGuess> = {}
+  for (const [key, guess] of Object.entries(view ?? {})) {
+    out[key] = { value: guess?.value, confidence: guess?.confidence ?? 0 }
   }
+  return out
+}
+
+function toCandidate(view: CandidateView | undefined, id?: string): IntakeCandidate {
   return {
     id: id ?? view?.id ?? "",
     sourceId: view?.source_id ?? "",
     sortOrder: view?.sort_order ?? 0,
-    fields,
+    fields: toGuesses(view?.fields),
     acceptedFields: view?.accepted_fields ?? [],
+    customFields: toGuesses(view?.custom_fields),
+    acceptedCustomFields: view?.accepted_custom_fields ?? [],
     quantity: view?.quantity ?? 1,
     selected: view?.selected ?? false,
     outcome: toOutcome(view?.outcome),
@@ -372,6 +385,7 @@ export async function createIntakeSession(
 export interface IntakeCandidateReview {
   selected?: boolean
   acceptedFields?: string[]
+  acceptedCustomFields?: string[]
   quantity?: number
 }
 
@@ -388,6 +402,7 @@ export async function reviewIntakeCandidate(
         attributes: {
           selected: review.selected,
           accepted_fields: review.acceptedFields,
+          accepted_custom_fields: review.acceptedCustomFields,
           quantity: review.quantity,
         },
       },

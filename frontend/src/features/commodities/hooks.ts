@@ -14,6 +14,7 @@ import {
   getCommoditiesValue,
   getCommodity,
   getCommodityTagCounts,
+  isCommodityRevisionConflict,
   listCommodities,
   listCommodityBrands,
   listCommodityEvents,
@@ -333,6 +334,13 @@ export function useUpdateCommodity() {
       qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
       invalidateTags()
       invalidateSellers()
+    },
+    onError: (err, { id }) => {
+      // The item was written after the values were read: read it again, so
+      // the next save starts from it.
+      if (isCommodityRevisionConflict(err)) {
+        qc.invalidateQueries({ queryKey: commodityKeys.detail(slug, id) })
+      }
     },
   })
 }

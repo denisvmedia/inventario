@@ -1,6 +1,6 @@
 # E2E override for docker-compose.yaml.
 #
-# Usage (invoked by .github/workflows/e2e-tests.yml):
+# Usage (invoked by the e2e jobs of .github/workflows/docker.yml):
 #   INVENTARIO_IMAGE=ghcr.io/denisvmedia/inventario:pr-<num> \
 #   ADMIN_EMAIL=admin@test-org.com ADMIN_PASSWORD=TestPassword123 \
 #   DEFAULT_TENANT_SLUG=test-org DEFAULT_TENANT_NAME="Test Organization" \

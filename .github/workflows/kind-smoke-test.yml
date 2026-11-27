@@ -1,100 +1,36 @@
 name: Kind Smoke Test
 
-on:
-  push:
-    branches: [master]
-  pull_request:
-
-# kind-smoke is a pure consumer: it pulls the sha-<7> image docker.yml
-# publishes for this commit, loads it into a kind cluster, and validates
-# the k8s/dev manifests can bring the stack up end-to-end. Nothing is
-# built here.
+# Loads the image docker.yml published for this commit into a kind cluster
+# and checks that the k8s/dev manifests bring the stack up end to end.
+# Nothing is built here.
 #
+# Called by docker.yml once its manifest job has published the image, so
+# there is nothing to wait for and no Actions API request to make. The
+# caller's concurrency group applies: a superseded pull request run cancels
+# this one with it.
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Fully qualified sha-<7> image reference to test
+        required: true
+        type: string
+
 #   - packages: read — pull from ghcr.io.
-#   - actions: read  — reusable wait workflow calls `gh run list`.
 permissions:
   contents: read
   packages: read
-  actions: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Resolve which ecosystems this PR touches. See .github/filters.yml +
-  # devdocs/ci/conditional-execution.md. A workflow-level `paths:` filter
-  # creates no check run at all on the pull requests it skips, which is what
-  # keeps a context from being required (#1816, #2569); the gate below leaves
-  # a `skipped` check instead, which branch protection treats as passing.
-  changes:
-    name: Detect changes
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      image_inputs: ${{ steps.filter.outputs.image_inputs }}
-      ci: ${{ steps.filter.outputs.ci }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Filter changed paths
-        id: filter
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
-        with:
-          filters: .github/filters.yml
-
-  # Wait for docker.yml to finish for this SHA and resolve the immutable
-  # sha-<7> image reference. A naive "does the tag exist on GHCR?" check
-  # (what this workflow used to do) can happily consume the PREVIOUS
-  # commit's image because pr-N / edge are mutable pointers that only
-  # move once docker.yml's merge job completes.
-  resolve-build:
-    name: Resolve build artifacts
-    uses: ./.github/workflows/_wait-for-docker-image.yml
-    needs: changes
-    if: >-
-      github.event_name != 'pull_request' ||
-      needs.changes.outputs.image_inputs == 'true' ||
-      needs.changes.outputs.ci == 'true'
-
-  # A cancelled or failed image build used to take every lane below it with
-  # it: the waiter cancels, its dependents report SKIPPED, and the pull
-  # request shows no failing check at all (#2536). This job exists only in
-  # that case, so the gap is loud instead of silent. A legitimate path-filter
-  # skip leaves `result` as `skipped` and this stays out of the way.
-  image-guard:
-    name: Image build did not complete
-    runs-on: ubuntu-latest
-    needs: resolve-build
-    if: >-
-      always() &&
-      (needs.resolve-build.result == 'cancelled' ||
-       needs.resolve-build.result == 'failure')
-    steps:
-      - name: Report the lanes that never ran
-        run: |
-          echo "::error::The image build this workflow waits on ended as '${{ needs.resolve-build.result }}'."
-          echo "Every job that needs it was skipped, so nothing below actually ran."
-          echo "Re-run the workflow once the image for this commit has been published."
-          exit 1
-
   kind-smoke-test:
     name: Kind smoke test
     runs-on: ubuntu-latest
-    needs: resolve-build
     timeout-minutes: 30
-    # Nothing to smoke-test when docker.yml built no image for this commit.
-    # An empty reference used to reach `docker pull` and fail there with
-    # `manifest unknown`, which reads like a broken build rather than like a
-    # commit that needs none.
-    if: needs.resolve-build.outputs.built == 'true'
 
     env:
       KIND_CLUSTER_NAME: inventario-ci
       K8S_NAMESPACE: inventario-dev
-      INVENTARIO_IMAGE: ${{ needs.resolve-build.outputs.image }}
+      INVENTARIO_IMAGE: ${{ inputs.image }}
       ARTIFACTS_DIR: artifacts
       PORT_FORWARD_LOG: artifacts/inventario-port-forward.log
       PORT_FORWARD_PID_FILE: artifacts/inventario-port-forward.pid
@@ -128,9 +64,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull image
-        # The resolve-build reusable workflow has already waited for
-        # docker.yml to finish for this commit, so the sha-<7> tag we
-        # receive is guaranteed to exist.
+        # The caller runs this only after its manifest job published the
+        # sha-<7> tag of this commit, so the tag exists.
         run: docker pull "$INVENTARIO_IMAGE"
 
       - name: Create kind cluster

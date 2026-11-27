@@ -32,7 +32,8 @@ func (r *CommodityRegistry) BackfillLegacyPrices(ctx context.Context) (int, erro
 		UPDATE %[1]s c
 		SET current_price = NULLIF(c.current_price, 0),
 		    converted_original_price = NULLIF(c.converted_original_price, 0),
-		    legacy_zero_prices = false
+		    legacy_zero_prices = false,
+		    revision = c.revision + 1
 		FROM batch
 		WHERE c.id = batch.id`, commodities)
 

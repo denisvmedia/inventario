@@ -119,7 +119,11 @@ func countDraftTypesInTx(ctx context.Context, tx *sqlx.Tx, drafts store.TableNam
 }
 
 // lockDraftsWithFieldInTx locks the rows of the group's open drafts whose
-// custom_fields have an entry for fieldID, value or not, until tx ends.
+// custom_fields have an entry for fieldID, value or not, until tx ends. It
+// locks the drafts with an empty entry too, although dropDraftFieldInTx
+// leaves them as they are: a draft that gets a value meanwhile waits for the
+// delete, so the count and the rewrite see the same drafts, and the rewrite
+// locks no draft row after the field's row.
 func lockDraftsWithFieldInTx(ctx context.Context, tx *sqlx.Tx, drafts store.TableName, groupID, fieldID string) error {
 	query := fmt.Sprintf(`SELECT id FROM %s WHERE group_id = $1 AND status = $2 AND (%s)->$3::text IS NOT NULL ORDER BY id FOR UPDATE`,
 		drafts, draftCustomFieldsSQL)
@@ -143,12 +147,16 @@ func countDraftValuesInTx(ctx context.Context, tx *sqlx.Tx, drafts store.TableNa
 }
 
 // dropDraftFieldInTx takes fieldID's entry out of the custom_fields of the
-// group's open drafts that have one, each with a new revision.
+// group's open drafts that hold a value of it, each with a new revision. A
+// draft whose entry is empty keeps it and its revision: the item form keeps
+// an empty entry for every field it shows, and leaves a field it does not
+// know out of the item it saves.
 func dropDraftFieldInTx(ctx context.Context, tx *sqlx.Tx, drafts store.TableName, groupID, fieldID string) error {
 	query := fmt.Sprintf(`
 		UPDATE %s SET form_values = form_values #- ARRAY['custom_fields', $1::text],
 			revision = revision + 1, updated_at = $2
-		WHERE group_id = $3 AND status = $4 AND (%s)->$1::text IS NOT NULL`, drafts, draftCustomFieldsSQL)
+		WHERE group_id = $3 AND status = $4 AND %s`, drafts,
+		draftCustomFieldHasValueSQL("(("+draftCustomFieldsSQL+")->$1::text)"))
 	if _, err := tx.ExecContext(ctx, query, fieldID, time.Now(), groupID, openDraftStatus()); err != nil {
 		return errxtrace.Wrap("failed to remove the custom field from the drafts", err, errx.Attrs("custom_field_id", fieldID))
 	}

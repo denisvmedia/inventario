@@ -550,6 +550,10 @@ table "commodities" {
     type = BOOLEAN
     default = "true"
   }
+  column "revision" {
+    type = BIGINT
+    default = "1"
+  }
   column "deleted_at" {
     type = TIMESTAMP
     null = true
@@ -2598,6 +2602,14 @@ table "intake_candidates" {
     default = "true"
   }
   column "accepted_fields" {
+    type = JSONB
+    null = true
+  }
+  column "custom_fields" {
+    type = JSONB
+    default = sql("'{}'")
+  }
+  column "accepted_custom_fields" {
     type = JSONB
     null = true
   }
