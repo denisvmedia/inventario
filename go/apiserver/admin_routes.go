@@ -424,11 +424,12 @@ func adminBackofficeRoutes(
 // RequireBackofficeAuth group. Retry and discard are audited; so is the
 // list, which reads tenant data across tenants. A support_agent may list
 // and retry; a discard takes a failure off every list, so it needs
-// platform_admin.
+// platform_admin, and so does a bulk discard (#2946), its dry run too.
 func adminFailedJobRoutes(r chi.Router, api *adminFailedJobsAPI) {
 	r.Get("/failed-jobs", api.listFailedJobs)
 	r.Post("/failed-jobs/{jobType}/{jobID}/retry", api.retryFailedJob)
 	r.With(RequirePlatformAdmin).Post("/failed-jobs/{jobType}/{jobID}/discard", api.discardFailedJob)
+	r.With(RequirePlatformAdmin).Post("/failed-jobs/bulk-discard", api.bulkDiscardFailedJobs)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

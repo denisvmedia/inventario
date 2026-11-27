@@ -1428,6 +1428,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the role split and the named job by the review of 2026-11-26; the confirmation, the id and the filtered empty state agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
 
+#### 2026-11-27 — Admin Failed jobs bulk discard
+
+- **Issue/PR**: #2946
+- **Mock**: [`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) has no page for background jobs and no bulk action of this kind; the header button follows **New tenant** in [`TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx).
+- **Reality**: For a `platform_admin`, the header of `frontend/src/pages/admin/AdminFailedJobsPage.tsx` gets an outline **Discard older…** button (`CalendarX`) on the right, as **New tenant** sits on the Tenants page. It opens `AdminFailedJobsBulkDiscardDialog.tsx`: the title and a body that says what a discard does, a muted bordered block that names the job type and tenant of the page's filters ("All job types" and "All tenants" without them), a **Failed before** date input (`Input type="date"`, at most today in UTC) with a hint that the day starts at 00:00 UTC, and a live line with the dry-run count. The destructive confirm button names the count ("Discard 12 jobs") and stays disabled until a day is picked and the count is above zero. A support agent does not get the button.
+- **Why**: not present in mock. #2946 asks for a bulk discard in the back office; the dialog takes the page's filters so the operator sees which jobs it takes, and confirms a count the server counted for that filter. The header placement, the date input instead of a date-and-time picker and the count in the confirm button are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2946 by the 2026-11-27 goal to work through the backlog.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
+
 #### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
 
 - **Issue/PR**: #1389 / #2923

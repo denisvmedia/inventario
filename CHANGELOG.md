@@ -554,6 +554,18 @@ when to add an entry and where it goes.
   admins, and `GET /admin/failed-jobs` with `retry` and `discard` under
   `/admin/failed-jobs/{jobType}/{jobID}/` for the back office
   ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
+- Failed jobs can be discarded in bulk: every job that failed before a date,
+  of one type or of every type, in one tenant or in all of them. In the back
+  office, **Discard older…** on the Failed jobs page takes the type and
+  tenant the filters show and asks with the count first; on the command
+  line, `inventario jobs failed discard --failed-before 2026-11-01` takes
+  `--type`, `--tenant` and `--dry-run`, and says how many jobs it discarded.
+  A date in the future is refused. Only a platform admin can discard in
+  bulk, and each bulk discard writes one audit row with the filter and the
+  counts. The API gains `POST /admin/failed-jobs/bulk-discard`, and
+  `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
+  `failed_before` filter
+  ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
 
 ### Changed
 
@@ -961,7 +973,9 @@ when to add an entry and where it goes.
   ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). Jobs
   that failed before the upgrade count toward the depth gauge from the first
   collection, so an alert on a depth above zero fires on day one until they
-  are retried or discarded
+  are retried or discarded. Discard them in one go with
+  `inventario jobs failed discard --failed-before <the upgrade date>`,
+  after a `--dry-run` to see the count
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)). See the
   admin runbook §10
   ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
