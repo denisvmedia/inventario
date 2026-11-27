@@ -142,9 +142,12 @@ func SplitSearchTerms(q string) []string {
 	return terms
 }
 
-// searchFold is the Unicode case folding text is matched with. A folding
-// Caser is stateless, so one value serves every goroutine.
-var searchFold = cases.Fold()
+// searchFold returns the Unicode case folding text is matched with. A Caser
+// must not be shared between goroutines, so each call builds its own; one
+// caller may use it for several strings in turn.
+func searchFold() cases.Caser {
+	return cases.Fold()
+}
 
 // ContainsFold reports whether s contains term, ignoring case. term is
 // matched literally: unlike a LIKE pattern, % and _ have no meaning. The
@@ -167,13 +170,15 @@ var searchFold = cases.Fold()
 // The shared registry tests (registrytest) therefore ignore case only in
 // ASCII letters.
 func ContainsFold(s, term string) bool {
-	return strings.Contains(searchFold.String(s), searchFold.String(term))
+	fold := searchFold()
+	return strings.Contains(fold.String(s), fold.String(term))
 }
 
 // equalFold reports whether s and t are equal, ignoring case as
 // ContainsFold does.
 func equalFold(s, t string) bool {
-	return searchFold.String(s) == searchFold.String(t)
+	fold := searchFold()
+	return fold.String(s) == fold.String(t)
 }
 
 // MatchCommoditySearch applies the free-text search to c. Every term must
@@ -294,15 +299,16 @@ func searchExcerpt(value, term string) string {
 	// Fold rune by rune and remember where each folded rune came from: a
 	// letter can fold to more than one (ß to "ss"), so an offset in the
 	// folded note is not an offset in the note.
+	fold := searchFold()
 	var folded []rune
 	var origin []int
 	for i, r := range runes {
-		for _, f := range searchFold.String(string(r)) {
+		for _, f := range fold.String(string(r)) {
 			folded = append(folded, f)
 			origin = append(origin, i)
 		}
 	}
-	needle := []rune(searchFold.String(term))
+	needle := []rune(fold.String(term))
 	// If folding rune by rune misses a match that folding the whole note
 	// found, the excerpt starts at the beginning of the note.
 	at, past := 0, utf8.RuneCountInString(term)
