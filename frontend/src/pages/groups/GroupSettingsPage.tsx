@@ -418,7 +418,6 @@ function InfoSection({
           <Label htmlFor="settings-group-name">{t("groups:settings.nameLabel")}</Label>
           <Input
             id="settings-group-name"
-            maxLength={100}
             disabled={updateMutation.isPending}
             aria-invalid={!!form.formState.errors.name}
             data-testid="settings-name-input"

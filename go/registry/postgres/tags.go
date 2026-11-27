@@ -572,6 +572,15 @@ func defaultTagLabelFromSlug(slug string) string {
 // Slugs are deduplicated and sorted before locking so the lock
 // acquisition order is deterministic across writers — eliminates
 // deadlock potential when two writers reference overlapping slug sets.
+//
+// Lock order for every writer that touches tags: the (group, slug)
+// advisory locks in sorted order, then the tag rows, then the group's
+// currency-migration lock when it needs one, then the item or file rows.
+// An item or file update calls this before it locks its own row, and a
+// tag rename or delete rewrites the items or files only after it holds
+// the slug and tag-row locks. A writer that locked an item row first and
+// then waited for a slug lock would deadlock against a rename holding the
+// slug and waiting for that row.
 func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, kind models.TagKind, slugs []string) error {
 	if len(slugs) == 0 || groupID == "" {
 		return nil
@@ -698,6 +707,14 @@ func (r *TagRegistry) renameRewriteSlug(
 			registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
 	}
 
+	// A running currency migration updates the group's items one by one
+	// under its lock. The rewrite below locks every item that carries the
+	// slug at once, in another order, so it waits for the migration first.
+	if kind == models.TagKindCommodity {
+		if err := lockGroupCurrencyMigration(ctx, tx, current.GroupID); err != nil {
+			return err
+		}
+	}
 	// Rewrite references only on the kind's own table — a commodity-tag
 	// rename must not touch files (those slugs belong to file tags).
 	rewriteQuery := fmt.Sprintf(
@@ -773,11 +790,12 @@ func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, kind mo
 // from whatever slug the first one settled on.
 //
 // Lock order: id-advisory → peek slug (no row lock) → slug-advisory
-// (old + new, sorted) → tag-row FOR UPDATE → rewrite + update → saved
-// view group lock. The peek-then-slug-lock split is what avoids
-// deadlocking against concurrent ensureTagRowsInTx (which takes
-// slug-lock then row-lock). The saved view writes never take a tag
-// lock, so taking their group lock last cannot deadlock against them.
+// (old + new, sorted) → tag-row FOR UPDATE → currency-migration lock (item
+// tags) → rewrite of the item or file rows + update → saved view group
+// lock. The peek-then-slug-lock split is what avoids deadlocking against
+// concurrent ensureTagRowsInTx (which takes slug-lock then row-lock). The
+// saved view writes never take a tag lock, so taking their group lock last
+// cannot deadlock against them.
 func (r *TagRegistry) RenameAtomic(
 	ctx context.Context,
 	id, newLabel, newSlug string,
@@ -858,10 +876,10 @@ func (r *TagRegistry) RenameAtomic(
 // block until our tx commits.
 //
 // Lock order: id-advisory → peek slug (no row lock) → slug-advisory →
-// tag-row FOR UPDATE → strip + delete. Same shape as RenameAtomic for
-// the same reason — taking the row lock before the slug lock would
-// deadlock against ensureTagRowsInTx, which acquires them in the
-// reverse order (slug-lock then row-lock).
+// tag-row FOR UPDATE → currency-migration lock (item tags) → strip +
+// delete. Same shape as RenameAtomic for the same reason — taking the row
+// lock before the slug lock would deadlock against ensureTagRowsInTx,
+// which acquires them in the reverse order (slug-lock then row-lock).
 //
 // When force=false and usage > 0, returns the populated TagUsage along
 // with registry.ErrTagInUse and rolls back without mutating state.
@@ -910,6 +928,13 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 
 		if refCount > 0 && !force {
 			return registry.ErrTagInUse
+		}
+		// Like the rename, the strip waits for a running currency
+		// migration before it locks the group's items.
+		if current.Kind == models.TagKindCommodity {
+			if err := lockGroupCurrencyMigration(ctx, tx, current.GroupID); err != nil {
+				return err
+			}
 		}
 		// The strip covers trashed rows too, so a restored item does not
 		// bring back a tag that no longer exists.

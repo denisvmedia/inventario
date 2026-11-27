@@ -50,8 +50,8 @@ import { parseServerError } from "@/lib/server-error"
 const MESSAGE_MAX_BYTES = 5 * 1024
 
 // Match the BE's byte-counted bound: `len()` on a Go string is
-// UTF-8 bytes, whereas Zod's built-in `.max()` measures UTF-16 code
-// units. A multibyte payload (emoji, CJK, accented characters) that
+// UTF-8 bytes, whereas Zod's built-in `.max()` counts code points.
+// A multibyte payload (emoji, CJK, accented characters) that
 // looks fine to the FE could trip the BE's 400 if we used `.max()`
 // here — using TextEncoder mirrors `len(message)` exactly.
 const utf8ByteLength = (value: string) => new TextEncoder().encode(value).length

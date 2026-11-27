@@ -252,7 +252,7 @@ func (r *CommodityReminder) ValidateWithContext(ctx context.Context) error {
 // author yet.
 func (r *CommodityReminder) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, r,
-		validation.Field(&r.Title, rules.NotEmpty, validation.Length(1, ReminderTitleMaxLength)),
+		validation.Field(&r.Title, rules.NotEmpty, validation.RuneLength(1, ReminderTitleMaxLength)),
 		validation.Field(&r.DueOn, validation.Required, DateFormat, validation.By(validateReminderYear)),
 		validation.Field(&r.RemindDaysBefore, ReminderLeadTimesRule, validation.By(r.validateLeadTimesFitRepeat)),
 		validation.Field(&r.RepeatUnit, validation.Required, ReminderRepeatUnitRule),

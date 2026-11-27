@@ -95,6 +95,18 @@ describe("<NoGroupPage />", () => {
     expect(screen.getByTestId("no-group-submit")).toBeInTheDocument()
   })
 
+  it("caps the group name at 100 characters, counted as the server counts (#2919)", async () => {
+    server.use(...baseHandlers)
+    const user = userEvent.setup()
+    renderNoGroup()
+    await user.click(await screen.findByTestId("no-group-create-button"))
+    const input = await screen.findByTestId("no-group-name-input")
+    await user.click(input)
+    // One emoji is two UTF-16 units; the server allows 100 of them.
+    await user.paste("🏠".repeat(120))
+    expect(input).toHaveValue("🏠".repeat(100))
+  })
+
   it("submits the new group and navigates directly to /g/<new-slug>", async () => {
     const captured = capture<{ data?: { attributes?: { name?: string } } }>()
     server.use(

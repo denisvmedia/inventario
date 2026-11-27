@@ -162,7 +162,6 @@ function MaintenanceScheduleForm({
           placeholder={t("maintenance:dialog.titlePlaceholder", {
             defaultValue: "Replace water filter",
           })}
-          maxLength={200}
           data-testid="maintenance-title-input"
           aria-invalid={!!errors.title}
           aria-describedby={errors.title ? "maintenance-title-error" : undefined}
@@ -222,7 +221,6 @@ function MaintenanceScheduleForm({
         <Textarea
           id="maintenance-notes"
           rows={3}
-          maxLength={1000}
           placeholder={t("maintenance:dialog.notesPlaceholder", {
             defaultValue: "Use NSF-53 filter, comes in 2-packs",
           })}

@@ -189,7 +189,7 @@ func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*m
 	// Create tenant using factory set
 	createdTenant, err := s.factorySet.TenantRegistry.Create(ctx, *tenant)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tenant: %w", err)
+		return nil, fmt.Errorf("failed to create tenant: %w", tenantDomainTaken(err, tenant.Domain))
 	}
 
 	return createdTenant, nil
@@ -291,8 +291,8 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	if err := tenant.ValidateWithContext(ctx); err != nil {
 		return nil, fmt.Errorf("tenant validation failed: %w", err)
 	}
-	// Only a domain the update changes is checked: a stored domain that
-	// another tenant also has must not block an edit of the name.
+	// Only a domain the update changes is checked. The unique index on
+	// tenants.domain keeps the stored one unique.
 	if !sameTenantDomain(previousDomain, tenant.Domain) {
 		if err := s.checkTenantDomainFree(ctx, tenant.ID, tenant.Domain); err != nil {
 			return nil, err
@@ -302,7 +302,7 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	// Update tenant
 	updatedTenant, err := s.factorySet.TenantRegistry.Update(ctx, *tenant)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update tenant: %w", err)
+		return nil, fmt.Errorf("failed to update tenant: %w", tenantDomainTaken(err, tenant.Domain))
 	}
 
 	if previousStatus == models.TenantStatusActive && updatedTenant.Status != models.TenantStatusActive {

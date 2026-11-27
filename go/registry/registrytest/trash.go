@@ -13,13 +13,15 @@ import (
 
 // TrashEnv is what RunTrashContract needs from a backend: registries scoped
 // to one empty group, a service file registry that reads every group, the
-// context that carries the group scope, and an area items can be placed in.
+// context that carries the group scope, and two areas items can be placed
+// in.
 type TrashEnv struct {
 	Ctx          context.Context
 	Commodities  registry.CommodityRegistry
 	Files        registry.FileRegistry
 	ServiceFiles registry.FileRegistry
 	AreaID       string
+	OtherAreaID  string
 }
 
 // RunTrashContract checks how a backend's FileRegistry splits trashed files

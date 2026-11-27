@@ -126,9 +126,9 @@ func (f CustomFieldFilter) matchesValue(raw json.RawMessage) bool {
 			return false
 		}
 		if f.Op == CustomFieldOpContains {
-			return containsFold(s, f.Text)
+			return ContainsFold(s, f.Text)
 		}
-		return f.Op == CustomFieldOpEq && strings.EqualFold(s, f.Text)
+		return f.Op == CustomFieldOpEq && equalFold(s, f.Text)
 	case models.CustomFieldTypeNumber, models.CustomFieldTypeMoney:
 		n, ok := rawDecimal(f.Type, raw)
 		return ok && compareOp(f.Op, n.Cmp(f.Number))
@@ -306,7 +306,7 @@ func (s CustomFieldSearch) match(c *models.Commodity, term string) []CommoditySe
 			continue
 		}
 		v, ok := rawString(c.CustomFields[id])
-		if ok && containsFold(v, term) {
+		if ok && ContainsFold(v, term) {
 			out = append(out, CommoditySearchMatch{Field: CommoditySearchFieldCustomFields, Value: searchExcerpt(v, term), CustomFieldID: id})
 		}
 	}
