@@ -678,6 +678,13 @@ when to add an entry and where it goes.
   only the status. Such a save now also records an "updated" entry with the
   other fields
   ([#2899](https://github.com/denisvmedia/inventario/issues/2899)).
+- A bulk action on items or files no longer undoes a change someone saves to
+  one of them while it runs. Changing the tags, type or status of selected
+  items, moving them, or changing the tags of selected files read each one,
+  changed it and wrote the whole record back, so a new name, a note or a tag
+  saved in between was lost. Each record is now read and written under its
+  row lock, and only the fields the action sets are written
+  ([#2891](https://github.com/denisvmedia/inventario/issues/2891)).
 - Renaming or deleting a tag while someone saves an item or file that
   carries it no longer fails one of the two with a server error. The save
   and the tag change could each wait for the other until the database gave
@@ -693,13 +700,6 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
-- A bulk action on items or files no longer undoes a change someone saves to
-  one of them while it runs. Changing the tags, type or status of selected
-  items, moving them, or changing the tags of selected files read each one,
-  changed it and wrote the whole record back, so a new name, a note or a tag
-  saved in between was lost. Each record is now read and written under its
-  row lock, and only the fields the action sets are written
-  ([#2891](https://github.com/denisvmedia/inventario/issues/2891)).
 - Text length limits count characters in every language. The server counted
   most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
   borrower, supply link, maintenance title, file description and other text
