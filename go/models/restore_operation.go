@@ -183,10 +183,10 @@ func (r *RestoreOperation) ValidateWithContext(ctx context.Context) error {
 
 	fields = append(fields,
 		validation.Field(&r.ExportID, validation.Required),
-		validation.Field(&r.Description, validation.Required, validation.Length(1, 500)),
+		validation.Field(&r.Description, validation.Required, validation.RuneLength(1, 500)),
 		validation.Field(&r.Status, validation.Required),
 		validation.Field(&r.Options),
-		validation.Field(&r.ErrorMessage, validation.Length(0, 2000)),
+		validation.Field(&r.ErrorMessage, validation.RuneLength(0, 2000)),
 	)
 
 	return validation.ValidateStructWithContext(ctx, r, fields...)

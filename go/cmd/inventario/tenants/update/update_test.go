@@ -1,6 +1,8 @@
 package update_test
 
 import (
+	"bytes"
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -51,11 +53,17 @@ func TestCommand_Flags(t *testing.T) {
 	cmd := update.New(dbConfig)
 	cobraCmd := cmd.Cmd()
 
-	// Test that all expected flags are present, including the new
-	// registration-mode flag added alongside the per-tenant registration mode
-	// feature.
+	// Every field the command can change has a flag; README and the help
+	// examples use them.
 	expectedFlags := []string{
+		"name",
+		"slug",
+		"domain",
+		"status",
+		"settings",
 		"registration-mode",
+		"dry-run",
+		"interactive",
 	}
 
 	for _, flagName := range expectedFlags {
@@ -109,4 +117,88 @@ func TestRegistrationMode_InvalidValueRejected(t *testing.T) {
 		err := mode.Validate()
 		c.Assert(err, qt.IsNotNil)
 	})
+}
+
+const testDSN = "postgres://test:test@localhost/test"
+
+// seededTenant registers a memory registry under the "postgres" name, holding
+// one tenant with a domain, and returns the registry and the tenant's ID. The
+// admin service the command opens gets the same registry, so a test reads
+// the command's writes back through it.
+func seededTenant(c *qt.C) (fs *registry.FactorySet, tenantID string) {
+	fs = memory.NewFactorySet()
+	tenant, err := fs.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "Acme",
+		Slug:   "acme",
+		Domain: new("inventory.acme.test"),
+		Status: models.TenantStatusActive,
+	})
+	c.Assert(err, qt.IsNil)
+
+	registry.Register("postgres", func(registry.Config) (*registry.FactorySet, error) { return fs, nil })
+	c.Cleanup(func() {
+		registry.Unregister("postgres")
+	})
+	return fs, tenant.ID
+}
+
+func runUpdate(c *qt.C, args ...string) error {
+	c.Helper()
+	cmd := update.New(&shared.DatabaseConfig{DBDSN: testDSN})
+	cmd.Cmd().SetOut(&bytes.Buffer{})
+	cmd.Cmd().SetArgs(args)
+	return cmd.Cmd().Execute()
+}
+
+func TestCommand_LiveUpdate_SetsTheFlaggedFields(t *testing.T) {
+	c := qt.New(t)
+	fs, tenantID := seededTenant(c)
+
+	err := runUpdate(c, "acme", "--name=Acme Corporation", "--domain=inventory.acme.example")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := fs.TenantRegistry.Get(context.Background(), tenantID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Name, qt.Equals, "Acme Corporation")
+	c.Assert(stored.Domain, qt.DeepEquals, new("inventory.acme.example"))
+	c.Assert(stored.Slug, qt.Equals, "acme")
+}
+
+// An empty --domain removes the domain. It is how an operator frees a domain
+// that two tenants share before the migration that makes domains unique.
+func TestCommand_LiveUpdate_EmptyDomainRemovesTheDomain(t *testing.T) {
+	c := qt.New(t)
+	fs, tenantID := seededTenant(c)
+
+	err := runUpdate(c, "acme", "--domain=")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := fs.TenantRegistry.Get(context.Background(), tenantID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Domain, qt.IsNil)
+}
+
+// Without --domain the domain stays as it is.
+func TestCommand_LiveUpdate_KeepsTheDomainWithoutTheFlag(t *testing.T) {
+	c := qt.New(t)
+	fs, tenantID := seededTenant(c)
+
+	err := runUpdate(c, "acme", "--name=Acme Corporation")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := fs.TenantRegistry.Get(context.Background(), tenantID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Domain, qt.DeepEquals, new("inventory.acme.test"))
+}
+
+func TestCommand_DryRun_ChangesNothing(t *testing.T) {
+	c := qt.New(t)
+	fs, tenantID := seededTenant(c)
+
+	err := runUpdate(c, "acme", "--domain=", "--dry-run")
+	c.Assert(err, qt.IsNil)
+
+	stored, err := fs.TenantRegistry.Get(context.Background(), tenantID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Domain, qt.DeepEquals, new("inventory.acme.test"))
 }

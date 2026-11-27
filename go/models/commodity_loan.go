@@ -167,9 +167,9 @@ func (*CommodityLoan) Validate() error {
 func (l *CommodityLoan) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, l,
 		validation.Field(&l.CommodityID, rules.NotEmpty),
-		validation.Field(&l.BorrowerName, rules.NotEmpty, validation.Length(1, 200)),
-		validation.Field(&l.BorrowerContact, validation.Length(0, 200)),
-		validation.Field(&l.BorrowerNote, validation.Length(0, 1000)),
+		validation.Field(&l.BorrowerName, rules.NotEmpty, validation.RuneLength(1, 200)),
+		validation.Field(&l.BorrowerContact, validation.RuneLength(0, 200)),
+		validation.Field(&l.BorrowerNote, validation.RuneLength(0, 1000)),
 		validation.Field(&l.LentAt, validation.Required, DateFormat),
 		validation.Field(&l.DueBackAt),
 		validation.Field(&l.ReturnedAt),

@@ -116,7 +116,7 @@ read as their digits.
 | `document_id` | yes | The document's id in that system, up to 255 bytes. |
 | `source_instance` | no | Tells two installations of one system apart, for example `home` and `office`, up to 255 bytes. Leave it out when you have one. |
 | `source_name` | no | How the system is shown, for example `Paperless-ngx`, up to 100 characters. Without it the inbox shows `source_system`. |
-| `source_url` | no | The document's address there: an absolute `http` or `https` address without a user name or password, up to 2048 bytes. It is stored and shown, never opened by Inventario. |
+| `source_url` | no | The document's address there: an absolute `http` or `https` address without a user name or password, up to 2048 characters. It is stored and shown, never opened by Inventario. |
 | `seller` | no | Up to 100 characters. |
 | `purchase_date` | no | `YYYY-MM-DD`, or a date and time in RFC 3339 form, of which the date is kept. |
 | `amount` | no | A number of zero or more with up to 13 digits before the decimal point and up to two after it, for example `129.90`, optionally after a currency code (`EUR129.90`). |

@@ -399,7 +399,7 @@ func (d *CommodityDraft) ValidateWithContext(ctx context.Context) error {
 // author yet.
 func (d *CommodityDraft) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, d,
-		validation.Field(&d.ClientKey, rules.NotEmpty, validation.Length(1, CommodityDraftClientKeyMaxLength), clientKeyRule),
+		validation.Field(&d.ClientKey, rules.NotEmpty, validation.RuneLength(1, CommodityDraftClientKeyMaxLength), clientKeyRule),
 		validation.Field(&d.Values, CommodityDraftValuesRule),
 	)
 }

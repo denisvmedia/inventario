@@ -177,7 +177,6 @@ export function LocationFormDialog({
               id="location-name"
               placeholder={t("locations:dialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={200}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
               aria-describedby={form.formState.errors.name ? "location-name-error" : undefined}
@@ -197,7 +196,6 @@ export function LocationFormDialog({
               id="location-description"
               placeholder={t("locations:dialog.descriptionPlaceholder")}
               autoComplete="off"
-              maxLength={200}
               rows={2}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.description}
@@ -224,7 +222,6 @@ export function LocationFormDialog({
               id="location-address"
               placeholder={t("locations:dialog.addressPlaceholder")}
               autoComplete="off"
-              maxLength={2000}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.address}
               aria-describedby={

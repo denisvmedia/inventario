@@ -157,9 +157,11 @@ Deleting an item moves it to the [Trash](../trash/) with its reminders: they sen
 Open **Upcoming** in the sidebar for one list of everything with a date coming up in the group, oldest first:
 
 - item reminders, on their next date;
-- warranty expiries of items in use;
+- warranty expiries;
 - loans due back, including overdue ones;
 - maintenance due, including overdue schedules.
+
+The list shows only items that are **In Use**. An item marked with an end status such as **Sold** or **Stolen** (see [Status lifecycle](../items/#status-lifecycle)) leaves it, and comes back when you revert it to **In Use**.
 
 ![The Upcoming page listing item reminders, warranty expiries, loans and maintenance by date, with tabs for each kind and a period selector](../../assets/screenshots/upcoming.png)
 
@@ -175,6 +177,8 @@ Inventario sends reminder emails so you don't have to keep checking these pages:
 - **Item reminders** — on the days before the date that you chose for that reminder. They go to the person who created the reminder, as long as they are still a member of the group.
 
 No reminder emails go out for a section the group [hides](../groups-and-sharing/#hide-sections-the-group-doesnt-use). Item reminders keep coming whatever the group hides.
+
+Reminder emails go out only for items that are **In Use**. An item marked **Sold**, **Lost**, **Disposed**, **Written Off**, **Donated**, or **Stolen** gets no warranty, loan, maintenance, or item reminders. When you revert it to **In Use**, the reminders that are still due are sent, the same as for an item restored from the [Trash](../trash/).
 
 Each email for a date is sent once. If Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day. A longer lead time is not sent after a shorter one, so if you add 90 to your warranty lead times, an item that expires next week, or one that already had its 60-day email, gets no new email; an item 75 days away gets its 90-day email straight away.
 

@@ -263,20 +263,18 @@ func auditRowContaining(c *qt.C, rows []*models.AuditLog, fragment string) *mode
 	return nil
 }
 
-// A domain that two tenants already share, which the schema does not
-// prevent, does not block an edit that leaves the domain alone. A new
-// domain is still checked.
-func TestAdminUpdateTenant_DomainIsCheckedOnlyWhenItChanges(t *testing.T) {
+// An edit that sends the domain the tenant already has is not refused as a
+// taken domain. A domain another tenant has is.
+func TestAdminUpdateTenant_RefusesOnlyAnotherTenantsDomain(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	env := newTenantWriteEnv(c)
 	acme := *env.acme
-	acme.Domain = new("shared.test")
+	acme.Domain = new("acme.test")
 	must.Must(env.params.FactorySet.TenantRegistry.Update(ctx, acme))
-	must.Must(env.params.FactorySet.TenantRegistry.Create(ctx, models.Tenant{Name: "Twin", Slug: "twin", Domain: new("shared.test"), Status: models.TenantStatusActive}))
 	must.Must(env.params.FactorySet.TenantRegistry.Create(ctx, models.Tenant{Name: "Other", Slug: "other", Domain: new("other.test"), Status: models.TenantStatusActive}))
 
-	rr := env.do(c, http.MethodPatch, tenantsPath("/"+env.acme.ID), map[string]any{"name": "Acme Renamed", "domain": "shared.test"})
+	rr := env.do(c, http.MethodPatch, tenantsPath("/"+env.acme.ID), map[string]any{"name": "Acme Renamed", "domain": "acme.test"})
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
 	c.Assert(env.storedTenant(c, env.acme.ID).Name, qt.Equals, "Acme Renamed")
 

@@ -156,6 +156,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
 	currencyMigrationFactory := NewCurrencyMigrationRegistryFactory()
+	currencyMigrationFactory.SetLocationGroupRegistry(groupReg)
 	fs.CurrencyMigrationRegistryFactory = currencyMigrationFactory
 	// Failed jobs (#1307) read the job rows of these stores directly.
 	fs.FailedJobRegistry = NewFailedJobRegistry(FailedJobStores{

@@ -435,6 +435,26 @@ type CommodityRegistry interface {
 	// ErrNotFound when the item does not exist or is in Trash.
 	SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error)
 
+	// Patch changes the columns a bulk action edits on a live item: its
+	// tags, type, status, status date, status note, sale price and area. It
+	// reads the item under the item's row lock, hands a copy to change, and
+	// writes those columns of the item change returns. Every other column
+	// and the custom field values keep what is stored, so Patch never writes
+	// back a value an edit saved since the caller last read the item.
+	//
+	// addTags names every tag change may add. They are locked before the
+	// item, as every write of an item's tags locks them, and a change that
+	// adds any other tag fails with ErrInvalidInput. A new type must be one
+	// of the group's item types (ErrUnknownItemType), and a new area one the
+	// group can see (ErrNotFound).
+	//
+	// change reports whether it changed anything; when it did not, nothing
+	// is written and after is nil. An error from change is returned as is,
+	// and nothing is written. before is the item as it was under the lock
+	// and after the item as stored. ErrNotFound when the item does not exist
+	// or is in Trash.
+	Patch(ctx context.Context, id string, addTags []string, change func(models.Commodity) (models.Commodity, bool, error)) (before, after *models.Commodity, err error)
+
 	// PurgeTrashed deletes the row of a trashed item; its loans, service
 	// records, maintenance schedules, supply links and events go with it
 	// through ON DELETE CASCADE. It never deletes a live item, so a purge
@@ -682,6 +702,14 @@ type FileRegistry interface {
 	// age. A user registry reads its group; a service registry reads every
 	// group.
 	ListStrandedTrashed(ctx context.Context, limit int) ([]*models.FileEntity, error)
+
+	// PatchTags changes the tags of a live file. It reads the file under the
+	// file's row lock, hands a copy to change, and writes the tags of the
+	// file change returns with a new update time; every other column and
+	// the links keep what is stored. addTags, change, before and after work
+	// as in CommodityRegistry.Patch. ErrNotFound when the file does not
+	// exist or is in Trash.
+	PatchTags(ctx context.Context, id string, addTags []string, change func(models.FileEntity) (models.FileEntity, bool, error)) (before, after *models.FileEntity, err error)
 
 	// Trash moves a live file to Trash. withCommodityID names the item whose
 	// deletion takes the file along, or is empty for a file deleted on its
@@ -2258,6 +2286,16 @@ type CurrencyMigrationRegistry interface {
 	// background worker calls this every tick AND on startup. Returns
 	// the rows it transitioned.
 	SweepStuckRunning(ctx context.Context, now time.Time, threshold time.Duration) ([]*models.CurrencyMigration, error)
+
+	// DeleteFinishedBefore deletes at most limit completed and failed
+	// migrations, discarded or not, that finished before the cutoff,
+	// together with their audit rows, and returns how many it deleted.
+	// A migration that has no completion time counts from its creation.
+	// A pending or running migration is never deleted, and neither is
+	// one a group still references through
+	// location_groups.currency_migration_id. A limit of zero or less
+	// deletes every match. Service registry only.
+	DeleteFinishedBefore(ctx context.Context, before time.Time, limit int) (int, error)
 
 	// IssuePreviewToken signs `inputs` with the registry's HMAC key and
 	// returns the encoded token. The token is stateless — IssuePreviewToken

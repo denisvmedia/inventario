@@ -19,6 +19,10 @@ var (
 	ErrBadDataStructure   = errx.NewSentinel("bad data structure")
 	ErrDeleted            = errx.NewSentinel("deleted", ErrNotFound)
 
+	// ErrDomainAlreadyExists is returned when a tenant write would give a
+	// domain to a second tenant. tenants.domain is unique.
+	ErrDomainAlreadyExists = errx.NewSentinel("domain already exists")
+
 	ErrGroupCurrencyNotSet      = errx.NewSentinel("group currency not set")
 	ErrInvalidSettingName       = errx.NewSentinel("invalid setting name")
 	ErrUserContextRequired      = errx.NewSentinel("user context required")
