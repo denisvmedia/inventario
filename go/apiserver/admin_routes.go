@@ -136,6 +136,11 @@ type AdminParams struct {
 	// tenant's files from before its rows (#1037), the same location the
 	// rest of the apiserver uploads to.
 	UploadLocation string
+
+	// AvatarSigner signs the avatar_url of the users and group members the
+	// admin responses carry (#2894), with the key /avatars checks them with.
+	// Nil leaves them without one, and the admin pages show initials.
+	AvatarSigner *services.FileSigningService
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -205,6 +210,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
 		apiTokens:    params.APITokenService,
+		avatarSigner: params.AvatarSigner,
 	}
 	groupsAPI := &adminGroupsAPI{
 		factorySet:   params.FactorySet,
@@ -214,6 +220,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		groupService: params.GroupService,
 		auditService: params.AuditService,
+		avatarSigner: params.AvatarSigner,
 	}
 	impersonationAPI := &adminImpersonationAPI{
 		factorySet:   params.FactorySet,

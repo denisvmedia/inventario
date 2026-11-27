@@ -132,3 +132,77 @@ func TestAvatarURL_RefusesToSignWithoutTheGroupItNeeds(t *testing.T) {
 	_, err = signer.GenerateAvatarURL("subject-1", "", "subject-1", "", "")
 	c.Assert(err, qt.IsNotNil)
 }
+
+// A back-office operator's URL names the operator instead of a viewer
+// (#2894). Its signature covers a message of its own, so it cannot be turned
+// into a user URL, or the other way round.
+func TestOperatorAvatarURL_RoundTrip(t *testing.T) {
+	c := qt.New(t)
+	signer := newAvatarSigner()
+
+	signed, err := signer.GenerateOperatorAvatarURL("subject-1", avatarTestKey, "operator-1", "binding")
+	c.Assert(err, qt.IsNil)
+	c.Assert(strings.HasPrefix(signed, services.AvatarURLPrefix+"subject-1?"), qt.IsTrue, qt.Commentf("got %s", signed))
+
+	urlPath, query := splitSignedURL(c, signed)
+	claims, err := signer.ValidateAvatarURL(urlPath, query, "binding")
+	c.Assert(err, qt.IsNil)
+	c.Assert(claims.SubjectID, qt.Equals, "subject-1")
+	c.Assert(claims.OperatorID, qt.Equals, "operator-1")
+	c.Assert(claims.ViewerID, qt.Equals, "")
+	c.Assert(claims.GroupID, qt.Equals, "")
+	c.Assert(claims.Version, qt.Equals, "3-a1b2c3d4e5f6")
+}
+
+func TestOperatorAvatarURL_RefusesTampering(t *testing.T) {
+	c := qt.New(t)
+	signer := newAvatarSigner()
+	operatorURL, err := signer.GenerateOperatorAvatarURL("subject-1", avatarTestKey, "operator-1", "binding")
+	c.Assert(err, qt.IsNil)
+	userURL, err := signer.GenerateAvatarURL("subject-1", avatarTestKey, "viewer-1", "group-1", "binding")
+	c.Assert(err, qt.IsNil)
+
+	cases := []struct {
+		name   string
+		signed string
+		mutate func(q url.Values)
+	}{
+		{name: "another operator", signed: operatorURL, mutate: func(q url.Values) { q.Set("op", "operator-2") }},
+		{name: "the operator passed off as a user", signed: operatorURL, mutate: func(q url.Values) {
+			q.Set("uid", q.Get("op"))
+			q.Del("op")
+		}},
+		{name: "a user passed off as an operator", signed: userURL, mutate: func(q url.Values) {
+			q.Set("op", q.Get("uid"))
+			q.Del("uid")
+			q.Del("gid")
+		}},
+		{name: "a group added", signed: operatorURL, mutate: func(q url.Values) { q.Set("gid", "group-1") }},
+		{name: "a user added", signed: operatorURL, mutate: func(q url.Values) { q.Set("uid", "viewer-1") }},
+		{name: "an operator added to a user URL", signed: userURL, mutate: func(q url.Values) { q.Set("op", "operator-1") }},
+		{name: "another session", signed: operatorURL},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			urlPath, query := splitSignedURL(c, tc.signed)
+			binding := services.SessionBinding("other-binding")
+			if tc.mutate != nil {
+				tc.mutate(query)
+				binding = "binding"
+			}
+			_, err := signer.ValidateAvatarURL(urlPath, query, binding)
+			c.Assert(err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestOperatorAvatarURL_RefusesToSignWithoutAnOperator(t *testing.T) {
+	c := qt.New(t)
+	signer := newAvatarSigner()
+
+	_, err := signer.GenerateOperatorAvatarURL("subject-1", avatarTestKey, "", "")
+	c.Assert(err, qt.IsNotNil)
+
+	_, err = signer.GenerateOperatorAvatarURL("subject-1", "", "operator-1", "")
+	c.Assert(err, qt.IsNotNil)
+}

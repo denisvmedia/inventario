@@ -294,6 +294,7 @@ function MemberRow({
           <UserAvatar
             name={member.user?.name}
             email={member.user?.email}
+            src={member.user?.avatar_url}
             className="size-8 rounded-full"
             fallbackClassName="bg-muted text-xs text-muted-foreground"
           />

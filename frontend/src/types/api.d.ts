@@ -3733,8 +3733,9 @@ export type paths = {
         };
         /**
          * Get a profile photo from a signed URL
-         * @description Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+         * @description Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
          *     they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+         *     A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
          */
         get: {
             parameters: {
@@ -3742,7 +3743,9 @@ export type paths = {
                     /** @description Photo version */
                     v: string;
                     /** @description The user the URL was issued to */
-                    uid: string;
+                    uid?: string;
+                    /** @description The back-office operator the URL was issued to */
+                    op?: string;
                     /** @description The group the two users share */
                     gid?: string;
                     /** @description Expiry, Unix seconds */
@@ -16365,6 +16368,12 @@ export type components = {
             user?: components["schemas"]["jsonapi.AdminGroupMemberUser"];
         };
         "jsonapi.AdminGroupMemberUser": {
+            /**
+             * @description AvatarURL is a signed URL of the member's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the member
+             *     has none.
+             */
+            avatar_url?: string;
             email?: string;
             id?: string;
             name?: string;
@@ -16422,6 +16431,11 @@ export type components = {
         };
         "jsonapi.AdminUserDetail": {
             active_session_count?: number;
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested it. Absent when the user has none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_memberships?: components["schemas"]["jsonapi.AdminUserGroupMembership"][];
@@ -16446,6 +16460,12 @@ export type components = {
             role?: components["schemas"]["models.GroupRole"];
         };
         "jsonapi.AdminUserListItem": {
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the user has
+             *     none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_membership_count?: number;

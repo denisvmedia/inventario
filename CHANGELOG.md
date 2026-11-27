@@ -814,6 +814,12 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- `inventario users delete` left the user's profile photo in storage, where
+  nothing pointed at it any more. It now deletes the photo after the account,
+  as deleting your own account does; pass `--upload-location` with the
+  server's upload location. The admin user page and the admin membership
+  editor show the users' photos instead of their initials
+  ([#2894](https://github.com/denisvmedia/inventario/issues/2894)).
 
 ### Security
 
