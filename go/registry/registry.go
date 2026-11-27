@@ -68,6 +68,29 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
+// CreatorLister lists the rows one user created, among the rows List returns
+// (#2934). The personal data export reads each group through it, so its work
+// grows with what the user created rather than with the size of the group.
+type CreatorLister[T any] interface {
+	// ListCreatedBy returns the rows List returns whose creator is userID,
+	// in no particular order.
+	ListCreatedBy(ctx context.Context, userID string) ([]*T, error)
+}
+
+// EntityRef names a row without reading the rest of it: its id, its UUID and
+// its name. Name is empty for a row that has none.
+type EntityRef struct {
+	ID   string `db:"id"`
+	UUID string `db:"uuid"`
+	Name string `db:"name"`
+}
+
+// AreaRef is the EntityRef of an area with the location it belongs to.
+type AreaRef struct {
+	EntityRef
+	LocationID string `db:"location_id"`
+}
+
 // Factory interfaces for creating context-aware registries
 // These replace the unsafe UserAwareRegistry and ServiceAwareRegistry patterns
 
@@ -89,6 +112,9 @@ type ServiceRegistryFactory[T any, P Registry[T]] interface {
 // items come back unassigned when restored.
 type AreaRegistry interface {
 	Registry[models.Area]
+
+	// ListRefs names every area of the scope, in no particular order.
+	ListRefs(ctx context.Context) ([]AreaRef, error)
 
 	// GetCommodities returns the ids of the live items filed under the area.
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
@@ -278,6 +304,7 @@ type CommodityEventListOptions struct {
 // page's history rail.
 type CommodityEventRegistry interface {
 	Registry[models.CommodityEvent]
+	CreatorLister[models.CommodityEvent]
 
 	// ListByCommodity returns paginated events for the given commodity,
 	// newest first. Total reflects the filtered count (post-Kinds, pre-LIMIT).
@@ -406,6 +433,15 @@ type CommodityName struct {
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
 type CommodityRegistry interface {
 	Registry[models.Commodity]
+	CreatorLister[models.Commodity]
+
+	// ListTrashedCreatedBy returns every item in Trash whose creator is
+	// userID, the rows ListTrashed pages through, in no particular order.
+	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.Commodity, error)
+
+	// ListRefs names every item of the scope, live or in Trash, in no
+	// particular order.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
 
 	// GetTrashed returns a trashed item by id; ErrNotFound when it does not
 	// exist or is live.
@@ -587,6 +623,9 @@ type NativePhotoFilterer interface {
 type LocationRegistry interface {
 	Registry[models.Location]
 
+	// ListRefs names every location of the scope, in no particular order.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
+
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
 
 	// ListPaginated returns a paginated list of locations along with the total count.
@@ -674,6 +713,12 @@ type StalledJobs struct {
 // see trashed files only. Update refuses a trashed file with ErrNotFound.
 type FileRegistry interface {
 	Registry[models.FileEntity]
+	CreatorLister[models.FileEntity]
+
+	// ListTrashedCreatedBy returns every file deleted on its own whose
+	// creator is userID, the rows ListTrashed pages through, with their
+	// links, in no particular order.
+	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.FileEntity, error)
 
 	// GetTrashed returns a trashed file by id; ErrNotFound when it does not
 	// exist or is live.
@@ -1241,6 +1286,7 @@ type LoanListOptions struct {
 // ids they are given.
 type CommodityLoanRegistry interface {
 	Registry[models.CommodityLoan]
+	CreatorLister[models.CommodityLoan]
 
 	// ListByCommodity returns all loans (open + closed) for a single
 	// commodity, ordered most-recent-first. Used by the per-item Lend
@@ -1365,6 +1411,7 @@ type ServiceListOptions struct {
 // (List, Count, ListPaginated) leave them out.
 type CommodityServiceRegistry interface {
 	Registry[models.CommodityService]
+	CreatorLister[models.CommodityService]
 
 	// ListByCommodity returns all service rows (open + completed) for a
 	// single commodity, ordered most-recent-first. Used by the per-item
@@ -1392,6 +1439,7 @@ type CommodityServiceRegistry interface {
 // and a per-commodity bulk reorder.
 type SupplyLinkRegistry interface {
 	Registry[models.SupplyLink]
+	CreatorLister[models.SupplyLink]
 
 	// ListByCommodity returns all supply links for one commodity, ordered
 	// by sort_order ASC, created_at ASC. Drives the per-item Supplies card
@@ -1515,6 +1563,7 @@ type MaintenanceListOptions struct {
 // maintenance reminder worker quiet about them.
 type MaintenanceScheduleRegistry interface {
 	Registry[models.MaintenanceSchedule]
+	CreatorLister[models.MaintenanceSchedule]
 
 	// ListByCommodity returns all schedules for a single commodity,
 	// ordered by next_due_at ascending. Used by the per-item
@@ -1578,6 +1627,7 @@ type MaintenanceReminderRegistry interface {
 // worker reads it that way.
 type CommodityReminderRegistry interface {
 	Registry[models.CommodityReminder]
+	CreatorLister[models.CommodityReminder]
 
 	// ListByCommodity returns the reminders of one item, ordered by
 	// due_on ascending.
@@ -1593,6 +1643,11 @@ type CommodityReminderRegistry interface {
 // repeated create with its client key or a repeated promotion finds it.
 type CommodityDraftRegistry interface {
 	Registry[models.CommodityDraft]
+	CreatorLister[models.CommodityDraft]
+
+	// ListRefs gives the id and the UUID of every draft List returns, in no
+	// particular order. A draft has no name.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
 
 	// CreateOrGet stores a new open draft unless the group already has a
 	// draft with the same ClientKey, which is returned unchanged with
