@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
-import { beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { MembershipEditor } from "@/components/admin/MembershipEditor"
 import { BackofficeAuthProvider } from "@/features/backoffice/auth/context"
@@ -12,6 +12,7 @@ import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { backofficeAuthHandlers } from "@/test/handlers"
+import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -63,6 +64,10 @@ beforeEach(() => {
   server.use(...backofficeAuthHandlers.signedIn())
 })
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 // Seeds /auth/me (so useIsSystemAdmin gates the editor's queries open) and
 // the members-list endpoint. `roster` overrides the seeded list.
 function seedMembers(roster: unknown[] = members) {
@@ -99,6 +104,26 @@ describe("MembershipEditor", () => {
     await waitFor(() => expect(screen.getAllByTestId("admin-group-member-row")).toHaveLength(2))
     expect(screen.getByText("Jordan Doe")).toBeInTheDocument()
     expect(screen.getByText("casey@acme.example.com")).toBeInTheDocument()
+  })
+
+  it("shows a member's photo from the avatar_url the admin API signs, initials otherwise", async () => {
+    stubImageLoading()
+    seedMembers([
+      {
+        ...members[0],
+        user: { ...members[0].user, avatar_url: "/api/v1/avatars/user-owner?op=bo-1&sig=a" },
+      },
+      members[1],
+    ])
+    renderEditor()
+
+    await waitFor(() => expect(screen.getAllByTestId("admin-group-member-row")).toHaveLength(2))
+    const [owner, viewer] = screen.getAllByTestId("admin-group-member-row")
+    expect(await within(owner).findByTestId("user-avatar-image")).toHaveAttribute(
+      "src",
+      "/api/v1/avatars/user-owner?op=bo-1&sig=a"
+    )
+    expect(within(viewer).getByTestId("user-avatar-initials")).toHaveTextContent("CL")
   })
 
   it("renders the empty state for a group with no members", async () => {

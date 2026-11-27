@@ -21,14 +21,16 @@ const thumbnailOrientationBatchSize = 100
 // BackfillThumbnailOrientation makes the thumbnails of JPEG photos again
 // when their EXIF orientation turns them and their thumbnails may show the
 // stored pixels unturned. It reads the start of every JPEG file not marked
-// ThumbnailsOriented. A photo stored the right way up, and a turned one
-// without thumbnails yet, is only marked; a turned one with thumbnails gets
-// them written again, which marks it.
+// ThumbnailsOriented. A photo stored the right way up is only marked; a
+// turned one with thumbnails gets them written again, which marks it. A
+// turned one without thumbnails stays unmarked: GenerateThumbnails marks it
+// when it writes them, and if a server of an older version writes them
+// unturned meanwhile (during a rolling deploy), the next pass finds them.
 //
 // A blob that cannot be read or decoded is skipped and logged and stays
 // unmarked, so the next start tries it again; the pass moves on by id, so
 // one bad file cannot stall the rest. The pass is idempotent: a second run
-// finds nothing to do.
+// writes nothing.
 func BackfillThumbnailOrientation(ctx context.Context, factorySet *registry.FactorySet, uploadLocation string) {
 	if factorySet == nil || factorySet.FileRegistryFactory == nil || uploadLocation == "" {
 		return
@@ -92,16 +94,14 @@ func (s *FileService) orientThumbnails(ctx context.Context, bucket *blob.Bucket,
 	if err != nil {
 		return false, err
 	}
-	if orientation != imageprocessor.OrientationNormal {
-		has, err := s.hasThumbnails(ctx, file)
-		if err != nil {
-			return false, err
-		}
-		if has {
-			return true, s.GenerateThumbnails(ctx, file)
-		}
+	if orientation == imageprocessor.OrientationNormal {
+		return false, reg.SetThumbnailsOriented(ctx, file.ID)
 	}
-	return false, reg.SetThumbnailsOriented(ctx, file.ID)
+	has, err := s.hasThumbnails(ctx, file)
+	if err != nil || !has {
+		return false, err
+	}
+	return true, s.GenerateThumbnails(ctx, file)
 }
 
 // hasThumbnails reports whether any thumbnail of file is stored.

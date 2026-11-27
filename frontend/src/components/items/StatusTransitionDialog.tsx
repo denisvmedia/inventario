@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FieldError } from "@/components/FieldError"
 import type { TerminalCommodityStatusValue } from "@/features/commodities/constants"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 
@@ -247,13 +248,15 @@ export function StatusTransitionDialog({
               id="status-transition-date"
               type="date"
               data-testid="status-transition-date"
+              aria-invalid={!!errors.status_date}
+              aria-describedby={errors.status_date ? "status-transition-date-error" : undefined}
               {...register("status_date")}
             />
-            {errors.status_date?.message ? (
-              <p className="text-xs text-destructive" data-testid="status-transition-date-error">
-                {t(errors.status_date.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="status-transition-date-error"
+              testId="status-transition-date-error"
+              message={errors.status_date?.message}
+            />
           </div>
 
           {isSold ? (
@@ -273,17 +276,18 @@ export function StatusTransitionDialog({
                   inputMode="decimal"
                   className="pl-8"
                   data-testid="status-transition-sale-price"
+                  aria-invalid={!!errors.sale_price}
+                  aria-describedby={
+                    errors.sale_price ? "status-transition-sale-price-error" : undefined
+                  }
                   {...register("sale_price")}
                 />
               </div>
-              {errors.sale_price?.message ? (
-                <p
-                  className="text-xs text-destructive"
-                  data-testid="status-transition-sale-price-error"
-                >
-                  {t(errors.sale_price.message)}
-                </p>
-              ) : null}
+              <FieldError
+                id="status-transition-sale-price-error"
+                testId="status-transition-sale-price-error"
+                message={errors.sale_price?.message}
+              />
             </div>
           ) : null}
 
@@ -299,13 +303,15 @@ export function StatusTransitionDialog({
                 `commodities:detail.statusTransitionDialog.notePlaceholder.${targetStatus}`
               )}
               data-testid="status-transition-note"
+              aria-invalid={!!errors.status_note}
+              aria-describedby={errors.status_note ? "status-transition-note-error" : undefined}
               {...register("status_note")}
             />
-            {errors.status_note?.message ? (
-              <p className="text-xs text-destructive" data-testid="status-transition-note-error">
-                {t(errors.status_note.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="status-transition-note-error"
+              testId="status-transition-note-error"
+              message={errors.status_note?.message}
+            />
           </div>
 
           <DialogFooter>

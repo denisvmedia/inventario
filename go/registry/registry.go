@@ -160,6 +160,11 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
+	// LocationID, when non-empty, restricts the result to commodities in
+	// any area of that location (#2897). It is AND-ed with AreaID, so an
+	// area of another location matches nothing, and an item without an
+	// area is in no location. An unknown ID matches nothing.
+	LocationID string
 	// SellerIDs, when non-empty, restricts the result to commodities whose
 	// seller is one of the listed IDs (#2804). Empty = unrestricted.
 	SellerIDs []string
@@ -609,8 +614,48 @@ type ExportRegistry interface {
 	// ClaimPending moves an export from pending to in_progress and reports
 	// whether this caller is the one that moved it. The condition lives in
 	// the write, so two workers racing for the same row get one true and one
-	// false instead of both producing an artifact (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// false instead of both producing an artifact (#2472). The claim counts a
+	// run in AttemptCount and records at as the run's first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of the run of an
+	// in_progress export. An export in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// RecoverStalled handles the exports (jobType models.WorkerTypeExport)
+	// or the imports (models.WorkerTypeImport) whose run the sweep takes
+	// for dead. One that has run sweep.MaxRuns times fails with
+	// sweep.ErrorMessage at sweep.Now; the others go back to pending, for
+	// the next claim to run them again. Exports in the trash are left alone.
+	// It works across tenants and is meant for the service registry.
+	RecoverStalled(ctx context.Context, jobType models.WorkerType, sweep StalledJobSweep) (StalledJobs, error)
+}
+
+// StalledJobSweep says which runs of exports, imports and restores a sweep
+// takes for dead, and what it records on the jobs it fails.
+type StalledJobSweep struct {
+	// HeartbeatBefore: a run whose latest heartbeat is older than this is
+	// dead.
+	HeartbeatBefore time.Time
+	// CreatedBefore: a run with no heartbeat at all, claimed by a version
+	// that recorded none, is dead when its job was created before this.
+	CreatedBefore time.Time
+	// Now is when a job the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxRuns is how many runs an export or an import gets before a dead
+	// run fails it instead of queuing it again. A restore is never queued
+	// again, so it ignores this.
+	MaxRuns int
+	// ErrorMessage is stored on each job the sweep fails.
+	ErrorMessage string
+}
+
+// StalledJobs is what one sweep for dead runs changed.
+type StalledJobs struct {
+	// Requeued counts the jobs that went back to pending.
+	Requeued int
+	// Failed counts the jobs that failed for good.
+	Failed int
 }
 
 // FileRegistry stores files and their links.
@@ -2166,8 +2211,20 @@ type RestoreOperationRegistry interface {
 	// ClaimPending moves an operation from pending to running and reports
 	// whether this caller is the one that moved it. Two workers racing for
 	// the same row get one true and one false, rather than both replaying a
-	// restore over live data (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// restore over live data (#2472). The claim records at as the run's
+	// first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of a running
+	// operation. An operation in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// FailStalled fails, with sweep.ErrorMessage at sweep.Now, the running
+	// operations whose run the sweep takes for dead, and returns how many
+	// it failed. A restore is never queued again: it may have written part
+	// of its backup. It works across tenants and is meant for the service
+	// registry.
+	FailStalled(ctx context.Context, sweep StalledJobSweep) (int, error)
 }
 
 // PreviewTokenInputs is the deterministic, replay-resistant payload
@@ -3608,6 +3665,9 @@ type FailedJobScope struct {
 	TenantID string
 	// GroupID limits the query to one group when set. It requires TenantID.
 	GroupID string
+	// FailedBefore, when set, limits the query to the jobs that failed
+	// before it. A job without a failure time counts from its creation.
+	FailedBefore time.Time
 }
 
 // FailedJobRegistry reads and acts on the jobs that failed for good, over
@@ -3641,20 +3701,27 @@ type FailedJobRegistry interface {
 	// Discard marks a failed job discarded at now. ErrNotFound when the
 	// type has no failed, undiscarded job with the id in the scope.
 	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// DiscardFailed marks every failed, undiscarded job of the type in the
+	// scope discarded at now and returns how many it marked. The scope
+	// must set FailedBefore (ErrFieldRequired otherwise), so a bulk discard
+	// always names the jobs it acts on by their failure time.
+	DiscardFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, now time.Time) (int, error)
 }
 
-// UserPurger hard-deletes a single user's auth / identity rows (and orphans the
-// nullable authorship back-refs) before the users row itself is dropped by the
-// orchestration layer (#2116). It exists because a bare DELETE FROM users is
-// rejected by the many NO ACTION child FKs pointing at users(id). This includes
-// the user's group_invites_audit references (created_by / used_by), which are
-// NOT NULL FKs that nothing else clears (#2147).
+// UserPurger clears what references a single user before the users row itself
+// is dropped by the orchestration layer (#2116). A bare DELETE FROM users is
+// rejected by the many NO ACTION child FKs pointing at users(id), so the purge
+// deletes the user's auth / identity and personal rows (memberships, invites,
+// reminders, drafts, saved views, ...) and hands the group rows the user
+// created (item history, loans, service records, maintenance, item types, ...)
+// to another member of their group.
 //
-// PRECONDITION: the user must no longer OWN shared content
-// (commodities/files/areas/locations/exports/groups/tags/…). Those rows carry
-// NOT NULL user_id + NOT NULL created_by columns that cannot be orphaned, so
-// this purger deliberately does not touch them; the final DELETE FROM users
-// will fail loudly with an FK violation if any remain. The users row itself is
+// PRECONDITION: the user must no longer OWN shared content (items, files,
+// places, exports, groups, tags, sellers). Those rows carry a NOT NULL
+// created_by column and are the user's own, so this purger deliberately does
+// not touch them; the final DELETE FROM users will fail loudly with an FK
+// violation if any remain. The users row itself is
 // NOT touched here — the caller (services.admin DeleteUser) drops it after the
 // dependents are gone.
 type UserPurger interface {
@@ -3672,10 +3739,11 @@ type UserPurger interface {
 // of being discovered at the final DELETE FROM users (which would leave a
 // half-erased account).
 //
-// "Owned content" means any row that carries a NOT NULL FK to users(id) which
-// cannot be orphaned without a schema change:
+// "Owned content" means a row that carries a NOT NULL FK to users(id) and that
+// UserPurger neither deletes nor hands over:
 //   - content authored by the user (created_by_user_id) in a group that is NOT
-//     being purged (commodities/files/areas/locations/exports/tags), and
+//     being purged (items, files, file links, places, exports, tags, sellers),
+//     and
 //   - location_groups the user created (created_by) that are NOT being purged.
 //
 // purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale

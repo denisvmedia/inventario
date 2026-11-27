@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { sameCommodityQuery, type CommodityQuery } from "@/features/commodities/query"
 import { useAreas } from "@/features/areas/hooks"
+import { useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useTagIndex } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -377,10 +378,12 @@ function QueryErrorNotice({ parameter }: { parameter: string | undefined }) {
 // query. A catalogue that failed to load lists no tags, which would mark
 // every tag of the query as deleted, and the previous group's catalogue,
 // kept while a group switch loads the new one, would mark the new group's
-// tags. Sellers and item types are checked only once the group's own list
-// of them has loaded.
+// tags. Sellers, item types and the location are checked only once the
+// group's own list of them has loaded; locations are read only for a query
+// that names one.
 export function useStaleReferences(query: CommodityQuery | undefined): StaleReferences | undefined {
   const areas = useAreas({ enabled: !!query })
+  const locations = useLocations({ enabled: !!query?.locationId })
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellerCatalog()
   const types = useItemTypeCatalog()
@@ -390,8 +393,26 @@ export function useStaleReferences(query: CommodityQuery | undefined): StaleRefe
     if (!query || !areas.data || tagsUnknown) return undefined
     const areaIds = new Set(areas.data.map((a) => a.id ?? ""))
     const tagSlugs = new Set(tagIndex.tags.map((tag) => tag.slug))
-    return staleReferences(query, areaIds, tagSlugs, sellers.ids, types.slugs, customFields.ids)
-  }, [query, areas.data, tagsUnknown, tagIndex.tags, sellers.ids, types.slugs, customFields.ids])
+    const locationIds = locations.data ? new Set(locations.data.map((l) => l.id ?? "")) : undefined
+    return staleReferences(
+      query,
+      areaIds,
+      tagSlugs,
+      sellers.ids,
+      types.slugs,
+      customFields.ids,
+      locationIds
+    )
+  }, [
+    query,
+    areas.data,
+    tagsUnknown,
+    tagIndex.tags,
+    sellers.ids,
+    types.slugs,
+    customFields.ids,
+    locations.data,
+  ])
 }
 
 // Names what a view's filter still asks for but no longer exists. The list
@@ -407,6 +428,7 @@ export function StaleNotice({ stale }: { stale: StaleReferences }) {
       <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-status-expiring" aria-hidden="true" />
       <div className="flex flex-col gap-0.5">
         <span className="font-medium">{t("commodities:savedViews.stale.title")}</span>
+        {stale.location ? <span>{t("commodities:savedViews.stale.location")}</span> : null}
         {stale.area ? <span>{t("commodities:savedViews.stale.area")}</span> : null}
         {stale.tags.length > 0 ? (
           <span>

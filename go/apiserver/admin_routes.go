@@ -136,6 +136,11 @@ type AdminParams struct {
 	// tenant's files from before its rows (#1037), the same location the
 	// rest of the apiserver uploads to.
 	UploadLocation string
+
+	// AvatarSigner signs the avatar_url of the users and group members the
+	// admin responses carry (#2894), with the key /avatars checks them with.
+	// Nil leaves them without one, and the admin pages show initials.
+	AvatarSigner *services.FileSigningService
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -205,6 +210,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
 		apiTokens:    params.APITokenService,
+		avatarSigner: params.AvatarSigner,
 	}
 	groupsAPI := &adminGroupsAPI{
 		factorySet:   params.FactorySet,
@@ -214,6 +220,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		groupService: params.GroupService,
 		auditService: params.AuditService,
+		avatarSigner: params.AvatarSigner,
 	}
 	impersonationAPI := &adminImpersonationAPI{
 		factorySet:   params.FactorySet,
@@ -417,11 +424,12 @@ func adminBackofficeRoutes(
 // RequireBackofficeAuth group. Retry and discard are audited; so is the
 // list, which reads tenant data across tenants. A support_agent may list
 // and retry; a discard takes a failure off every list, so it needs
-// platform_admin.
+// platform_admin, and so does a bulk discard (#2946), its dry run too.
 func adminFailedJobRoutes(r chi.Router, api *adminFailedJobsAPI) {
 	r.Get("/failed-jobs", api.listFailedJobs)
 	r.Post("/failed-jobs/{jobType}/{jobID}/retry", api.retryFailedJob)
 	r.With(RequirePlatformAdmin).Post("/failed-jobs/{jobType}/{jobID}/discard", api.discardFailedJob)
+	r.With(RequirePlatformAdmin).Post("/failed-jobs/bulk-discard", api.bulkDiscardFailedJobs)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

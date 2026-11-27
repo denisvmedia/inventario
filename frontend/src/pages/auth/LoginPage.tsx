@@ -28,6 +28,7 @@ import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 import { isTenantSuspendedError, parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
 const SESSION_REASON_KEY: Record<string, string> = {
   session_expired: "auth:session.expired",
@@ -376,14 +377,15 @@ export function LoginPage() {
                 disabled={isBusy}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
+                aria-describedby={form.formState.errors.email ? "login-email-error" : undefined}
                 {...form.register("email")}
               />
             </div>
-            {form.formState.errors.email ? (
-              <p className="text-xs text-destructive" data-testid="email-error">
-                {t(form.formState.errors.email.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="login-email-error"
+              testId="email-error"
+              message={form.formState.errors.email?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -403,13 +405,14 @@ export function LoginPage() {
               disabled={isBusy}
               aria-invalid={!!form.formState.errors.password}
               data-testid="password"
+              aria-describedby={form.formState.errors.password ? "login-password-error" : undefined}
               {...form.register("password")}
             />
-            {form.formState.errors.password ? (
-              <p className="text-xs text-destructive" data-testid="password-error">
-                {t(form.formState.errors.password.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="login-password-error"
+              testId="password-error"
+              message={form.formState.errors.password?.message}
+            />
           </div>
 
           {serverError ? (

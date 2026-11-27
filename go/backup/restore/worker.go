@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -43,6 +44,9 @@ type RestoreWorker struct {
 	// replays an archive over live data, which is the worst of the three
 	// (#2131, #2472).
 	inFlight sync.Map
+
+	// lastStallSweep is when recoverStalledRestores last swept.
+	lastStallSweep time.Time
 }
 
 // WorkerOption customizes a RestoreWorker constructed via NewRestoreWorker.
@@ -166,8 +170,27 @@ func (w *RestoreWorker) run(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
+			w.recoverStalledRestores(ctx, time.Now())
 			w.processPendingRestores(ctx)
 		}
+	}
+}
+
+// recoverStalledRestores fails, every stall.SweepInterval, the restores whose
+// worker stopped in the middle of the run. It runs while the worker is paused
+// too: a pause stops new runs, and the sweep only moves the dead ones on.
+func (w *RestoreWorker) recoverStalledRestores(ctx context.Context, now time.Time) {
+	if now.Sub(w.lastStallSweep) < stall.SweepInterval {
+		return
+	}
+	w.lastStallSweep = now
+	failed, err := w.restoreService.RecoverStalled(ctx, now)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to recover stalled restores", "error", err)
+		return
+	}
+	if failed > 0 {
+		slog.WarnContext(ctx, "Failed restores whose worker stopped", "failed", failed)
 	}
 }
 
@@ -206,7 +229,7 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 		// Claim the row before dispatching: the condition is in the write, so
 		// exactly one caller wins it however many replicas are polling (#2472).
-		claimed, claimErr := w.registrySet.RestoreOperationRegistry.ClaimPending(ctx, restoreOp.ID)
+		claimed, claimErr := w.registrySet.RestoreOperationRegistry.ClaimPending(ctx, restoreOp.ID, time.Now())
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(restoreOp.ID)
@@ -223,6 +246,10 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 		go func(restoreOperationID string) {
 			defer w.semaphore.Release(1)
 			defer w.inFlight.Delete(restoreOperationID)
+			stopBeat := stall.Beat(ctx, stall.HeartbeatInterval, func(ctx context.Context, now time.Time) error {
+				return w.registrySet.RestoreOperationRegistry.Heartbeat(ctx, restoreOperationID, now)
+			})
+			defer stopBeat()
 			w.processRestore(ctx, restoreOperationID)
 		}(restoreOp.ID)
 	}

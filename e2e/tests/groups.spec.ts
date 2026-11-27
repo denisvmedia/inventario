@@ -1677,11 +1677,13 @@ test.describe('Group + role cluster in header (#1258)', () => {
       (m: { attributes: { member_user_id: string } }) => m.attributes.member_user_id === me.id,
     );
     expect(myMembership, 'caller must be a member of their active group').toBeDefined();
-    // Post-#1533 the role taxonomy is viewer / user / admin / owner —
-    // the badge surfaces whichever role the API reports verbatim.
+    // Post-#1533 the role taxonomy is viewer / user / admin / owner. The
+    // badge shows the translated label (members:roles.*), the same one the
+    // Members page draws; the suite runs in English.
     const expectedRole = myMembership.attributes.role as 'viewer' | 'user' | 'admin' | 'owner';
+    const roleLabel = { viewer: 'Viewer', user: 'User', admin: 'Administrator', owner: 'Owner' }[expectedRole];
 
-    await expect(role).toHaveText(expectedRole);
+    await expect(role).toHaveText(roleLabel);
     await expect(role).toHaveClass(new RegExp(`role-indicator--${expectedRole}`));
 
     // Shared visual tokens in SCSS should produce matching box metrics. A
@@ -1750,10 +1752,11 @@ test.describe('Group + role cluster in header (#1258)', () => {
       await expect(page.locator('.group-selector__name')).toHaveText(groupName);
       // Post-#1533 the new group's only member is the caller and they
       // are the sole owner (invariant enforced by the create endpoint),
-      // so the refreshed badge must read "owner". If the reactive
-      // chain ever breaks, this would flip to empty or stale text.
+      // so the refreshed badge must read "Owner", the translated label.
+      // If the reactive chain ever breaks, this would flip to empty or
+      // stale text.
       const role = page.locator('[data-testid="current-role"]');
-      await expect(role).toHaveText('owner');
+      await expect(role).toHaveText('Owner');
       await expect(role).toHaveClass(/role-indicator--owner/);
     } finally {
       // Navigate the UI away from the about-to-be-deleted group before

@@ -72,6 +72,25 @@ func TestParse_EveryParameter(t *testing.T) {
 	})
 }
 
+// The location filter keeps the items in any area of one location (#2897).
+// It goes with an area filter, both applying, and round-trips through Values.
+func TestParse_Location(t *testing.T) {
+	c := qt.New(t)
+	values, err := url.ParseQuery("location_id=+loc-1+&area_id=area-1&unassigned=false")
+	c.Assert(err, qt.IsNil)
+
+	q, err := commodityquery.Parse(values)
+	c.Assert(err, qt.IsNil)
+	c.Assert(q.LocationID, qt.Equals, "loc-1")
+	c.Assert(q.AreaID, qt.Equals, "area-1")
+	c.Assert(q.ListOptions().LocationID, qt.Equals, "loc-1")
+	c.Assert(q.Values().Encode(), qt.Equals, "area_id=area-1&location_id=loc-1")
+
+	again, err := commodityquery.Parse(q.Values())
+	c.Assert(err, qt.IsNil)
+	c.Assert(again, qt.DeepEquals, q)
+}
+
 func TestParse_Refuses(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -86,6 +105,8 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "a boolean that is neither", query: "include_inactive=maybe", param: "include_inactive"},
 		{name: "lent_out that is neither", query: "lent_out=yes", param: "lent_out"},
 		{name: "a repeated single-value parameter", query: "q=a&q=b", param: "q"},
+		{name: "a repeated location", query: "location_id=l-1&location_id=l-2", param: "location_id"},
+		{name: "a location with no area", query: "location_id=l-1&unassigned=true", param: "location_id"},
 		{name: "an unknown tag mode", query: "tags=a&tag_mode=some", param: "tag_mode"},
 		{name: "a tag with no usable characters", query: "tags=%23%23%23", param: "tags"},
 		{name: "a tag both required and excluded", query: "tags=red&tags_exclude=Red", param: "tags_exclude"},

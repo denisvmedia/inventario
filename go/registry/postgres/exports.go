@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/jmoiron/sqlx"
@@ -311,13 +313,81 @@ func (r *ExportRegistry) HardDelete(ctx context.Context, id string) error {
 
 // ClaimPending flips an export from pending to in_progress, letting the
 // database pick the winner when two workers race for the same row (#2472).
-func (r *ExportRegistry) ClaimPending(ctx context.Context, id string) (bool, error) {
-	claimed, err := r.newSQLRegistry().ClaimByStatus(ctx, id,
-		string(models.ExportStatusPending), string(models.ExportStatusInProgress))
+func (r *ExportRegistry) ClaimPending(ctx context.Context, id string, at time.Time) (bool, error) {
+	var claimed bool
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET status = $1, heartbeat_at = $2, attempt_count = attempt_count + 1
+			WHERE id = $3 AND status = $4`, r.tableNames.Exports())
+		res, err := tx.ExecContext(ctx, query, string(models.ExportStatusInProgress), at.UTC(), id,
+			string(models.ExportStatusPending))
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		claimed = n == 1
+		return err
+	})
 	if err != nil {
 		return false, errxtrace.Wrap("failed to claim pending export", err)
 	}
 	return claimed, nil
+}
+
+func (r *ExportRegistry) Heartbeat(ctx context.Context, id string, at time.Time) error {
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET heartbeat_at = $1 WHERE id = $2 AND status = $3`, r.tableNames.Exports())
+		_, err := tx.ExecContext(ctx, query, at.UTC(), id, string(models.ExportStatusInProgress))
+		return err
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to record export heartbeat", err)
+	}
+	return nil
+}
+
+func (r *ExportRegistry) RecoverStalled(ctx context.Context, jobType models.WorkerType, sweep registry.StalledJobSweep) (registry.StalledJobs, error) {
+	var typeCond string
+	switch jobType {
+	case models.WorkerTypeExport:
+		typeCond = "type <> $1"
+	case models.WorkerTypeImport:
+		typeCond = "type = $1"
+	default:
+		return registry.StalledJobs{}, errxtrace.Classify(registry.ErrUnknownFailedJobType, errx.Attrs("job_type", string(jobType)))
+	}
+	// $1 the imported type, $2 in_progress, $3 the heartbeat cutoff, $4 the
+	// cutoff for runs without a heartbeat, $5 the run limit.
+	stalled := fmt.Sprintf(`%s AND status = $2 AND deleted_at IS NULL
+		AND (heartbeat_at < $3 OR (heartbeat_at IS NULL AND created_date < $4))`, typeCond)
+	args := []any{string(models.ExportTypeImported), string(models.ExportStatusInProgress),
+		sweep.HeartbeatBefore.UTC(), sweep.CreatedBefore.UTC(), sweep.MaxRuns}
+
+	var out registry.StalledJobs
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		fail := fmt.Sprintf(`UPDATE %s SET status = $6, error_message = $7, completed_date = $8, heartbeat_at = NULL
+			WHERE %s AND attempt_count >= $5`, r.tableNames.Exports(), stalled)
+		res, err := tx.ExecContext(ctx, fail, append(args, string(models.ExportStatusFailed), sweep.ErrorMessage, sweep.Now.UTC())...)
+		if err != nil {
+			return err
+		}
+		failed, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		requeue := fmt.Sprintf(`UPDATE %s SET status = $6, heartbeat_at = NULL WHERE %s AND attempt_count < $5`,
+			r.tableNames.Exports(), stalled)
+		res, err = tx.ExecContext(ctx, requeue, append(args, string(models.ExportStatusPending))...)
+		if err != nil {
+			return err
+		}
+		requeued, err := res.RowsAffected()
+		out = registry.StalledJobs{Requeued: int(requeued), Failed: int(failed)}
+		return err
+	})
+	if err != nil {
+		return registry.StalledJobs{}, errxtrace.Wrap("failed to recover stalled exports", err)
+	}
+	return out, nil
 }
 
 func (r *ExportRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Export, *models.Export] {

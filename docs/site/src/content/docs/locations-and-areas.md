@@ -17,6 +17,8 @@ This page walks you through creating and editing both, placing items, the "No lo
 
 Open **Locations** in the sidebar to see every location in your current group. Each location is a card showing its icon, name, a one-line description (or address), and stat chips for how many **areas** and **items** it holds. Click a card to open the location, where you'll see its areas laid out as tiles and a Files panel underneath. Click an area tile to open the area, which shows the items inside it with search, filters, sorting, and a grid/list toggle.
 
+To see every item of a location at once, across its areas, choose the location in the **Location** filter on **All Items**, or use **Show items** next to the location in [search](../getting-started/#find-anything). See [The All Items page](../items/#the-all-items-page-search-filter-sort).
+
 :::note
 On large groups the item counts on cards and tiles are sampled, so a very full location may show a count like **12+** or a dash (**—**) rather than an exact number. Open the area itself for the precise total.
 :::

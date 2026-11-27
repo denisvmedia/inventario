@@ -33,6 +33,29 @@ describe("<StatusTransitionDialog />", () => {
     expect(call.sale_price).toBeUndefined()
   })
 
+  it("marks an emptied date invalid and describes it by its message", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(
+      <StatusTransitionDialog
+        open
+        targetStatus="lost"
+        purchaseCurrency="USD"
+        onSubmit={onSubmit}
+        onOpenChange={vi.fn()}
+      />
+    )
+
+    const date = screen.getByTestId("status-transition-date")
+    await user.clear(date)
+    await user.click(screen.getByTestId("status-transition-confirm"))
+
+    expect(await screen.findByTestId("status-transition-date-error")).toBeInTheDocument()
+    expect(date).toHaveAttribute("aria-invalid", "true")
+    expect(date).toHaveAccessibleDescription("Date is required.")
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it.each([
     ["donated", "Mark as Donated", "Record that you gave this item away.", "Given to…"],
     ["stolen", "Mark as Stolen", /theft of this item/, "Taken from…"],

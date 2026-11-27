@@ -145,28 +145,58 @@ Upload behavior:
 
 ## Format and size limits
 
-The backend enforces (and surfaces through error messages):
+The backend enforces:
 
-- Max single-file size: 50 MB.
-- Allowed MIME types: image/* (jpeg, png, webp, heic), application/pdf,
-  text/plain, application/zip.
-- Per-tenant quota.
+- Max single-file size: set by the operator with `--max-upload-bytes`
+  (`INVENTARIO_RUN_MAX_UPLOAD_BYTES`), 1 GiB by default; a negative value
+  turns the limit off. A larger file is refused with `413`.
+- Allowed content types, sniffed from the bytes rather than taken from
+  the file name (`go/internal/mimekit`): JPEG, PNG, GIF and WebP images,
+  PDF, plain text, CSV, JSON, ZIP, Word, Excel and PowerPoint documents,
+  MP4, AVI and QuickTime video, and MP3 and WAV audio. HEIC is not
+  accepted.
+- A per-group storage quota of 150 MiB. The storage card shows it and the
+  storage quota reminder emails warn as a group nears it; an upload is not
+  refused when the group is over it.
 
-The UI surfaces these limits in the upload zone's hint text. Don't
-hard-code the size in the component — read from the seed config.
+The frontend is not told the size limit, so the upload zone does not name
+it. Don't hard-code the size in the component: it is an operator setting.
 
 ## Image processing
 
-Thumbnails are generated on the backend (a worker resizes to 256×256
-WEBP). The frontend always reads `file.thumbnail_url` and falls back
-to the category icon when missing. Don't compose thumbnails on the
-client — the image bytes might be 8 MB.
+The backend renders three JPEG thumbnails of every JPEG and PNG upload,
+`small`, `medium` and `large`, 150, 300 and 600 px on the longest side
+(`go/services/thumbnail_sizes.go`). They are made during the upload; one
+that is missing later is served as a placeholder while a background job
+renders it. GIF and WebP uploads get no thumbnails. Each signed file URL
+carries a `thumbnails` map from size name to URL next to `url` and
+`inline_url`.
+
+The frontend picks a size for the slot (`CommodityThumb` builds a
+`srcset` from the map; `FileCard` prefers `medium`), falls back to the
+full-size URL for an image without thumbnails, and to the category or type
+icon when nothing loads. Don't compose thumbnails on the client: the
+original might be several megabytes.
+
+Thumbnails are stored apart from the file and have no file row, so storage
+usage and the quota count each file at its uploaded size only. The storage
+card says so.
 
 ## EXIF / orientation
 
-Backend strips EXIF on upload (privacy + orientation correctness).
-The displayed image is always upright; no rotation logic in the
-frontend.
+Item photos are stored as uploaded, EXIF included, with the GPS position a
+phone camera may have written. Only profile photos are re-encoded, which
+drops their EXIF block and applies the orientation tag to the pixels
+(`go/services/avatar_service.go`). Browsers apply the EXIF orientation when
+they draw a full-size photo, so the frontend has no rotation logic. The
+server applies the tag when it renders item thumbnails
+(`GenerateThumbnails` in `go/services/file_service.go`) and marks the file
+`thumbnails_oriented`. At startup, `BackfillThumbnailOrientation`
+(`go/services/thumbnail_orientation_backfill.go`) reads the tag of every
+unmarked JPEG: an upright photo is marked, and a turned one with thumbnails
+gets them made again. A turned photo without thumbnails stays unmarked until
+its thumbnails are made, so thumbnails an older server writes unturned
+during a rolling deploy are fixed on the next start.
 
 ## Empty / loading / error
 

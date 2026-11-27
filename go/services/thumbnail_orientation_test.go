@@ -117,8 +117,8 @@ func TestFileService_GenerateThumbnails_AppliesTheExifOrientation(t *testing.T) 
 }
 
 // Thumbnails written before the orientation was applied are made again for
-// a turned photo; every JPEG that could be read is marked, and a second run
-// changes nothing.
+// a turned photo; every JPEG that could be read is marked, except a turned
+// one without thumbnails, and a second run changes nothing.
 func TestBackfillThumbnailOrientation(t *testing.T) {
 	c := qt.New(t)
 	fx := newFileLinkFixture(c)
@@ -150,7 +150,7 @@ func TestBackfillThumbnailOrientation(t *testing.T) {
 		c.Check(fx.blobExists(c, key), qt.IsFalse, qt.Commentf("a photo without thumbnails gets them on its first view"))
 	}
 
-	wantMarked := map[string]bool{turned.ID: true, noThumbnails.ID: true, upright.ID: true, missing.ID: false}
+	wantMarked := map[string]bool{turned.ID: true, noThumbnails.ID: false, upright.ID: true, missing.ID: false}
 	for id, want := range wantMarked {
 		got, err := fx.set.FileRegistry.Get(fx.ctx, id)
 		c.Assert(err, qt.IsNil)
@@ -160,4 +160,25 @@ func TestBackfillThumbnailOrientation(t *testing.T) {
 	fx.writeBlob(c, turnedSmall, sentinel)
 	services.BackfillThumbnailOrientation(fx.ctx, fx.factorySet, fx.uploadLocation)
 	c.Check(fx.readBlob(c, turnedSmall), qt.DeepEquals, sentinel, qt.Commentf("a second run writes nothing"))
+}
+
+// A turned photo without thumbnails is left unmarked, so thumbnails a server
+// of an older version writes unturned during a rolling deploy are made again
+// by the next pass.
+func TestBackfillThumbnailOrientation_RemakesThumbnailsAnOlderServerWroteLater(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkFixture(c)
+	svc := services.NewFileService(fx.factorySet, fx.uploadLocation)
+	phone := readFixture(c, "phone-photo.jpg")
+	file := fx.jpegFile(c, "late.jpg", phone)
+
+	services.BackfillThumbnailOrientation(fx.ctx, fx.factorySet, fx.uploadLocation)
+	fx.writeUnturnedThumbnails(c, svc, file, phone)
+	services.BackfillThumbnailOrientation(fx.ctx, fx.factorySet, fx.uploadLocation)
+
+	small := svc.GetThumbnailPaths(file.TenantID, file.ID)["small"]
+	c.Check(quadrants(c, fx.readBlob(c, small)), qt.Equals, turnedQuadrants)
+	got, err := fx.set.FileRegistry.Get(fx.ctx, file.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(got.ThumbnailsOriented, qt.IsTrue)
 }

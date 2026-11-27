@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2026-11-27T17:01:10+01:00
+-- Generated on: 2026-11-27T19:36:08+01:00
 -- Direction: UP
 -- +ptah lock_timeout=3s
 -- +ptah statement_timeout=30s

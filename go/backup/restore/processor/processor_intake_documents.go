@@ -72,11 +72,10 @@ func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error
 	// A dry run of a full replace removes nothing, but the real run would
 	// remove the group's records first, so it has nothing to keep.
 	if !w.options.DryRun || w.options.Strategy != types.RestoreStrategyFullReplace {
-		_, err := reg.GetByExternalID(w.ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
+		kept, err := reg.GetByExternalID(w.ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
 		switch {
 		case err == nil:
-			w.stats.SkippedCount++
-			return false, nil
+			return false, w.keepIntakeDocument(reg, kept, a.ID)
 		case !errors.Is(err, registry.ErrNotFound):
 			return false, errxtrace.Wrap("failed to look up delivered document", err, errx.Attrs("intake_document_id", a.ID))
 		}
@@ -90,8 +89,7 @@ func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error
 		return false, errxtrace.Wrap("failed to create delivered document", err, errx.Attrs("intake_document_id", a.ID))
 	}
 	if !created {
-		w.stats.SkippedCount++
-		return false, nil
+		return false, w.keepIntakeDocument(reg, stored, a.ID)
 	}
 	w.proc.trackCreatedEntity(stored.ID)
 	if err := w.recordPromotedDraft(reg, stored); err != nil {
@@ -101,9 +99,25 @@ func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error
 	return true, nil
 }
 
-// recordPromotedDraft names the item on a restored document whose draft
-// became one while the restore ran: a promotion records its item only on
-// the documents that are there when it commits.
+// keepIntakeDocument keeps the group's record of a document. A record whose
+// draft became an item it does not name gets the item, so a restore that
+// stored the record and failed to record the item finishes it when it is run
+// again. A dry run writes nothing.
+func (w *inbWalker) keepIntakeDocument(reg registry.IntakeDocumentRegistry, kept *models.IntakeDocument, archiveID string) error {
+	if !w.options.DryRun {
+		if err := w.recordPromotedDraft(reg, kept); err != nil {
+			return errxtrace.Wrap("failed to record the item of a delivered document", err, errx.Attrs("intake_document_id", archiveID))
+		}
+	}
+	w.stats.SkippedCount++
+	return nil
+}
+
+// recordPromotedDraft names the item on a document whose draft became one
+// that the document does not name: a restored document whose draft was
+// promoted while the restore ran, since a promotion records its item only on
+// the documents that are there when it commits, or a kept one that an
+// earlier restore stored and could not finish.
 func (w *inbWalker) recordPromotedDraft(reg registry.IntakeDocumentRegistry, doc *models.IntakeDocument) error {
 	if doc.CommodityID != nil || doc.DraftID == nil || *doc.DraftID == "" || w.proc.factorySet.CommodityDraftRegistryFactory == nil {
 		return nil
