@@ -5,6 +5,12 @@ import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import {
+  useBelowSm,
+  useCloseOnHistoryBack,
+  useKeyboardVisibleArea,
+  useToastBottomInset,
+} from "@/components/ui/dialog-phone"
 
 // "default" is the centered card at every width. It is never taller than the
 // screen minus 2rem and scrolls as a whole when its content is taller, so its
@@ -13,16 +19,27 @@ import { Button } from "@/components/ui/button"
 // `sm` (640px) the dialog fills the screen, the header (title and close
 // button) sticks to the top, the footer (the actions) sticks to the bottom
 // above the safe-area inset, and the content between them scrolls; it slides
-// up on open and down on close. From `sm` up it is the same centered card as
-// "default".
+// up on open and down on close. While the on-screen keyboard is open it fills
+// the part of the screen above the keyboard, so the footer stays in sight;
+// a step back in the browser history (the Android back gesture) closes it the
+// way its close button does; and toasts keep clear of its footer. From `sm` up
+// it is the same centered card as "default".
 type DialogContentVariant = "default" | "fullscreen-mobile"
 
 // DialogHeader and DialogFooter read the variant from here, so a dialog opts
-// in with one prop on DialogContent and keeps its markup.
+// in with one prop on DialogContent and keeps its markup. A full-screen
+// dialog's footer reports its element through `setFooter`, so toasts can keep
+// clear of it.
 const DialogLayoutContext = React.createContext<{
   variant: DialogContentVariant
   showCloseButton: boolean
+  setFooter?: (footer: HTMLElement | null) => void
 }>({ variant: "default", showCloseButton: false })
+
+// The `open` prop of a controlled Dialog, so its content knows as soon as it
+// closes, before the exit animation ends. Undefined for an uncontrolled one,
+// whose content is open for as long as it is mounted.
+const DialogOpenContext = React.createContext<boolean | undefined>(undefined)
 
 const closeButtonClassName =
   "opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
@@ -61,7 +78,11 @@ const fullscreenMobileFooterClassName =
   "flex-row justify-end max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:mt-auto max-sm:flex-wrap max-sm:border-t max-sm:bg-background max-sm:px-4 max-sm:pt-3 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  return (
+    <DialogOpenContext.Provider value={props.open}>
+      <DialogPrimitive.Root data-slot="dialog" {...props} />
+    </DialogOpenContext.Provider>
+  )
 }
 
 function DialogTrigger({ ...props }: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
@@ -97,6 +118,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   variant = "default",
+  style,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -104,7 +126,21 @@ function DialogContent({
 }) {
   const { t } = useTranslation()
   const fullscreenMobile = variant === "fullscreen-mobile"
-  const layout = React.useMemo(() => ({ variant, showCloseButton }), [variant, showCloseButton])
+  const open = React.useContext(DialogOpenContext) ?? true
+  const belowSm = useBelowSm()
+  const fullScreen = fullscreenMobile && belowSm && open
+  const [footer, setFooter] = React.useState<HTMLElement | null>(null)
+  const keyboard = useKeyboardVisibleArea(fullScreen)
+  const backCloseRef = React.useRef<HTMLButtonElement>(null)
+  useCloseOnHistoryBack(fullScreen, () => backCloseRef.current?.click())
+  useToastBottomInset(fullScreen, footer, keyboard?.bottom ?? 0)
+  const layout = React.useMemo(
+    () => ({ variant, showCloseButton, setFooter: fullscreenMobile ? setFooter : undefined }),
+    [variant, showCloseButton, fullscreenMobile]
+  )
+  // The keyboard leaves only part of the screen visible: fill that part.
+  const contentStyle =
+    fullScreen && keyboard ? { ...style, top: keyboard.top, height: keyboard.height } : style
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -116,9 +152,16 @@ function DialogContent({
           fullscreenMobile && fullscreenMobileContentClassName,
           className
         )}
+        style={contentStyle}
         {...props}
       >
         <DialogLayoutContext.Provider value={layout}>{children}</DialogLayoutContext.Provider>
+        {fullscreenMobile && (
+          // The step back in the browser history closes the dialog through
+          // this button, the same way as the visible close button, so a
+          // dialog that asks about unsaved changes asks here too.
+          <DialogPrimitive.Close ref={backCloseRef} hidden tabIndex={-1} aria-hidden="true" />
+        )}
         {showCloseButton && (
           // In the full-screen layout the header carries the close button
           // below `sm`, so this one only shows from `sm` up.
@@ -180,14 +223,24 @@ function DialogFooter({
   className,
   showCloseButton = false,
   children,
+  ref,
   ...props
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
   const { t } = useTranslation()
-  const { variant } = React.useContext(DialogLayoutContext)
+  const { variant, setFooter } = React.useContext(DialogLayoutContext)
+  const footerRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      setFooter?.(node)
+      if (typeof ref === "function") ref(node)
+      else if (ref) ref.current = node
+    },
+    [ref, setFooter]
+  )
   return (
     <div
+      ref={footerRef}
       data-slot="dialog-footer"
       className={cn(
         "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",

@@ -1176,6 +1176,14 @@ when to add an entry and where it goes.
   an owner first. Before, the delete went through and left the group with
   its members and no owner, so nobody could manage or delete it
   ([#3051](https://github.com/denisvmedia/inventario/issues/3051)).
+- On a phone, a form that fills the screen (Add item, a location, an area and
+  the other long forms) keeps its buttons above the on-screen keyboard while
+  you type. The back gesture closes it as its close button does, so Add item
+  still asks whether to save what was entered, and the page under it stays.
+  A toast shown while it is open sits above its buttons. Before, the keyboard
+  covered the buttons, the back gesture left the page and lost the form, and
+  a toast covered the buttons for a few seconds
+  ([#2931](https://github.com/denisvmedia/inventario/issues/2931)).
 
 - Saving an item from an edit form opened before someone changed the item on
   another device, or before a tag on it was renamed, no longer puts back what
