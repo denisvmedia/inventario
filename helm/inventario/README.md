@@ -249,6 +249,8 @@ When the migration runs in the setup Job, the `pre-upgrade` hook migrates to com
 
 Neither mode removes the requirement. Expand and contract over releases: add a column, deploy code that writes both, backfill, deploy code that reads the new one, drop the old one in a later release. The chart cannot enforce this and does not try.
 
+What an old pod survives: a new table, a new index, and a new column that is nullable or has a default. The app ignores columns it does not know, and its inserts and updates name their columns, so the database fills in the default and keeps what the new version wrote. What it does not survive: a dropped or renamed column or table it uses, a changed column type, a new `NOT NULL` column without a default, or a new constraint its writes break. v0.2.x does not ignore unknown columns, so an upgrade from v0.2.x fails reads on the old pods for the whole rollout; `PRODUCTION.md` (Appendix C) says to scale the Deployments to zero first.
+
 ### Concurrency is safe
 
 Whenever the migration runs in the pod, every app pod — apiserver and each worker — runs `migrate up` on start, so several can run at once during a rollout. That is fine: the migrator takes a PostgreSQL advisory lock (`ptah_migrate`) for the duration, so concurrent runners serialize rather than racing. A pod that finds the schema already current returns after a single round trip.
