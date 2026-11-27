@@ -805,6 +805,13 @@ when to add an entry and where it goes.
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
 
+- A web address custom field value of up to 2,048 characters saves whatever
+  its alphabet. A long address written in Cyrillic or another script with
+  two- or more-byte letters failed with a server error, because the database
+  kept the whole value in an index whose entries have a size limit. That
+  index served no search or filter and is removed
+  ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.
