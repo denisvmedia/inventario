@@ -36,6 +36,8 @@ Every group has one **group currency** — the currency all of its item prices a
 The group currency is fixed when you create the group. To change it later you'd use the currency-migration tool in **Group settings → Info**, which reprices every item in the group at an exchange rate you provide. That tool is only available if your server operator has enabled it; if it's switched off you'll see a note saying so.
 :::
 
+While a migration runs, the group's items can't be changed. Adding, editing or deleting an item, restoring one from Trash, editing or deleting an item tag and starting a restore all show **Locked while a currency migration is running.** Try again once the migration has finished. File tags and files are not affected.
+
 Once a currency migration of the group has started, **Group settings → Info** has a link to the group's migrations: the latest ten, newest first, each with its currencies, rate and status. A migration drops off that list 90 days after it ended, unless your server operator set another period.
 
 ## Switch the active group

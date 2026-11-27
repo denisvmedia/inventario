@@ -12531,6 +12531,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
             };
         };
         options?: never;
@@ -12587,6 +12596,15 @@ export type paths = {
                 };
                 /** @description User-side request problem */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
                     headers: {
                         [name: string]: unknown;
                     };
