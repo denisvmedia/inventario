@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -113,7 +114,68 @@ func buildSchema(ctx context.Context, migr *migrator.Migrator, dsn string) error
 		return err
 	}
 
+	return addNewerReleaseColumns(ctx, dsn)
+}
+
+// newerReleaseColumn is a column this binary does not know. buildSchema adds it
+// to every table, so the whole suite runs against the schema a newer release
+// would leave behind: during a rolling upgrade the pods of the previous version
+// read and write tables the new version has already migrated.
+//
+// It is NOT NULL with a default, the shape an additive migration has, so an
+// INSERT that lists only the columns this binary knows still succeeds.
+const (
+	newerReleaseColumn  = "newer_release_probe"
+	newerReleaseDefault = "set by the database"
+)
+
+// addNewerReleaseColumns adds newerReleaseColumn to every table the schema owns.
+func addNewerReleaseColumns(ctx context.Context, dsn string) error {
+	pool, err := getOrCreatePool(dsn)
+	if err != nil {
+		return err
+	}
+
+	tables, err := listSchemaTables(ctx, pool)
+	if err != nil {
+		return err
+	}
+
+	for _, table := range tables {
+		_, err := pool.Exec(ctx, fmt.Sprintf(
+			"ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT '%s'",
+			table, newerReleaseColumn, newerReleaseDefault))
+		if err != nil {
+			return fmt.Errorf("add %s to %s: %w", newerReleaseColumn, table, err)
+		}
+	}
+
 	return nil
+}
+
+// listSchemaTables returns the quoted names of the tables the schema owns,
+// leaving out the migrator's own bookkeeping.
+func listSchemaTables(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT quote_ident(tablename)
+		FROM pg_tables
+		WHERE schemaname = 'public'
+		  AND tablename <> 'schema_migrations'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		tables = append(tables, name)
+	}
+
+	return tables, rows.Err()
 }
 
 // truncateAllTables empties every table the schema owns, leaving the schema and
@@ -129,25 +191,8 @@ func truncateAllTables(ctx context.Context, dsn string) error {
 		return err
 	}
 
-	rows, err := pool.Query(ctx, `
-		SELECT quote_ident(tablename)
-		FROM pg_tables
-		WHERE schemaname = 'public'
-		  AND tablename <> 'schema_migrations'`)
+	tables, err := listSchemaTables(ctx, pool)
 	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return err
-		}
-		tables = append(tables, name)
-	}
-	if err := rows.Err(); err != nil {
 		return err
 	}
 	if len(tables) == 0 {

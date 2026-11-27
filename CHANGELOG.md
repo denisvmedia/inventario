@@ -743,6 +743,17 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- The server ignores table columns it does not know. A rolling upgrade from
+  this release to a later one whose migration adds a column no longer fails
+  the pods that still run this release. The upgrade to this release does not
+  have that protection: pods that still run v0.2.x fail every read of a table
+  that the migrations below add a column to, which covers items, files,
+  groups, the audit log, exports, restores and several background job
+  tables, until they are replaced. Scale the chart's Deployments to zero
+  before `helm upgrade`, as `PRODUCTION.md` (Appendix C, "Upgrading from
+  v0.2.x") describes. `PRODUCTION.md` and the chart README list the schema
+  changes a rolling upgrade survives
+  ([#2873](https://github.com/denisvmedia/inventario/issues/2873)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
   each retry and discard to the audit log. Two metrics come with it:
@@ -753,9 +764,10 @@ when to add an entry and where it goes.
   one more database migration: it adds `discarded_at` to `exports`,
   `restore_operations`, `thumbnail_generation_jobs`, `intake_sources` and
   `currency_migrations`, `attempt_count` to `exports`, and an index on the
-  failed intake sources. During a rolling upgrade, pods that still run the
-  previous version can fail reads of those tables until they are replaced,
-  as with the `hidden_sections` column below
+  failed intake sources. During a rolling upgrade, pods that still run
+  v0.2.x fail reads of exports, restores, thumbnail jobs and currency
+  migrations until they are replaced, as described in the entry on unknown
+  columns
   ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). Jobs
   that failed before the upgrade count toward the depth gauge from the first
   collection, so an alert on a depth above zero fires on day one until they
@@ -770,22 +782,17 @@ when to add an entry and where it goes.
   `GET /g/{slug}/plan` reports the tenant's plan again
   ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
 - The upgrade runs one more database migration, which adds a `set_entry`
-  column to `item_types` and `custom_field_definitions`. As with the
-  `hidden_sections` column below, pods that still run the previous version
-  fail reads of item types and custom fields until they are replaced, so
-  item pages, item forms and the item types and custom fields pages served
-  by those pods fail with 500 until the rollout finishes
-  ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
-  of problem tracked in
-  [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
+  column to `item_types` and `custom_field_definitions`. Both tables are new
+  in this release, so v0.2.x pods do not read them
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - The upgrade runs two more database migrations. One adds the
   `hidden_sections` column to `location_groups`. During a rolling upgrade,
-  pods that still run the previous version fail every read of a group until
+  pods that still run v0.2.x fail every read of a group until
   they are replaced, because they read all columns of the table and do not
   know the new one. Expect group pages and group API calls served by those
-  pods to fail with 500 until the rollout finishes
-  ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
-  of problem tracked in
+  pods to fail with 500 until the rollout finishes, as described in the entry
+  on unknown columns
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607),
   [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
   The other adds the `personal_data_exports` table for personal data exports.
   The archives are stored with the uploads under `t/<tenant>/personal-exports/`;
