@@ -948,10 +948,13 @@ when to add an entry and where it goes.
   delivery stopped before it recorded the draft and was never sent again. A
   delivery refused with `intake.document_conflict` keeps neither its record
   nor its file, also when the conflicting batch appeared while it was being
-  stored. A second batch that a delivery made and could not delete is
-  deleted by the next delivery of the document, and running a merge restore
-  again records the item on a delivered document that the first restore left
-  without it ([#2879](https://github.com/denisvmedia/inventario/issues/2879)).
+  stored, or the conflicting draft became an item meanwhile: that item is not
+  linked to the refused delivery's record. A second batch that a delivery
+  made and could not delete is deleted by the next delivery of the document,
+  and running a merge restore again records the item on a delivered document
+  that the first restore left without it
+  ([#2879](https://github.com/denisvmedia/inventario/issues/2879),
+  [#3008](https://github.com/denisvmedia/inventario/issues/3008)).
 - A group with more than 50 locations or more than 50 areas showed only the
   first 50 in the location and area pickers of the item form, on the
   Locations page, in the backup item picker and wherever an item's location
