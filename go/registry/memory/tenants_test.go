@@ -52,3 +52,50 @@ func TestTenantRegistry_LetsSlugLessTenantsThrough(t *testing.T) {
 	_, err = reg.Create(ctx, newMemoryTestTenant("Second", ""))
 	c.Assert(err, qt.IsNil)
 }
+
+func newMemoryTestTenantWithDomain(name, slug, domain string) models.Tenant {
+	tenant := newMemoryTestTenant(name, slug)
+	tenant.Domain = new(domain)
+	return tenant
+}
+
+func TestTenantRegistry_DomainIsUnique(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	reg := memory.NewTenantRegistry()
+
+	_, err := reg.Create(ctx, newMemoryTestTenantWithDomain("Acme", "acme", "acme.example"))
+	c.Assert(err, qt.IsNil)
+	globex, err := reg.Create(ctx, newMemoryTestTenantWithDomain("Globex", "globex", "globex.example"))
+	c.Assert(err, qt.IsNil)
+
+	_, err = reg.Create(ctx, newMemoryTestTenantWithDomain("Acme again", "acme-again", "acme.example"))
+	c.Assert(err, qt.ErrorIs, registry.ErrDomainAlreadyExists)
+
+	taken := *globex
+	taken.Domain = new("acme.example")
+	_, err = reg.Update(ctx, taken)
+	c.Assert(err, qt.ErrorIs, registry.ErrDomainAlreadyExists)
+
+	renamed := *globex
+	renamed.Name = "Globex Corporation"
+	updated, err := reg.Update(ctx, renamed)
+	c.Assert(err, qt.IsNil)
+	c.Assert(*updated.Domain, qt.Equals, "globex.example")
+}
+
+func TestTenantRegistry_LetsDomainLessTenantsThrough(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	reg := memory.NewTenantRegistry()
+
+	_, err := reg.Create(ctx, newMemoryTestTenant("First", "first"))
+	c.Assert(err, qt.IsNil)
+	second, err := reg.Create(ctx, newMemoryTestTenant("Second", "second"))
+	c.Assert(err, qt.IsNil)
+
+	renamed := *second
+	renamed.Name = "Second renamed"
+	_, err = reg.Update(ctx, renamed)
+	c.Assert(err, qt.IsNil)
+}

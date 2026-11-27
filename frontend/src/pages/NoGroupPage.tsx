@@ -11,6 +11,7 @@ import { useLogout } from "@/features/auth/hooks"
 import { useCreateGroup } from "@/features/group/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { parseServerError } from "@/lib/server-error"
+import { capCodePoints } from "@/lib/text-length"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
 // NoGroupPage — onboarding landing for an authenticated user with zero
@@ -160,10 +161,9 @@ export function NoGroupPage() {
                   <Input
                     id="no-group-name"
                     autoComplete="off"
-                    maxLength={100}
                     disabled={createMutation.isPending}
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => setName(capCodePoints(e.target.value, 100))}
                     placeholder={t("groups:create.namePlaceholder")}
                     data-testid="no-group-name-input"
                   />

@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   ITEM_TYPE_LIMIT,
-  ITEM_TYPE_NAME_MAX,
   ITEM_TYPE_NAME_TAKEN,
   ITEM_TYPES_MAX,
   type ItemType,
@@ -194,7 +193,6 @@ export function ItemTypeFormDialog({
                   : t("itemTypes:dialog.namePlaceholder")
               }
               autoComplete="off"
-              maxLength={ITEM_TYPE_NAME_MAX}
               disabled={isPending}
               aria-invalid={!!errors.name}
               aria-describedby={

@@ -648,6 +648,13 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Reminder emails go out only for items in use. An item marked Sold, Lost,
+  Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
+  loan and item reminders, and its reminders, loans and maintenance stayed on
+  the Upcoming page; the weekly digest listed its warranty and maintenance as
+  coming up, and the maintenance of an item in Trash too. Reverting the item
+  to In Use brings back the reminders that are still due
+  ([#2908](https://github.com/denisvmedia/inventario/issues/2908)).
 - A request that waits for a free database connection stops waiting when the
   client gives up or the request times out. Before, it stayed in the queue
   with no deadline, so under load the queue grew instead of shedding
@@ -663,6 +670,28 @@ when to add an entry and where it goes.
   with the server's English text. It now shows the status without changing
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
+
+- An item's history keeps every edit of a save. A save that changed the
+  status, the area, a price or the cover recorded only that change, and the
+  name, type, tags or any other field changed in the same save were missing
+  from the history; a bulk edit that set the type and the status recorded
+  only the status. Such a save now also records an "updated" entry with the
+  other fields
+  ([#2899](https://github.com/denisvmedia/inventario/issues/2899)).
+- A bulk action on items or files no longer undoes a change someone saves to
+  one of them while it runs. Changing the tags, type or status of selected
+  items, moving them, or changing the tags of selected files read each one,
+  changed it and wrote the whole record back, so a new name, a note or a tag
+  saved in between was lost. Each record is now read and written under its
+  row lock, and only the fields the action sets are written
+  ([#2891](https://github.com/denisvmedia/inventario/issues/2891)).
+- Renaming or deleting a tag while someone saves an item or file that
+  carries it no longer fails one of the two with a server error. The save
+  and the tag change could each wait for the other until the database gave
+  up on one of them. A tag rename or delete, and an item type delete that
+  moves items to another type, now also wait for a running currency
+  migration of the group instead of rewriting the items it is converting
+  ([#2874](https://github.com/denisvmedia/inventario/issues/2874)).
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
@@ -670,6 +699,19 @@ when to add an entry and where it goes.
   shows the server's reason instead of a fixed "Couldn't …" line. A server
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
+
+- Text length limits count characters in every language. The server counted
+  most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
+  borrower, supply link, maintenance title, file description and other text
+  was refused with 422 at about half the length the form allowed. Form fields
+  now also count an emoji as one character, as the server does, where they
+  stopped at half the limit. An account name has 100 characters at most, which
+  the server always required; the sign-up and profile forms said 255. Two
+  limits stay in bytes because they bound storage rather than text a person
+  reads: the query of a saved view and the external system, instance and
+  document identifiers of the intake API
+  ([#2919](https://github.com/denisvmedia/inventario/issues/2919)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
@@ -692,6 +734,13 @@ when to add an entry and where it goes.
   going out without that recipient, or, for a loan, being marked as sent
   with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Switching groups in the sidebar now saves the group as your default group,
+  as the top bar switcher already did, so the next sign-in lands in the group
+  you used last whichever control you used. A switch saves only the group: it
+  no longer writes back a name you changed on another device since the page
+  loaded. The role next to the top bar switcher is the Members page badge,
+  with its icon, color and translated label, in place of the untranslated role
+  key ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
 - The item delete dialog and the area delete dialog showed raw keys such as
   "delete.title" instead of their text
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
@@ -708,13 +757,6 @@ when to add an entry and where it goes.
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
-- Switching groups in the sidebar now saves the group as your default group,
-  as the top bar switcher already did, so the next sign-in lands in the group
-  you used last whichever control you used. A switch saves only the group: it
-  no longer writes back a name you changed on another device since the page
-  loaded. The role next to the top bar switcher is the Members page badge,
-  with its icon, color and translated label, in place of the untranslated role
-  key ([#2910](https://github.com/denisvmedia/inventario/issues/2910)).
 - An item opened from a searched Items list, or from an area's items, stays
   open. Before, an item clicked within a moment of the list loading closed
   again and the list came back
@@ -772,6 +814,24 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- A tenant domain is unique in the database. The upgrade runs a migration
+  that replaces the index on `tenants.domain` with a unique one, so two
+  creates or edits that give one domain to two tenants at the same time no
+  longer both succeed; the second gets `409 tenant.domain_taken`. Tenants
+  written before domains were checked can share one, and the index cannot
+  be built over them: `inventario db migrate up` then stops before it
+  applies anything and names each shared domain with the slugs of its
+  tenants. Leave each domain with one tenant, with
+  `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes
+  it) or in the back office, and run the migrations again.
+  `db migrate up --dry-run` runs the same check before the upgrade
+  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
+- `inventario tenants update` accepts `--name`, `--slug`, `--domain`,
+  `--status`, `--settings`, `--dry-run` and `--interactive`. Only
+  `--registration-mode` was registered, so the commands README and the
+  command's help showed, such as `--domain=inventory.acme.com`, failed with
+  `unknown flag`
+  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
 - The server ignores table columns it does not know. A rolling upgrade from
   this release to a later one whose migration adds a column no longer fails
   the pods that still run this release. The upgrade to this release does not

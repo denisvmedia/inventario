@@ -28,18 +28,24 @@ func TestDraftMarkContract_Postgres(t *testing.T) {
 	registrytest.RunDraftMarkContract(t, newPostgresTrashEnv)
 }
 
-// newPostgresTrashEnv returns registries scoped to the test group, with one
-// area to place items in.
+func TestBulkPatchContract_Postgres(t *testing.T) {
+	registrytest.RunBulkPatchContract(t, newPostgresTrashEnv)
+}
+
+// newPostgresTrashEnv returns registries scoped to the test group, with two
+// areas to place items in.
 func newPostgresTrashEnv(t *testing.T) registrytest.TrashEnv {
 	c := qt.New(t)
 	fx := newFileLinkPGFixture(t)
 	location := createTestLocation(c, fx.set)
 	area := createTestArea(c, fx.set, location.ID)
+	other := createTestArea(c, fx.set, location.ID)
 	return registrytest.TrashEnv{
 		Ctx:          fx.ctx,
 		Commodities:  fx.set.CommodityRegistry,
 		Files:        fx.set.FileRegistry,
 		ServiceFiles: fx.factorySet.FileRegistryFactory.CreateServiceRegistry(),
 		AreaID:       area.ID,
+		OtherAreaID:  other.ID,
 	}
 }

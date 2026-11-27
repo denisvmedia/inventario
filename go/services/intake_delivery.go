@@ -132,17 +132,20 @@ func normalizeIntakeDelivery(in IntakeDelivery, file *IntakeDeliveredFile) (norm
 	if err := validation.Validate(n.Title, validation.Required, validation.RuneLength(1, intakeDocumentTitleMaxRunes)); err != nil {
 		errs["title"] = err
 	}
+	// Bytes: see models.IntakeExternalValueMaxLength.
 	if err := validation.Validate(n.SourceSystem, validation.Required, validation.Length(1, models.IntakeExternalValueMaxLength),
 		validation.Match(intakeSourceSystemPattern).Error("must be letters, digits, dots, dashes or underscores")); err != nil {
 		errs["source_system"] = err
 	}
+	// Bytes: see models.IntakeExternalValueMaxLength.
 	if err := validation.Validate(n.SourceInstance, validation.Length(0, models.IntakeExternalValueMaxLength)); err != nil {
 		errs["source_instance"] = err
 	}
+	// Bytes: see models.IntakeExternalValueMaxLength.
 	if err := validation.Validate(n.DocumentID, validation.Required, validation.Length(1, models.IntakeExternalValueMaxLength)); err != nil {
 		errs["document_id"] = err
 	}
-	if err := validation.Validate(n.SourceURL, validation.Length(0, models.IntakeSourceURLMaxLength), models.IntakeSourceURLRule); err != nil {
+	if err := validation.Validate(n.SourceURL, validation.RuneLength(0, models.IntakeSourceURLMaxLength), models.IntakeSourceURLRule); err != nil {
 		errs["source_url"] = err
 	}
 	if err := validation.Validate(n.SourceName, validation.RuneLength(0, models.IntakeSourceNameMaxRunes)); err != nil {

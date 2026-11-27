@@ -107,7 +107,7 @@ func (req *UpdateProfileRequest) Bind(r *http.Request) error {
 func (req *UpdateProfileRequest) ValidateWithContext(ctx context.Context) error {
 	var fields []*validation.FieldRules
 	if req.NameSet {
-		fields = append(fields, validation.Field(&req.Name, rules.NotEmpty, validation.Length(1, 100)))
+		fields = append(fields, validation.Field(&req.Name, rules.NotEmpty, validation.RuneLength(1, 100)))
 	}
 	if req.DefaultGroupIDSet && req.DefaultGroupID != nil {
 		fields = append(fields, validation.Field(&req.DefaultGroupID, validation.By(validateUUIDPointer)))

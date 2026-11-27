@@ -111,9 +111,9 @@ func (*SupplyLink) Validate() error {
 func (s *SupplyLink) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, s,
 		validation.Field(&s.CommodityID, rules.NotEmpty),
-		validation.Field(&s.Label, rules.NotEmpty, validation.Length(1, 200)),
-		validation.Field(&s.URL, rules.NotEmpty, validation.Length(1, 2048), validation.By(validateAbsoluteHTTPURL)),
-		validation.Field(&s.Notes, validation.Length(0, 1000)),
+		validation.Field(&s.Label, rules.NotEmpty, validation.RuneLength(1, 200)),
+		validation.Field(&s.URL, rules.NotEmpty, validation.RuneLength(1, 2048), validation.By(validateAbsoluteHTTPURL)),
+		validation.Field(&s.Notes, validation.RuneLength(0, 1000)),
 	)
 }
 

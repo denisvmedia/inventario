@@ -196,8 +196,8 @@ func (u *User) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&u.Email, rules.NotEmpty, validation.Length(1, 255), validation.Match(EmailPattern)),
-		validation.Field(&u.Name, rules.NotEmpty, validation.Length(1, 100)),
+		validation.Field(&u.Email, rules.NotEmpty, validation.RuneLength(1, 255), validation.Match(EmailPattern)),
+		validation.Field(&u.Name, rules.NotEmpty, validation.RuneLength(1, 100)),
 		validation.Field(&u.TenantID, rules.NotEmpty),
 	)
 
