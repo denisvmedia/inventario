@@ -44,6 +44,7 @@ import {
 import { useFilesViewMode, type FilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatBytes } from "@/lib/intl"
 import { listContextFromLocation } from "@/lib/list-context"
@@ -290,8 +291,8 @@ export function FilesListPage() {
       } else {
         toast.success(t("files:bulk.tagsUpdated", { count: result.succeeded.length }))
       }
-    } catch {
-      toast.error(t("files:bulk.tagsError"))
+    } catch (err) {
+      toastMutationError(err, t("files:bulk.tagsError"))
     }
   }
 

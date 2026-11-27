@@ -93,6 +93,49 @@ test.describe("Item statuses (#1607)", () => {
     await expect(cards.first()).toContainText("Donated");
   });
 
+  // #2915: the step-by-step dialog shows the status without changing it, and
+  // a save from it keeps the date, note and sale price Change Status set.
+  test("keeps the sale details when a sold item is saved from All fields", async ({
+    page,
+    request,
+  }) => {
+    const id = await create(request, { name: `Bike ${run}` });
+
+    await page.goto(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`);
+    await expect(page.getByTestId("page-commodity-detail")).toBeVisible();
+    await page.getByTestId("commodity-detail-transition-sold").click();
+    const transition = page.getByTestId("status-transition-dialog");
+    await transition.getByTestId("status-transition-date").fill("2026-11-20");
+    await transition.getByTestId("status-transition-sale-price").fill("150");
+    await transition.getByTestId("status-transition-note").fill(`Sold to Bob ${run}`);
+    await transition.getByTestId("status-transition-confirm").click();
+    await expect(transition).toBeHidden();
+
+    const card = page.getByTestId("commodity-detail-terminal-status");
+    await expect(card.getByTestId("commodity-detail-terminal-status-label")).toHaveText("Sold");
+
+    await page.getByTestId("commodity-detail-edit").click();
+    await page.getByTestId("commodity-edit-all-fields").click();
+    const form = page.getByTestId("commodity-form-dialog");
+    const status = form.getByLabel("Status", { exact: true });
+    await expect(status).toHaveText("Sold");
+    await expect(status).toBeDisabled();
+    const name = form.getByLabel("Name", { exact: true });
+    await name.fill(`Road bike ${run}`);
+    await form.getByTestId("commodity-form-submit").click();
+    await expect(form).toBeHidden();
+
+    await expect(page.getByRole("heading", { name: `Road bike ${run}` })).toBeVisible();
+    await expect(card.getByTestId("commodity-detail-terminal-status-label")).toHaveText("Sold");
+    await expect(card.getByTestId("commodity-detail-terminal-status-date")).toContainText("2026");
+    await expect(card.getByTestId("commodity-detail-terminal-status-note")).toHaveText(
+      `Sold to Bob ${run}`,
+    );
+    await expect(card.getByTestId("commodity-detail-terminal-status-sale-price")).toContainText(
+      "150",
+    );
+  });
+
   test("finds donated and stolen items together, each with its own pill", async ({
     page,
     request,

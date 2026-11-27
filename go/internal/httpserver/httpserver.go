@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type APIServer struct {
 	server     *http.Server
 	ln         net.Listener
 	done       chan struct{}
+	doneOnce   sync.Once
 	onShutdown []func()
 }
 
@@ -38,7 +40,7 @@ func (s *APIServer) Run(addr string, h http.Handler) <-chan error {
 	if err != nil {
 		errCh <- err
 		close(errCh)
-		close(s.done)
+		s.markDone()
 		return errCh
 	}
 	s.ln = ln
@@ -58,17 +60,33 @@ func (s *APIServer) Port() int {
 	return (any)(s.ln.Addr()).(*net.TCPAddr).Port
 }
 
+// Shutdown stops the server and then runs the OnShutdown functions. After a
+// Run whose listener could not bind, nothing is serving: Shutdown only runs
+// the functions, so the caller can treat both cases alike.
 func (s *APIServer) Shutdown() error {
-	defer func() {
-		close(s.done)
-	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := s.server.Shutdown(ctx)
+	defer s.markDone()
+
+	var err error
+	if s.ln != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = s.server.Shutdown(ctx)
+	}
 	for _, f := range s.onShutdown {
 		f()
 	}
 	return err
+}
+
+// markDone closes the Done channel. Both a failed Run and Shutdown close it,
+// and a caller that sees the bind error still calls Shutdown, so it closes
+// only once.
+func (s *APIServer) markDone() {
+	s.doneOnce.Do(func() {
+		if s.done != nil {
+			close(s.done)
+		}
+	})
 }
 
 func (s *APIServer) Done() <-chan struct{} {

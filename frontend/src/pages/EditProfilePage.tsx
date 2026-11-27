@@ -41,6 +41,7 @@ import {
   type ProfileEditInput,
 } from "@/features/auth/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useAvatarPicker } from "@/hooks/useAvatarPicker"
 import { useConfirm } from "@/hooks/useConfirm"
 import { HttpError } from "@/lib/http"
@@ -75,8 +76,8 @@ function ProfilePhotoSection() {
     try {
       await removeMutation.mutateAsync()
       toast.success(t("settings:profile.photo.removed"))
-    } catch {
-      toast.error(t("settings:profile.photo.errors.remove"))
+    } catch (err) {
+      toastMutationError(err, t("settings:profile.photo.errors.remove"))
     }
   }
 

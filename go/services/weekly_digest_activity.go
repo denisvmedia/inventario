@@ -148,7 +148,7 @@ func (s *WeeklyDigestService) collectUpcomingWarranties(ctx context.Context, now
 			Kind: WeeklyDigestUpcomingWarranty,
 			Name: c.Name,
 			Date: string(*c.WarrantyExpiresAt),
-			URL:  s.commodityURL(c),
+			URL:  s.commodityURL(ctx, c),
 		})
 		activity[c.GroupID] = entry
 	}
@@ -183,7 +183,7 @@ func (s *WeeklyDigestService) collectUpcomingMaintenance(ctx context.Context, no
 			Kind: WeeklyDigestUpcomingMaintenance,
 			Name: name,
 			Date: string(m.NextDueAt),
-			URL:  s.commodityURL(commodity),
+			URL:  s.commodityURL(ctx, commodity),
 		})
 		activity[m.GroupID] = entry
 	}
@@ -192,11 +192,11 @@ func (s *WeeklyDigestService) collectUpcomingMaintenance(ctx context.Context, no
 
 // commodityURL builds the deep link for a commodity, or returns empty when
 // there is no builder or no group slug to build it from.
-func (s *WeeklyDigestService) commodityURL(c *models.Commodity) string {
+func (s *WeeklyDigestService) commodityURL(ctx context.Context, c *models.Commodity) string {
 	if c == nil || s.commodityURLBuilder == nil || s.factorySet.LocationGroupRegistry == nil {
 		return ""
 	}
-	group, err := s.factorySet.LocationGroupRegistry.Get(context.Background(), c.GroupID)
+	group, err := s.factorySet.LocationGroupRegistry.Get(ctx, c.GroupID)
 	if err != nil || group == nil || group.Slug == "" {
 		return ""
 	}

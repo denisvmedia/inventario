@@ -206,6 +206,42 @@ Rules:
 - **Reset on edit.** Watch the form via `form.watch()` and clear the
   banner when the user edits — see the LoginPage example.
 
+### Action toasts
+
+A one-click action has no form to hold a banner: a delete, a revoke, a
+settings toggle. Its failure is a toast, and the toast follows the same
+rule as the banner: the server's message wins, the translated string is
+the fallback. Report it with `toastMutationError(err, t("..."))` from
+`@/lib/mutation-error-toast`, from the mutation's `onError` or from a
+`catch` around `mutateAsync`:
+
+```tsx
+import { toastMutationError } from "@/lib/mutation-error-toast"
+
+try {
+  await remove.mutateAsync(id)
+  toast.success(t("locations:toast.areaDeleted"))
+} catch (err) {
+  toastMutationError(err, t("locations:toast.areaDeleteError"))
+}
+```
+
+Rules:
+
+- **Never a fixed string for a server error.** `toast.error(t("..."))` in
+  a `catch` drops the reason a 409 or 422 carries.
+- **One failure, one toast.** The global toast (`@/lib/global-error-toast`)
+  reports every 5xx, every 423 and every request that never reached the
+  server, for any query or mutation. `toastMutationError` leaves those to
+  it and shows the rest.
+- **A mutation that opts out of the global toast** with
+  `meta: { suppressGlobalErrorToast: true }` reports every error itself,
+  with `toast.error(parseServerError(err, t("...")))`.
+- **Branch on a known code first.** A handler that has its own copy for a
+  stable error code (`getServerErrorCode`) shows that copy and passes the
+  remaining errors to `toastMutationError` — see `reportError` in
+  `CommodityBulkActions`.
+
 ## Submit-button gating
 
 Submit buttons are gated on three things, in this order:

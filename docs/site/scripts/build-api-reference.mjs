@@ -1,4 +1,7 @@
-// Assemble the static API reference into public/api/ before Astro builds.
+// Assemble the static API reference into public/api/reference/ before Astro
+// builds. It cannot be public/api/ itself: that path is the API reference
+// page (src/content/docs/api.mdx), and Astro skips a page whose route a file
+// in public/ already takes.
 //
 // The OpenAPI spec is generated from the Go source by `make swagger` and lives
 // at go/docs/swagger.yaml. Copying it in at build time rather than committing a
@@ -16,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../..");
-const outDir = resolve(here, "../public/api");
+const outDir = resolve(here, "../public/api/reference");
 
 const spec = resolve(repoRoot, "go/docs/swagger.yaml");
 const redoc = resolve(here, "../node_modules/redoc/bundles/redoc.standalone.js");
@@ -37,4 +40,4 @@ await mkdir(outDir, { recursive: true });
 await copyFile(spec, resolve(outDir, "swagger.yaml"));
 await copyFile(redoc, resolve(outDir, "redoc.standalone.js"));
 
-console.log("build-api-reference: public/api/ assembled");
+console.log("build-api-reference: public/api/reference/ assembled");

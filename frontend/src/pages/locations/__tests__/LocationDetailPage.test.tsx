@@ -3,6 +3,7 @@ import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
+import type { QueryClient } from "@tanstack/react-query"
 
 import { LocationDetailPage } from "@/pages/locations/LocationDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -20,6 +21,8 @@ import {
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { createQueryClient } from "@/lib/query-client"
+import { toastSpies } from "@/test/global-mocks"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -50,10 +53,15 @@ function commodityResource(id: string, attrs: CommodityAttrs) {
   return { id, type: "commodities", attributes: { ...attrs, id } }
 }
 
-function renderDetail(initialPath: string, props: { initialMode?: "edit" } = {}) {
+function renderDetail(
+  initialPath: string,
+  props: { initialMode?: "edit" } = {},
+  queryClient?: QueryClient
+) {
   setAccessToken("good-token")
   return renderWithProviders({
     initialPath,
+    queryClient,
     routes: (
       <Route
         path="/g/:groupSlug/locations/:id"
@@ -200,6 +208,55 @@ describe("<LocationDetailPage />", () => {
       expect(screen.getByRole("heading", { name: "Cottage" })).toBeInTheDocument()
     )
     expect(screen.getByTestId("location-detail-areas-empty")).toBeInTheDocument()
+  })
+
+  function serveEmptyLocation(deleteResponse: () => Response) {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc2", locationResource("loc2", { name: "Cottage" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc2", { name: "Cottage" })]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, []),
+      ...fileHandlers.list(SLUG, []),
+      http.delete(apiUrl(`/g/${SLUG}/locations/loc2`), deleteResponse)
+    )
+  }
+
+  async function deleteCottage(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByTestId("location-detail-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+  }
+
+  it("shows the server's reason when the delete is refused", async () => {
+    const user = userEvent.setup()
+    serveEmptyLocation(() =>
+      HttpResponse.json(
+        { errors: [{ status: "Conflict", detail: "the location is in use by a saved view" }] },
+        { status: 409 }
+      )
+    )
+    renderDetail(`/g/${SLUG}/locations/loc2`)
+    await deleteCottage(user)
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("the location is in use by a saved view")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows one toast when the delete fails on the server", async () => {
+    const user = userEvent.setup()
+    serveEmptyLocation(() =>
+      HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+    )
+    // The app's client, so the global 5xx toast runs as it does in the app.
+    renderDetail(`/g/${SLUG}/locations/loc2`, {}, createQueryClient())
+    await deleteCottage(user)
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("Server error. Please try again later.")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
   })
 
   it("opens the upload dialog with the location name in the title from the EntityFilesPanel Attach button (#1448)", async () => {
