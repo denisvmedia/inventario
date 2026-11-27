@@ -465,9 +465,11 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 // recordItemOnDocumentsInTx points the document another system delivered
 // for the draft (#2809) at the item the draft became. A delivery that made
 // the draft and failed to record it left a document that names no draft yet:
-// it is the one whose identity gives the draft's client key, and it gets the
-// draft too. The digest is the one models.IntakeDeliveredDraftClientKey
-// computes.
+// it is the one whose identity gives the draft's client key and that names a
+// session, and it gets the draft too. A delivery records its session before
+// it makes the draft, so a document with no session is the new record of a
+// later delivery, which the draft was not made from (#3008). The digest is
+// the one models.IntakeDeliveredDraftClientKey computes.
 func (r *CommodityDraftRegistry) recordItemOnDocumentsInTx(ctx context.Context, tx *sqlx.Tx, draft *models.CommodityDraft, itemID string, now time.Time) error {
 	var keyDigest *string
 	if digest, ok := strings.CutPrefix(draft.ClientKey, models.IntakeDeliveredDraftKeyPrefix); ok {
@@ -475,7 +477,7 @@ func (r *CommodityDraftRegistry) recordItemOnDocumentsInTx(ctx context.Context, 
 	}
 	query := fmt.Sprintf(`
 		UPDATE %s SET commodity_id = $1, draft_id = COALESCE(draft_id, $4), updated_at = $2
-		WHERE group_id = $3 AND (draft_id = $4 OR (draft_id IS NULL AND $5::text IS NOT NULL
+		WHERE group_id = $3 AND (draft_id = $4 OR (draft_id IS NULL AND session_id IS NOT NULL AND $5::text IS NOT NULL
 			AND encode(sha256(convert_to(external_system, 'UTF8') || decode('00', 'hex')
 				|| convert_to(external_instance, 'UTF8') || decode('00', 'hex')
 				|| convert_to(external_document_id, 'UTF8')), 'hex') = $5))`, r.tableNames.IntakeDocuments())
