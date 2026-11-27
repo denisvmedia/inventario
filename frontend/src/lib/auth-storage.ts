@@ -43,16 +43,91 @@ function safeSessionStorage(): Storage | null {
   }
 }
 
+// The identity a stored access token belongs to: the `user_id` claim of the
+// JWT, or null when no token is stored. A token whose payload cannot be read
+// maps to one shared value, so replacing one such token with another counts
+// as the same user. The claim is read without verifying the signature; it
+// only tells this tab that the signed-in user changed, and the server checks
+// every request on its own.
+const UNREADABLE_TOKEN_IDENTITY = "unreadable-token"
+
+function tokenIdentity(token: string | null): string | null {
+  if (!token) return null
+  const payload = token.split(".")[1]
+  if (!payload) return UNREADABLE_TOKEN_IDENTITY
+  try {
+    const claims: unknown = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")))
+    if (claims && typeof claims === "object" && "user_id" in claims) {
+      const userId = (claims as { user_id: unknown }).user_id
+      if (typeof userId === "string" && userId) return userId
+    }
+  } catch {
+    // Not base64 or not JSON: fall through to the shared value.
+  }
+  return UNREADABLE_TOKEN_IDENTITY
+}
+
+type IdentityListener = () => void
+
+const identityListeners = new Set<IdentityListener>()
+
+// Counts the changes of the signed-in user this tab has seen. Work that
+// started under one value and finishes under another belongs to a user who is
+// no longer signed in (see the mutation cache in lib/query-client.ts).
+let identityGeneration = 0
+
+export function authIdentityGeneration(): number {
+  return identityGeneration
+}
+
+function notifyIdentityChange(): void {
+  identityGeneration += 1
+  for (const listener of [...identityListeners]) listener()
+}
+
+// Another tab wrote the access token. A refresh there keeps the same user and
+// is ignored; a sign-in, a sign-out or a switch to another user is reported
+// here too. A null key means that tab cleared the whole storage area.
+function onStorage(event: StorageEvent): void {
+  if (event.storageArea && event.storageArea !== safeLocalStorage()) return
+  if (event.key === null) {
+    notifyIdentityChange()
+    return
+  }
+  if (event.key !== ACCESS_TOKEN_KEY) return
+  if (tokenIdentity(event.oldValue) !== tokenIdentity(event.newValue)) notifyIdentityChange()
+}
+
+// Calls `listener` after the signed-in user changes, in this tab or in another
+// one: sign-in, sign-out, and a switch from one user to another. Refreshing the
+// token of the same user does not call it. Returns the unsubscribe function.
+export function onAuthIdentityChange(listener: IdentityListener): () => void {
+  if (identityListeners.size === 0 && typeof window !== "undefined") {
+    window.addEventListener("storage", onStorage)
+  }
+  identityListeners.add(listener)
+  return () => {
+    identityListeners.delete(listener)
+    if (identityListeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", onStorage)
+    }
+  }
+}
+
 export function getAccessToken(): string | null {
   return safeLocalStorage()?.getItem(ACCESS_TOKEN_KEY) ?? null
 }
 
 export function setAccessToken(token: string): void {
+  const before = tokenIdentity(getAccessToken())
   safeLocalStorage()?.setItem(ACCESS_TOKEN_KEY, token)
+  if (tokenIdentity(token) !== before) notifyIdentityChange()
 }
 
 export function clearAccessToken(): void {
+  const hadToken = getAccessToken() !== null
   safeLocalStorage()?.removeItem(ACCESS_TOKEN_KEY)
+  if (hadToken) notifyIdentityChange()
 }
 
 export function getCsrfToken(): string | null {

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -787,11 +789,55 @@ func (r *IntakeRegistry) StoreScan(ctx context.Context, sourceID string, attempt
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, warnings = $2, scanned_at = $3, wait_reason = '', error_code = '', updated_at = $3
 			WHERE id = $4`, r.tableNames.IntakeSources())
-		_, err = tx.ExecContext(ctx, update, string(models.IntakeSourceScanned), warnings, now, sourceID)
-		return err
+		if _, err := tx.ExecContext(ctx, update, string(models.IntakeSourceScanned), warnings, now, sourceID); err != nil {
+			return errxtrace.Wrap("failed to mark intake source scanned", err)
+		}
+		return r.updateScannedFiles(ctx, tx, source, scan.Files)
 	})
 	if err != nil {
 		return errxtrace.Wrap("failed to store intake scan", err)
+	}
+	return nil
+}
+
+// updateScannedFiles writes a scan's file updates in the transaction that
+// stores the scan. The source row is already locked; the tags come next and
+// then the file rows in id order, the order every file write takes (see
+// ensureTagRowsInTx). The worker's role sees every group, so a file is only
+// read in the source's group.
+func (r *IntakeRegistry) updateScannedFiles(ctx context.Context, tx *sqlx.Tx, source *models.IntakeSource, updates []registry.IntakeFileUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	var tags []string
+	for _, u := range updates {
+		tags = append(tags, u.Tags...)
+	}
+	if err := ensureTagRowsInTx(ctx, tx, r.tableNames, source.TenantID, source.GroupID, source.CreatedByUserID, models.TagKindFile, tags); err != nil {
+		return err
+	}
+	updates = slices.SortedFunc(slices.Values(updates), func(a, b registry.IntakeFileUpdate) int {
+		return strings.Compare(a.FileID, b.FileID)
+	})
+	lock := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 AND tenant_id = $2 AND group_id = $3 AND %s FOR UPDATE`,
+		r.tableNames.Files(), liveRow)
+	write := fmt.Sprintf(`UPDATE %s SET title = $1, tags = $2, updated_at = $3 WHERE id = $4`, r.tableNames.Files())
+	for _, u := range updates {
+		var file models.FileEntity
+		err := tx.QueryRowxContext(ctx, lock, u.FileID, source.TenantID, source.GroupID).StructScan(&file)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to lock a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
+		next, changed := u.Apply(file)
+		if !changed {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, write, next.Title, next.Tags, next.UpdatedAt.UTC(), file.ID); err != nil {
+			return errxtrace.Wrap("failed to update a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
 	}
 	return nil
 }

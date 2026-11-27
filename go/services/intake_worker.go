@@ -291,7 +291,16 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 	for _, warn := range result.Warnings {
 		warnings = append(warnings, models.IntakeWarning{Code: warn.Code, Field: warn.Field, Detail: warn.Detail})
 	}
-	err = reg.StoreScan(ctx, src.ID, src.Attempts, registry.IntakeScan{Candidates: candidates, Warnings: warnings}, w.clock())
+	scan := registry.IntakeScan{Candidates: candidates, Warnings: warnings}
+	// The file suggestions are stored with the scan, so a result dropped
+	// below leaves the files as they are. A file delivered from another
+	// system keeps the title it came with.
+	fileUpdates := &intakeFileUpdates{}
+	if !src.HasExternalIdentity() {
+		fileUpdates = w.fileUpdates(author.ctx, files.ids, result.Files, log)
+		scan.Files = fileUpdates.updates
+	}
+	err = reg.StoreScan(ctx, src.ID, src.Attempts, scan, w.clock())
 	switch {
 	case errors.Is(err, registry.ErrIntakeSourceChanged):
 		log.InfoContext(ctx, "Intake worker: the source changed during the scan; result dropped")
@@ -299,12 +308,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		log.ErrorContext(ctx, "Intake worker: failed to store the scan", "error", err)
 	default:
 		log.InfoContext(ctx, "Intake worker: source scanned", "candidates", len(candidates))
-		// The suggestions follow the stored scan only: a result dropped
-		// above leaves the files as they are. A file delivered from another
-		// system is never scanned, so it keeps the title it came with.
-		if !src.HasExternalIdentity() {
-			w.applyIntakeFileSuggestions(author.ctx, files.ids, result.Files, log)
-		}
+		fileUpdates.logStored(ctx, log)
 	}
 }
 

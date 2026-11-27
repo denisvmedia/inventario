@@ -8,9 +8,9 @@ import (
 )
 
 // creatorStore adapts a base registry whose rows carry a creator to the
-// groupConfiguration hand-over the user purge runs on group rows: item
-// history, loans, service records, supply links, maintenance, reminder send
-// records and restores.
+// groupConfiguration hand-over the user purge runs on group rows: tags,
+// sellers, item history, loans, service records, supply links, maintenance,
+// reminder send records and restores.
 type creatorStore[T any, P registry.PIDable[T]] struct {
 	base *Registry[T, P]
 }
@@ -38,11 +38,13 @@ func (s creatorStore[T, P]) groupsCreatedBy(tenantID, userID string) []string {
 }
 
 // reattributeCreator gives the rows userID created in tenantID to
-// heirs[groupID]. A row whose group has no heir keeps its creator. Each
-// changed row is a copy, so a reader holding the stored one sees no change.
-func (s creatorStore[T, P]) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// heirs[groupID] and returns how many each group handed over. A row whose
+// group has no heir keeps its creator. Each changed row is a copy, so a
+// reader holding the stored one sees no change.
+func (s creatorStore[T, P]) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	s.base.lock.Lock()
 	defer s.base.lock.Unlock()
+	moved := map[string]int{}
 	for pair := s.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		row, ok := any(pair.Value).(models.TenantGroupAware)
 		if !ok || row.GetTenantID() != tenantID || row.GetCreatedByUserID() != userID {
@@ -53,11 +55,52 @@ func (s creatorStore[T, P]) reattributeCreator(tenantID, userID string, heirs ma
 			continue
 		}
 		cp := P(copyOut((*T)(pair.Value)))
-		if moved, ok := any(cp).(models.TenantGroupAware); ok {
-			moved.SetCreatedByUserID(heir)
+		if changed, ok := any(cp).(models.TenantGroupAware); ok {
+			changed.SetCreatedByUserID(heir)
 			pair.Value = cp
+			moved[row.GetGroupID()]++
 		}
 	}
+	return moved
+}
+
+// createdGroupStore hands over the groups the user created. A group's own id
+// is its group, so the member who takes it is a member of that group.
+type createdGroupStore struct {
+	base *baseLocationGroupRegistry
+}
+
+func (s createdGroupStore) groupsCreatedBy(tenantID, userID string) []string {
+	s.base.lock.RLock()
+	defer s.base.lock.RUnlock()
+	var out []string
+	for pair := s.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		if g := pair.Value; g.TenantID == tenantID && g.CreatedBy == userID {
+			out = append(out, g.ID)
+		}
+	}
+	return out
+}
+
+// reattributeCreator gives the groups userID created in tenantID to
+// heirs[groupID]. A group without an heir keeps its creator. Each changed
+// group is a copy, so a reader holding the stored one sees no change.
+func (s createdGroupStore) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
+	s.base.lock.Lock()
+	defer s.base.lock.Unlock()
+	moved := map[string]int{}
+	for pair := s.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		g := pair.Value
+		heir := heirs[g.ID]
+		if g.TenantID != tenantID || g.CreatedBy != userID || heir == "" {
+			continue
+		}
+		cp := copyOut(g)
+		cp.CreatedBy = heir
+		pair.Value = cp
+		moved[g.ID]++
+	}
+	return moved
 }
 
 // currencyMigrationAuditStore hands over the audit rows of currency changes,
@@ -80,9 +123,10 @@ func (s currencyMigrationAuditStore) groupsCreatedBy(tenantID, userID string) []
 	return out
 }
 
-func (s currencyMigrationAuditStore) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+func (s currencyMigrationAuditStore) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	s.f.auditLock.Lock()
 	defer s.f.auditLock.Unlock()
+	moved := map[string]int{}
 	for i, row := range *s.f.auditRows {
 		heir := heirs[row.GroupID]
 		if row.TenantID != tenantID || row.CreatedByUserID != userID || heir == "" {
@@ -91,46 +135,69 @@ func (s currencyMigrationAuditStore) reattributeCreator(tenantID, userID string,
 		cp := *row
 		cp.CreatedByUserID = heir
 		(*s.f.auditRows)[i] = &cp
+		moved[row.GroupID]++
 	}
+	return moved
+}
+
+// groupRowStore is one store of group rows the user purge hands over, named
+// by the postgres table it stands for, the name the audit row counts its
+// rows under.
+type groupRowStore struct {
+	table string
+	store groupConfiguration
 }
 
 // groupRowStores returns the hand-over adapters of the group rows the user
 // purge gives to another member. Item types, custom fields and delivered
 // documents are wired with their own setters.
-func groupRowStores(fs *registry.FactorySet) []groupConfiguration {
-	var stores []groupConfiguration
+func groupRowStores(fs *registry.FactorySet) []groupRowStore {
+	var stores []groupRowStore
+	add := func(table string, store groupConfiguration) {
+		stores = append(stores, groupRowStore{table: table, store: store})
+	}
+	if r, ok := fs.LocationGroupRegistry.(*LocationGroupRegistry); ok {
+		add("location_groups", createdGroupStore{base: r.baseLocationGroupRegistry})
+	}
+	if f, ok := fs.TagRegistryFactory.(*TagRegistryFactory); ok {
+		add("tags", handOverStore(f.base))
+	}
+	if f, ok := fs.SellerRegistryFactory.(*SellerRegistryFactory); ok {
+		add("sellers", handOverStore(f.base))
+	}
 	if f, ok := fs.CommodityEventRegistryFactory.(*CommodityEventRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.base))
+		add("commodity_events", handOverStore(f.base))
 	}
 	if f, ok := fs.CommodityLoanRegistryFactory.(*CommodityLoanRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.base))
+		add("commodity_loans", handOverStore(f.base))
 	}
 	if f, ok := fs.CommodityServiceRegistryFactory.(*CommodityServiceRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.base))
+		add("commodity_services", handOverStore(f.base))
 	}
 	if f, ok := fs.SupplyLinkRegistryFactory.(*SupplyLinkRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.base))
+		add("commodity_supply_links", handOverStore(f.base))
 	}
 	if f, ok := fs.MaintenanceScheduleRegistryFactory.(*MaintenanceScheduleRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.base))
+		add("maintenance_schedules", handOverStore(f.base))
 	}
 	if r, ok := fs.MaintenanceReminderRegistry.(*MaintenanceReminderRegistry); ok {
-		stores = append(stores, handOverStore(r.baseMaintenanceReminderRegistry))
+		add("maintenance_reminders", handOverStore(r.baseMaintenanceReminderRegistry))
 	}
 	if r, ok := fs.WarrantyReminderRegistry.(*WarrantyReminderRegistry); ok {
-		stores = append(stores, handOverStore(r.baseWarrantyReminderRegistry))
+		add("warranty_reminders", handOverStore(r.baseWarrantyReminderRegistry))
 	}
 	if r, ok := fs.StorageQuotaReminderRegistry.(*StorageQuotaReminderRegistry); ok {
-		stores = append(stores, handOverStore(r.baseStorageQuotaReminderRegistry))
+		add("storage_quota_reminders", handOverStore(r.baseStorageQuotaReminderRegistry))
 	}
 	if f, ok := fs.CurrencyMigrationRegistryFactory.(*CurrencyMigrationRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.baseRegistry), currencyMigrationAuditStore{f: f})
+		add("currency_migrations", handOverStore(f.baseRegistry))
+		add("currency_migration_audit_rows", currencyMigrationAuditStore{f: f})
 	}
 	if f, ok := fs.RestoreOperationRegistryFactory.(*RestoreOperationRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.baseRestoreOperationRegistry))
+		add("restore_operations", handOverStore(f.baseRestoreOperationRegistry))
 	}
 	if f, ok := fs.RestoreStepRegistryFactory.(*RestoreStepRegistryFactory); ok {
-		stores = append(stores, handOverStore(f.baseRestoreStepRegistry))
+		add("restore_steps", handOverStore(f.baseRestoreStepRegistry))
 	}
 	return stores
 }

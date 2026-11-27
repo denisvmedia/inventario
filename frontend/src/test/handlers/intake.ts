@@ -241,9 +241,18 @@ export function backend(
         attributes: { id, path: id, ext: ".jpg", links: linksOf(id) },
       })
     }),
-    http.delete(apiUrl(`${base}/files/:id`), ({ params }) => {
+    http.delete(apiUrl(`${base}/files/:id`), ({ params, request }) => {
       const id = String(params.id)
-      if (!uploaded.delete(id)) return notFound()
+      if (!uploaded.has(id)) return notFound()
+      // With unless_linked=true the server keeps a file a link holds (#2930).
+      const unlessLinked = new URL(request.url).searchParams.get("unless_linked") === "true"
+      if (unlessLinked && linksOf(id).length > 0) {
+        return HttpResponse.json(
+          { errors: [{ status: "409", code: "file.linked" }] },
+          { status: 409 }
+        )
+      }
+      uploaded.delete(id)
       state.trashed.push(id)
       return new HttpResponse(null, { status: 204 })
     }),

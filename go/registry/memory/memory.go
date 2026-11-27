@@ -36,6 +36,10 @@ func NewFactorySet() *registry.FactorySet {
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
+	// The drafts name item types and hold custom field values; the two
+	// factories count them and rewrite them on a delete.
+	itemTypeFactory.SetDraftFactory(commodityDraftFactory)
+	customFieldFactory.SetDraftFactory(commodityDraftFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -160,12 +164,14 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CurrencyMigrationRegistryFactory = currencyMigrationFactory
 	// Failed jobs (#1307) read the job rows of these stores directly.
 	fs.FailedJobRegistry = NewFailedJobRegistry(FailedJobStores{
-		Exports:            exportFactory,
-		Restores:           restoreOperationFactory,
-		Thumbnails:         thumbnailGenerationJobFactory,
-		Files:              fileFactory,
-		Intake:             intakeFactory,
-		CurrencyMigrations: currencyMigrationFactory,
+		Exports:             exportFactory,
+		Restores:            restoreOperationFactory,
+		Thumbnails:          thumbnailGenerationJobFactory,
+		Files:               fileFactory,
+		Intake:              intakeFactory,
+		CurrencyMigrations:  currencyMigrationFactory,
+		PersonalDataExports: personalDataExportReg,
+		Users:               userReg,
 	})
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	groupPurger := NewGroupPurger(
@@ -258,6 +264,12 @@ func NewFactorySet() *registry.FactorySet {
 	if invites, ok := fs.GroupInviteRegistry.(*GroupInviteRegistry); ok {
 		userPurger.setGroupInviteRegistry(invites)
 	}
+	userPurger.setAuditLogRegistry(fs.AuditLogRegistry)
+
+	// What a member leaves behind in a group lives in stores read off the
+	// FactorySet, so it is wired after every fs.* field too.
+	membershipReg.setMemberDeparture(newMemberDeparture(fs, apiTokenReg))
+	apiTokenReg.setMemberships(membershipReg)
 
 	return fs
 }

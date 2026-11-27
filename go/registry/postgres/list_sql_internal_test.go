@@ -379,14 +379,15 @@ func TestAdminGroupListSQL(t *testing.T) {
 
 func TestOwnedRowExistsSQL(t *testing.T) {
 	for _, tc := range []struct {
-		purged []string
-		want   sqlCase
+		purged    []string
+		heirsFrom string
+		want      sqlCase
 	}{
 		{
 			// Nothing purged, so any owned row counts as retained.
 			want: sqlCase{
 				name: "no exclusion",
-				sql:  "SELECT EXISTS (SELECT 1 FROM commodities WHERE tenant_id = $1 AND created_by_user_id = $2)",
+				sql:  "SELECT EXISTS (SELECT 1 FROM commodities t WHERE t.tenant_id = $1 AND t.created_by_user_id = $2)",
 				args: []any{"tenant-1", "user-1"},
 			},
 		},
@@ -394,13 +395,25 @@ func TestOwnedRowExistsSQL(t *testing.T) {
 			purged: []string{"group-1", "group-2"},
 			want: sqlCase{
 				name: "purged groups are excluded",
-				sql:  "SELECT EXISTS (SELECT 1 FROM commodities WHERE tenant_id = $1 AND created_by_user_id = $2 AND group_id NOT IN ($3, $4))",
+				sql:  "SELECT EXISTS (SELECT 1 FROM commodities t WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id NOT IN ($3, $4))",
 				args: []any{"tenant-1", "user-1", "group-1", "group-2"},
+			},
+		},
+		{
+			// A row handed over at deletion counts only when its group has
+			// nobody else to take it.
+			purged:    []string{"group-1"},
+			heirsFrom: "group_memberships",
+			want: sqlCase{
+				name: "only rows without an heir",
+				sql: "SELECT EXISTS (SELECT 1 FROM commodities t WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id NOT IN ($3) " +
+					"AND NOT EXISTS (SELECT 1 FROM group_memberships m WHERE m.tenant_id = t.tenant_id AND m.group_id = t.group_id AND m.member_user_id <> $4))",
+				args: []any{"tenant-1", "user-1", "group-1", "user-1"},
 			},
 		},
 	} {
 		t.Run(tc.want.name, func(t *testing.T) {
-			got, args := ownedRowExistsQuery("commodities", "created_by_user_id", "group_id", "tenant-1", "user-1", tc.purged)
+			got, args := ownedRowExistsQuery("commodities", "created_by_user_id", "group_id", tc.heirsFrom, "tenant-1", "user-1", tc.purged)
 			checkSQL(qt.New(t), got, args, tc.want)
 		})
 	}

@@ -145,7 +145,9 @@ export function CreateGroupPage() {
               autoComplete="off"
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.name}
-              aria-describedby={form.formState.errors.name ? "group-name-error" : undefined}
+              aria-describedby={
+                form.formState.errors.name?.message ? "group-name-error" : undefined
+              }
               data-testid="group-name-input"
               {...form.register("name")}
             />
@@ -168,10 +170,16 @@ export function CreateGroupPage() {
                   onChange={field.onChange}
                   disabled={mutation.isPending}
                   testId="group-create-icon-picker"
+                  invalid={!!form.formState.errors.icon}
+                  describedBy={form.formState.errors.icon?.message ? "group-icon-error" : undefined}
                 />
               )}
             />
-            <FieldError testId="group-icon-error" message={form.formState.errors.icon?.message} />
+            <FieldError
+              id="group-icon-error"
+              testId="group-icon-error"
+              message={form.formState.errors.icon?.message}
+            />
           </div>
 
           <div className="space-y-1.5">

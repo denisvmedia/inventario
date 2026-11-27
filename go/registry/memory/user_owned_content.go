@@ -26,8 +26,11 @@ const (
 	deletionBlocks accountDeletion = iota + 1
 	// deletionRemoves marks personal rows, which UserPurger deletes.
 	deletionRemoves
-	// deletionHandsOver marks rows of the group, which UserPurger gives to
-	// another member (see UserPurger.SetGroupRowStores).
+	// deletionHandsOver marks rows of the group, the group's own row for the
+	// groups the user created included, which UserPurger gives to another
+	// member (see UserPurger.setGroupRowStores). The pre-check refuses the
+	// deletion while such a row is in a group that stays and has no other
+	// member to take it.
 	deletionHandsOver
 )
 
@@ -40,7 +43,7 @@ const (
 func ownedSources(fs *registry.FactorySet) []ownedSource {
 	return []ownedSource{
 		{registry.OwnedGroupMemberships, deletionRemoves, membershipRows(fs)},
-		{registry.OwnedLocationGroups, deletionBlocks, createdGroupRows(fs)},
+		{registry.OwnedLocationGroups, deletionHandsOver, createdGroupRows(fs)},
 		{registry.OwnedGroupInvites, deletionRemoves, inviteRows(fs)},
 		{registry.OwnedCommodities, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			reg := fs.CommodityRegistryFactory.CreateServiceRegistry()
@@ -56,10 +59,10 @@ func ownedSources(fs *registry.FactorySet) []ownedSource {
 		{registry.OwnedAreas, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.AreaRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedTags, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedTags, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.TagRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedSellers, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedSellers, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.SellerRegistryFactory.CreateServiceRegistry().List)
 		}},
 		{registry.OwnedExports, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {

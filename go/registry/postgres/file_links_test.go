@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -206,6 +207,45 @@ func TestFileRegistry_Postgres_Links(t *testing.T) {
 		c.Assert(updated.Title, qt.Equals, "Renamed")
 		c.Assert(updated.SHA256, qt.Equals, "abc")
 		c.Assert(pgLinkKeys(updated), qt.DeepEquals, []string{"commodity/lamp/images"})
+	})
+
+	t.Run("the thumbnail orientation pass lists unmarked JPEG files and an edit keeps the mark", func(t *testing.T) {
+		c := qt.New(t)
+		fx := newFileLinkPGFixture(t)
+		svc := fx.factorySet.FileRegistryFactory.CreateServiceRegistry()
+
+		fx.file(c, "manual", 1)
+		jpegFile := func(name string) *models.FileEntity {
+			file, err := fx.set.FileRegistry.Create(fx.ctx, models.FileEntity{
+				Title: name, Type: models.FileTypeImage, Category: models.FileCategoryImages,
+				File: &models.File{Path: name, OriginalPath: "files/" + name, Ext: ".jpg", MIMEType: "image/jpeg"},
+			})
+			c.Assert(err, qt.IsNil)
+			return file
+		}
+		first, second := jpegFile("first"), jpegFile("second")
+		if second.ID < first.ID {
+			first, second = second, first
+		}
+
+		pending, err := svc.ListPendingThumbnailOrientation(fx.ctx, "", 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(pgFileIDs(pending), qt.DeepEquals, []string{first.ID, second.ID})
+		pending, err = svc.ListPendingThumbnailOrientation(fx.ctx, first.ID, 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(pgFileIDs(pending), qt.DeepEquals, []string{second.ID})
+
+		c.Assert(svc.SetThumbnailsOriented(fx.ctx, first.ID), qt.IsNil)
+		c.Assert(svc.SetThumbnailsOriented(fx.ctx, "no-such-file"), qt.IsNil)
+		pending, err = svc.ListPendingThumbnailOrientation(fx.ctx, "", 100)
+		c.Assert(err, qt.IsNil)
+		c.Assert(pgFileIDs(pending), qt.DeepEquals, []string{second.ID})
+
+		edit := *first
+		edit.Title = "Renamed"
+		updated, err := fx.set.FileRegistry.Update(fx.ctx, edit)
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.ThumbnailsOriented, qt.IsTrue)
 	})
 
 	t.Run("checksums stay within the group", func(t *testing.T) {
@@ -413,4 +453,62 @@ func TestFileLinks_Postgres_OneReceiptThreeItems(t *testing.T) {
 	files, err := fx.set.FileRegistry.List(fx.ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(files, qt.HasLen, 1)
+}
+
+func pgFileIDs(files []*models.FileEntity) []string {
+	ids := make([]string, 0, len(files))
+	for _, f := range files {
+		ids = append(ids, f.ID)
+	}
+	return ids
+}
+
+// pgTrashAfterReadFactory moves a file to Trash right after the attach reads
+// it, as another member's delete can between the read and the link of one
+// attach request.
+type pgTrashAfterReadFactory struct {
+	registry.FileRegistryFactory
+	deletedBy string
+}
+
+type pgTrashAfterReadRegistry struct {
+	registry.FileRegistry
+	deletedBy string
+}
+
+func (f pgTrashAfterReadFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
+	inner, err := f.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return pgTrashAfterReadRegistry{FileRegistry: inner, deletedBy: f.deletedBy}, nil
+}
+
+func (r pgTrashAfterReadRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	file, err := r.FileRegistry.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.FileRegistry.Trash(ctx, id, r.deletedBy, "", time.Now()); err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+func TestFileLinks_Postgres_AttachFileTrashedAfterTheRead(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkPGFixture(t)
+	area := createTestArea(c, fx.set, createTestLocation(c, fx.set).ID)
+	item := createTestCommodity(c, fx.set, area.ID)
+	file := fx.file(c, "manual", 1)
+
+	racing := *fx.factorySet
+	racing.FileRegistryFactory = pgTrashAfterReadFactory{FileRegistryFactory: fx.factorySet.FileRegistryFactory, deletedBy: fx.user.ID}
+	_, _, err := services.NewFileLinkService(&racing).Attach(fx.ctx, file.ID, models.FileLinkCommodity, item.ID, models.FileLinkMetaDocuments)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	var links int
+	c.Assert(fx.dbx.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM file_links WHERE file_id = $1", file.ID).Scan(&links), qt.IsNil)
+	c.Assert(links, qt.Equals, 0, qt.Commentf("a file in Trash must not be linked"))
 }

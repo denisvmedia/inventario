@@ -272,6 +272,53 @@ func TestFileLinkService_Attach(t *testing.T) {
 	})
 }
 
+// trashAfterReadFactory moves a file to Trash right after the attach reads
+// it, as another member's delete can between the read and the link of one
+// attach request.
+type trashAfterReadFactory struct {
+	registry.FileRegistryFactory
+}
+
+type trashAfterReadRegistry struct {
+	registry.FileRegistry
+}
+
+func (f trashAfterReadFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
+	inner, err := f.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return trashAfterReadRegistry{inner}, nil
+}
+
+func (r trashAfterReadRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	file, err := r.FileRegistry.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.FileRegistry.Trash(ctx, id, "other-member", "", time.Now()); err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+func TestFileLinkService_Attach_FileTrashedAfterTheRead(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkFixture(c)
+	racing := *fx.factorySet
+	racing.FileRegistryFactory = trashAfterReadFactory{fx.factorySet.FileRegistryFactory}
+	svc := services.NewFileLinkService(&racing)
+	com := fx.commodity(c, "Drill")
+	file := fx.storedFile(c, "manual.pdf", "application/pdf", models.FileCategoryDocuments)
+
+	_, _, err := svc.Attach(fx.ctx, file.ID, models.FileLinkCommodity, com.ID, models.FileLinkMetaDocuments)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	trashed, err := fx.set.FileRegistry.GetTrashed(fx.ctx, file.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(trashed.Links, qt.HasLen, 0, qt.Commentf("a file in Trash must not be linked"))
+}
+
 func TestFileLinkService_Detach(t *testing.T) {
 	t.Run("last attachment leaves a standalone file", func(t *testing.T) {
 		c := qt.New(t)

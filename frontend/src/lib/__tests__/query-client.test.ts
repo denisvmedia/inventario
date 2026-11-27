@@ -1,9 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { toast } from "sonner"
+import { MutationObserver, type QueryClient } from "@tanstack/react-query"
 
 import { createQueryClient } from "@/lib/query-client"
 import { HttpError } from "@/lib/http"
+import { clearAuth, setAccessToken } from "@/lib/auth-storage"
+import { fakeAccessToken } from "@/test/handlers/auth"
 
 const errorMock = toast.error as ReturnType<typeof vi.fn>
 
@@ -98,5 +101,124 @@ describe("createQueryClient", () => {
       .execute(undefined)
       .catch(() => {})
     expect(errorMock).not.toHaveBeenCalled()
+  })
+})
+
+// A mutation still running when the signed-in user changes must not write the
+// previous user's result into the next user's session (#2878).
+describe("a mutation that outlives the signed-in user", () => {
+  beforeEach(() => {
+    clearAuth()
+    setAccessToken(fakeAccessToken("user-a"))
+  })
+
+  afterEach(() => {
+    clearAuth()
+  })
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (error: unknown) => void
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    return { promise, resolve, reject }
+  }
+
+  // Starts a mutation the way useMutation does, with callbacks at both levels,
+  // and reports which of them ran and whether the mutate() promise settled.
+  function startMutation(client: QueryClient, meta?: Record<string, unknown>) {
+    const response = deferred<string>()
+    const ran: string[] = []
+    const observer = new MutationObserver<string, unknown, void>(client, {
+      mutationFn: () => response.promise,
+      meta,
+      onSuccess: () => void ran.push("hook onSuccess"),
+      onError: () => void ran.push("hook onError"),
+      onSettled: () => void ran.push("hook onSettled"),
+    })
+    const unsubscribe = observer.subscribe(() => {})
+    observer
+      .mutate(undefined, {
+        onSuccess: () => void ran.push("call onSuccess"),
+        onError: () => void ran.push("call onError"),
+        onSettled: () => void ran.push("call onSettled"),
+      })
+      .then(
+        () => void ran.push("promise resolved"),
+        () => void ran.push("promise rejected")
+      )
+    return { response, ran, unsubscribe }
+  }
+
+  // Lets every callback that is going to run, run.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it("runs none of its callbacks when it succeeds after a switch to another user", async () => {
+    const { response, ran, unsubscribe } = startMutation(createQueryClient())
+
+    setAccessToken(fakeAccessToken("user-b"))
+    response.resolve("saved for user A")
+    await settle()
+
+    expect(ran).toEqual([])
+    unsubscribe()
+  })
+
+  it("runs none of its callbacks and shows no toast when it fails after a sign-out", async () => {
+    const { response, ran, unsubscribe } = startMutation(createQueryClient())
+
+    clearAuth()
+    response.reject(new HttpError("server", 500, "/x", null))
+    await settle()
+
+    expect(ran).toEqual([])
+    expect(errorMock).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it("runs its callbacks when only the same user's token was refreshed", async () => {
+    const { response, ran, unsubscribe } = startMutation(createQueryClient())
+
+    setAccessToken(fakeAccessToken("user-a", "refreshed"))
+    response.resolve("saved for user A")
+    await settle()
+
+    expect(ran).toEqual([
+      "hook onSuccess",
+      "hook onSettled",
+      "call onSuccess",
+      "call onSettled",
+      "promise resolved",
+    ])
+    unsubscribe()
+  })
+
+  it("runs the callbacks of a mutation that changes the signed-in user itself", async () => {
+    const { response, ran, unsubscribe } = startMutation(createQueryClient(), {
+      changesIdentity: true,
+    })
+
+    setAccessToken(fakeAccessToken("user-b"))
+    response.resolve("signed in as user B")
+    await settle()
+
+    expect(ran).toContain("hook onSuccess")
+    expect(ran).toContain("promise resolved")
+    unsubscribe()
+  })
+
+  it("runs the callbacks of a mutation started after the switch", async () => {
+    const client = createQueryClient()
+    setAccessToken(fakeAccessToken("user-b"))
+    const { response, ran, unsubscribe } = startMutation(client)
+
+    response.resolve("saved for user B")
+    await settle()
+
+    expect(ran).toContain("hook onSuccess")
+    expect(ran).toContain("promise resolved")
+    unsubscribe()
   })
 })

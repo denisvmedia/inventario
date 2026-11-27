@@ -98,13 +98,16 @@ items when you save; the dialog says how many items that is before you click
 
 Point at a row and click the bin.
 
-- When no item has a value for the field, confirm and the field is removed.
-- When items have a value, the dialog says how many, Trash included. Tick
-  **Delete the values too** and click **Delete field**: the field and every one
-  of its values are deleted. This cannot be undone.
+- When no item and no [draft](../items/#save-as-draft) has a value for the
+  field, confirm and the field is removed. A field a draft shows empty does not
+  count.
+- When items or drafts have a value, the dialog says how many items, Trash
+  included, and how many drafts. Tick **Delete the values too** and click
+  **Delete field**: the field and every one of its values are deleted, and the
+  drafts lose theirs. This cannot be undone.
 
-If another member gives an item a value for the field while the dialog is
-open, the dialog shows the new count and asks you to confirm again.
+If another member gives an item or a draft a value for the field while the
+dialog is open, the dialog shows the new count and asks you to confirm again.
 
 ## Fill in custom fields on an item
 

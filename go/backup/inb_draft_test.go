@@ -414,7 +414,8 @@ func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 // TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType: a draft's type is mapped
 // onto the group's item types as an item's is (#2802), here by name, because
 // the group replaced the type with one of the same name under another slug.
-// A dry run and a kept draft create no type.
+// A dry run and a kept draft create no type. Deleting the type moves the
+// group's draft to the type picked for it, so a kept draft keeps that one.
 func TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
@@ -426,7 +427,9 @@ func TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType(t *testing.T) {
 	must.Must(drafts.SaveValues(f.ctx, f.draft.ID, f.draft.Revision, values))
 	blobKey, _ := f.runExport(c, signer)
 
-	c.Assert(itemTypes.Delete(f.ctx, boat.ID), qt.IsNil)
+	other := must.Must(itemTypes.GetBySlug(f.ctx, models.CommodityTypeOther))
+	must.Must(itemTypes.DeleteReassigning(f.ctx, boat.ID, other.ID))
+	c.Check(f.draftsByKey(c)["draft-in-backup"].Values["type"], qt.Equals, string(other.Slug))
 	craft := must.Must(itemTypes.Create(f.ctx, models.ItemType{Slug: "watercraft", Name: "boat"}))
 	typesBefore := len(must.Must(itemTypes.List(f.ctx)))
 
@@ -435,7 +438,7 @@ func TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
 	c.Check(must.Must(itemTypes.List(f.ctx)), qt.HasLen, typesBefore)
-	c.Check(f.draftsByKey(c)["draft-in-backup"].Values["type"], qt.Equals, string(boat.Slug))
+	c.Check(f.draftsByKey(c)["draft-in-backup"].Values["type"], qt.Equals, string(other.Slug))
 
 	final, err = restoreInb(c, f.inbFixture, signer, blobKey)
 	c.Assert(err, qt.IsNil)

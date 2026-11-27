@@ -24,7 +24,7 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
 
 function renderPanel(
   linkedEntityType: "commodity" | "location" = "commodity",
-  options: { onAttachClick?: () => void } = {}
+  options: { onAttachClick?: () => void; canEdit?: boolean } = {}
 ) {
   setAccessToken("good-token")
   return renderWithProviders({
@@ -39,6 +39,7 @@ function renderPanel(
                 linkedEntityType={linkedEntityType}
                 linkedEntityId={COMMODITY}
                 onAttachClick={options.onAttachClick}
+                canEdit={options.canEdit ?? true}
               />
             </ConfirmProvider>
           </GroupProvider>
@@ -170,6 +171,29 @@ describe("<EntityFilesPanel />", () => {
     // navigation to /files/:id).
     expect(await screen.findByTestId("file-detail-sheet")).toBeInTheDocument()
     expect(screen.queryByTestId("file-image-viewer")).not.toBeInTheDocument()
+  })
+
+  it("offers no Edit or Delete in the file sheet to a role that cannot change files (#2886)", async () => {
+    const user = userEvent.setup()
+    const manual = {
+      title: "Manual",
+      path: "manual",
+      ext: ".pdf",
+      mime_type: "application/pdf",
+      category: "documents" as const,
+      type: "document",
+      links: [{ entity_type: "location", entity_id: COMMODITY }],
+    }
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [{ id: "f-doc", attributes: manual }]),
+      ...fileHandlers.detail(SLUG, "f-doc", { id: "f-doc", ...manual })
+    )
+    renderPanel("location", { canEdit: false })
+    await user.click(await screen.findByTestId("file-card-open-f-doc"))
+    expect(await screen.findByTestId("file-detail-filename")).toHaveTextContent("manual.pdf")
+    expect(screen.queryByTestId("file-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("file-detail-delete")).not.toBeInTheDocument()
   })
 
   it("pages past the first 24 files", async () => {

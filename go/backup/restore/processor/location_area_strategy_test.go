@@ -107,8 +107,9 @@ func TestUpdateLocationAndAreaDryRunWriteNothing(t *testing.T) {
 func TestUpdateLocationRecordsAFailedStep(t *testing.T) {
 	c := qt.New(t)
 
-	p, ctx, _ := restoreFixture(c)
+	p, ctx, area := restoreFixture(c)
 	p.restoreOperationID = "restore-op-1"
+	p.stepOwner = models.TenantGroupAwareEntityID{TenantID: area.TenantID, GroupID: area.GroupID, CreatedByUserID: area.CreatedByUserID}
 
 	stats, existing, _ := newStrategyFixture()
 

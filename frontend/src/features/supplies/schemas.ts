@@ -5,20 +5,21 @@ import { z } from "zod"
 // (1..200), url required (absolute http(s), 1..2048), notes optional
 // (0..1000). Keeping the regex narrow so an obvious typo
 // ("amazon.com" with no scheme) is caught client-side before the
-// user finds out via a 422.
+// user finds out via a 422. The messages are i18n keys, which FieldError
+// resolves.
 export const supplyLinkFormSchema = z.object({
   label: z
     .string()
     .trim()
-    .min(1, "Label is required")
-    .max(200, "Keep the label under 200 characters"),
+    .min(1, "supplies:validation.labelRequired")
+    .max(200, "supplies:validation.labelTooLong"),
   url: z
     .string()
     .trim()
-    .min(1, "URL is required")
-    .max(2048, "Keep the URL under 2048 characters")
-    .regex(/^https?:\/\/.+/i, "Use a full URL starting with http:// or https://"),
-  notes: z.string().max(1000, "Keep notes under 1000 characters").optional().default(""),
+    .min(1, "supplies:validation.urlRequired")
+    .max(2048, "supplies:validation.urlTooLong")
+    .regex(/^https?:\/\/.+/i, "supplies:validation.urlScheme"),
+  notes: z.string().max(1000, "supplies:validation.notesTooLong").optional().default(""),
 })
 
 export type SupplyLinkFormInput = z.input<typeof supplyLinkFormSchema>

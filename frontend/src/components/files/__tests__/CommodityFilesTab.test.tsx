@@ -26,11 +26,13 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
 interface RenderOptions {
   onAttachClick?: () => void
   queryClient?: QueryClient
+  // A role that cannot change files: no onAttachClick, canEdit false.
+  readOnly?: boolean
 }
 
 function renderTab(opts: RenderOptions = {}) {
   setAccessToken("good-token")
-  const onAttachClick = opts.onAttachClick ?? vi.fn()
+  const onAttachClick = opts.readOnly ? undefined : (opts.onAttachClick ?? vi.fn())
   return renderWithProviders({
     queryClient: opts.queryClient,
     initialPath: `/g/${SLUG}/commodities/${COMMODITY}`,
@@ -40,7 +42,11 @@ function renderTab(opts: RenderOptions = {}) {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommodityFilesTab commodityId={COMMODITY} onAttachClick={onAttachClick} />
+              <CommodityFilesTab
+                commodityId={COMMODITY}
+                onAttachClick={onAttachClick}
+                canEdit={!opts.readOnly}
+              />
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -249,6 +255,21 @@ describe("<CommodityFilesTab />", () => {
     expect(await screen.findByTestId("file-detail-sheet")).toBeInTheDocument()
     expect(screen.queryByTestId("file-image-viewer")).toBeNull()
     expect(screen.queryByTestId("file-preview-dialog-pdf")).toBeNull()
+  })
+
+  it("offers a role that cannot change files no upload, attach or Edit and Delete (#2886)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...seed([{ id: invoiceFixture.id, attributes: invoiceFixture }]),
+      ...fileHandlers.detail(SLUG, invoiceFixture.id, { ...invoiceFixture })
+    )
+    renderTab({ readOnly: true })
+    await user.click(await screen.findByTestId(`file-card-open-${invoiceFixture.id}`))
+    expect(await screen.findByTestId("file-detail-filename")).toHaveTextContent("receipt.pdf")
+    expect(screen.queryByTestId("commodity-files-upload-zone")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-files-attach-existing")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("file-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("file-detail-delete")).not.toBeInTheDocument()
   })
 
   it("surfaces an error alert when the list endpoint 500s", async () => {

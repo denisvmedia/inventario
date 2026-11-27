@@ -19,6 +19,8 @@ interface IconPickerProps {
   // selection deterministically.
   testIdPrefix?: string
   disabled?: boolean
+  // Points the grid at the form's FieldError.
+  describedBy?: string
 }
 
 // NOTE — there are two intentional icon pickers (see
@@ -53,11 +55,18 @@ export function IconPicker({
   label,
   testIdPrefix = "icon-picker",
   disabled = false,
+  describedBy,
 }: IconPickerProps) {
   return (
     <div className="flex flex-col gap-2">
       <Label data-testid={`${testIdPrefix}-label`}>{label}</Label>
-      <div className="flex flex-wrap gap-1.5" aria-label={label} data-testid={testIdPrefix}>
+      <div
+        role="group"
+        className="flex flex-wrap gap-1.5"
+        aria-label={label}
+        aria-describedby={describedBy}
+        data-testid={testIdPrefix}
+      >
         {icons.map((ic, idx) => {
           const selected = ic === value
           return (

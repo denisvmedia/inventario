@@ -33,9 +33,38 @@ type TrashEnv struct {
 // between the two reads the Trash sweeps of services.TrashService use:
 // ListTrashedBefore returns the files deleted on their own, and
 // ListStrandedTrashed the files that went to Trash with an item that is no
-// longer in Trash. newEnv is called once per subtest and must return an empty
-// group.
+// longer in Trash. It also checks that a file in Trash takes new links only
+// through AddLinkIncludingTrashed. newEnv is called once per subtest and must
+// return an empty group.
 func RunTrashContract(t *testing.T, newEnv func(t *testing.T) TrashEnv) {
+	t.Run("a file in Trash takes no new link", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		ctx := env.Ctx
+		item := trashContractItem(c, env, "Drill")
+		file := trashContractFile(c, env, "drill-manual.pdf")
+
+		// An attach reads the file while it is live, and the file goes to
+		// Trash before the link is written.
+		_, err := env.Files.Get(ctx, file.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(env.Files.Trash(ctx, file.ID, "registrytest", "", time.Now()), qt.IsNil)
+
+		link := models.FileLink{FileID: file.ID, EntityType: models.FileLinkCommodity, EntityID: item.ID, Meta: models.FileLinkMetaDocuments}
+		_, _, err = env.Files.AddLink(ctx, link)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		trashed, err := env.Files.GetTrashed(ctx, file.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed.Links, qt.HasLen, 0)
+
+		_, created, err := env.Files.AddLinkIncludingTrashed(ctx, link)
+		c.Assert(err, qt.IsNil)
+		c.Assert(created, qt.IsTrue)
+		trashed, err = env.Files.GetTrashed(ctx, file.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed.LinkTo(models.FileLinkCommodity, item.ID), qt.IsNotNil)
+	})
+
 	t.Run("stranded files", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)

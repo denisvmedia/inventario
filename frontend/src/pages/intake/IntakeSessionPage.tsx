@@ -28,7 +28,7 @@ import type { CustomField } from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
 import { customFieldGuessText, customFieldGuessUsable } from "@/features/customFields/values"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import {
   candidatePrice,
   candidateText,
@@ -72,10 +72,8 @@ export function IntakeSessionPage() {
   const { id = "" } = useParams<{ id: string }>()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  const role = useMyGroupRole()
   const migrationLock = useGroupMigrationLock()
-  const canWrite =
-    (role === "user" || role === "admin" || role === "owner") && !migrationLock.locked
+  const canWrite = useGroupPermissions().canEditContent && !migrationLock.locked
   const session = useIntakeSession(id)
   const itemsPath = `/g/${encodeURIComponent(slug)}/commodities`
 

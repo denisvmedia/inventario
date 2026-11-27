@@ -9,6 +9,7 @@ import { LocationsListPage } from "@/pages/locations/LocationsListPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -16,6 +17,7 @@ import {
   commodityHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
 } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -59,6 +61,7 @@ function UrlControls() {
 function renderList(initialPath = `/g/${SLUG}/locations`) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -66,7 +69,9 @@ function renderList(initialPath = `/g/${SLUG}/locations`) {
         element={
           <ConfirmProvider>
             <GroupProvider>
-              <LocationsListPage />
+              <WhenRoleKnown>
+                <LocationsListPage />
+              </WhenRoleKnown>
               <UrlControls />
             </GroupProvider>
           </ConfirmProvider>
@@ -75,6 +80,13 @@ function renderList(initialPath = `/g/${SLUG}/locations`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 beforeEach(() => {
   clearAuth()
@@ -338,6 +350,7 @@ describe("<LocationsListPage />", () => {
     )
     setAccessToken("good-token")
     renderWithProviders({
+      withAuth: true,
       initialPath: `/g/${SLUG}/locations/new`,
       routes: (
         <>
@@ -449,5 +462,69 @@ describe("<LocationsListPage />", () => {
     const { container } = renderList()
     await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<LocationsListPage /> by role (#2886)", () => {
+  // The server takes location and area writes from admins and owners only.
+  function seedOne() {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+  }
+
+  it.each(["viewer", "user"] as const)(
+    "offers a %s no add location, add area or delete",
+    async (role) => {
+      server.use(...memberHandlers.asRole("g1", role))
+      seedOne()
+      renderList()
+      const card = await screen.findByTestId("location-card")
+      expect(within(card).getByText("Main House")).toBeVisible()
+      expect(screen.queryByTestId("locations-add-button")).not.toBeInTheDocument()
+      expect(within(card).queryByTestId("location-card-menu")).not.toBeInTheDocument()
+    }
+  )
+
+  it("offers a viewer no create button on the empty page", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, []),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList()
+    expect(await screen.findByTestId("locations-empty")).toBeInTheDocument()
+    expect(screen.queryByTestId("locations-empty-cta")).not.toBeInTheDocument()
+  })
+
+  it("opens no create dialog for a user who follows a /locations/new link", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedOne()
+    setAccessToken("good-token")
+    renderWithProviders({
+      withAuth: true,
+      initialPath: `/g/${SLUG}/locations/new`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/locations/new"
+          element={
+            <ConfirmProvider>
+              <GroupProvider>
+                <WhenRoleKnown>
+                  <LocationsListPage initialMode="create" />
+                </WhenRoleKnown>
+              </GroupProvider>
+            </ConfirmProvider>
+          }
+        />
+      ),
+    })
+    expect(await screen.findByTestId("location-card")).toBeInTheDocument()
+    expect(screen.queryByTestId("location-form-dialog")).not.toBeInTheDocument()
   })
 })

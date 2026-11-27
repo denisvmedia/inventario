@@ -150,24 +150,33 @@ func (r *PersonalDataExportRegistry) ClaimPending(_ context.Context, id string, 
 	}
 	e.Status = models.PersonalDataExportStatusInProgress
 	e.StartedAt = new(startedAt)
+	e.AttemptCount++
 	r.exports[id] = e
 	return true, nil
 }
 
-func (r *PersonalDataExportRegistry) RequeueStalled(_ context.Context, startedBefore time.Time) (int, error) {
+func (r *PersonalDataExportRegistry) RecoverStalled(_ context.Context, sweep registry.PersonalDataExportStalledSweep) (requeued, failed int, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	moved := 0
 	for id, e := range r.exports {
-		if e.Status != models.PersonalDataExportStatusInProgress || e.StartedAt == nil || !e.StartedAt.Before(startedBefore) {
+		if e.Status != models.PersonalDataExportStatusInProgress || e.StartedAt == nil || !e.StartedAt.Before(sweep.StartedBefore) {
 			continue
 		}
-		e.Status = models.PersonalDataExportStatusPending
-		e.StartedAt = nil
+		if e.AttemptCount >= sweep.MaxBuilds {
+			e.Status = models.PersonalDataExportStatusFailed
+			e.ErrorMessage = sweep.ErrorMessage
+			e.CompletedAt = new(sweep.Now)
+			e.BlobKey = ""
+			e.SizeBytes = 0
+			failed++
+		} else {
+			e.Status = models.PersonalDataExportStatusPending
+			e.StartedAt = nil
+			requeued++
+		}
 		r.exports[id] = e
-		moved++
 	}
-	return moved, nil
+	return requeued, failed, nil
 }
 
 func (r *PersonalDataExportRegistry) Update(_ context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error) {

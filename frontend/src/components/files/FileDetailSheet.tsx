@@ -47,6 +47,10 @@ export interface FileDetailSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit: (id: string) => void
+  // May the caller change and delete files (features/group/roles.ts)?
+  // Edit, Delete and removing an attachment are shown only when true;
+  // Open and Download always.
+  canEdit: boolean
   // Optional sibling list for the fullscreen image viewer's gallery
   // navigation. The list page populates this with the image rows in
   // the current filter view; deep-linked detail (where there's no
@@ -61,6 +65,7 @@ export function FileDetailSheet({
   open,
   onOpenChange,
   onEdit,
+  canEdit,
   imageSiblings,
   onSelectSibling,
 }: FileDetailSheetProps) {
@@ -187,7 +192,7 @@ export function FileDetailSheet({
 
                   <dt className="text-muted-foreground">{t("files:detail.linkedEntity")}</dt>
                   <dd className="min-w-0">
-                    <FileLinksList file={file} />
+                    <FileLinksList file={file} canEdit={canEdit} />
                   </dd>
 
                   {file.created_at ? (
@@ -260,7 +265,7 @@ export function FileDetailSheet({
                 </Button>
               </>
             ) : null}
-            {file ? (
+            {file && canEdit ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -271,7 +276,7 @@ export function FileDetailSheet({
                 {t("files:detail.edit")}
               </Button>
             ) : null}
-            {file ? (
+            {file && canEdit ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -308,7 +313,7 @@ export function FileDetailSheet({
         // just a bare fullscreen host.
         <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
           <DialogContent
-            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+            className="flex h-screen max-h-none w-screen max-w-none flex-col gap-0 overflow-visible rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
             data-testid="file-detail-pdf-fullscreen"
           >
             <DialogHeader className="sr-only">

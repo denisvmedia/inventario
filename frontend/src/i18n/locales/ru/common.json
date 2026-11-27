@@ -11,6 +11,10 @@
     "save": "Сохранить"
   },
   "brand": "Inventario",
+  "chipInput": {
+    "add": "Добавить {{value}}",
+    "remove": "Убрать {{value}}"
+  },
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Что-то пошло не так"
@@ -22,7 +26,8 @@
       "restore": "Восстановление",
       "thumbnail": "Миниатюра",
       "intake": "Распознавание документа",
-      "currencyMigration": "Смена валюты"
+      "currencyMigration": "Смена валюты",
+      "personalDataExport": "Выгрузка личных данных"
     }
   },
   "listError": {
