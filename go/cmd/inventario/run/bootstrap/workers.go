@@ -605,6 +605,7 @@ func StartCurrencyMigrationWorker(ctx context.Context, rs *RuntimeSetup, cfg *Co
 	adapter := &currencyMigrationProcessorAdapter{inner: processor}
 	opts := []services.CurrencyMigrationWorkerOption{
 		services.WithCurrencyMigrationActiveInterval(rs.WorkerDurations.CurrencyMigrationInterval),
+		services.WithCurrencyMigrationRetention(rs.WorkerDurations.CurrencyMigrationRetention),
 	}
 	if rs.PauseController != nil {
 		opts = append(opts, services.WithCurrencyMigrationPauseController(rs.PauseController))

@@ -609,8 +609,48 @@ type ExportRegistry interface {
 	// ClaimPending moves an export from pending to in_progress and reports
 	// whether this caller is the one that moved it. The condition lives in
 	// the write, so two workers racing for the same row get one true and one
-	// false instead of both producing an artifact (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// false instead of both producing an artifact (#2472). The claim counts a
+	// run in AttemptCount and records at as the run's first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of the run of an
+	// in_progress export. An export in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// RecoverStalled handles the exports (jobType models.WorkerTypeExport)
+	// or the imports (models.WorkerTypeImport) whose run the sweep takes
+	// for dead. One that has run sweep.MaxRuns times fails with
+	// sweep.ErrorMessage at sweep.Now; the others go back to pending, for
+	// the next claim to run them again. Exports in the trash are left alone.
+	// It works across tenants and is meant for the service registry.
+	RecoverStalled(ctx context.Context, jobType models.WorkerType, sweep StalledJobSweep) (StalledJobs, error)
+}
+
+// StalledJobSweep says which runs of exports, imports and restores a sweep
+// takes for dead, and what it records on the jobs it fails.
+type StalledJobSweep struct {
+	// HeartbeatBefore: a run whose latest heartbeat is older than this is
+	// dead.
+	HeartbeatBefore time.Time
+	// CreatedBefore: a run with no heartbeat at all, claimed by a version
+	// that recorded none, is dead when its job was created before this.
+	CreatedBefore time.Time
+	// Now is when a job the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxRuns is how many runs an export or an import gets before a dead
+	// run fails it instead of queuing it again. A restore is never queued
+	// again, so it ignores this.
+	MaxRuns int
+	// ErrorMessage is stored on each job the sweep fails.
+	ErrorMessage string
+}
+
+// StalledJobs is what one sweep for dead runs changed.
+type StalledJobs struct {
+	// Requeued counts the jobs that went back to pending.
+	Requeued int
+	// Failed counts the jobs that failed for good.
+	Failed int
 }
 
 // FileRegistry stores files and their links.
@@ -2154,8 +2194,20 @@ type RestoreOperationRegistry interface {
 	// ClaimPending moves an operation from pending to running and reports
 	// whether this caller is the one that moved it. Two workers racing for
 	// the same row get one true and one false, rather than both replaying a
-	// restore over live data (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// restore over live data (#2472). The claim records at as the run's
+	// first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of a running
+	// operation. An operation in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// FailStalled fails, with sweep.ErrorMessage at sweep.Now, the running
+	// operations whose run the sweep takes for dead, and returns how many
+	// it failed. A restore is never queued again: it may have written part
+	// of its backup. It works across tenants and is meant for the service
+	// registry.
+	FailStalled(ctx context.Context, sweep StalledJobSweep) (int, error)
 }
 
 // PreviewTokenInputs is the deterministic, replay-resistant payload
@@ -2234,6 +2286,16 @@ type CurrencyMigrationRegistry interface {
 	// background worker calls this every tick AND on startup. Returns
 	// the rows it transitioned.
 	SweepStuckRunning(ctx context.Context, now time.Time, threshold time.Duration) ([]*models.CurrencyMigration, error)
+
+	// DeleteFinishedBefore deletes at most limit completed and failed
+	// migrations, discarded or not, that finished before the cutoff,
+	// together with their audit rows, and returns how many it deleted.
+	// A migration that has no completion time counts from its creation.
+	// A pending or running migration is never deleted, and neither is
+	// one a group still references through
+	// location_groups.currency_migration_id. A limit of zero or less
+	// deletes every match. Service registry only.
+	DeleteFinishedBefore(ctx context.Context, before time.Time, limit int) (int, error)
 
 	// IssuePreviewToken signs `inputs` with the registry's HMAC key and
 	// returns the encoded token. The token is stateless — IssuePreviewToken
@@ -2747,6 +2809,48 @@ type LocationGroupRegistry interface {
 	// returns the group with applied=false. A missing group gives
 	// ErrNotFound.
 	SetHiddenSections(ctx context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// UpdateDetails writes the name, icon and description of an active
+	// group, its hidden sections when details carries them, and updated_at.
+	// No other column is written, so a deletion, a currency migration or a
+	// settings change that commits meanwhile is kept. The name is required.
+	// It returns the stored group and applied=true. A group that is not
+	// active is left as it is: the call returns the group with
+	// applied=false. A missing group gives ErrNotFound.
+	//
+	// The generic Update writes every column from the value it is given;
+	// the API's write paths use UpdateDetails, SetHiddenSections,
+	// MarkPendingDeletion and SetCurrencyMigrationID instead.
+	UpdateDetails(ctx context.Context, groupID string, details GroupDetails, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// MarkPendingDeletion moves an active group to pending_deletion and sets
+	// updated_at, writing those two columns only; the group purge worker
+	// deletes the group later. It returns the stored group and
+	// applied=true. A group that is not active is left as it is: the call
+	// returns the group with applied=false. A missing group gives
+	// ErrNotFound. MarkPendingDeletionAdmin is the cross-tenant form the
+	// back office uses.
+	MarkPendingDeletion(ctx context.Context, groupID string, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// SetCurrencyMigrationID records the currency migration that holds the
+	// group's item write lock, writing currency_migration_id only. It writes
+	// nothing and returns applied=false when the group is not active, or
+	// when the migration is no longer pending or running: the worker that
+	// finished it has already cleared the id, and writing the id back would
+	// show the group as migrating until another migration replaced it. The
+	// memory backend runs no migrations, so it checks the group alone. A
+	// missing group gives ErrNotFound.
+	SetCurrencyMigrationID(ctx context.Context, groupID, migrationID string) (applied bool, err error)
+}
+
+// GroupDetails is what LocationGroupRegistry.UpdateDetails writes: the name,
+// icon and description, which are always written, and the hidden sections,
+// which are written only when HiddenSections is not nil.
+type GroupDetails struct {
+	Name           string
+	Icon           string
+	Description    string
+	HiddenSections *models.GroupSections
 }
 
 // AdminGroupSortField names the columns the admin group listing endpoint
@@ -3579,18 +3683,19 @@ type FailedJobRegistry interface {
 	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
 }
 
-// UserPurger hard-deletes a single user's auth / identity rows (and orphans the
-// nullable authorship back-refs) before the users row itself is dropped by the
-// orchestration layer (#2116). It exists because a bare DELETE FROM users is
-// rejected by the many NO ACTION child FKs pointing at users(id). This includes
-// the user's group_invites_audit references (created_by / used_by), which are
-// NOT NULL FKs that nothing else clears (#2147).
+// UserPurger clears what references a single user before the users row itself
+// is dropped by the orchestration layer (#2116). A bare DELETE FROM users is
+// rejected by the many NO ACTION child FKs pointing at users(id), so the purge
+// deletes the user's auth / identity and personal rows (memberships, invites,
+// reminders, drafts, saved views, ...) and hands the group rows the user
+// created (item history, loans, service records, maintenance, item types, ...)
+// to another member of their group.
 //
-// PRECONDITION: the user must no longer OWN shared content
-// (commodities/files/areas/locations/exports/groups/tags/…). Those rows carry
-// NOT NULL user_id + NOT NULL created_by columns that cannot be orphaned, so
-// this purger deliberately does not touch them; the final DELETE FROM users
-// will fail loudly with an FK violation if any remain. The users row itself is
+// PRECONDITION: the user must no longer OWN shared content (items, files,
+// places, exports, groups, tags, sellers). Those rows carry a NOT NULL
+// created_by column and are the user's own, so this purger deliberately does
+// not touch them; the final DELETE FROM users will fail loudly with an FK
+// violation if any remain. The users row itself is
 // NOT touched here — the caller (services.admin DeleteUser) drops it after the
 // dependents are gone.
 type UserPurger interface {
@@ -3608,10 +3713,11 @@ type UserPurger interface {
 // of being discovered at the final DELETE FROM users (which would leave a
 // half-erased account).
 //
-// "Owned content" means any row that carries a NOT NULL FK to users(id) which
-// cannot be orphaned without a schema change:
+// "Owned content" means a row that carries a NOT NULL FK to users(id) and that
+// UserPurger neither deletes nor hands over:
 //   - content authored by the user (created_by_user_id) in a group that is NOT
-//     being purged (commodities/files/areas/locations/exports/tags), and
+//     being purged (items, files, file links, places, exports, tags, sellers),
+//     and
 //   - location_groups the user created (created_by) that are NOT being purged.
 //
 // purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale

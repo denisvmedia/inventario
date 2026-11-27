@@ -1,10 +1,13 @@
-import { describe, expect, it, beforeEach } from "vitest"
+import "fake-indexeddb/auto"
+import { Blob as NodeBlob, File as NodeFile } from "node:buffer"
+import { describe, expect, it, beforeEach, onTestFinished, vi } from "vitest"
 import { http, HttpResponse } from "msw"
 
 import { server } from "@/test/server"
 import { apiUrl } from "@/test/handlers"
 import { login, logout } from "@/features/auth/api"
 import { clearAuth, getAccessToken, getCsrfToken } from "@/lib/auth-storage"
+import { loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 
@@ -85,5 +88,39 @@ describe("logout", () => {
     )
     await expect(logout()).rejects.toBeDefined()
     expect(getAccessToken()).toBeNull()
+  })
+
+  // #2920: what the item form kept for a signed-in user must not wait in the
+  // browser for the next person. The visitor's form (#1988) waits for the
+  // sign-in that adds its item.
+  it("removes the item form's recovery, and keeps the visitor's", async () => {
+    // jsdom's File does not survive fake-indexeddb; Node's does, as a
+    // browser's does with IndexedDB.
+    vi.stubGlobal("File", NodeFile)
+    vi.stubGlobal("Blob", NodeBlob)
+    onTestFinished(() => {
+      vi.unstubAllGlobals()
+    })
+    server.use(http.post(apiUrl("/auth/logout"), () => new HttpResponse(null, { status: 204 })))
+    const slot = "commodity-draft:u1:household:create"
+    const visitor = "commodity-draft:anon:create"
+    const staged = [{ id: "p1", file: new File(["x"], "receipt.png"), tags: [] }]
+    window.localStorage.setItem(slot, JSON.stringify({ name: "Couch" }))
+    window.localStorage.setItem(`${slot}:base-revision`, "2")
+    window.sessionStorage.setItem(`${slot}:client-key`, "form:1")
+    window.localStorage.setItem(visitor, JSON.stringify({ name: "Lamp" }))
+    window.localStorage.setItem("inventario_theme", "dark")
+    await savePendingFiles(slot, staged)
+    await savePendingFiles(visitor, staged)
+
+    await logout()
+
+    expect(window.localStorage.getItem(slot)).toBeNull()
+    expect(window.localStorage.getItem(`${slot}:base-revision`)).toBeNull()
+    expect(window.sessionStorage.getItem(`${slot}:client-key`)).toBeNull()
+    expect(await loadPendingFiles(slot)).toEqual([])
+    expect(window.localStorage.getItem(visitor)).not.toBeNull()
+    expect(await loadPendingFiles(visitor)).toHaveLength(1)
+    expect(window.localStorage.getItem("inventario_theme")).toBe("dark")
   })
 })
