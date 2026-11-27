@@ -3,16 +3,21 @@ title: API reference
 description: The HTTP API behind the app, browsable and versioned alongside these docs.
 ---
 
+{/* The viewer is a static file in public/api/reference/, outside the locale
+    tree, so the links are built from the site base: a relative link would
+    point under /cs/ or /ru/ on the translated fallbacks of this page. */}
+export const reference = `${import.meta.env.BASE_URL}api/reference/`
+
 Everything the Inventario web app does, it does through an HTTP API, and that
 API is documented here:
 
-<a href="../api/" class="not-content" style="display:inline-block;padding:0.6rem 1rem;border-radius:0.5rem;background:var(--sl-color-accent);color:var(--sl-color-black);font-weight:600;text-decoration:none">Open the API reference</a>
+<a href={reference} class="not-content" style="display:inline-block;padding:0.6rem 1rem;border-radius:0.5rem;background:var(--sl-color-accent);color:var(--sl-color-black);font-weight:600;text-decoration:none">Open the API reference</a>
 
 The reference is generated from the same OpenAPI specification the server
 ships, so it describes the version of these docs you are reading — not
 whatever is on the main branch. The raw spec is at
-[`swagger.yaml`](../api/swagger.yaml) if you want to feed it to a client
-generator or an HTTP client.
+<a href={`${reference}swagger.yaml`}><code>swagger.yaml</code></a> if you want
+to feed it to a client generator or an HTTP client.
 
 ## Before you build against it
 

@@ -631,6 +631,29 @@ describe("<CommodityDetailPage />", () => {
     )
   })
 
+  it("shows the server's reason when the delete is refused", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      http.delete(apiUrl(`/g/${SLUG}/commodities/${ID}`), () =>
+        HttpResponse.json(
+          { errors: [{ status: "Conflict", detail: "the item is lent out" }] },
+          { status: 409 }
+        )
+      )
+    )
+    renderDetail()
+    await user.click(await screen.findByTestId("commodity-detail-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalledWith("the item is lent out"))
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("commodity-detail-delete")).toBeInTheDocument()
+  })
+
   it("renders the audit timeline with kind-aware copy (#1450)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

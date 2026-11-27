@@ -171,6 +171,7 @@ import {
   type ListContext,
 } from "@/lib/list-context"
 import { parseServerError } from "@/lib/server-error"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { cn } from "@/lib/utils"
 
 type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies" | "maintenance"
@@ -669,7 +670,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       setQuickEditOn((open) => (open?.id === savedOn && open.field === field ? null : open))
       return true
     } catch (err) {
-      toast.error(parseServerError(err, t("commodities:quickEdit.error")))
+      toastMutationError(err, t("commodities:quickEdit.error"))
       return false
     }
   }
@@ -688,8 +689,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       await remove.mutateAsync(deleting)
       toast.success(t("commodities:toast.deleted"), { action: undoDelete([deleting]) })
       navigate(listHref)
-    } catch {
-      toast.error(t("commodities:toast.deleteError"))
+    } catch (err) {
+      toastMutationError(err, t("commodities:toast.deleteError"))
     }
   }
 
@@ -727,8 +728,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         },
       })
       toast.success(t("commodities:toast.statusUpdated"))
-    } catch {
-      toast.error(t("commodities:toast.statusUpdateError"))
+    } catch (err) {
+      toastMutationError(err, t("commodities:toast.statusUpdateError"))
     }
   }
 
@@ -755,7 +756,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       toast.success(t("commodities:toast.statusUpdated"))
       setTransitionOn(null)
     } catch (err) {
-      toast.error(t("commodities:toast.statusUpdateError"))
+      toastMutationError(err, t("commodities:toast.statusUpdateError"))
       // Re-throw so the dialog can map field-level 422 errors onto its
       // inputs (it stays open). The toast above is the summary.
       throw err
