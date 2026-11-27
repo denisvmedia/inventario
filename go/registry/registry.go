@@ -3516,6 +3516,9 @@ type FailedJobScope struct {
 	TenantID string
 	// GroupID limits the query to one group when set. It requires TenantID.
 	GroupID string
+	// FailedBefore, when set, limits the query to the jobs that failed
+	// before it. A job without a failure time counts from its creation.
+	FailedBefore time.Time
 }
 
 // FailedJobRegistry reads and acts on the jobs that failed for good, over
@@ -3549,6 +3552,12 @@ type FailedJobRegistry interface {
 	// Discard marks a failed job discarded at now. ErrNotFound when the
 	// type has no failed, undiscarded job with the id in the scope.
 	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// DiscardFailed marks every failed, undiscarded job of the type in the
+	// scope discarded at now and returns how many it marked. The scope
+	// must set FailedBefore (ErrFieldRequired otherwise), so a bulk discard
+	// always names the jobs it acts on by their failure time.
+	DiscardFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, now time.Time) (int, error)
 }
 
 // UserPurger hard-deletes a single user's auth / identity rows (and orphans the

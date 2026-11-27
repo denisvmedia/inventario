@@ -213,6 +213,78 @@ describe("AdminFailedJobsPage", () => {
     expect(within(rows[1]).queryByTestId("admin-failed-job-discard")).not.toBeInTheDocument()
   })
 
+  it("discards the jobs of the filters that failed before a day, after a dry-run count", async () => {
+    const user = userEvent.setup()
+    const backend = seed()
+    renderPage("/admin/failed-jobs?tenantID=t1")
+
+    await waitFor(() => expect(screen.getAllByTestId("admin-failed-job-row")).toHaveLength(1))
+    await user.click(screen.getByTestId("admin-failed-jobs-bulk-open"))
+    const dialog = await screen.findByTestId("admin-failed-jobs-bulk-dialog")
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-scope")).toHaveTextContent(
+      "Acme Inc"
+    )
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()
+    expect(backend.state.requests.some((r) => r.method === "POST")).toBe(false)
+
+    await user.type(within(dialog).getByLabelText("Failed before"), "2026-11-21")
+
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("admin-failed-jobs-bulk-count")).toHaveTextContent(
+        "1 failed job will be discarded."
+      )
+    )
+    const dryRun = backend.state.requests.find((r) => r.method === "POST")
+    expect(dryRun?.url.pathname).toBe("/api/v1/admin/failed-jobs/bulk-discard")
+    expect(dryRun?.url.searchParams.get("failed_before")).toBe("2026-11-21")
+    expect(dryRun?.url.searchParams.get("tenantID")).toBe("t1")
+    expect(dryRun?.url.searchParams.get("dry_run")).toBe("true")
+
+    await user.click(within(dialog).getByRole("button", { name: "Discard 1 job" }))
+
+    await waitFor(() => expect(screen.getByTestId("admin-failed-jobs-empty")).toBeInTheDocument())
+    const discards = backend.state.requests.filter(
+      (r) => r.method === "POST" && r.url.searchParams.get("dry_run") === null
+    )
+    expect(discards).toHaveLength(1)
+    expect(discards[0].url.searchParams.get("tenantID")).toBe("t1")
+    expect(backend.state.jobs.map((job) => job.id)).toEqual(["r1"])
+    expect(toastSpies.success).toHaveBeenCalledWith("1 failed job is discarded.", undefined)
+    expect(screen.queryByTestId("admin-failed-jobs-bulk-dialog")).not.toBeInTheDocument()
+  })
+
+  it("keeps the bulk discard closed to a day nothing failed before", async () => {
+    const user = userEvent.setup()
+    seed()
+    renderPage()
+
+    await screen.findAllByTestId("admin-failed-job-row")
+    await user.click(screen.getByTestId("admin-failed-jobs-bulk-open"))
+    const dialog = await screen.findByTestId("admin-failed-jobs-bulk-dialog")
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-scope")).toHaveTextContent(
+      "All job types"
+    )
+    await user.type(within(dialog).getByLabelText("Failed before"), "2026-11-01")
+
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("admin-failed-jobs-bulk-count")).toHaveTextContent(
+        "No failed job of these filters failed before this day."
+      )
+    )
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()
+  })
+
+  it("does not offer the bulk discard to a support agent", async () => {
+    server.use(...backofficeAuthHandlers.signedIn({ user: { role: "support_agent" } }))
+    seed()
+    renderPage()
+
+    await screen.findAllByTestId("admin-failed-job-row")
+    await waitFor(() =>
+      expect(screen.queryByTestId("admin-failed-jobs-bulk-open")).not.toBeInTheDocument()
+    )
+  })
+
   it("shows the empty state", async () => {
     seed([])
     renderPage()

@@ -11,6 +11,7 @@ import (
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/cmd/inventario/jobs"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/memory"
@@ -174,6 +175,78 @@ func TestDiscard(t *testing.T) {
 	out, err = run(c, testDSN, "failed", "list", "--type", "restore")
 	c.Assert(err, qt.IsNil)
 	c.Assert(out, qt.Contains, "No failed jobs.")
+}
+
+// The fixture's jobs failed on 2026-11-20, the export at 10:00 and the
+// restore a minute before.
+func TestDiscardBefore(t *testing.T) {
+	c := qt.New(t)
+	f := newFixture(c)
+
+	out, err := run(c, testDSN, "failed", "discard", "--failed-before", "2026-11-21", "--dry-run")
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, "Would discard 2 failed jobs that failed before 2026-11-21T00:00:00Z: export 1, restore 1. Nothing was discarded.\n")
+	c.Assert(f.auditRows(c, "admin.failed_job_bulk_discard"), qt.HasLen, 0, qt.Commentf("a dry run is not audited"))
+
+	out, err = run(c, testDSN, "failed", "list", "--failed-before", "2026-11-20T10:00:00Z")
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Contains, f.restore)
+	c.Assert(out, qt.Not(qt.Contains), f.export, qt.Commentf("the export failed at 10:00, not before"))
+
+	out, err = run(c, testDSN, "failed", "discard", "--type", "export", "--tenant", "acme", "--failed-before", "2026-11-21")
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, "Discarded 1 failed job that failed before 2026-11-21T00:00:00Z: export 1.\n")
+	export, err := f.set.ExportRegistry.Get(f.ctx, f.export)
+	c.Assert(err, qt.IsNil)
+	c.Assert(export.DiscardedAt, qt.IsNotNil)
+
+	rows := f.auditRows(c, "admin.failed_job_bulk_discard")
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	c.Assert(rows[0].UserID, qt.IsNil, qt.Commentf("the CLI has no actor"))
+	c.Assert(*rows[0].EntityType, qt.Equals, "export")
+	c.Assert(rows[0].TenantID, qt.IsNotNil)
+	c.Assert([]byte(rows[0].UserAgent), checkers.JSONPathEquals("$.discarded"), float64(1))
+	c.Assert([]byte(rows[0].UserAgent), checkers.JSONPathEquals("$.failed_before"), "2026-11-21T00:00:00Z")
+	c.Assert([]byte(rows[0].UserAgent), checkers.JSONPathEquals("$.tenant"), "acme")
+
+	out, err = run(c, testDSN, "failed", "discard", "--failed-before", "2026-11-21")
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, "Discarded 1 failed job that failed before 2026-11-21T00:00:00Z: restore 1.\n")
+	out, err = run(c, testDSN, "failed", "discard", "--failed-before", "2026-11-21")
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, "No failed jobs failed before 2026-11-21T00:00:00Z.\n")
+	c.Assert(f.auditRows(c, "admin.failed_job_bulk_discard"), qt.HasLen, 3)
+}
+
+func TestDiscardBefore_RefusesABadFilter(t *testing.T) {
+	c := qt.New(t)
+	f := newFixture(c)
+
+	_, err := run(c, testDSN, "failed", "discard")
+	c.Assert(err, qt.ErrorMatches, "give a job id, or --failed-before .*")
+	_, err = run(c, testDSN, "failed", "discard", "--failed-before", "yesterday")
+	c.Assert(err, qt.ErrorMatches, `invalid --failed-before "yesterday".*`)
+	_, err = run(c, testDSN, "failed", "discard", "--type", "restore", "--dry-run", f.restore)
+	c.Assert(err, qt.ErrorMatches, "--failed-before, --tenant and --dry-run discard in bulk.*")
+	c.Assert(f.auditRows(c, "admin.failed_job_bulk_discard"), qt.HasLen, 0, qt.Commentf("refused before the service runs"))
+
+	_, err = run(c, testDSN, "failed", "discard", "--failed-before", time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput)
+	_, err = run(c, testDSN, "failed", "discard", "--type", "nope", "--failed-before", "2026-11-21")
+	c.Assert(err, qt.ErrorMatches, `unknown job type "nope".*`)
+	_, err = run(c, testDSN, "failed", "discard", "--tenant", "nobody", "--failed-before", "2026-11-21")
+	c.Assert(err, qt.ErrorMatches, ".*tenant 'nobody' not found.*")
+
+	rows := f.auditRows(c, "admin.failed_job_bulk_discard")
+	c.Assert(rows, qt.HasLen, 3, qt.Commentf("a discard the service refuses is audited"))
+	for _, row := range rows {
+		c.Assert(row.Success, qt.IsFalse)
+	}
+	out, err := run(c, testDSN, "failed", "list")
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Contains, f.export)
+	c.Assert(out, qt.Contains, f.restore)
 }
 
 func TestRefusesMemoryDatabase(t *testing.T) {

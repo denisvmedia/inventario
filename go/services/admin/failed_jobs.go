@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -16,8 +17,9 @@ import (
 // Failed-job audit actions (#1307). The same literals as the admin HTTP
 // plane, so one query finds every retry and discard whichever way it came.
 const (
-	auditActionFailedJobRetry   = "admin.failed_job_retry"
-	auditActionFailedJobDiscard = "admin.failed_job_discard"
+	auditActionFailedJobRetry       = "admin.failed_job_retry"
+	auditActionFailedJobDiscard     = "admin.failed_job_discard"
+	auditActionFailedJobBulkDiscard = "admin.failed_job_bulk_discard"
 )
 
 // FailedJobListRequest selects the failed jobs `inventario jobs failed list`
@@ -29,6 +31,22 @@ type FailedJobListRequest struct {
 	Tenant string
 	// Limit caps the list; zero or less prints every job.
 	Limit int
+	// FailedBefore, when set, lists only the jobs that failed before it,
+	// the jobs a bulk discard with the same filter takes.
+	FailedBefore time.Time
+}
+
+// FailedJobBulkDiscardRequest selects the failed jobs
+// `inventario jobs failed discard --failed-before` discards (#2946).
+type FailedJobBulkDiscardRequest struct {
+	// Type limits the discard to one job type; empty takes every type.
+	Type string
+	// Tenant is a tenant id or slug; empty takes every tenant.
+	Tenant string
+	// FailedBefore is required and must not be in the future.
+	FailedBefore time.Time
+	// DryRun counts the jobs and discards nothing.
+	DryRun bool
 }
 
 func (s *Service) failedJobs() (*services.FailedJobService, error) {
@@ -53,7 +71,7 @@ func (s *Service) ListFailedJobs(ctx context.Context, req FailedJobListRequest) 
 	if err != nil {
 		return services.FailedJobPage{}, err
 	}
-	q := services.FailedJobQuery{Limit: req.Limit}
+	q := services.FailedJobQuery{Limit: req.Limit, Scope: registry.FailedJobScope{FailedBefore: req.FailedBefore}}
 	if strings.TrimSpace(req.Type) != "" {
 		if q.Type, err = parseFailedJobType(req.Type); err != nil {
 			return services.FailedJobPage{}, err
@@ -67,6 +85,80 @@ func (s *Service) ListFailedJobs(ctx context.Context, req FailedJobListRequest) 
 		q.Scope.TenantID = t.ID
 	}
 	return svc.List(ctx, q)
+}
+
+// DiscardFailedJobsBefore marks discarded every failed job the request
+// selects and returns how many it discarded, per type. Unless it is a dry
+// run, it writes one admin.failed_job_bulk_discard audit row that names the
+// filter and the counts, also when the discard is refused.
+func (s *Service) DiscardFailedJobsBefore(ctx context.Context, req FailedJobBulkDiscardRequest) (services.FailedJobCounts, error) {
+	svc, err := s.failedJobs()
+	if err != nil {
+		return services.FailedJobCounts{}, err
+	}
+	rawType := strings.TrimSpace(req.Type)
+	q := services.FailedJobBulkQuery{Scope: registry.FailedJobScope{FailedBefore: req.FailedBefore}}
+	extra := map[string]any{"type": rawType}
+	if !req.FailedBefore.IsZero() {
+		extra["failed_before"] = req.FailedBefore.UTC().Format(time.RFC3339)
+	}
+	audit := func(tenantID string, counts services.FailedJobCounts, opErr error) {
+		if req.DryRun {
+			return
+		}
+		if opErr == nil || counts.Total > 0 {
+			extra["discarded"] = counts.Total
+			extra["by_type"] = counts.ByType
+		}
+		s.logFailedJobBulkDiscard(ctx, tenantID, rawType, extra, opErr)
+	}
+
+	if rawType != "" {
+		if q.Type, err = parseFailedJobType(rawType); err != nil {
+			audit("", services.FailedJobCounts{}, err)
+			return services.FailedJobCounts{}, err
+		}
+	}
+	if tenant := strings.TrimSpace(req.Tenant); tenant != "" {
+		extra["tenant"] = tenant
+		t, err := s.GetTenant(ctx, tenant)
+		if err != nil {
+			err = errxtrace.Wrap("failed to find tenant", err)
+			audit("", services.FailedJobCounts{}, err)
+			return services.FailedJobCounts{}, err
+		}
+		q.Scope.TenantID = t.ID
+	}
+	if req.DryRun {
+		return svc.CountBulk(ctx, q)
+	}
+	counts, err := svc.DiscardBulk(ctx, q)
+	audit(q.Scope.TenantID, counts, err)
+	return counts, err
+}
+
+// logFailedJobBulkDiscard writes the one audit row of a CLI bulk discard,
+// with the filter and the counts in the breadcrumb the admin HTTP plane
+// writes. The actor is nil, as for every CLI action.
+func (s *Service) logFailedJobBulkDiscard(ctx context.Context, tenantID, jobType string, extra map[string]any, opErr error) {
+	if s.factorySet == nil || s.factorySet.AuditLogRegistry == nil {
+		return
+	}
+	ev := services.AdminEvent{
+		Action:  auditActionFailedJobBulkDiscard,
+		Success: opErr == nil,
+		Extra:   extra,
+	}
+	if tenantID != "" {
+		ev.TenantID = new(tenantID)
+	}
+	if jobType != "" {
+		ev.SubjectType = new(jobType)
+	}
+	if opErr != nil {
+		ev.ErrMsg = new(opErr.Error())
+	}
+	services.NewAuditService(s.factorySet.AuditLogRegistry).LogAdmin(ctx, ev)
 }
 
 // RetryFailedJob puts a failed job of any tenant back in its queue and

@@ -78,7 +78,7 @@
         },
         "/admin/failed-jobs": {
             "get": {
-                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; `id` is the row\nid there. ?type limits the list to one job type and ?tenantID to one\ntenant. `meta.job_types` lists the job types with whether each can be\nretried.\nAn unknown ?type returns 400 with `failed_job.unknown_type`.",
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; `id` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. `meta.job_types` lists the job\ntypes with whether each can be retried.\nAn unknown ?type returns 400 with `failed_job.unknown_type`, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n`failed_job.invalid_failed_before`.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -108,6 +108,13 @@
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "example": "2026-11-01",
+                        "description": "Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time",
+                        "name": "failed_before",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "Page number (default 1)",
                         "name": "page",
@@ -128,7 +135,7 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request - unknown job type",
+                        "description": "Bad Request - unknown job type or unreadable failed_before",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -141,6 +148,80 @@
                     },
                     "403": {
                         "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/bulk-discard": {
+            "post": {
+                "description": "Marks discarded every failed job that failed before ?failed_before\n(#2946), as the single discard does: the jobs leave the failed list\nand the depth gauge and keep their rows and errors. A job without a\nfailure time counts from its creation. The filter is the list's:\n?type limits the discard to one job type and ?tenantID to one tenant,\nand GET /admin/failed-jobs with the same query lists the jobs it\ntakes. ?dry_run=true only counts them. `meta.discarded` is how many\njobs were discarded; a job someone retried or discarded in the\nmeantime is not among them.\nA discard writes one audit row that names the filter and the counts,\nalso when it is refused; a dry run writes none. Needs the\nplatform_admin role: a support_agent gets 403 `admin.role_required`.\nA missing, unreadable or future ?failed_before returns 400\n`failed_job.invalid_failed_before`, an unknown ?type 400\n`failed_job.unknown_type`.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Discard failed background jobs in bulk (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2026-11-01",
+                        "description": "Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future",
+                        "name": "failed_before",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Count the jobs and discard nothing",
+                        "name": "dry_run",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminFailedJobBulkDiscardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - missing, unreadable or future failed_before, or unknown job type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled, or not a platform_admin",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -13599,6 +13680,33 @@
                     "description": "Reason is the free-form justification for the block (max 500 chars).",
                     "type": "string",
                     "maxLength": 500
+                }
+            }
+        },
+        "apiserver.AdminFailedJobBulkDiscardMeta": {
+            "type": "object",
+            "properties": {
+                "by_type": {
+                    "description": "ByType counts per job type; a type with none is left out.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "discarded": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "dry_run": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobBulkDiscardResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/apiserver.AdminFailedJobBulkDiscardMeta"
                 }
             }
         },
