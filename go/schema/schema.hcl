@@ -1966,6 +1966,10 @@ table "exports" {
     type = INTEGER
     default = "0"
   }
+  column "heartbeat_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "discarded_at" {
     type = TIMESTAMP
     null = true
@@ -3933,6 +3937,10 @@ table "restore_operations" {
     type = TIMESTAMP
     null = true
   }
+  column "heartbeat_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -4595,7 +4603,9 @@ table "tenants" {
     unique = true
     columns = [column.uuid]
   }
-  index "tenants_domain_idx" {
+  index "tenants_domain_unique_idx" {
+    unique = true
+    where = "domain IS NOT NULL"
     columns = [column.domain]
   }
   index "tenants_single_default_idx" {

@@ -501,3 +501,83 @@ func TestAccountDeletionService_DeleteAccount_RemovesTheMembersDrafts(t *testing
 	c.Assert(err, qt.IsNil)
 	c.Assert(kept.Links, qt.HasLen, 0)
 }
+
+// A member's records on another member's item in a shared group belong to
+// the group (#2882): the deletion hands them to the owner instead of
+// refusing, and the invites the member created or accepted go.
+func TestAccountDeletionService_DeleteAccount_HandsTheMembersItemRecordsToTheOwner(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "records-group-slug-00000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	authored := models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: leaving.ID}
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	event, err := fs.CommodityEventRegistryFactory.CreateServiceRegistry().Create(leavingCtx, models.CommodityEvent{
+		TenantGroupAwareEntityID: authored,
+		CommodityID:              "commodity-1",
+		Kind:                     models.CommodityEventKindUpdated,
+		OccurredAt:               time.Now(),
+	})
+	c.Assert(err, qt.IsNil)
+	loans := fs.CommodityLoanRegistryFactory.CreateServiceRegistry()
+	loan, err := loans.Create(leavingCtx, models.CommodityLoan{
+		TenantGroupAwareEntityID: authored,
+		CommodityID:              "commodity-1",
+		BorrowerName:             "Neighbor",
+		LentAt:                   models.Date("2026-05-01"),
+	})
+	c.Assert(err, qt.IsNil)
+	won, err := fs.WarrantyReminderRegistry.CreateOnce(ctx, models.WarrantyReminder{TenantGroupAwareEntityID: authored, CommodityID: "commodity-1", ThresholdDays: 30})
+	c.Assert(err, qt.IsNil)
+	c.Assert(won, qt.IsTrue)
+
+	sent, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "sent-by-leaving",
+		CreatedBy:           leaving.ID,
+		ExpiresAt:           time.Now().Add(time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+	usedAt := time.Now()
+	accepted, err := fs.GroupInviteRegistry.Create(ctx, models.GroupInvite{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		Token:               "accepted-by-leaving",
+		CreatedBy:           staying.ID,
+		ExpiresAt:           time.Now().Add(time.Hour),
+		UsedBy:              &leaving.ID,
+		UsedAt:              &usedAt,
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	keptEvent, err := fs.CommodityEventRegistryFactory.CreateServiceRegistry().Get(ctx, event.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptEvent.CreatedByUserID, qt.Equals, staying.ID)
+	keptLoan, err := loans.Get(ctx, loan.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(keptLoan.CreatedByUserID, qt.Equals, staying.ID)
+	warranty, ok := fs.WarrantyReminderRegistry.(*memory.WarrantyReminderRegistry)
+	c.Assert(ok, qt.IsTrue)
+	reminders, err := warranty.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(reminders, qt.HasLen, 1)
+	c.Assert(reminders[0].CreatedByUserID, qt.Equals, staying.ID)
+
+	_, err = fs.GroupInviteRegistry.GetByToken(ctx, sent.Token)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.GroupInviteRegistry.GetByToken(ctx, accepted.Token)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}

@@ -182,7 +182,7 @@ there for what each restore strategy does with it.
 | 403 | `api_token.group_not_allowed` | The token is limited to another group. |
 | 403 | | The token's account has the **Viewer** role in the group. |
 | 409 | `intake.document_changed` | The document was received before with other fields or another file. |
-| 409 | `intake.document_conflict` | A batch in the inbox or a draft carries the document, but the group has no record of the delivery that made it. Delete that batch and discard that draft, then send the document again, or send it with another `source_instance`. |
+| 409 | `intake.document_conflict` | A batch in the inbox or a draft carries the document, but the group has no record of the delivery that made it. The refused delivery keeps nothing, the file it carried included. Delete that batch and discard that draft, then send the document again, or send it with another `source_instance`. |
 | 413 | | The document or the fields are larger than allowed. |
 | 415 | | The body is not a form, a multipart form or JSON. |
 | 422 | | A field is missing, unknown, sent twice or malformed; the answer names it. |

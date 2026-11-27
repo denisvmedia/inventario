@@ -53,6 +53,12 @@ var ErrMissingExtension = errx.NewSentinel("required PostgreSQL extension is not
 // Ptah to discard that revision so the next attempt re-runs the migration.
 var ErrDirtyMigration = errx.NewSentinel("migration is recorded as dirty and cannot be retried automatically")
 
+// ErrDuplicateTenantDomains is returned by MigrateUp when two or more tenants
+// share a domain. The migration that makes tenants.domain unique (#2948)
+// cannot be applied to such a database, so MigrateUp stops before it applies
+// anything and names every shared domain with the slugs of its tenants.
+var ErrDuplicateTenantDomains = errx.NewSentinel("tenants share a domain")
+
 // requiredExtensions are the extensions the migration chain cannot run without.
 // pg_trgm supplies gin_trgm_ops for the trigram indexes on commodities, files and tags.
 var requiredExtensions = []string{"pg_trgm"}
@@ -116,6 +122,13 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	// A missing extension is a setup problem. Reporting it here names the extension
 	// rather than failing later on whatever operator class it supplied.
 	if err := m.verifyExtensions(ctx); err != nil {
+		return err
+	}
+
+	// Rows written before tenants.domain was unique can share a domain, and
+	// the unique index cannot be built over them. Reporting them here names
+	// the tenants to fix rather than failing on the index.
+	if err := m.verifyTenantDomainsUnique(ctx); err != nil {
 		return err
 	}
 
@@ -214,6 +227,66 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 			"or install it out of band if your platform manages extensions",
 			strings.Join(missing, ", ")),
 		ErrMissingExtension,
+	)
+}
+
+// verifyTenantDomainsUnique reports the domains that more than one tenant has,
+// as ErrDuplicateTenantDomains. A database without a tenants table has none.
+// The check runs on every MigrateUp: once the unique index exists it finds
+// nothing, and reading the tenants table costs little.
+func (m *Migrator) verifyTenantDomainsUnique(ctx context.Context) error {
+	db, err := sql.Open("postgres", m.dbURL)
+	if err != nil {
+		return errxtrace.Wrap("failed to connect to database", err)
+	}
+	defer db.Close()
+
+	var hasTenants bool
+	if err := db.QueryRowContext(ctx, "SELECT to_regclass('tenants') IS NOT NULL").Scan(&hasTenants); err != nil {
+		return errxtrace.Wrap("failed to look for the tenants table", err)
+	}
+	if !hasTenants {
+		return nil
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT domain, string_agg(slug, ', ' ORDER BY slug)
+		FROM tenants
+		WHERE domain IS NOT NULL
+		GROUP BY domain
+		HAVING count(*) > 1
+		ORDER BY domain`)
+	if err != nil {
+		return errxtrace.Wrap("failed to look for tenants that share a domain", err)
+	}
+	defer rows.Close()
+
+	var shared []string
+	for rows.Next() {
+		var domain, slugs string
+		if err := rows.Scan(&domain, &slugs); err != nil {
+			return errxtrace.Wrap("failed to read a shared tenant domain", err)
+		}
+		shared = append(shared, fmt.Sprintf("%q (tenants %s)", domain, slugs))
+	}
+	if err := rows.Err(); err != nil {
+		return errxtrace.Wrap("failed to look for tenants that share a domain", err)
+	}
+	if len(shared) == 0 {
+		return nil
+	}
+
+	m.logger.ErrorContext(ctx, "tenants share a domain, so tenants.domain cannot be made unique",
+		"domains", strings.Join(shared, "; "),
+	)
+
+	return errxtrace.ClassifyNew(
+		fmt.Sprintf("tenants share a domain, so tenants.domain cannot be made unique: %s. "+
+			"Leave each domain with one tenant: give the others another domain or none, "+
+			"with `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes it) "+
+			"or on the tenant's page in the back office, then run the migrations again",
+			strings.Join(shared, "; ")),
+		ErrDuplicateTenantDomains,
 	)
 }
 

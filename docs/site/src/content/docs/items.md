@@ -446,6 +446,8 @@ those fields blank on a finished item too.
 While the **Add item** dialog is open, what you type and the files you add are
 also kept in this browser, so a reload or a closed tab does not lose them. That
 copy stays on this device only; to continue on another device, save a draft.
+It is kept for you and for the group you opened the dialog in: someone else who
+signs in on this browser starts with an empty form, and signing out removes it.
 
 - If a draft cannot be saved, for example while you are offline, the dialog
   says so and keeps your input on this device. Click **Retry** when you are
@@ -455,6 +457,9 @@ copy stays on this device only; to continue on another device, save a draft.
   so a failed upload loses nothing.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
+- What the dialog is still sending when you leave it, for example with the
+  browser's **Back** button, goes to the group you opened it in, also when you
+  switch to another group meanwhile.
 
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to
@@ -922,7 +927,9 @@ On the **All Items** page you can act on several items at once:
      second message says so; those files stay on the Files page.
 
 Each item is changed the way a single change would change it: the same checks
-apply, and the change shows in the item's history. An item that already has
+apply, and the change shows in the item's history. The action writes only
+what it sets, so a change someone saves to one of the items while it runs,
+such as a new name or another tag, is kept. An item that already has
 what you set, such as a tag it already carries, is left as it is, and so is
 an item that does not have a tag you remove. When no item changed, a message
 says which of the two it was.

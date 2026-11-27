@@ -120,8 +120,10 @@ type TenantIndexes struct {
 	//ptah:schema:index name="tenants_slug_idx" fields="slug" unique="true" table="tenants"
 	_ int
 
-	// Index for domain lookups
-	//ptah:schema:index name="tenants_domain_idx" fields="domain" table="tenants"
+	// A domain belongs to one tenant: requests are routed to a tenant by
+	// their host, so two tenants on one domain would make it ambiguous which
+	// one a request reaches. Also the index of the domain lookups.
+	//ptah:schema:index name="tenants_domain_unique_idx" fields="domain" unique="true" condition="domain IS NOT NULL" table="tenants"
 	_ int
 
 	// Index for status filtering
