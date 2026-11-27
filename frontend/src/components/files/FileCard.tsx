@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FadeInImage } from "@/components/ui/fade-in-image"
-import { isCoverCandidate, ordinaryLinks, type FileEntity, type URLData } from "@/features/files/api"
+import {
+  isCoverCandidate,
+  ordinaryLinks,
+  type FileEntity,
+  type URLData,
+} from "@/features/files/api"
 import {
   FILE_CATEGORY_TILES,
   FILE_TAG_PILLS,
@@ -114,8 +119,7 @@ export function FileCard({
   // up a mutation handler. The auto-pick branch surfaces the same star with
   // an outline + tooltip "Pin as cover", so the user can promote the
   // current implicit cover to an explicit one without re-uploading.
-  const canPin =
-    !!onSetCover && !!coverState?.itemId && isCoverCandidate(file, coverState.itemId)
+  const canPin = !!onSetCover && !!coverState?.itemId && isCoverCandidate(file, coverState.itemId)
   const isExplicit = canPin && coverState?.current === file.id
   const isAutoPick = canPin && !coverState?.current && coverState?.auto === file.id
   const showStar = canPin
