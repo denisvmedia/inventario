@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
@@ -71,6 +72,21 @@ func (f *RestoreStepRegistryFactory) CreateServiceRegistry() registry.RestoreSte
 		Registry: serviceRegistry,
 		userID:   "", // Clear userID to bypass user filtering
 	}
+}
+
+// Create stores a step. The service registry fills in no tenant or group, so
+// a step written through it has to carry its restore operation's, as the
+// postgres schema requires.
+func (r *RestoreStepRegistry) Create(ctx context.Context, step models.RestoreStep) (*models.RestoreStep, error) {
+	if r.userID == "" {
+		if step.TenantID == "" {
+			return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+		}
+		if step.GroupID == "" {
+			return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+		}
+	}
+	return r.Registry.Create(ctx, step)
 }
 
 func (r *RestoreStepRegistry) ListByRestoreOperation(ctx context.Context, restoreOperationID string) ([]*models.RestoreStep, error) {

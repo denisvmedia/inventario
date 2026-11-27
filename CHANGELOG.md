@@ -946,6 +946,11 @@ when to add an entry and where it goes.
   migration and ended in a timeout or a server error when the migration
   took longer than a minute. File tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+- A restore on PostgreSQL records its step-by-step log, and **View log** in
+  the export's **Restore history** shows it. Before, every step failed to
+  save because it had no tenant or group, so the log of every restore stayed
+  empty, failed restores included
+  ([#3022](https://github.com/denisvmedia/inventario/issues/3022)).
 
 ### Security
 
