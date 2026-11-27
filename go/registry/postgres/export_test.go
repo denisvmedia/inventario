@@ -53,3 +53,20 @@ func UserTenantMoveColumns() map[string]string {
 	}
 	return columns
 }
+
+// AccountDeletionColumns exposes how deleting an account treats each user
+// reference the purge and the pre-check read from a list, as "table.column"
+// keys: the userOwnedTables entries by their rule ("blocks", "removed",
+// "handed over"), and the user_id tables UserPurger deletes from as
+// "removed". A test checks the lists against the live schema. It compiles
+// only under `go test`.
+func AccountDeletionColumns() map[string]string {
+	columns := make(map[string]string)
+	for _, t := range userOwnedTables {
+		columns[string(t.table(store.DefaultTableNames))+"."+t.userColumn] = t.onDeletion.String()
+	}
+	for _, nameFn := range userDeleteByUserID {
+		columns[nameFn(store.DefaultTableNames)+".user_id"] = deletionRemoves.String()
+	}
+	return columns
+}
