@@ -984,6 +984,12 @@ when to add an entry and where it goes.
   migration and ended in a timeout or a server error when the migration
   took longer than a minute. File tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+- `inventario users delete` refuses a user who still owns items, files,
+  places, exports or a group they created, before it changes anything.
+  Before, it removed the user from every group, deleted their invites and
+  handed over their group rows, and only then failed, which left the user in
+  no group with all of their content still in place
+  ([#3010](https://github.com/denisvmedia/inventario/issues/3010)).
 
 ### Security
 
