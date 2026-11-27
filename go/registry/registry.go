@@ -1714,6 +1714,25 @@ type IntakeScan struct {
 	// Selected, AcceptedFields and Quantity are stored as given.
 	Candidates []models.IntakeCandidate
 	Warnings   []models.IntakeWarning
+	// Files are the changes the scan makes to the source's files (#1626).
+	// They are written with the scan, so a source reads scanned only once
+	// its files carry them, and a scan that is not stored changes no file.
+	Files []IntakeFileUpdate
+}
+
+// IntakeFileUpdate is the change a scan makes to one file of its source.
+type IntakeFileUpdate struct {
+	FileID string
+	// Tags are the file tags Apply may add. The caller creates them in the
+	// group beforehand; the registry locks them before the file, the order
+	// every file write takes, so a tag deleted meanwhile is created again
+	// rather than left referenced by the file.
+	Tags []string
+	// Apply returns the file with the change made and whether it changed.
+	// It gets the file as stored, read under the file's lock. The registry
+	// writes back the title, the tags and the update time. A file that is
+	// gone, in the trash or in another group is left out.
+	Apply func(models.FileEntity) (models.FileEntity, bool)
 }
 
 // IntakeCandidateReview is a member's review of a detected product. A nil
@@ -1849,7 +1868,9 @@ type IntakeRegistry interface {
 	// get the same source. ErrNotFound when nothing is due.
 	ClaimNextSource(ctx context.Context, now time.Time) (*models.IntakeSource, error)
 
-	// StoreScan stores the outcome of a scan and marks the source scanned.
+	// StoreScan stores the outcome of a scan, writes its file updates and
+	// marks the source scanned, all at once. An error from a file update
+	// stores nothing.
 	// attempt is the source's Attempts as ClaimNextSource returned it; when
 	// the source is no longer that scan (neither scanning nor canceled with
 	// that attempt), nothing is stored and ErrIntakeSourceChanged is
