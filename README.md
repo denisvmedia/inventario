@@ -188,7 +188,8 @@ out and keeps them out until it is reactivated; a status change made with
 ./inventario users update new@acme.com --tenant=acme --upload-location=s3://bucket   # move to another tenant
 
 # Delete user with confirmation (refused, changing nothing, while they own
-# items, files, places, exports or a group they created)
+# items, files, places or exports, created a group nobody else is in, or are
+# the only owner of a group that has other members)
 ./inventario users delete admin@acme.com
 
 # Preview operations without making changes

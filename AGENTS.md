@@ -81,7 +81,7 @@ The system implements enterprise-grade multi-tenancy with:
 - `./inventario users list` - List all users with filtering
 - `./inventario users get <id-or-email>` - Get detailed user information
 - `./inventario users update <id-or-email>` - Update user-row fields (email, name, active status, tenant, password); only the flags you pass are changed. `--tenant` moves only a user who belongs to no group and owns or authored nothing; it signs them out everywhere and copies the profile photo (`--upload-location`)
-- `./inventario users delete <id-or-email>` - Delete users with confirmation; deletes the profile photo too (`--upload-location`). A user who still owns items, files, places, exports or a group they created is refused before anything changes
+- `./inventario users delete <id-or-email>` - Delete users with confirmation; deletes the profile photo too (`--upload-location`). Refused before anything changes for a user who still owns items, files, places or exports, who created a group nobody else is in, or who is the only owner of a group that has other members (the error names the group; make another member an owner first)
 - For PostgreSQL: Set POSTGRES_TEST_DSN environment variable for testing
 
 ## Project Structure

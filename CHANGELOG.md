@@ -1146,6 +1146,12 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- `inventario users delete` refuses a user who is the only owner of a group
+  that has other members, before it changes anything, as deleting your own
+  account does. The message names the group, so another member can be made
+  an owner first. Before, the delete went through and left the group with
+  its members and no owner, so nobody could manage or delete it
+  ([#3051](https://github.com/denisvmedia/inventario/issues/3051)).
 
 ### Security
 
