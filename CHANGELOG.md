@@ -791,8 +791,10 @@ when to add an entry and where it goes.
   the group it opened in: a save still running when the member leaves the
   form with browser Back and switches group goes on there, and a form still
   open when the page moves to another group keeps showing the draft and its
-  files. Before, the remaining requests went to the other group's paths
-  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+  files, and keeps its unsaved input with the group it opened in. Before,
+  the remaining requests went to the other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 
 - An item's history keeps every edit of a save. A save that changed the
   status, the area, a price or the cover recorded only that change, and the
@@ -916,10 +918,12 @@ when to add an entry and where it goes.
   it again on the AI step, or picking it again on the **Files** step, staged a
   second copy beside its row under **Saved with this draft**; the next save
   dropped the copy, and with it the title and tag the scan suggested. The file
-  now stays on its saved row with the title and tags it was saved with. The
-  remove and add buttons of the tag and number chips are named in the app's
-  language
-  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
+  now stays on its saved row with the title and tags it was saved with, and a
+  file picked just before **Add item** is saved with the item even when it is
+  large and takes a while to read. The remove and add buttons of the tag and
+  number chips are named in the app's language
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
@@ -1166,6 +1170,10 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- The recent results on the search page are kept for each user, and signing
+  out removes them. Before, they were kept for the group only, so the next
+  person to sign in on the same browser saw what the last one opened there
+  ([#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - Signing out in one tab while another tab renewed its session no longer
   signs you back in, and no longer makes the server take the renewal for a
   stolen session and sign you out on your other devices. A sign-out now waits
@@ -1447,6 +1455,22 @@ when to add an entry and where it goes.
   logs an error instead of a warning. Renamed keys: `duration` (a string) on
   `Currency migration completed` is `duration_ms` (an integer), and `slug`
   on `group purged` is `group_slug`
+- Sign-in, session and tenant log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  These refusals are logged as warnings, not errors: a user who reaches
+  another tenant's host (`Security violation: user attempted to access
+  different tenant`), an OAuth sign-in with a provider account linked in
+  another tenant, an OAuth link started in another tenant, and a magic link
+  whose token or user is not found. Back-office lines carry `admin_id`
+  instead of `user_id`. `user_tenant`, `callback_tenant` and
+  `requested_tenant` are now `user_tenant_id`, `callback_tenant_id` and
+  `requested_tenant_id`; `row_id` is `token_id`; `id` on the email
+  verification lines is `verification_id`; the catch-all tenant lines carry
+  `tenant_slug` and `catch_all_tenant_slug`. A failed impersonation, API
+  token or session revocation step is logged once, without a second
+  `internal server error` line. A password that cannot be hashed at
+  registration and a request that reaches a tenant-only route without a
+  tenant are now logged
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23

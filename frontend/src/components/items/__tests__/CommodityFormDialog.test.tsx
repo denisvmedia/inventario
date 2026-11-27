@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, onTestFinished, vi } from "vitest"
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { addItemSlot } from "@/features/commodities/draft"
 import { HttpError } from "@/lib/http"
 import { renderWithProviders } from "@/test/render"
 import { pickRadixSelect } from "@/test/radix"
@@ -634,6 +635,45 @@ describe("<CommodityFormDialog />", () => {
     })
     await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
     expect(window.localStorage.getItem(draftKey)).toBeNull()
+  })
+
+  // #3023: the pages name the slot after the group in the address. With the
+  // form open across a move to another group, the input stays in the slot of
+  // the group the form opened in.
+  it("keeps the values in the slot of the group it opened in", async () => {
+    const user = userEvent.setup()
+    const opening = addItemSlot("u1", "household")
+    const other = addItemSlot("u1", "garage")
+    onTestFinished(() => {
+      window.localStorage.removeItem(opening)
+      window.localStorage.removeItem(other)
+    })
+    let moveTo: (slug: string) => void = () => {}
+    function Harness() {
+      const [slug, setSlug] = useState("household")
+      moveTo = setSlug
+      return (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey={addItemSlot("u1", slug)}
+        />
+      )
+    }
+    renderWithProviders({ children: <Harness /> })
+    await walkPastAi(user)
+    act(() => moveTo("garage"))
+    await user.type(await screen.findByLabelText(/^Name$/i), "Lamp")
+
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem(opening) ?? "{}").name).toBe("Lamp")
+    )
+    expect(window.localStorage.getItem(other)).toBeNull()
   })
 
   // Issue #1554: bundle commodities (count > 1) cannot carry warranty

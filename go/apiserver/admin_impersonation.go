@@ -259,7 +259,7 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Failed to sign impersonation token", "operator_id", operator.ID, "target_id", target.ID, "error", err)
 		api.auditStart(r, operator.ID, "", target.ID, target.TenantID, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -284,7 +284,7 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 	if err := api.store.Put(r.Context(), slot); err != nil {
 		slog.ErrorContext(r.Context(), "Failed to record impersonation return slot", "operator_id", operator.ID, "target_id", target.ID, "error", err)
 		api.auditStart(r, operator.ID, "", target.ID, target.TenantID, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -455,7 +455,7 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 		// Redis-backed store outage), not a missing slot — surface it
 		// as a 500 rather than masking it as "not active".
 		slog.ErrorContext(r.Context(), "Impersonation end: failed to read return slot", "jti", jti, "operator_id", operatorID, "error", err)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -465,7 +465,7 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	// rather than restore the wrong session.
 	if slot.OperatorUserID != operatorID {
 		slog.ErrorContext(r.Context(), "Impersonation end: slot/token operator mismatch",
-			"jti", jti, "slot_operator", slot.OperatorUserID, "token_operator", operatorID)
+			"jti", jti, "slot_operator_id", slot.OperatorUserID, "token_operator_id", operatorID)
 		_ = renderEntityError(w, r, ErrNotImpersonating)
 		return
 	}
@@ -502,7 +502,7 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Impersonation end: failed to reload back-office operator", "operator_id", slot.OperatorUserID, "error", err)
 		api.auditEnd(r, slot, targetID, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -544,7 +544,7 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 		// slot — surface it as a 500 rather than reporting a misleading
 		// inactive banner that masks a backend outage.
 		slog.ErrorContext(r.Context(), "Impersonation current: failed to read return slot", "jti", jti, "error", err)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -598,7 +598,7 @@ func (api *adminImpersonationAPI) restoreBackofficeSession(w http.ResponseWriter
 	tokenString, err := api.signBackofficeAccessTokenForEnd(operator, rti)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Impersonation end: failed to mint back-office access token", "operator_id", operator.ID, "error", err)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
