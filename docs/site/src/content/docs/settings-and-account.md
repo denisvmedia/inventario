@@ -129,6 +129,10 @@ The copy has:
   supply links, open [drafts of new items](../items/#drafts-of-a-new-item),
   saved views, and the history entries you made.
 
+A file in the Trash is included, also one that went there together with its
+item, and so are the loans, maintenance schedules and service records of an
+item in the Trash.
+
 Locations, areas, sellers, item types and tags appear by name on your items.
 A history entry holds only the fields you changed, with the values you set,
 not the values they replaced. Other members appear only as ids, and text you

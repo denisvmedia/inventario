@@ -25,18 +25,22 @@ type CreatorListingsEnv struct {
 	AreaName     string
 }
 
-// creatorRows are the ids of the rows one member created.
+// creatorRows are the ids of the rows one member created. The trashed* rows
+// belong to the item in Trash: a file that went to Trash with it, and a loan,
+// a maintenance schedule and a service record of it (#3035).
 type creatorRows struct {
-	item, trashedItem, file, trashedFile       string
-	loan, schedule, service, link, reminder    string
-	draft, event                               string
-	itemName, trashedItemName, draftUUID, user string
+	item, trashedItem, file, trashedFile          string
+	loan, schedule, service, link, reminder       string
+	draft, event                                  string
+	itemName, trashedItemName, draftUUID, user    string
+	trashedItemFile, trashedLoan, trashedSchedule string
+	trashedService                                string
 }
 
 // RunCreatorListingsContract checks the creator listings the personal data
-// export reads (#2934): each returns the rows of its List, or of its Trash
-// listing, that one member created and none of the other member's, and the
-// ref listings name every row of the group.
+// export reads (#2934): each returns the rows one member created and none of
+// the other member's, the rows of an item in Trash included, and the ref
+// listings name every row of the group.
 func RunCreatorListingsContract(t *testing.T, newEnv func(t *testing.T) CreatorListingsEnv) {
 	c := qt.New(t)
 	env := newEnv(t)
@@ -138,14 +142,20 @@ func checkCreatorListings(c *qt.C, env CreatorListingsEnv, ctx context.Context, 
 		c.Check(liveFiles[0].Links, qt.HasLen, 1, qt.Commentf("a file comes with its links"))
 	}
 	trashedFiles, err := files.ListTrashedCreatedBy(ctx, user)
-	check("files in Trash", idsOf(trashedFiles), err, want.trashedFile)
+	check("files in Trash", idsOf(trashedFiles), err, want.trashedFile, want.trashedItemFile)
+	for _, f := range trashedFiles {
+		if f.ID == want.trashedItemFile {
+			c.Assert(f.Links, qt.HasLen, 1, qt.Commentf("a file in Trash with its item comes with its link"))
+			c.Check(f.Links[0].EntityID, qt.Equals, want.trashedItem)
+		}
+	}
 
 	loans, err := mustUserRegistry(c, ctx, fs.CommodityLoanRegistryFactory.CreateUserRegistry).ListCreatedBy(ctx, user)
-	check("loans", idsOf(loans), err, want.loan)
+	check("loans", idsOf(loans), err, want.loan, want.trashedLoan)
 	schedules, err := mustUserRegistry(c, ctx, fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry).ListCreatedBy(ctx, user)
-	check("maintenance schedules", idsOf(schedules), err, want.schedule)
+	check("maintenance schedules", idsOf(schedules), err, want.schedule, want.trashedSchedule)
 	services, err := mustUserRegistry(c, ctx, fs.CommodityServiceRegistryFactory.CreateUserRegistry).ListCreatedBy(ctx, user)
-	check("service records", idsOf(services), err, want.service)
+	check("service records", idsOf(services), err, want.service, want.trashedService)
 	links, err := mustUserRegistry(c, ctx, fs.SupplyLinkRegistryFactory.CreateUserRegistry).ListCreatedBy(ctx, user)
 	check("supply links", idsOf(links), err, want.link)
 	reminders, err := mustUserRegistry(c, ctx, fs.CommodityReminderRegistryFactory.CreateUserRegistry).ListCreatedBy(ctx, user)
@@ -158,7 +168,9 @@ func checkCreatorListings(c *qt.C, env CreatorListingsEnv, ctx context.Context, 
 
 // seedCreatorRows creates, as the member of ctx, one row of each kind the
 // creator listings read, on a live item, and an item and a file in Trash.
-// The loan and the history entry are added by the caller.
+// The item in Trash went there with a file, a loan, a schedule and a service
+// record of its own. The loan and the history entry on the live item are
+// added by the caller.
 func seedCreatorRows(c *qt.C, env CreatorListingsEnv, ctx context.Context, userID, tag string) creatorRows {
 	c.Helper()
 	fs := env.Factories
@@ -176,17 +188,18 @@ func seedCreatorRows(c *qt.C, env CreatorListingsEnv, ctx context.Context, userI
 	rows.trashedItem = newItem(rows.trashedItemName)
 
 	files := mustUserRegistry(c, ctx, fs.FileRegistryFactory.CreateUserRegistry)
-	newFile := func(name string) string {
+	newFile := func(name, itemID string) string {
 		file, err := files.Create(ctx, models.FileEntity{
 			Title: name, Type: models.FileTypeDocument, Category: models.FileCategoryDocuments,
-			Links: []models.FileLink{{EntityType: models.FileLinkCommodity, EntityID: rows.item, Meta: models.FileLinkMetaDocuments}},
+			Links: []models.FileLink{{EntityType: models.FileLinkCommodity, EntityID: itemID, Meta: models.FileLinkMetaDocuments}},
 			File:  &models.File{Path: name, OriginalPath: "files/" + name, Ext: ".pdf", MIMEType: "application/pdf"},
 		})
 		c.Assert(err, qt.IsNil)
 		return file.ID
 	}
-	rows.file = newFile("manual-" + tag + ".pdf")
-	rows.trashedFile = newFile("receipt-" + tag + ".pdf")
+	rows.file = newFile("manual-"+tag+".pdf", rows.item)
+	rows.trashedFile = newFile("receipt-"+tag+".pdf", rows.item)
+	rows.trashedItemFile = newFile("warranty-"+tag+".pdf", rows.trashedItem)
 	now := time.Now()
 	c.Assert(files.Trash(ctx, rows.trashedFile, userID, "", now), qt.IsNil)
 
@@ -218,8 +231,21 @@ func seedCreatorRows(c *qt.C, env CreatorListingsEnv, ctx context.Context, userI
 	c.Assert(created, qt.IsTrue)
 	rows.draft, rows.draftUUID = draft.ID, draft.UUID
 
+	trashedSchedule, err := mustUserRegistry(c, ctx, fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry).Create(ctx, models.MaintenanceSchedule{
+		CommodityID: rows.trashedItem, Title: "Oil the saw " + tag, IntervalDays: 30, NextDueAt: "2027-02-10", Enabled: true,
+	})
+	c.Assert(err, qt.IsNil)
+	rows.trashedSchedule = trashedSchedule.ID
+	trashedService, err := mustUserRegistry(c, ctx, fs.CommodityServiceRegistryFactory.CreateUserRegistry).Create(ctx, models.CommodityService{
+		CommodityID: rows.trashedItem, ProviderName: "Saw shop " + tag, Reason: "Teeth", SentAt: "2026-06-01", CostCurrency: "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	rows.trashedService = trashedService.ID
+	rows.trashedLoan = creatorLoan(c, env, ctx, rows.trashedItem)
+
 	_, err = items.Trash(ctx, rows.trashedItem, userID, now)
 	c.Assert(err, qt.IsNil)
+	c.Assert(files.Trash(ctx, rows.trashedItemFile, userID, rows.trashedItem, now), qt.IsNil)
 	return rows
 }
 

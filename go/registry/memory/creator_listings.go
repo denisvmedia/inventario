@@ -64,20 +64,23 @@ func (r *FileRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*mod
 
 func (r *FileRegistry) ListTrashedCreatedBy(_ context.Context, userID string) ([]*models.FileEntity, error) {
 	return r.trashedFiles(func(f *models.FileEntity, _ []models.FileLink) bool {
-		return f.DeletedWithCommodityID == nil && f.CreatedByUserID == userID
+		return f.CreatedByUserID == userID
 	}), nil
 }
 
+// The loans, schedules and service records of items in Trash are listed
+// too: the embedded registry's List keeps them.
+
 func (r *CommodityLoanRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.CommodityLoan, error) {
-	return listCreatedBy(ctx, r.List, userID)
+	return listCreatedBy(ctx, r.Registry.List, userID)
 }
 
 func (r *MaintenanceScheduleRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.MaintenanceSchedule, error) {
-	return listCreatedBy(ctx, r.List, userID)
+	return listCreatedBy(ctx, r.Registry.List, userID)
 }
 
 func (r *CommodityServiceRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.CommodityService, error) {
-	return listCreatedBy(ctx, r.List, userID)
+	return listCreatedBy(ctx, r.Registry.List, userID)
 }
 
 func (r *CommodityReminderRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.CommodityReminder, error) {

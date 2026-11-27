@@ -68,12 +68,14 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
-// CreatorLister lists the rows one user created, among the rows List returns
-// (#2934). The personal data export reads each group through it, so its work
-// grows with what the user created rather than with the size of the group.
+// CreatorLister lists the rows one user created (#2934). The personal data
+// export reads each group through it, so its work grows with what the user
+// created rather than with the size of the group.
 type CreatorLister[T any] interface {
-	// ListCreatedBy returns the rows List returns whose creator is userID,
-	// in no particular order.
+	// ListCreatedBy returns the live rows of the scope whose creator is
+	// userID, in no particular order. A row that belongs to an item in
+	// Trash, such as a loan, is listed too, also where List leaves it out;
+	// an item or a file in Trash is listed by ListTrashedCreatedBy.
 	ListCreatedBy(ctx context.Context, userID string) ([]*T, error)
 }
 
@@ -715,9 +717,9 @@ type FileRegistry interface {
 	Registry[models.FileEntity]
 	CreatorLister[models.FileEntity]
 
-	// ListTrashedCreatedBy returns every file deleted on its own whose
-	// creator is userID, the rows ListTrashed pages through, with their
-	// links, in no particular order.
+	// ListTrashedCreatedBy returns every file in Trash whose creator is
+	// userID, those deleted with their item included, with their links, in
+	// no particular order.
 	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.FileEntity, error)
 
 	// GetTrashed returns a trashed file by id; ErrNotFound when it does not

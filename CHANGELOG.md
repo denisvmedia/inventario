@@ -63,9 +63,12 @@ when to add an entry and where it goes.
   a copy of the caller's own data: their profile, settings and group
   memberships, and in each group the items, files with their bytes, loans,
   maintenance schedules, service records, reminders, supply links, open
-  drafts, saved views and history entries they created. A history entry
-  holds only the fields it changed, with the values it set. An item's
-  location, area, seller, type and tags are given by name; other members
+  drafts, saved views and history entries they created. Items and files in
+  Trash are included, a file that went to Trash with its item too, and so
+  are the loans, maintenance schedules and service records of an item in
+  Trash ([#3035](https://github.com/denisvmedia/inventario/issues/3035)). A
+  history entry holds only the fields it changed, with the values it set. An
+  item's location, area, seller, type and tags are given by name; other members
   appear only as ids, never by name or email. A file whose bytes are no
   longer in storage is listed as missing. The archive is a plain `tar.gz` of
   JSON documents and files whose manifest has kind `personal_data_export`; it

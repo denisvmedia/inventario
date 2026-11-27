@@ -114,10 +114,10 @@ func (r *FileRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*mod
 	return out, nil
 }
 
-// ListTrashedCreatedBy returns the user's files deleted on their own, with
-// their links.
+// ListTrashedCreatedBy returns the user's files in Trash, those deleted with
+// their item included, with their links.
 func (r *FileRegistry) ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.FileEntity, error) {
-	out, err := r.listFilesCreatedBy(ctx, trashedRow+" AND deleted_with_commodity_id IS NULL", userID)
+	out, err := r.listFilesCreatedBy(ctx, trashedRow, userID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list the user's trashed files", err)
 	}
@@ -136,33 +136,29 @@ func (r *FileRegistry) listFilesCreatedBy(ctx context.Context, state, userID str
 	return out, err
 }
 
-// ListCreatedBy returns the user's loans of live items.
+// ListCreatedBy returns the user's loans, those of items in Trash included.
 func (r *CommodityLoanRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.CommodityLoan, error) {
-	table := r.tableNames.CommodityLoans()
-	out, err := listCreatedBy[models.CommodityLoan](ctx, r.newSQLRegistry().Do, table,
-		liveCommodityOf(string(r.tableNames.Commodities()), string(table), "commodity_id"), userID)
+	out, err := listCreatedBy[models.CommodityLoan](ctx, r.newSQLRegistry().Do, r.tableNames.CommodityLoans(), "", userID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list the user's commodity loans", err)
 	}
 	return out, nil
 }
 
-// ListCreatedBy returns the user's maintenance schedules of live items.
+// ListCreatedBy returns the user's maintenance schedules, those of items in
+// Trash included.
 func (r *MaintenanceScheduleRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.MaintenanceSchedule, error) {
-	table := r.tableNames.MaintenanceSchedules()
-	out, err := listCreatedBy[models.MaintenanceSchedule](ctx, r.newSQLRegistry().Do, table,
-		liveCommodityOf(string(r.tableNames.Commodities()), string(table), "commodity_id"), userID)
+	out, err := listCreatedBy[models.MaintenanceSchedule](ctx, r.newSQLRegistry().Do, r.tableNames.MaintenanceSchedules(), "", userID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list the user's maintenance schedules", err)
 	}
 	return out, nil
 }
 
-// ListCreatedBy returns the user's service records of live items.
+// ListCreatedBy returns the user's service records, those of items in Trash
+// included.
 func (r *CommodityServiceRegistry) ListCreatedBy(ctx context.Context, userID string) ([]*models.CommodityService, error) {
-	table := r.tableNames.CommodityServices()
-	out, err := listCreatedBy[models.CommodityService](ctx, r.newSQLRegistry().Do, table,
-		liveCommodityOf(string(r.tableNames.Commodities()), string(table), "commodity_id"), userID)
+	out, err := listCreatedBy[models.CommodityService](ctx, r.newSQLRegistry().Do, r.tableNames.CommodityServices(), "", userID)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list the user's commodity services", err)
 	}
