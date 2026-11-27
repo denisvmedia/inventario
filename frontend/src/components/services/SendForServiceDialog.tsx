@@ -127,7 +127,7 @@ export function SendForServiceDialog({
               placeholder={t("services:dialog.providerNamePlaceholder")}
               autoComplete="off"
               aria-invalid={!!errors.provider_name}
-              aria-describedby={errors.provider_name ? "service-provider-name-error" : undefined}
+              aria-describedby={errors.provider_name?.message ? "service-provider-name-error" : undefined}
               {...register("provider_name")}
             />
             <FieldError
@@ -146,7 +146,7 @@ export function SendForServiceDialog({
               autoComplete="off"
               aria-invalid={!!errors.provider_contact}
               aria-describedby={
-                errors.provider_contact ? "service-provider-contact-error" : undefined
+                errors.provider_contact?.message ? "service-provider-contact-error" : undefined
               }
               {...register("provider_contact")}
             />
@@ -168,7 +168,7 @@ export function SendForServiceDialog({
               placeholder={t("services:dialog.reasonPlaceholder")}
               autoComplete="off"
               aria-invalid={!!errors.reason}
-              aria-describedby={errors.reason ? "service-reason-error" : undefined}
+              aria-describedby={errors.reason?.message ? "service-reason-error" : undefined}
               {...register("reason")}
             />
             <p className="text-xs text-muted-foreground">{t("services:dialog.reasonHint")}</p>
@@ -187,7 +187,7 @@ export function SendForServiceDialog({
                 type="date"
                 data-testid="service-sent-at"
                 aria-invalid={!!errors.sent_at}
-                aria-describedby={errors.sent_at ? "service-sent-at-error" : undefined}
+                aria-describedby={errors.sent_at?.message ? "service-sent-at-error" : undefined}
                 {...register("sent_at")}
               />
               <FieldError
@@ -206,7 +206,7 @@ export function SendForServiceDialog({
                 data-testid="service-expected-return-at"
                 aria-invalid={!!errors.expected_return_at}
                 aria-describedby={
-                  errors.expected_return_at ? "service-expected-return-at-error" : undefined
+                  errors.expected_return_at?.message ? "service-expected-return-at-error" : undefined
                 }
                 {...register("expected_return_at")}
               />
@@ -228,7 +228,7 @@ export function SendForServiceDialog({
                 placeholder="0.00"
                 autoComplete="off"
                 aria-invalid={!!errors.cost_amount}
-                aria-describedby={errors.cost_amount ? "service-cost-amount-error" : undefined}
+                aria-describedby={errors.cost_amount?.message ? "service-cost-amount-error" : undefined}
                 {...register("cost_amount")}
               />
               <FieldError
@@ -246,7 +246,7 @@ export function SendForServiceDialog({
                 maxLength={3}
                 autoComplete="off"
                 aria-invalid={!!errors.cost_currency}
-                aria-describedby={errors.cost_currency ? "service-cost-currency-error" : undefined}
+                aria-describedby={errors.cost_currency?.message ? "service-cost-currency-error" : undefined}
                 {...register("cost_currency")}
               />
               <FieldError

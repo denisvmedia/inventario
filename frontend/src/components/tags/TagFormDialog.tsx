@@ -130,7 +130,7 @@ export function TagFormDialog({
               data-testid="tag-form-label"
               placeholder={t("tags:form.labelPlaceholder")}
               aria-invalid={!!errors.label}
-              aria-describedby={errors.label ? "tag-form-label-error" : undefined}
+              aria-describedby={errors.label?.message ? "tag-form-label-error" : undefined}
               {...register("label")}
             />
             <FieldError
@@ -147,7 +147,7 @@ export function TagFormDialog({
               data-testid="tag-form-slug"
               placeholder={t("tags:form.slugPlaceholder")}
               aria-invalid={!!errors.slug}
-              aria-describedby={errors.slug ? "tag-form-slug-error" : undefined}
+              aria-describedby={errors.slug?.message ? "tag-form-slug-error" : undefined}
               {...register("slug")}
             />
             <p className="text-xs text-muted-foreground">{t("tags:form.slugHint")}</p>
@@ -170,7 +170,7 @@ export function TagFormDialog({
                   testId="tag-form-color"
                   disabled={isPending}
                   invalid={!!errors.color}
-                  describedBy={errors.color ? "tag-form-color-error" : undefined}
+                  describedBy={errors.color?.message ? "tag-form-color-error" : undefined}
                 />
               )}
             />

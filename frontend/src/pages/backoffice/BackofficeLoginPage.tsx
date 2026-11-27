@@ -173,7 +173,7 @@ export function BackofficeLoginPage() {
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="backoffice-email"
                 aria-describedby={
-                  form.formState.errors.email ? "backoffice-login-email-error" : undefined
+                  form.formState.errors.email?.message ? "backoffice-login-email-error" : undefined
                 }
                 {...form.register("email")}
               />
@@ -195,7 +195,7 @@ export function BackofficeLoginPage() {
               aria-invalid={!!form.formState.errors.password}
               data-testid="backoffice-password"
               aria-describedby={
-                form.formState.errors.password ? "backoffice-login-password-error" : undefined
+                form.formState.errors.password?.message ? "backoffice-login-password-error" : undefined
               }
               {...form.register("password")}
             />

@@ -31,5 +31,13 @@
     "reorderError": "Couldn't reorder the supply links.",
     "updated": "Supply link updated.",
     "updateError": "Couldn't update the supply link."
+  },
+  "validation": {
+    "labelRequired": "Enter a label.",
+    "labelTooLong": "The label can have at most 200 characters.",
+    "notesTooLong": "The notes can have at most 1000 characters.",
+    "urlRequired": "Enter a URL.",
+    "urlScheme": "Enter a full URL that starts with http:// or https://.",
+    "urlTooLong": "The URL can have at most 2048 characters."
   }
 }

@@ -142,7 +142,7 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
           placeholder={t("reminders:dialog.titlePlaceholder")}
           data-testid="reminder-title-input"
           aria-invalid={!!errors.title}
-          aria-describedby={errors.title ? "reminder-title-error" : undefined}
+          aria-describedby={errors.title?.message ? "reminder-title-error" : undefined}
           {...register("title")}
         />
         <FieldError id="reminder-title-error" message={errors.title?.message} />
@@ -156,7 +156,7 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
             type="date"
             data-testid="reminder-date-input"
             aria-invalid={!!errors.due_on}
-            aria-describedby={errors.due_on ? "reminder-date-error" : undefined}
+            aria-describedby={errors.due_on?.message ? "reminder-date-error" : undefined}
             {...register("due_on")}
           />
           <FieldError id="reminder-date-error" message={errors.due_on?.message} />
@@ -169,7 +169,7 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
             data-testid="reminder-leads-input"
             aria-invalid={!!errors.remind_days_before}
             aria-describedby={
-              errors.remind_days_before ? "reminder-leads-error" : "reminder-leads-hint"
+              errors.remind_days_before?.message ? "reminder-leads-error" : "reminder-leads-hint"
             }
             {...register("remind_days_before")}
           />
@@ -225,7 +225,7 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
               inputMode="numeric"
               data-testid="reminder-interval-input"
               aria-invalid={!!errors.repeat_interval}
-              aria-describedby={errors.repeat_interval ? "reminder-interval-error" : undefined}
+              aria-describedby={errors.repeat_interval?.message ? "reminder-interval-error" : undefined}
               {...register("repeat_interval")}
             />
             <FieldError id="reminder-interval-error" message={errors.repeat_interval?.message} />

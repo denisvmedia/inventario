@@ -938,6 +938,11 @@ when to add an entry and where it goes.
   took longer than a minute. File tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
 
+- The supply link dialog shows its field errors in the language you chose
+  and marks the field that failed, as the other forms do. A refused icon on
+  the create group and group settings pages also marks the icon picker
+  ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.

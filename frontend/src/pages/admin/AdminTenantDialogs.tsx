@@ -194,7 +194,7 @@ export function TenantFormDialog(props: TenantFormProps) {
               disabled={pending}
               aria-invalid={!!errors.name}
               data-testid="admin-tenant-name"
-              aria-describedby={errors.name ? "admin-tenant-name-error" : undefined}
+              aria-describedby={errors.name?.message ? "admin-tenant-name-error" : undefined}
               {...form.register("name")}
             />
             <FieldError
@@ -212,7 +212,7 @@ export function TenantFormDialog(props: TenantFormProps) {
               disabled={pending}
               aria-invalid={!!errors.slug}
               data-testid="admin-tenant-slug"
-              aria-describedby={errors.slug ? "admin-tenant-slug-error" : undefined}
+              aria-describedby={errors.slug?.message ? "admin-tenant-slug-error" : undefined}
               {...form.register("slug")}
             />
             {errors.slug?.message ? (
@@ -236,7 +236,7 @@ export function TenantFormDialog(props: TenantFormProps) {
               disabled={pending}
               aria-invalid={!!errors.domain}
               data-testid="admin-tenant-domain"
-              aria-describedby={errors.domain ? "admin-tenant-domain-error" : undefined}
+              aria-describedby={errors.domain?.message ? "admin-tenant-domain-error" : undefined}
               {...form.register("domain")}
             />
             {errors.domain?.message ? (

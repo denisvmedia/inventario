@@ -931,6 +931,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Forms & Validation
 
+#### 2026-11-27 — Icon pickers: an invalid state
+
+- **Issue/PR**: #2983
+- **Mock**: The icon grids of [`design-mocks/src/components/LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) (L102–L122) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) (L62–L82) have no error state. The mock has no group icon picker.
+- **Reality**: When the server refuses the icon, the group icon picker (`frontend/src/components/groups/IconPicker.tsx`, on the create group and group settings pages) points its trigger's `aria-describedby` at the field's `FieldError`, and the trigger gets the destructive border and ring that an invalid `Input` has. The location and area picker (`frontend/src/components/locations/IconPicker.tsx`) puts `aria-describedby` on its tile row, now a `role="group"`; its look does not change.
+- **Why**: not present in mock. `devdocs/frontend/forms.md` asks every control that failed to point at its error and to look invalid. `aria-invalid` is not valid ARIA on a button or a group, so the border comes from a class with the colors of the `aria-invalid` classes of `Input`.
+- **Approved by**: user (explicit) — pre-approved for #2983 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws an error state for an icon picker; otherwise permanent.
+
 #### 2026-11-26 — Create group page: what the group is for
 
 - **Issue/PR**: #1607

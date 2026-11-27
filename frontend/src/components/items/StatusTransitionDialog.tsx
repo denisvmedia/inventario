@@ -249,7 +249,7 @@ export function StatusTransitionDialog({
               type="date"
               data-testid="status-transition-date"
               aria-invalid={!!errors.status_date}
-              aria-describedby={errors.status_date ? "status-transition-date-error" : undefined}
+              aria-describedby={errors.status_date?.message ? "status-transition-date-error" : undefined}
               {...register("status_date")}
             />
             <FieldError
@@ -278,7 +278,7 @@ export function StatusTransitionDialog({
                   data-testid="status-transition-sale-price"
                   aria-invalid={!!errors.sale_price}
                   aria-describedby={
-                    errors.sale_price ? "status-transition-sale-price-error" : undefined
+                    errors.sale_price?.message ? "status-transition-sale-price-error" : undefined
                   }
                   {...register("sale_price")}
                 />
@@ -304,7 +304,7 @@ export function StatusTransitionDialog({
               )}
               data-testid="status-transition-note"
               aria-invalid={!!errors.status_note}
-              aria-describedby={errors.status_note ? "status-transition-note-error" : undefined}
+              aria-describedby={errors.status_note?.message ? "status-transition-note-error" : undefined}
               {...register("status_note")}
             />
             <FieldError
