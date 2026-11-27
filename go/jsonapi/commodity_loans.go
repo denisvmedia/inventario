@@ -102,9 +102,9 @@ func (lrd CommodityLoanRequestData) Validate() error {
 
 func (lrd CommodityLoanRequestData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &lrd,
-		validation.Field(&lrd.BorrowerName, validation.Required, validation.Length(1, 200)),
-		validation.Field(&lrd.BorrowerContact, validation.Length(0, 200)),
-		validation.Field(&lrd.BorrowerNote, validation.Length(0, 1000)),
+		validation.Field(&lrd.BorrowerName, validation.Required, validation.RuneLength(1, 200)),
+		validation.Field(&lrd.BorrowerContact, validation.RuneLength(0, 200)),
+		validation.Field(&lrd.BorrowerNote, validation.RuneLength(0, 1000)),
 		validation.Field(&lrd.LentAt, validation.Required, models.DateFormat),
 	)
 }
@@ -209,13 +209,13 @@ func (lurd CommodityLoanUpdateRequestData) Validate() error {
 func (lurd CommodityLoanUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 3)
 	if lurd.BorrowerName != nil {
-		fields = append(fields, validation.Field(&lurd.BorrowerName, validation.Required, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&lurd.BorrowerName, validation.Required, validation.RuneLength(1, 200)))
 	}
 	if lurd.BorrowerContact != nil {
-		fields = append(fields, validation.Field(&lurd.BorrowerContact, validation.Length(0, 200)))
+		fields = append(fields, validation.Field(&lurd.BorrowerContact, validation.RuneLength(0, 200)))
 	}
 	if lurd.BorrowerNote != nil {
-		fields = append(fields, validation.Field(&lurd.BorrowerNote, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&lurd.BorrowerNote, validation.RuneLength(0, 1000)))
 	}
 	return validation.ValidateStructWithContext(ctx, &lurd, fields...)
 }

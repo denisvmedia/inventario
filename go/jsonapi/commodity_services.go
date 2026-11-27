@@ -103,9 +103,9 @@ func (srd CommodityServiceRequestData) Validate() error {
 
 func (srd CommodityServiceRequestData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &srd,
-		validation.Field(&srd.ProviderName, validation.Required, validation.Length(1, 200)),
-		validation.Field(&srd.ProviderContact, validation.Length(0, 200)),
-		validation.Field(&srd.Reason, validation.Length(0, 1000)),
+		validation.Field(&srd.ProviderName, validation.Required, validation.RuneLength(1, 200)),
+		validation.Field(&srd.ProviderContact, validation.RuneLength(0, 200)),
+		validation.Field(&srd.Reason, validation.RuneLength(0, 1000)),
 		validation.Field(&srd.SentAt, validation.Required, models.DateFormat),
 		validation.Field(&srd.CostCurrency, validation.By(func(any) error {
 			amountSet := srd.CostAmount != nil && !srd.CostAmount.IsZero()
@@ -179,13 +179,13 @@ func (surd CommodityServiceUpdateRequestData) Validate() error {
 func (surd CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 5)
 	if surd.ProviderName != nil {
-		fields = append(fields, validation.Field(&surd.ProviderName, validation.Required, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderName, validation.Required, validation.RuneLength(1, 200)))
 	}
 	if surd.ProviderContact != nil {
-		fields = append(fields, validation.Field(&surd.ProviderContact, validation.Length(0, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderContact, validation.RuneLength(0, 200)))
 	}
 	if surd.Reason != nil {
-		fields = append(fields, validation.Field(&surd.Reason, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&surd.Reason, validation.RuneLength(0, 1000)))
 	}
 	// Pair gate for cost: BOTH or NEITHER on this PATCH.
 	fields = append(fields, validation.Field(&surd.CostCurrency, validation.By(func(any) error {

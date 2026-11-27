@@ -162,9 +162,9 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 	// wire contract of the previous /settings endpoint.
 	httpMethod, _ := ctx.Value(httpMethodKey).(string)
 	return validation.ValidateStructWithContext(ctx, la,
-		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
+		validation.Field(&la.Name, validation.Required, validation.RuneLength(1, 100)),
 		validation.Field(&la.Icon, validation.By(validateGroupIcon)),
-		validation.Field(&la.Description, validation.Length(0, 200)),
+		validation.Field(&la.Description, validation.RuneLength(0, 200)),
 		validation.Field(&la.HiddenSections),
 		validation.Field(&la.CollectionSet, validation.When(httpMethod != http.MethodPost,
 			validation.Nil.ErrorObject(validation.NewError("validation_create_only",

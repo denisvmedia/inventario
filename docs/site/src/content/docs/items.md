@@ -518,7 +518,9 @@ The header also has:
 
 A **History** section lists every change — who, when, and what — including
 status changes, price changes, moves, cover-photo changes, and a change of
-[seller](../sellers/).
+[seller](../sellers/). A save that changes several things shows one row for
+each status, price, area, or cover change, and one more row for the other
+fields it changed, such as the name or the type.
 
 :::note
 Lending, service, and supplies tracking are only available on single-unit
@@ -686,6 +688,11 @@ them keeps its date, note, and sale price.
 Once an item is in one of these end states, the detail page shows that status
 (with the captured date, note, and sale price) and a **Revert to In Use**
 button so you can put it back into active use at any time.
+
+An item in an end state gets no reminder emails and is left out of the
+Upcoming page and of the weekly digest's coming-up list. Reverting it to In
+Use brings back the reminders that are still due. See [Reminder
+emails](../warranties-loans-maintenance/#reminder-emails).
 
 ## The All Items page: search, filter, sort
 
@@ -920,7 +927,9 @@ On the **All Items** page you can act on several items at once:
      second message says so; those files stay on the Files page.
 
 Each item is changed the way a single change would change it: the same checks
-apply, and the change shows in the item's history. An item that already has
+apply, and the change shows in the item's history. The action writes only
+what it sets, so a change someone saves to one of the items while it runs,
+such as a new name or another tag, is kept. An item that already has
 what you set, such as a tag it already carries, is left as it is, and so is
 an item that does not have a tag you remove. When no item changed, a message
 says which of the two it was.

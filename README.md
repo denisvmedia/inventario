@@ -141,6 +141,9 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # "Hostnames and tenants".
 ./inventario tenants update acme --domain=inventory.acme.com
 
+# Remove the tenant's domain
+./inventario tenants update acme --domain=
+
 # Delete tenant with confirmation (type the tenant's slug to confirm)
 ./inventario tenants delete acme
 
