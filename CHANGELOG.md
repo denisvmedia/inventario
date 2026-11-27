@@ -862,6 +862,14 @@ when to add an entry and where it goes.
   migration that finished before its start request recorded it on the group
   no longer leaves the group shown as migrating
   ([#2918](https://github.com/denisvmedia/inventario/issues/2918)).
+- Add item and the batch upload dialog move the uploads they did not use to
+  Trash, and could move one that an item used: when another tab or a retried
+  save attached the file between the dialog's check and its delete. The
+  server now checks the links and trashes the file in one step, and keeps a
+  file that something links. The API takes it as
+  `DELETE /files/{id}?unless_linked=true`, which answers 409 `file.linked`
+  for a file it keeps
+  ([#2930](https://github.com/denisvmedia/inventario/issues/2930)).
 - The version badge in Settings → Help and the version a feedback report
   carries now show the release you run. Before, every release showed 0.1.0.
   A build without a release number, such as the `edge` image, shows no badge

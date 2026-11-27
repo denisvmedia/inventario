@@ -424,3 +424,33 @@ func TestTrash_Postgres_AreaDeleteWaitsForACurrencyMigration(t *testing.T) {
 		c.Assert(*got.DeletedFromAreaID, qt.Equals, fx.area.ID)
 	}
 }
+
+// TrashFileUnlessLinked trashes a file nothing links to, keeps one a link made
+// after the caller last read it holds, and reports a file in Trash as gone
+// (#2930).
+func TestTrash_Postgres_TrashFileUnlessLinked(t *testing.T) {
+	c := qt.New(t)
+	fx := newTrashPGFixture(t)
+
+	unused := fx.blobFile(c, "unused-upload", 100)
+	c.Assert(fx.trash.TrashFileUnlessLinked(fx.ctx, unused.ID), qt.IsNil)
+	_, err := fx.set.FileRegistry.GetTrashed(fx.ctx, unused.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fx.trash.TrashFileUnlessLinked(fx.ctx, unused.ID), qt.ErrorIs, registry.ErrNotFound)
+
+	// Read without links, then linked by another request before the trash.
+	raced := fx.blobFile(c, "raced-upload", 100)
+	read, err := fx.set.FileRegistry.Get(fx.ctx, raced.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(read.Links, qt.HasLen, 0)
+	drill := fx.item(c, "Drill")
+	_, _, err = fx.set.FileRegistry.AddLink(fx.ctx, models.FileLink{
+		FileID: raced.ID, EntityType: models.FileLinkCommodity, EntityID: drill.ID, Meta: models.FileLinkMetaImages,
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(fx.trash.TrashFileUnlessLinked(fx.ctx, raced.ID), qt.ErrorIs, services.ErrFileLinked)
+	kept, err := fx.set.FileRegistry.Get(fx.ctx, raced.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(pgLinkKeys(kept), qt.DeepEquals, []string{"commodity/" + drill.ID + "/images"})
+}
