@@ -308,6 +308,25 @@ describe("AdminFailedJobsPage", () => {
     expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()
   })
 
+  // The input's max does not stop a later day typed by hand (#3011).
+  it("says the day is too late when one after today is typed", async () => {
+    const user = userEvent.setup()
+    seed()
+    renderPage()
+
+    await screen.findAllByTestId("admin-failed-job-row")
+    await user.click(screen.getByTestId("admin-failed-jobs-bulk-open"))
+    const dialog = await screen.findByTestId("admin-failed-jobs-bulk-dialog")
+    await user.type(within(dialog).getByLabelText("Failed before"), "2999-01-01")
+
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("admin-failed-jobs-bulk-count")).toHaveTextContent(
+        "The day must not be later than today."
+      )
+    )
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()
+  })
+
   it("does not offer the bulk discard to a support agent", async () => {
     server.use(...backofficeAuthHandlers.signedIn({ user: { role: "support_agent" } }))
     seed()

@@ -14,17 +14,33 @@ export interface ListPage<T> {
 }
 
 // Reads every page of a paged list endpoint, MAX_PAGE_SIZE rows at a time,
-// and returns the rows in the order the server sent them. It stops at the
-// first short page or once it has as many rows as the reported total.
-export async function listAllPages<T>(
+// and returns the rows in the order the server sent them. With a reported
+// total it reads until it holds that many rows, so a server that caps the
+// page below MAX_PAGE_SIZE is still read to the end; without one it stops at
+// the first short page. A page that adds no new row ends the walk too.
+//
+// Offset paging is not a snapshot: a row created, deleted or renamed between
+// two page reads moves the rows after it, so a row can come back on the next
+// page or be missed. A row whose id was already read is dropped, so the list
+// holds each id once.
+export async function listAllPages<T extends { id?: string }>(
   fetchPage: (page: number, perPage: number) => Promise<ListPage<T>>
 ): Promise<T[]> {
   const out: T[] = []
+  const seen = new Set<string>()
   for (let page = 1; page <= MAX_PAGES; page++) {
     const { rows, total } = await fetchPage(page, MAX_PAGE_SIZE)
-    out.push(...rows)
-    if (rows.length < MAX_PAGE_SIZE) break
-    if (total !== undefined && out.length >= total) break
+    let added = 0
+    for (const row of rows) {
+      if (row.id !== undefined) {
+        if (seen.has(row.id)) continue
+        seen.add(row.id)
+      }
+      out.push(row)
+      added++
+    }
+    if (added === 0) break
+    if (total === undefined ? rows.length < MAX_PAGE_SIZE : out.length >= total) break
   }
   return out
 }
