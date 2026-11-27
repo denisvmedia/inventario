@@ -527,9 +527,9 @@ func snapshotServiceLifecycle(svc *models.CommodityService) models.CommodityEven
 	if svc.ReturnedAt != nil && *svc.ReturnedAt != "" {
 		p["returned_at"] = string(*svc.ReturnedAt)
 	}
-	if !svc.CostAmount.IsZero() {
+	if svc.HasCost() {
 		p["cost_amount"] = decimalString(svc.CostAmount)
-		p["cost_currency"] = string(svc.CostCurrency)
+		p["cost_currency"] = svc.CostCurrency
 	}
 	return p
 }
@@ -552,9 +552,9 @@ func snapshotServiceDiff(svc *models.CommodityService) models.CommodityEventPayl
 	if svc.ExpectedReturnAt != nil && *svc.ExpectedReturnAt != "" {
 		p["expected_return_at"] = string(*svc.ExpectedReturnAt)
 	}
-	if !svc.CostAmount.IsZero() {
+	if svc.HasCost() {
 		p["cost_amount"] = decimalString(svc.CostAmount)
-		p["cost_currency"] = string(svc.CostCurrency)
+		p["cost_currency"] = svc.CostCurrency
 	}
 	return p
 }

@@ -17477,10 +17477,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
@@ -20256,10 +20256,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
