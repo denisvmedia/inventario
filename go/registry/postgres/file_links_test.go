@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -460,4 +461,54 @@ func pgFileIDs(files []*models.FileEntity) []string {
 		ids = append(ids, f.ID)
 	}
 	return ids
+}
+
+// pgTrashAfterReadFactory moves a file to Trash right after the attach reads
+// it, as another member's delete can between the read and the link of one
+// attach request.
+type pgTrashAfterReadFactory struct {
+	registry.FileRegistryFactory
+	deletedBy string
+}
+
+type pgTrashAfterReadRegistry struct {
+	registry.FileRegistry
+	deletedBy string
+}
+
+func (f pgTrashAfterReadFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
+	inner, err := f.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return pgTrashAfterReadRegistry{FileRegistry: inner, deletedBy: f.deletedBy}, nil
+}
+
+func (r pgTrashAfterReadRegistry) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	file, err := r.FileRegistry.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.FileRegistry.Trash(ctx, id, r.deletedBy, "", time.Now()); err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+func TestFileLinks_Postgres_AttachFileTrashedAfterTheRead(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkPGFixture(t)
+	area := createTestArea(c, fx.set, createTestLocation(c, fx.set).ID)
+	item := createTestCommodity(c, fx.set, area.ID)
+	file := fx.file(c, "manual", 1)
+
+	racing := *fx.factorySet
+	racing.FileRegistryFactory = pgTrashAfterReadFactory{FileRegistryFactory: fx.factorySet.FileRegistryFactory, deletedBy: fx.user.ID}
+	_, _, err := services.NewFileLinkService(&racing).Attach(fx.ctx, file.ID, models.FileLinkCommodity, item.ID, models.FileLinkMetaDocuments)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	var links int
+	c.Assert(fx.dbx.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM file_links WHERE file_id = $1", file.ID).Scan(&links), qt.IsNil)
+	c.Assert(links, qt.Equals, 0, qt.Commentf("a file in Trash must not be linked"))
 }

@@ -135,8 +135,25 @@ func (r *FileRegistry) lockFileForShare(ctx context.Context, tx *sqlx.Tx, fileID
 	return &file, nil
 }
 
-// AddLink attaches a file to an entity; see the interface doc.
+// AddLink attaches a live file to an entity; see the interface doc.
 func (r *FileRegistry) AddLink(ctx context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(ctx, link, isLiveFile)
+}
+
+// AddLinkIncludingTrashed attaches a file in either state; see the interface
+// doc.
+func (r *FileRegistry) AddLinkIncludingTrashed(ctx context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(ctx, link, anyFileState)
+}
+
+func isLiveFile(f *models.FileEntity) bool { return !f.IsTrashed() }
+
+func anyFileState(*models.FileEntity) bool { return true }
+
+// addLink writes the link when inState holds for the file. The file is read
+// under the share lock, which waits for a concurrent Trash to commit, so the
+// state it checks is the one the link is written against.
+func (r *FileRegistry) addLink(ctx context.Context, link models.FileLink, inState func(*models.FileEntity) bool) (*models.FileLink, bool, error) {
 	if link.FileID == "" {
 		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "FileID"))
 	}
@@ -148,6 +165,9 @@ func (r *FileRegistry) AddLink(ctx context.Context, link models.FileLink) (*mode
 		file, err := r.lockFileForShare(ctx, tx, link.FileID)
 		if err != nil {
 			return err
+		}
+		if !inState(file) {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", link.FileID))
 		}
 		stored, created, err = r.insertLink(ctx, tx, file, link)
 		return err
