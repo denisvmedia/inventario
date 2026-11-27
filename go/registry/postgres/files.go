@@ -136,6 +136,11 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 	reg := r.newSQLRegistry()
 
 	err := reg.UpdateWithPrepare(ctx, file, func(ctx context.Context, tx *sqlx.Tx, stored models.FileEntity, next *models.FileEntity) error {
+		// The tag locks come before the file's row lock, the order a tag
+		// rename or delete takes them in (see ensureTagRowsInTx).
+		if err := ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(next.Tags)); err != nil {
+			return err
+		}
 		var current struct {
 			LegacyType string `db:"linked_entity_type"`
 			LegacyID   string `db:"linked_entity_id"`
@@ -168,7 +173,7 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 		if next.File != nil && next.SHA256 == "" {
 			next.SHA256 = current.SHA256
 		}
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(next.Tags))
+		return nil
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update file", err)

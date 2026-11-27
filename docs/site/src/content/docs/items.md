@@ -922,7 +922,9 @@ On the **All Items** page you can act on several items at once:
      second message says so; those files stay on the Files page.
 
 Each item is changed the way a single change would change it: the same checks
-apply, and the change shows in the item's history. An item that already has
+apply, and the change shows in the item's history. The action writes only
+what it sets, so a change someone saves to one of the items while it runs,
+such as a new name or another tag, is kept. An item that already has
 what you set, such as a tag it already carries, is left as it is, and so is
 an item that does not have a tag you remove. When no item changed, a message
 says which of the two it was.
