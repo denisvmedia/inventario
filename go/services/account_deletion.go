@@ -30,8 +30,8 @@ var (
 	ErrAccountSoleOwnerOfSharedGroup = errx.NewSentinel("cannot delete account: you are the sole owner of a shared group — transfer ownership first")
 
 	// ErrAccountStillOwnsContent is returned by DeleteAccount when the user still
-	// owns content (items, files, file links, places, exports, tags, sellers)
-	// authored in a RETAINED group, or created a location_group that is not
+	// owns content (items, files, file links, places, exports) authored in a
+	// RETAINED group, or created a location_group that is not
 	// being purged. Those rows carry a NOT NULL created_by_user_id (or
 	// created_by) FK to users(id) and are the user's own, so they are neither
 	// purged nor handed over, and the account cannot be erased unilaterally. It is raised up-front by the read-only pre-check

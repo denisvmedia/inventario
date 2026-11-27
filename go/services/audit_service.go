@@ -347,35 +347,15 @@ func apiTokenIDFromContext(ctx context.Context) *string {
 	return new(token.ID)
 }
 
-// impersonatorFromContext returns the operator id stored in the
-// `impersonator_id` JWT claim when the `imp` claim is true, otherwise
-// nil. Nil is the common case: the vast majority of admin actions are
-// performed without an active impersonation session.
-//
-// The claim name was renamed from `impersonated_by` to
-// `impersonator_id` at #1785 Phase 5 (the audit-log column stays
-// `impersonated_by` because the column tracks "who was the
-// impersonator?" — the rename only applies to the wire-side claim).
-// The legacy claim is still read as a fallback so an in-flight
-// impersonation session minted before the upgrade is not orphaned on
-// rolling deploys; both names will never coexist in production after
-// the rollout window.
+// impersonatorFromContext returns the operator acting through an
+// impersonation session (appctx.ImpersonatorID), or nil. Nil is the common
+// case: the vast majority of actions are performed without one.
 func impersonatorFromContext(ctx context.Context) *string {
-	claims := appctx.JWTClaimsFromContext(ctx)
-	if claims == nil {
+	by := appctx.ImpersonatorID(ctx)
+	if by == "" {
 		return nil
 	}
-	imp, _ := claims["imp"].(bool)
-	if !imp {
-		return nil
-	}
-	if by, ok := claims["impersonator_id"].(string); ok && by != "" {
-		return &by
-	}
-	if by, ok := claims["impersonated_by"].(string); ok && by != "" {
-		return &by
-	}
-	return nil
+	return &by
 }
 
 // requestIDFromRequest returns the request's correlation id, or nil when there

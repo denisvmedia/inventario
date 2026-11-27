@@ -2,12 +2,18 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/postgres/store"
@@ -129,6 +135,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 	}
 
 	return store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		handed := handOvers{}
 		inTenant := []func(context.Context, *sqlx.Tx, string, string) error{
 			// Thumbnail chain (#2117 parity): user_concurrency_slots.job_id
 			// -> thumbnail_generation_jobs (NO ACTION) and
@@ -137,8 +144,15 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			r.purgeByUserID,
 			// The hand-over runs while the memberships it picks heirs from
 			// are still there.
-			r.handOverGroupRows,
-			r.reattributeIntakeDocuments,
+			func(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+				return r.handOverGroupRows(ctx, tx, handed, tenantID, userID)
+			},
+			func(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+				return r.reattributeIntakeDocuments(ctx, tx, handed, tenantID, userID)
+			},
+			func(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+				return r.recordHandOvers(ctx, tx, handed, tenantID, userID)
+			},
 			// The file links to the drafts and intake sources about to go.
 			r.purgeLinksToRemovedRows,
 			r.purgeRemovedRows,
@@ -188,13 +202,14 @@ func (r *UserPurger) purgeByUserID(ctx context.Context, tx *sqlx.Tx, tenantID, u
 }
 
 // handOverGroupRows gives the rows of every deletionHandsOver table the user
-// created to another member of the row's group; see reattributeRows.
-func (r *UserPurger) handOverGroupRows(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+// created to another member of the row's group, see reattributeRows, and
+// counts them in handed.
+func (r *UserPurger) handOverGroupRows(ctx context.Context, tx *sqlx.Tx, handed handOvers, tenantID, userID string) error {
 	for _, t := range userOwnedTables {
 		if t.onDeletion != deletionHandsOver {
 			continue
 		}
-		if err := r.reattributeRows(ctx, tx, t, "", tenantID, userID); err != nil {
+		if err := r.reattributeRows(ctx, tx, t, handed, "", tenantID, userID); err != nil {
 			return err
 		}
 	}
@@ -365,7 +380,7 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 // The drafts the documents made go to the same member, so a replay finds the
 // draft the record names; the ones whose group has no heir are purged with
 // the user's other drafts.
-func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, handed handOvers, tenantID, userID string) error {
 	docs := r.tableNames.IntakeDocuments()
 	rest := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", docs)
 	if _, err := tx.ExecContext(ctx, rest, tenantID, userID); err != nil {
@@ -377,7 +392,7 @@ func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx
 		userColumn:  createdByUserIDColumn,
 		groupColumn: "group_id",
 	}
-	return r.reattributeRows(ctx, tx, drafts, "t.client_key LIKE $3",
+	return r.reattributeRows(ctx, tx, drafts, handed, "t.client_key LIKE $3",
 		tenantID, userID, models.IntakeDeliveredDraftKeyPrefix+"%")
 }
 
@@ -386,8 +401,9 @@ func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx
 // first. The user's own membership is left out of the choice. A row whose
 // group has no other member keeps its creator; such a group is private and is
 // purged before the user is. A filter that is not empty further limits the
-// rows of t; its parameters start at $3.
-func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, t userOwnedTable, filter, tenantID, userID string, filterArgs ...any) error {
+// rows of t; its parameters start at $3. Each row handed over is counted in
+// handed.
+func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, t userOwnedTable, handed handOvers, filter, tenantID, userID string, filterArgs ...any) error {
 	if filter != "" {
 		filter = " AND " + filter
 	}
@@ -403,14 +419,85 @@ func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, t userOwn
 				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 				joined_at, member_user_id
 		) heir
-		WHERE t.tenant_id = $1 AND t.%[3]s = $2 AND t.%[4]s = heir.group_id%[5]s`,
+		WHERE t.tenant_id = $1 AND t.%[3]s = $2 AND t.%[4]s = heir.group_id%[5]s
+		RETURNING heir.group_id, heir.member_user_id`,
 		table, memberships, t.userColumn, t.groupColumn, filter)
-	if _, err := tx.ExecContext(ctx, query, append([]any{tenantID, userID}, filterArgs...)...); err != nil {
+	rows, err := tx.QueryContext(ctx, query, append([]any{tenantID, userID}, filterArgs...)...)
+	if err != nil {
 		return errxtrace.Wrap(
 			"failed to hand over the user's group rows",
 			err,
 			errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
 		)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var groupID, heir string
+		if err := rows.Scan(&groupID, &heir); err != nil {
+			return errxtrace.Wrap("failed to read a handed over row", err, errx.Attrs("table", table))
+		}
+		handed.add(groupID, heir, table)
+	}
+	if err := rows.Err(); err != nil {
+		return errxtrace.Wrap("failed to read the handed over rows", err, errx.Attrs("table", table))
+	}
+	return nil
+}
+
+// handOvers counts, per group, the rows the purge gave to another member.
+type handOvers map[string]*groupHandOver
+
+// groupHandOver is what one group's heir received: the count of rows per
+// table.
+type groupHandOver struct {
+	heir string
+	rows map[string]int
+}
+
+func (h handOvers) add(groupID, heir, table string) {
+	g, ok := h[groupID]
+	if !ok {
+		g = &groupHandOver{heir: heir, rows: map[string]int{}}
+		h[groupID] = g
+	}
+	g.rows[table]++
+}
+
+// recordHandOvers writes one audit row per group whose rows the purge handed
+// over, in the purge transaction: the deleted user as the actor, the group
+// as the entity, and the member who received the rows with the count per
+// table in the breadcrumb. The rows keep the request id and the impersonator
+// of the request that deleted the account, when there is one.
+func (r *UserPurger) recordHandOvers(ctx context.Context, tx *sqlx.Tx, handed handOvers, tenantID, userID string) error {
+	groupIDs := slices.Sorted(maps.Keys(handed))
+	audit := store.NewTxRegistry[models.AuditLog](tx, r.tableNames.AuditLogs())
+	for _, groupID := range groupIDs {
+		g := handed[groupID]
+		breadcrumb, err := json.Marshal(map[string]any{"to_user_id": g.heir, "rows": g.rows})
+		if err != nil {
+			return errxtrace.Wrap("failed to encode the hand-over", err)
+		}
+		entry := models.AuditLog{
+			ID:         uuid.NewString(),
+			UUID:       uuid.NewString(),
+			Timestamp:  time.Now(),
+			UserID:     new(userID),
+			TenantID:   new(tenantID),
+			Action:     registry.AuditActionAccountDeletionHandOver,
+			EntityType: new("location_group"),
+			EntityID:   new(groupID),
+			UserAgent:  string(breadcrumb),
+			Success:    true,
+		}
+		if id := appctx.RequestIDFromContext(ctx); id != "" {
+			entry.RequestID = new(id)
+		}
+		if by := appctx.ImpersonatorID(ctx); by != "" {
+			entry.ImpersonatedBy = new(by)
+		}
+		if err := audit.Insert(ctx, entry); err != nil {
+			return errxtrace.Wrap("failed to record the hand-over", err, errx.Attrs("group_id", groupID))
+		}
 	}
 	return nil
 }

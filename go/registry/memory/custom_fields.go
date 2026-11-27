@@ -254,13 +254,15 @@ func (f *CustomFieldRegistryFactory) groupsCreatedBy(tenantID, userID string) []
 }
 
 // reattributeCreator gives the fields userID created in tenantID to the heir
-// of their group in heirs; a group without an heir keeps the creator. The
-// template entries live on the fields, so they move with them.
-func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// of their group in heirs and returns how many each group handed over; a
+// group without an heir keeps the creator. The template entries live on the
+// fields, so they move with them.
+func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.base.lock.Lock()
 	defer f.base.lock.Unlock()
+	moved := map[string]int{}
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		d := pair.Value
 		heir := heirs[d.GroupID]
@@ -270,7 +272,45 @@ func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string,
 		cp := *d
 		cp.CreatedByUserID = heir
 		pair.Value = &cp
+		moved[d.GroupID]++
 	}
+	return moved
+}
+
+// customFieldTemplates is the hand-over view of the item type entries of the
+// fields a user created. On postgres each entry is an item_type_custom_fields
+// row carrying its field's creator, handed over in an UPDATE of its own; here
+// the entries live in the definition, so handing over the field hands them
+// over, and this only counts them for the audit row. Call it before the
+// fields change hands.
+type customFieldTemplates struct {
+	fields *CustomFieldRegistryFactory
+}
+
+func (t customFieldTemplates) groupsCreatedBy(tenantID, userID string) []string {
+	return t.fields.groupsCreatedBy(tenantID, userID)
+}
+
+func (t customFieldTemplates) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
+	f := t.fields
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	counted := map[string]int{}
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		d := pair.Value
+		if d.TenantID != tenantID || d.CreatedByUserID != userID || heirs[d.GroupID] == "" {
+			continue
+		}
+		// An entry whose item type is gone has no row on postgres.
+		for _, entry := range d.Templates {
+			if f.itemTypeExists(d.GroupID, entry.ItemTypeID) {
+				counted[d.GroupID]++
+			}
+		}
+	}
+	return counted
 }
 
 // purgeWhere removes the fields match selects, for the group and tenant

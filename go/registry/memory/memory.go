@@ -258,6 +258,7 @@ func NewFactorySet() *registry.FactorySet {
 	if invites, ok := fs.GroupInviteRegistry.(*GroupInviteRegistry); ok {
 		userPurger.setGroupInviteRegistry(invites)
 	}
+	userPurger.setAuditLogRegistry(fs.AuditLogRegistry)
 
 	// What a member leaves behind in a group lives in stores read off the
 	// FactorySet, so it is wired after every fs.* field too.
