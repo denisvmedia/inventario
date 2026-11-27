@@ -46,10 +46,10 @@ matters more than wall-time.
    `E2E Tests (${{ matrix.browser }})`, rather than `E2E Tests (chromium)`.
    A required context that sometimes does not exist stays "Expected — waiting
    for status" and blocks the merge forever, so a matrix job meant to be
-   required has to run and decide inside its steps. `e2e-tests-linux` does
-   that: its first step reads the image resolver's result and either runs the
-   suite, reports green because the diff builds no image, or fails because the
-   build did.
+   required has to run and decide inside its steps. `e2e-tests-linux` in
+   `docker.yml` does that: its first step reads the result of the build and
+   manifest jobs it needs and either runs the suite, reports green because the
+   diff builds no image, or fails because the build did.
 
 ## Filter quick-reference
 
@@ -63,7 +63,7 @@ matters more than wall-time.
 | `frontend_codegen` | The codegen script, `frontend/package*.json`, `frontend/src/types/api.d.ts`, plus any Go file or `Makefile` (Go drives `swagger.json`, the codegen input) |
 | `frontend_i18n`    | `frontend/src/**`, `frontend/i18next.config.ts`, `frontend/scripts/i18n-check.mjs`, `frontend/package*.json`                                            |
 | `e2e`              | `e2e/**` or `docker-compose.e2e.yaml`                                                                                                                    |
-| `image_inputs`     | Anything that makes a fresh Docker image necessary or that a downstream consumer (e2e-tests, kind-smoke-test) needs an image for: `Dockerfile`, `.dockerignore`, `docker-compose*.yaml`, `go/**`, `frontend/**`, `scripts/**`, `init-scripts/**`, `Makefile`, `.goreleaser.yaml`, `e2e/**`, `k8s/dev/**` |
+| `image_inputs`     | Anything that makes a fresh Docker image necessary or that a lane testing the image (the e2e and kind lanes of `docker.yml`, `helm-kind-smoke-test`) needs an image for: `Dockerfile`, `.dockerignore`, `docker-compose*.yaml`, `go/**`, `frontend/**`, `scripts/**`, `init-scripts/**`, `Makefile`, `.goreleaser.yaml`, `e2e/**`, `k8s/dev/**` |
 | `markdown`         | Any `**/*.md`, plus the linter's own config (`.markdownlint.jsonc`, `.markdownlint-cli2.jsonc`). Gates `markdown-lint.yml`                              |
 | `ci`               | Anything under `.github/workflows/`, `.github/actions/`, or `.github/filters.yml`                                                                        |
 
@@ -81,24 +81,24 @@ under `dorny/paths-filter`'s default semantics.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `CHANGELOG.md` only                  | `markdown-lint` and the `changelog` job of `frontend-test` (the CHANGELOG.md guard alone) |
 | Root markdown only (`README.md`)     | `markdown-lint` only. The 13 ecosystem-gated workflows skip; the narrowly-filtered ones (helm-lint, cli-integration-test, smoke tests, release dry-run, renovate-config) also skip          |
-| Backend only (`go/**`)               | `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`, `frontend-codegen` (Go drives swagger.json), `frontend-embed-smoke-test`, `docker.yml`, `e2e-tests-linux[chromium]`; Firefox + macOS-webkit + the other frontend-* workflows skip |
+| Backend only (`go/**`)               | `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`, `frontend-codegen` (Go drives swagger.json), `frontend-embed-smoke-test`, `docker.yml` with `e2e-tests-linux[chromium]` and the kind smoke test; Firefox + macOS-webkit + the other frontend-* workflows skip |
 | Model annotations or the migration chain (`go/models/**`, `go/schema/**`) | `migration-plan` on top of the backend set — it posts the schema delta against a base-state database and fails on a destructive one unless the PR carries the `allow-destructive` label |
-| Frontend code only (e.g. `frontend/src/App.tsx`) | `frontend-test`, `frontend-lint`, `frontend-i18n`, `frontend-lhci`, `frontend-size`, `frontend-embed-smoke-test`, `docker.yml`, full `e2e-tests` matrix. `frontend-codegen` skips because no codegen driver changed |
-| Frontend codegen driver only (`frontend/scripts/codegen.mjs`) | `frontend-codegen`, plus (via `frontend/**`) `frontend-test`, `frontend-lint`, `frontend-lhci`, `frontend-size`, `frontend-embed-smoke-test`, `docker.yml`, and the full `e2e-tests` matrix. `frontend-i18n` skips because no i18n input changed |
-| E2E only (`e2e/**`)                  | `docker.yml` (`e2e/**` is in `image_inputs` so a fresh image is built), full `e2e-tests` matrix                                                                                            |
+| Frontend code only (e.g. `frontend/src/App.tsx`) | `frontend-test`, `frontend-lint`, `frontend-i18n`, `frontend-lhci`, `frontend-size`, `frontend-embed-smoke-test`, `docker.yml` with the full e2e matrix. `frontend-codegen` skips because no codegen driver changed |
+| Frontend codegen driver only (`frontend/scripts/codegen.mjs`) | `frontend-codegen`, plus (via `frontend/**`) `frontend-test`, `frontend-lint`, `frontend-lhci`, `frontend-size`, `frontend-embed-smoke-test`, and `docker.yml` with the full e2e matrix. `frontend-i18n` skips because no i18n input changed |
+| E2E only (`e2e/**`)                  | `docker.yml` (`e2e/**` is in `image_inputs` so a fresh image is built) with the full e2e matrix                                                                                             |
 | Helm only (`helm/**`)                | `helm-lint`                                                                                                                                                                                |
-| Dockerfile / compose / scripts / init-scripts | `docker.yml`, `docker-compose-smoke-test`, `kind-smoke-test`, e2e-tests-linux[chromium] (webkit + firefox skip unless the change is also frontend/e2e)                          |
-| `k8s/dev/**` only                    | `docker.yml`, `kind-smoke-test`, `e2e-tests-linux[chromium]`                                                                                                                              |
+| Dockerfile / compose / scripts / init-scripts | `docker.yml` with the kind smoke test and e2e-tests-linux[chromium] (webkit + firefox skip unless the change is also frontend/e2e), `docker-compose-smoke-test`               |
+| `k8s/dev/**` only                    | `docker.yml` with the kind smoke test and `e2e-tests-linux[chromium]`                                                                                                                      |
 | `renovate.json` only                 | `renovate-config-validation`                                                                                                                                                              |
 | Any change to `.github/workflows/**` | Full pipeline (the `ci` filter forces it)                                                                                                                                                  |
 | `master` push or `v*` tag            | Full pipeline (PR-only gating, always-on integration)                                                                                                                                      |
 
 ## e2e browser-matrix scoping
 
-`e2e-tests.yml` runs three Playwright browsers in the worst case: Chromium
-and Firefox on Linux, Webkit on macOS. Each browser is its own ~30-minute
-critical-path job. The `changes` job emits two extra outputs to scope the
-matrix:
+The e2e lanes of `docker.yml` run three Playwright browsers in the worst
+case: Chromium and Firefox on Linux, Webkit on macOS. Each browser is its own
+~30-minute critical-path job. The `changes` job of `docker.yml` emits two extra
+outputs to scope the matrix:
 
 - `linux_browsers` — a JSON array. `["chromium","firefox"]` whenever the diff
   matches the `frontend`, `e2e`, or `ci` filter (or any non-PR event);
@@ -119,6 +119,16 @@ narrows to `frontend OR e2e OR ci OR non-PR`.
 | Frontend or e2e                                            | chromium + firefox      | yes               |
 | `ci` (workflow / action / filters edit)                    | chromium + firefox      | yes               |
 | push to master or `v*` tag                                 | chromium + firefox      | yes               |
+
+## Image build and the lanes that test it
+
+`docker.yml` builds the image and runs the lanes that pull it: the e2e lanes
+and the kind smoke test. They wait for the manifest job through `needs`, so a
+pull request whose build is queued costs no Actions API requests while it
+waits. `helm-kind-smoke-test.yml` is the one image consumer still outside
+`docker.yml`; it polls through `_wait-for-docker-image.yml`. The request
+budget these choices are sized against is in
+[`github-api-budget.md`](github-api-budget.md).
 
 ## Markdown lint
 
@@ -151,13 +161,13 @@ markdownlint-cli2 --fix          # auto-fix what's auto-fixable
 | --------------------------------- | ---------------------------------------------------------------------------- |
 | `cli-integration-test.yml`        | Already has `paths: [go/**, .github/workflows/cli-integration-test.yml]`     |
 | `docker-compose-smoke-test.yml`   | Already has a conservative path filter                                       |
-| `kind-smoke-test.yml`             | Already has a conservative path filter                                       |
+| `kind-smoke-test.yml`             | `workflow_call` only, from `docker.yml` once the image is published          |
 | `helm-lint.yml`                   | Already gated on `helm/**`                                                   |
 | `renovate-config-validation.yml`  | Already gated on `renovate.json`                                             |
 | `release.yml`                     | Already gated on a narrow PR path filter (PR dry-run); tag push unaffected   |
 | `dependabot-automerge.yml`        | Only fires on PRs by `dependabot[bot]` / `renovate[bot]`                     |
 | `copilot-setup-steps.yml`         | `workflow_dispatch` only                                                     |
-| `_wait-for-docker-image.yml`      | `workflow_call` only (reusable)                                              |
+| `_wait-for-docker-image.yml`      | `workflow_call` only (reusable), from `helm-kind-smoke-test.yml`             |
 
 ## Adding a new conditional check
 
