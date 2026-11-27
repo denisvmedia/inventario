@@ -648,6 +648,13 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Renaming or deleting a tag while someone saves an item or file that
+  carries it no longer fails one of the two with a server error. The save
+  and the tag change could each wait for the other until the database gave
+  up on one of them. A tag rename or delete, and an item type delete that
+  moves items to another type, now also wait for a running currency
+  migration of the group instead of rewriting the items it is converting
+  ([#2874](https://github.com/denisvmedia/inventario/issues/2874)).
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
