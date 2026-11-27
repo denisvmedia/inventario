@@ -815,6 +815,15 @@ when to add an entry and where it goes.
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
 
+- Item thumbnails of a photo taken in portrait on a phone are upright. A
+  phone stores such a photo sideways with a tag that says how to turn it;
+  browsers turn the full photo, but the thumbnails in the item list, on the
+  item page and on the Files page were made from the stored pixels and lay
+  on their side. Thumbnails are now turned first. When the server first starts
+  after the upgrade it reads the start of every JPEG photo once, in the
+  background, and makes the thumbnails of the turned ones again
+  ([#2980](https://github.com/denisvmedia/inventario/issues/2980)).
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.

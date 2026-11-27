@@ -774,6 +774,18 @@ type FileRegistry interface {
 	// only.
 	SetChecksum(ctx context.Context, id, sha256 string) error
 
+	// ListPendingThumbnailOrientation returns up to limit JPEG files that have
+	// a blob and are not marked ThumbnailsOriented, ordered by id and starting
+	// after afterID, for the startup thumbnail orientation pass. Trashed files
+	// are included. Service mode only.
+	ListPendingThumbnailOrientation(ctx context.Context, afterID string, limit int) ([]*models.FileEntity, error)
+
+	// SetThumbnailsOriented marks a file's thumbnails as made from the photo
+	// turned the way its EXIF orientation says. It writes only that column, so
+	// it cannot overwrite a concurrent metadata edit; an unknown id is not an
+	// error. Service mode only.
+	SetThumbnailsOriented(ctx context.Context, id string) error
+
 	// MoveLegacyLinks moves the single link that up to limit files still carry
 	// in their legacy linked_entity_* columns into file_links, and empties those
 	// columns in the same transaction, so a row is moved exactly once and a
