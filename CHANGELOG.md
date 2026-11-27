@@ -659,6 +659,21 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Reminder emails go out only for items in use. An item marked Sold, Lost,
+  Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
+  loan and item reminders, and its reminders, loans and maintenance stayed on
+  the Upcoming page; the weekly digest listed its warranty and maintenance as
+  coming up, and the maintenance of an item in Trash too. Reverting the item
+  to In Use brings back the reminders that are still due
+  ([#2908](https://github.com/denisvmedia/inventario/issues/2908)).
+- A request that waits for a free database connection stops waiting when the
+  client gives up or the request times out. Before, it stayed in the queue
+  with no deadline, so under load the queue grew instead of shedding
+  requests, and requests that each held one connection while waiting for a
+  second could stop the server from answering until it was restarted. A save
+  whose transaction did not commit is now reported as failed; before, a
+  failed commit was reported as a success
+  ([#2875](https://github.com/denisvmedia/inventario/issues/2875)).
 - Saving an item from the **All fields** dialog keeps its status date, status
   note and sale price. The dialog sent the item without them, and the save
   cleared them. The dialog also offered a status change it could not finish:
@@ -667,6 +682,36 @@ when to add an entry and where it goes.
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
 
+- The Add item form keeps unsaved input for one user. What it kept in the
+  browser (the values, the files and the draft it saves to) is filed under the
+  user and the group, so the next person to sign in on the same browser starts
+  with an empty form, and signing out removes it. A save still running when
+  the member leaves the form with browser Back and switches group goes on in
+  the group the form opened in; before, its remaining requests went to the
+  other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+
+- An item's history keeps every edit of a save. A save that changed the
+  status, the area, a price or the cover recorded only that change, and the
+  name, type, tags or any other field changed in the same save were missing
+  from the history; a bulk edit that set the type and the status recorded
+  only the status. Such a save now also records an "updated" entry with the
+  other fields
+  ([#2899](https://github.com/denisvmedia/inventario/issues/2899)).
+- A bulk action on items or files no longer undoes a change someone saves to
+  one of them while it runs. Changing the tags, type or status of selected
+  items, moving them, or changing the tags of selected files read each one,
+  changed it and wrote the whole record back, so a new name, a note or a tag
+  saved in between was lost. Each record is now read and written under its
+  row lock, and only the fields the action sets are written
+  ([#2891](https://github.com/denisvmedia/inventario/issues/2891)).
+- Renaming or deleting a tag while someone saves an item or file that
+  carries it no longer fails one of the two with a server error. The save
+  and the tag change could each wait for the other until the database gave
+  up on one of them. A tag rename or delete, and an item type delete that
+  moves items to another type, now also wait for a running currency
+  migration of the group instead of rewriting the items it is converting
+  ([#2874](https://github.com/denisvmedia/inventario/issues/2874)).
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
@@ -675,6 +720,17 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- Text length limits count characters in every language. The server counted
+  most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
+  borrower, supply link, maintenance title, file description and other text
+  was refused with 422 at about half the length the form allowed. Form fields
+  now also count an emoji as one character, as the server does, where they
+  stopped at half the limit. An account name has 100 characters at most, which
+  the server always required; the sign-up and profile forms said 255. Two
+  limits stay in bytes because they bound storage rather than text a person
+  reads: the query of a saved view and the external system, instance and
+  document identifiers of the intake API
+  ([#2919](https://github.com/denisvmedia/inventario/issues/2919)).
 - A personal data export whose build stops its worker every time is no
   longer started again every hour for good. Each build counts, and a build
   whose worker stops during the third one fails the export with "the
@@ -776,6 +832,24 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- A tenant domain is unique in the database. The upgrade runs a migration
+  that replaces the index on `tenants.domain` with a unique one, so two
+  creates or edits that give one domain to two tenants at the same time no
+  longer both succeed; the second gets `409 tenant.domain_taken`. Tenants
+  written before domains were checked can share one, and the index cannot
+  be built over them: `inventario db migrate up` then stops before it
+  applies anything and names each shared domain with the slugs of its
+  tenants. Leave each domain with one tenant, with
+  `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes
+  it) or in the back office, and run the migrations again.
+  `db migrate up --dry-run` runs the same check before the upgrade
+  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
+- `inventario tenants update` accepts `--name`, `--slug`, `--domain`,
+  `--status`, `--settings`, `--dry-run` and `--interactive`. Only
+  `--registration-mode` was registered, so the commands README and the
+  command's help showed, such as `--domain=inventory.acme.com`, failed with
+  `unknown flag`
+  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
 - The server ignores table columns it does not know. A rolling upgrade from
   this release to a later one whose migration adds a column no longer fails
   the pods that still run this release. The upgrade to this release does not
@@ -948,6 +1022,17 @@ when to add an entry and where it goes.
   the file; a custom image build that copies only `frontend/` has to copy
   `CHANGELOG.md` next to it
   ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
+- The currency migration worker deletes completed and failed currency
+  migrations, discarded or not, 90 days after they ended, with their
+  per-item audit rows. `--currency-migration-retention`
+  (`INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION`, at least `24h`) sets the
+  period. The worker checks once an hour, also while it is paused, and never
+  deletes a pending or running migration or one a group still points to. A
+  deleted migration leaves the group's migration history and the failed jobs
+  list; the audit log keeps its start and its end. The first check after the
+  upgrade deletes the older migrations kept so far, so set a longer period
+  before the upgrade to keep them. See the admin runbook §10
+  ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 
 ## [0.2.2] - 2026-11-23
 

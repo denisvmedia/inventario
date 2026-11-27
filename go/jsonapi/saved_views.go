@@ -224,6 +224,7 @@ func (d SavedViewRequestData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &d,
 		validation.Field(&d.Name, validation.Required, validation.RuneLength(1, models.MaxSavedViewNameRunes)),
 		validation.Field(&d.Icon, validation.By(validSavedViewIcon)),
+		// Bytes: MaxSavedViewQueryBytes bounds the size of the stored query string, which members never read as text.
 		validation.Field(&d.Query, validation.Length(0, models.MaxSavedViewQueryBytes)),
 		validation.Field(&d.Layout, validation.By(validSavedViewLayout)),
 	)
@@ -296,6 +297,7 @@ func (d SavedViewUpdateRequestData) ValidateWithContext(ctx context.Context) err
 	}
 	if d.Query != nil {
 		fields = append(fields, validation.Field(&d.Query, validation.By(func(any) error {
+			// Bytes: MaxSavedViewQueryBytes bounds the size of the stored query string, which members never read as text.
 			return validation.Validate(*d.Query, validation.Length(0, models.MaxSavedViewQueryBytes))
 		})))
 	}

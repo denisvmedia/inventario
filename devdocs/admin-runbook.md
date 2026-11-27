@@ -654,8 +654,19 @@ it:
 - `personal-data-export`: until the row expires, 7 days after the user's
   request or after the latest retry; the export worker then deletes it.
   Deleting the user or the tenant deletes it too.
-- `currency-migration`: never. No cleanup removes currency migrations
-  today; the row stays until the group is deleted
+- `currency-migration`: the currency migration worker deletes completed and
+  failed migrations, discarded or not, once they ended more than
+  `--currency-migration-retention` ago
+  (`INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION`, `2160h` (90 days) by
+  default), with their per-item audit rows. It checks once an hour, also
+  while the worker is paused. A pending or running migration, and one a
+  group still points to (`location_groups.currency_migration_id`), is never
+  deleted. The period must be at least `24h`, because the daily limit of two
+  migrations per group counts the completed ones since UTC midnight; a
+  shorter value stops the server at startup. A deleted migration leaves the
+  group's migration history as well; the audit log keeps its
+  `currency_migration.start` and `currency_migration.complete` or
+  `currency_migration.fail` rows
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 
 Jobs that failed before the upgrade to this version are listed and counted
@@ -773,9 +784,18 @@ Create and edit:
   closed.
 - Slugs and domains are unique: one another tenant has is refused with
   `409` and `tenant.slug_taken` or `tenant.domain_taken`. A domain is a
-  bare lowercase hostname; an empty `domain` on edit removes it. An edit
-  checks the domain only when it changes it, so a domain two tenants
-  already share does not block a rename.
+  bare lowercase hostname; an empty `domain` on edit removes it, as
+  `inventario tenants update <slug> --domain=` does. A unique index on
+  `tenants.domain` holds the rule in the database, so two creates or
+  edits that give one domain to two tenants at the same time cannot both
+  succeed: the second gets the same `409`.
+- Tenants written before the index existed (#2948) can share a domain.
+  `inventario db migrate up` checks for that before it applies anything,
+  and stops with the shared domains and the slugs of their tenants:
+  `tenants share a domain, so tenants.domain cannot be made unique:
+  "acme.com" (tenants acme, acme-old)`. Leave each domain with one tenant,
+  then run the migrations again. `db migrate up --dry-run` runs the same
+  check, so it can be run before the upgrade.
 - With a tenant base domain (`--tenant-base-domain`), where
   `<slug>.<base domain>` is a tenant's address, a custom domain that is the
   base domain or a host under it is refused with `422` and

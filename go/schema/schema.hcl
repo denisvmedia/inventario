@@ -4603,7 +4603,9 @@ table "tenants" {
     unique = true
     columns = [column.uuid]
   }
-  index "tenants_domain_idx" {
+  index "tenants_domain_unique_idx" {
+    unique = true
+    where = "domain IS NOT NULL"
     columns = [column.domain]
   }
   index "tenants_single_default_idx" {

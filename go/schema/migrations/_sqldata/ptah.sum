@@ -1,4 +1,4 @@
-h1:fyPDn7IwNeLDz6JFCa0KDEdkmEXg6nowwPw6ejfubBE=
+h1:AeXuTxzK+bg41BAIT6cyvVytjJZKMSSRGbPYox2VIAA=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -53,5 +53,5 @@ h1:fyPDn7IwNeLDz6JFCa0KDEdkmEXg6nowwPw6ejfubBE=
 1795707457_add_failed_job_discard.up.sql h1:YLtyEf6O4tmSgKLddtGbfVLuKHINKc/M3u5BhM4aYg8=
 1795713553_add_item_set_entries.down.sql h1:Bx5MUbhWElFVygFacj4w/wvb6eiWRMWrQIbF8IDJyr8=
 1795713553_add_item_set_entries.up.sql h1:Y7kGwRIrlAgVM8QsR2wKyCDP2W9Cz62YnZcS/ZhGYOM=
-1795782965_add_personal_data_export_failed_job_columns.down.sql h1:/NdcIK/a4hFBhiwEAYDx6u0dlIFAMD30plkgiHIszy8=
-1795782965_add_personal_data_export_failed_job_columns.up.sql h1:gYeoP4WwLRikUtePfB1Wi71DhuW/PLyx93Fp7t2KKF8=
+1795785551_make_tenant_domain_unique.down.sql h1:RQ4ksCmFrZpClPfI2uGRtPjnMmiqiQrEktGk2p6VlB4=
+1795785551_make_tenant_domain_unique.up.sql h1:Iz9oR20/4uVFYpN0fUIYJf1lc8ZmUV/vlzjKc84fGJk=

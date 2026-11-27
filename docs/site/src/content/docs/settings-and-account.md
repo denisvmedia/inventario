@@ -12,7 +12,9 @@ account security, sign-in methods, and where to get help.
 
 The **Preferences** page has a left-hand menu with five sections — **Account**,
 **Appearance**, **Notifications**, **Privacy & security**, and **Help &
-support** — plus a **Sign out** shortcut at the bottom of that menu.
+support** — plus a **Sign out** shortcut at the bottom of that menu. Signing out
+also removes the unsaved **Add item** input this browser kept for you (see
+[Saved on this device](../items/#saved-on-this-device)).
 
 ![The Preferences page with its left-hand menu of sections](../../assets/screenshots/settings.png)
 
@@ -198,7 +200,7 @@ on for:
 - how many items were added, how many were changed, and how many files were
   attached;
 - warranties expiring in the next 30 days and maintenance due in the next 14,
-  nearest first, unless the group
+  nearest first, for items that are In Use, unless the group
   [hides that section](../groups-and-sharing/#hide-sections-the-group-doesnt-use).
 
 A few things worth knowing:

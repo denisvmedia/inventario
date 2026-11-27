@@ -101,7 +101,7 @@ func (a *RestoreOperationCreateRequest) validateAttributesWithContext(ctx contex
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&a.Data.Attributes.Description, validation.Required, validation.Length(1, 500)),
+		validation.Field(&a.Data.Attributes.Description, validation.Required, validation.RuneLength(1, 500)),
 		validation.Field(&a.Data.Attributes.Options),
 	)
 
@@ -138,7 +138,7 @@ func (a *RestoreOperationUpdateRequest) validateAttributesWithContext(ctx contex
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&a.Data.Attributes.Description, validation.Required, validation.Length(1, 500)),
+		validation.Field(&a.Data.Attributes.Description, validation.Required, validation.RuneLength(1, 500)),
 		validation.Field(&a.Data.Attributes.Options),
 	)
 

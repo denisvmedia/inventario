@@ -24,7 +24,6 @@ import {
 import {
   REMINDER_MAX_INTERVAL,
   REMINDER_REPEAT_UNITS,
-  REMINDER_TITLE_MAX,
   type Reminder,
   type ReminderInput,
   type ReminderRepeatUnit,
@@ -141,7 +140,6 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
         <Input
           id="reminder-title"
           placeholder={t("reminders:dialog.titlePlaceholder")}
-          maxLength={REMINDER_TITLE_MAX}
           data-testid="reminder-title-input"
           aria-invalid={!!errors.title}
           aria-describedby={errors.title ? "reminder-title-error" : undefined}
