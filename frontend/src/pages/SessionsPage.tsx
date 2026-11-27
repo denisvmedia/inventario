@@ -24,6 +24,7 @@ import {
 } from "@/features/sessions/hooks"
 import { parseUserAgent } from "@/features/security/ua"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { formatDateTime, formatRelative } from "@/lib/intl"
 
@@ -68,9 +69,7 @@ export function SessionsPage() {
         toast.success(t("settings:sessions.toasts.revoked"))
         setPendingRevoke(null)
       },
-      onError: () => {
-        toast.error(t("settings:sessions.toasts.revokeFailed"))
-      },
+      onError: (err) => toastMutationError(err, t("settings:sessions.toasts.revokeFailed")),
     })
   }
 
@@ -96,9 +95,7 @@ export function SessionsPage() {
         toast.success(t("settings:sessions.toasts.allRevoked"))
         setRevokeAllOpen(false)
       },
-      onError: () => {
-        toast.error(t("settings:sessions.toasts.revokeFailed"))
-      },
+      onError: (err) => toastMutationError(err, t("settings:sessions.toasts.revokeFailed")),
     })
   }
 

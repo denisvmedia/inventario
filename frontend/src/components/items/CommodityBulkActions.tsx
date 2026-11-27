@@ -47,6 +47,7 @@ import { ITEM_TYPE_UNKNOWN_FIELD } from "@/features/itemTypes/api"
 import { labelsPageHref } from "@/features/labels/links"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
 import type { ListContext } from "@/lib/list-context"
 import {
@@ -340,9 +341,13 @@ export function CommodityBulkActions({
       toast.error(t("commodities:toast.bulkTooMany", { max: meta.max ?? MAX_BULK_QUERY_ITEMS }))
       return
     }
-    if (action.kind === "move") toast.error(t("commodities:toast.bulkMoveError"))
-    else if (action.kind === "delete") toast.error(t("commodities:toast.bulkDeleteError"))
-    else toast.error(t("commodities:toast.bulkUpdateError"))
+    if (action.kind === "move") {
+      toastMutationError(err, t("commodities:toast.bulkMoveError"))
+    } else if (action.kind === "delete") {
+      toastMutationError(err, t("commodities:toast.bulkDeleteError"))
+    } else {
+      toastMutationError(err, t("commodities:toast.bulkUpdateError"))
+    }
   }
 
   // submit sends the action of the open dialog, and closes that dialog when

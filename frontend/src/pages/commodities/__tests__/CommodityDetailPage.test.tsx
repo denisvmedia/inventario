@@ -579,6 +579,35 @@ describe("<CommodityDetailPage />", () => {
     expect(within(dialog).getByTestId("commodity-form-submit")).toBeInTheDocument()
   })
 
+  it("keeps the status date, note and sale price when All fields saves (#2915)", async () => {
+    const user = userEvent.setup()
+    const row = itemRow(ID, "MacBook Pro 16")
+    row.attributes = {
+      ...row.attributes,
+      status: "sold",
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+    }
+    const puts = serveItems([row])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    await screen.findByLabelText(/^name/i)
+    await user.click(screen.getByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    const name = within(dialog).getByRole("textbox", { name: /^name/i })
+    await user.clear(name)
+    await user.type(name, "MacBook Air")
+    await user.click(within(dialog).getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes).toMatchObject({
+      name: "MacBook Air",
+      status: "sold",
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+    })
+  })
+
   it("deletes the commodity from the detail page", async () => {
     const user = userEvent.setup()
     server.use(
@@ -600,6 +629,29 @@ describe("<CommodityDetailPage />", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("commodity-detail-delete")).not.toBeInTheDocument()
     )
+  })
+
+  it("shows the server's reason when the delete is refused", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      http.delete(apiUrl(`/g/${SLUG}/commodities/${ID}`), () =>
+        HttpResponse.json(
+          { errors: [{ status: "Conflict", detail: "the item is lent out" }] },
+          { status: 409 }
+        )
+      )
+    )
+    renderDetail()
+    await user.click(await screen.findByTestId("commodity-detail-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalledWith("the item is lent out"))
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("commodity-detail-delete")).toBeInTheDocument()
   })
 
   it("renders the audit timeline with kind-aware copy (#1450)", async () => {
@@ -1509,7 +1561,12 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
         "Item 50 of 52 to review"
       )
     )
-    await user.click(screen.getByTestId("commodity-review-mark"))
+    // The position comes from page 1, but the next item is on page 2, and
+    // both review actions stay disabled until that page has loaded. A click
+    // before then lands on a disabled button and does nothing.
+    const mark = screen.getByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    await user.click(mark)
     await waitFor(() =>
       expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c51?`)
     )

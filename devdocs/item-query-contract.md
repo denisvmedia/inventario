@@ -73,6 +73,8 @@ Every term must match. A term matches an item when one of these holds:
 
 In PostgreSQL most searched fields are joined into the generated column `commodities.search_text` (by the `commodity_search_text` SQL function), which carries a trigram GIN index, so a term is one `ILIKE` on an indexed column. The brand and the model are matched with an `ILIKE` each on their own trigram-indexed columns: putting them into `search_text` would change the function's parameters, which the generated column depends on, and rewriting a generated column's expression in place needs PostgreSQL 17. The memory registry evaluates `MatchCommoditySearch` in Go. `registry.CommoditySearchTextFields` must list the fields of the generated column, and together with `registry.CommodityColumnSearchFields` the same fields as `registry.CommoditySearchFields`; a unit test checks both.
 
+The backends ignore case differently for some non-ASCII letters. The memory registry uses Unicode case folding (`registry.ContainsFold`), so `οδος` finds `ΟΔΟΣ` and `strasse` finds `Straße`. PostgreSQL's `ILIKE` lowercases by the collation of the database, and under the libc collation the `postgres` image initializes with, neither of those matches. The comment on `registry.ContainsFold` lists the differences; the shared registry tests ignore case only in ASCII letters.
+
 Not part of the contract yet: `field:value` syntax (`serial:ABC123`, `tag:fragile`) and the text of attached PDFs. Until they are added, a colon is an ordinary character in a term.
 
 ## Why an item matched

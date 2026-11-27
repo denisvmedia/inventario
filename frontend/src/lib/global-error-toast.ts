@@ -24,8 +24,17 @@ export interface GlobalErrorToastMeta {
 }
 
 export function notifyGlobalServerError(error: unknown, meta: unknown): void {
-  if (!(error instanceof HttpError)) return
   if (isMetaSuppressed(meta)) return
+  const message = globalErrorToastMessage(error)
+  if (message !== null) toast.error(message)
+}
+
+// globalErrorToastMessage returns the message the global toast shows for
+// error, or null when it shows none. It does not read the meta opt-out, so a
+// local handler can ask whether the global toast covers an error before it
+// shows its own (see toastMutationError).
+export function globalErrorToastMessage(error: unknown): string | null {
+  if (!(error instanceof HttpError)) return null
 
   // 423 Locked is raised by the requireGroupNotMigrating middleware on
   // any commodity write (and by the symmetric in-handler check on
@@ -34,39 +43,33 @@ export function notifyGlobalServerError(error: unknown, meta: unknown): void {
   // a colleague starting a migration and our group-detail refetch —
   // still gets a clear, translated message instead of a silent failure.
   if (error.status === 423) {
-    toast.error(
-      i18next.t("errors:lockedDuringMigration", {
-        defaultValue: "Commodity changes are paused while a currency migration runs.",
-      })
-    )
-    return
+    return i18next.t("errors:lockedDuringMigration", {
+      defaultValue: "Commodity changes are paused while a currency migration runs.",
+    })
   }
 
   // Status 0 is a request that never reached the server. It has to come before
   // the < 500 return, which would otherwise swallow it and leave the user with
   // a list that looks empty (#2098).
   if (error instanceof NetworkError) {
-    toast.error(
-      i18next.t("common:serverError.network.title", {
-        defaultValue: "Can't reach the server",
-      })
-    )
-    return
+    return i18next.t("common:serverError.network.title", {
+      defaultValue: "Can't reach the server",
+    })
   }
 
-  if (error.status < 500) return
+  if (error.status < 500) return null
 
   // Skip our own currency-migration codes — the wizard renders them
   // inline and these strings already carry their own user-facing copy
   // through the per-call onError handler. Belt-and-braces; the wizard
   // uses meta.suppressGlobalErrorToast already.
   const code = getServerErrorCode(error)
-  if (code?.startsWith("currency_migration.")) return
+  if (code?.startsWith("currency_migration.")) return null
 
   const fallback = i18next.t("errors:global.server", {
     defaultValue: "Server error. Please try again later.",
   })
-  toast.error(parseServerError(error, fallback))
+  return parseServerError(error, fallback)
 }
 
 function isMetaSuppressed(meta: unknown): boolean {

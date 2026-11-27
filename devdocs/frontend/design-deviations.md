@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-27 — Item edit dialog: status shown, not changed
+
+- **Issue/PR**: #2915 / PR #2954
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) has no status field; the status changes from the Change Status row of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (L720).
+- **Reality**: In edit mode (**All fields**), the Basics step of `frontend/src/components/items/CommodityFormDialog.tsx` keeps the Status select at the end of the step, disabled, with the item's status in it and a muted `text-xs` line under it that names **Change Status** on the item page. Saving the dialog sends the status, its date, note and sale price as the item has them. When the server refuses one of those (the status was changed meanwhile), the server-error banner says so in the app's words instead of the server's text.
+- **Why**: Leaving In Use needs a date and Sold a sale price, which only the Change Status dialog asks for; an editable select there could not save such a change. The disabled select keeps the status visible in a dialog the edit form calls All fields.
+- **Approved by**: user (explicit) — pre-approved for #2915 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Drop the disabled select and keep the mock's form without a status once the edit form shows the status.
+
 #### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
 
 - **Issue/PR**: #1626 / #2905

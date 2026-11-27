@@ -226,7 +226,7 @@ The form is split across the five steps. Only a handful of fields are required
 | **Type** * | One of your group's [item types](../item-types/). A new group starts with **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, and **Other**. Choose **New type** at the end of the list to add one without leaving the form. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
 | **Location** / **Area** | Only when you edit an item; a new item is placed after it is saved. Where the item lives: pick a location first, then an area. Both are optional. Owners and administrators can also add a new location or area from the pickers. See [Locations & areas](../locations-and-areas/). |
-| **Status** * | Starts as **In Use** (see [Status lifecycle](#status-lifecycle)). |
+| **Status** | Only when you edit an item, and only shown: change it with **Change Status** on the item page (see [Status lifecycle](#status-lifecycle)). A new item starts as **In Use**. |
 
 ### Purchase
 
@@ -557,7 +557,7 @@ if you use it.
 
 Links, extra serial numbers, part numbers, status, and the draft switch are not
 on this form. **All fields** opens the step-by-step dialog with everything you
-have typed so far.
+have typed so far. The dialog shows the status but does not change it.
 
 The edit form has its own address (the item's address followed by `/edit`), so
 reloading the page keeps you in it.
@@ -674,7 +674,9 @@ To change status, open the item and use the **Change Status** buttons, or
 change several items at once from the bulk-action bar (see [Select and change
 items in bulk](#select-and-change-items-in-bulk)). Marking
 an item as anything other than In Use opens a short dialog where you record the
-**date**, an optional **note**, and — for **Sold** — the **sale price**.
+**date**, an optional **note**, and — for **Sold** — the **sale price**. The
+edit form and the **All fields** dialog don't change the status, and saving
+them keeps its date, note, and sale price.
 
 Once an item is in one of these end states, the detail page shows that status
 (with the captured date, note, and sale price) and a **Revert to In Use**

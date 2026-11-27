@@ -7,7 +7,7 @@ import {
   useGroupNotifications,
   useUpdateGroupNotifications,
 } from "@/features/notifications-group/hooks"
-import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { cn } from "@/lib/utils"
 
 // NotificationsCard renders the per-group notification card on
@@ -35,7 +35,6 @@ export function NotificationsCard({
   className,
 }: NotificationsCardProps) {
   const { t } = useTranslation()
-  const toast = useAppToast()
   const query = useGroupNotifications(groupSlug)
   const mutation = useUpdateGroupNotifications(groupSlug)
 
@@ -58,9 +57,7 @@ export function NotificationsCard({
     mutation.mutate(
       { [key]: value },
       {
-        onError: () => {
-          toast.error(t("groups:settings.notifications.saveError"))
-        },
+        onError: (err) => toastMutationError(err, t("groups:settings.notifications.saveError")),
       }
     )
   }

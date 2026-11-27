@@ -96,6 +96,7 @@ import { useSystemInfo } from "@/features/system/hooks"
 import { useWhatsNewUnread } from "@/features/whats-new/hooks"
 import { WhatsNewDot } from "@/features/whats-new/WhatsNewDot"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
 import { useTheme } from "@/components/theme-provider"
@@ -736,7 +737,6 @@ function AppearanceSection() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const { density, setDensity } = useDensity()
-  const toast = useAppToast()
   const settingsQuery = useUserSettings()
   const patchMutation = usePatchSetting()
 
@@ -762,7 +762,7 @@ function AppearanceSection() {
     patchMutation.mutate(
       { field, value },
       {
-        onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
+        onError: (err) => toastMutationError(err, t("settings:notifications.errors.saveFailed")),
       }
     )
   }
@@ -1098,7 +1098,6 @@ const NOTIFICATION_GROUPS: Array<{ titleKey: string; rows: NotificationRow[] }> 
 
 function NotificationsSection() {
   const { t } = useTranslation()
-  const toast = useAppToast()
   const settingsQuery = useUserSettings()
   const patchMutation = usePatchSetting()
   // The loan default is the server's --loan-reminder-due-soon-days.
@@ -1111,7 +1110,7 @@ function NotificationsSection() {
     patchMutation.mutate(
       { field, value: next },
       {
-        onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
+        onError: (err) => toastMutationError(err, t("settings:notifications.errors.saveFailed")),
       }
     )
   }
@@ -1132,7 +1131,7 @@ function NotificationsSection() {
     patchMutation.mutate(
       { field: cfg.field, value: payload },
       {
-        onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
+        onError: (err) => toastMutationError(err, t("settings:notifications.errors.saveFailed")),
       }
     )
   }
