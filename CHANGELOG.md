@@ -731,6 +731,15 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- A field that fails validation in the Send for service, Lend, Edit loan,
+  tag, status change and feedback dialogs gets a red border, as it does on
+  the other forms, instead of only a red line under it. In those dialogs, in
+  the maintenance schedule and API token dialogs, and on the sign-in,
+  registration, password reset, back-office sign-in, account and group
+  delete and tenant forms, a screen reader reads the error when the user
+  returns to the field
+  ([#2913](https://github.com/denisvmedia/inventario/issues/2913)).
+
 - Text length limits count characters in every language. The server counted
   most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
   borrower, supply link, maintenance title, file description and other text
