@@ -119,15 +119,19 @@ export function commoditiesListSource(ctx: ListContext, slug: string): ListPageS
   }
 }
 
-/** An item's page, or its edit form, carrying the list it was opened from. */
+/**
+ * An item's page, or its edit form, carrying the list it was opened from.
+ * `view` adds the page's own parameters, such as the tab.
+ */
 export function commodityHref(
   slug: string,
   id: string,
   ctx: ListContext | null,
-  opts: { edit?: boolean } = {}
+  opts: { edit?: boolean; view?: URLSearchParams } = {}
 ): string {
   const path = `${commoditiesListPath(slug)}/${encodeURIComponent(id)}${opts.edit ? "/edit" : ""}`
-  return withListContext(path, ctx)
+  const view = opts.view?.toString()
+  return withListContext(view ? `${path}?${view}` : path, ctx)
 }
 
 // `Number("abc")` is NaN, which would poison the list query key and the

@@ -398,10 +398,10 @@ func (s *IntakeSource) ValidateWithContext(ctx context.Context) error {
 // client key "intake:<candidate id>", so a retry, a second device or a lost
 // response finds the draft instead of making another one.
 //
-// Fields is what the scan read, with the confidence of each value. Selected,
-// AcceptedFields and Quantity are the member's review: whether to keep the
-// product, which of the read values go into the draft, and how many identical
-// units it covers. A quantity above one stays one item with that count, as an
+// Fields and CustomFields are what the scan read, with the confidence of each
+// value. Selected, AcceptedFields, AcceptedCustomFields and Quantity are the
+// member's review: whether to keep the product, which of the read values go
+// into the draft, and how many identical units it covers. A quantity above one stays one item with that count, as an
 // item's count always means a bundle of identical units.
 //
 //ptah:schema:rls:enable table="intake_candidates" comment="Enable RLS for multi-tenant intake candidate isolation"
@@ -431,6 +431,16 @@ type IntakeCandidate struct {
 
 	//ptah:schema:field name="accepted_fields" type="JSONB"
 	AcceptedFields ValuerSlice[string] `json:"accepted_fields" db:"accepted_fields"`
+
+	// CustomFields is what the scan read for the group's custom fields, by
+	// field ID, a select field's value as its option ID.
+	//ptah:schema:field name="custom_fields" type="JSONB" not_null="true" default_expr="'{}'"
+	CustomFields IntakeFields `json:"custom_fields" db:"custom_fields" userinput:"false"`
+
+	// AcceptedCustomFields are the IDs of the custom fields whose scanned
+	// value goes into the draft.
+	//ptah:schema:field name="accepted_custom_fields" type="JSONB"
+	AcceptedCustomFields ValuerSlice[string] `json:"accepted_custom_fields" db:"accepted_custom_fields"`
 
 	//ptah:schema:field name="quantity" type="INTEGER" not_null="true" default="1"
 	Quantity int `json:"quantity" db:"quantity"`
@@ -550,6 +560,12 @@ func (c *IntakeCandidate) IsUnfinished() bool {
 // Accepts reports whether the member accepts the scanned value of field.
 func (c *IntakeCandidate) Accepts(field string) bool {
 	return slices.Contains(c.AcceptedFields, field)
+}
+
+// AcceptsCustomField reports whether the member accepts the scanned value of
+// the custom field with the given ID.
+func (c *IntakeCandidate) AcceptsCustomField(id string) bool {
+	return slices.Contains(c.AcceptedCustomFields, id)
 }
 
 func (*IntakeCandidate) Validate() error {

@@ -457,18 +457,24 @@ func (r *IntakeRegistry) ReviewCandidate(ctx context.Context, id string, review 
 		if review.AcceptedFields != nil {
 			candidate.AcceptedFields = models.ValuerSlice[string](append([]string{}, *review.AcceptedFields...))
 		}
+		if review.AcceptedCustomFields != nil {
+			candidate.AcceptedCustomFields = models.ValuerSlice[string](append([]string{}, *review.AcceptedCustomFields...))
+		}
 		if review.Quantity != nil {
 			candidate.Quantity = *review.Quantity
 		}
 		if candidate.AcceptedFields == nil {
 			candidate.AcceptedFields = models.ValuerSlice[string]{}
 		}
+		if candidate.AcceptedCustomFields == nil {
+			candidate.AcceptedCustomFields = models.ValuerSlice[string]{}
+		}
 		update := fmt.Sprintf(`
-			UPDATE %s SET selected = $1, accepted_fields = $2, quantity = $3, outcome = $4, updated_at = $5
-			WHERE id = $6
+			UPDATE %s SET selected = $1, accepted_fields = $2, accepted_custom_fields = $3, quantity = $4, outcome = $5, updated_at = $6
+			WHERE id = $7
 			RETURNING *`, r.tableNames.IntakeCandidates())
 		return tx.QueryRowxContext(ctx, update,
-			candidate.Selected, candidate.AcceptedFields, candidate.Quantity, string(candidate.Outcome), time.Now().UTC(), id,
+			candidate.Selected, candidate.AcceptedFields, candidate.AcceptedCustomFields, candidate.Quantity, string(candidate.Outcome), time.Now().UTC(), id,
 		).StructScan(&updated)
 	})
 	if err != nil {
@@ -891,6 +897,12 @@ func (r *IntakeRegistry) insertCandidates(ctx context.Context, tx *sqlx.Tx, sour
 		}
 		if candidate.AcceptedFields == nil {
 			candidate.AcceptedFields = models.ValuerSlice[string]{}
+		}
+		if candidate.CustomFields == nil {
+			candidate.CustomFields = models.IntakeFields{}
+		}
+		if candidate.AcceptedCustomFields == nil {
+			candidate.AcceptedCustomFields = models.ValuerSlice[string]{}
 		}
 		if candidate.Quantity < 1 {
 			candidate.Quantity = 1

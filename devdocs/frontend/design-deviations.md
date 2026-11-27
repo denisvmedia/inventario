@@ -162,6 +162,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the sticky footer and the confidence column agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
 
+#### 2026-11-27 — Batch review page: custom field values
+
+- **Issue/PR**: #2880
+- **Mock**: No such page in [`design-mocks/src/views/`](../../design-mocks/src/views/); the rows follow the field list of the 2026-11-25 Batch review page entry.
+- **Reality**: The "N fields used" list of a product shows, after the item fields, one row per group custom field the scan read a value for, in the group's field order: the same `Checkbox`, the field's name as the label, the value (a select option by its label, yes/no in words) and the confidence. A field deleted since the scan has no row. "N fields used" counts the ticked custom fields too.
+- **Why**: not present in mock. The issue asks for the custom field guesses as review rows with their confidence, as the single-item scan review shows them.
+- **Approved by**: user (explicit) — pre-approved for #2880 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
+
 #### 2026-11-25 — Views control on the items list toolbar
 
 - **Issue/PR**: #2793 / #2839

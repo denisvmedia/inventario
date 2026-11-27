@@ -142,7 +142,10 @@ of the whole line.
 
 - Tick the products you want to keep. Every product starts ticked.
 - Change the **Quantity** if the scan read it wrong.
-- Open **N fields used** to see each value the scan read, with its confidence.
+- Open **N fields used** to see each value the scan read, with its confidence,
+  then the values it read for your group's
+  [custom fields](../custom-fields/#custom-fields-read-by-ai) under each
+  field's name. A value read with a confidence under 30% starts unticked.
   Untick a value to leave that field empty in the draft. A value the scan did
   not read stays empty too: an unknown price is not a price of 0. See
   [Unknown is not zero](#unknown-is-not-zero).
@@ -612,6 +615,9 @@ from, with its search, filters, sort, and page:
 
 - The item page, the side panel, and the edit form show the item's place in
   that list (for example, "4 of 17") and arrows to the previous and next item.
+- Moving to the previous or next item keeps the tab you are on, and on the
+  **Files** tab the filter you picked, so you can check the photos of each item
+  in turn.
 - **Back to items** returns to that list, on the page you reached.
 - On the edit form, **Save and next** saves the item and opens the next item's
   edit form. It moves on to the list's next page when needed.
@@ -681,6 +687,10 @@ beside the details on the item page. If you haven't picked one, Inventario uses
 the first photo you attached. To set or change it, open the **Files** tab, find
 the image you want, and choose to set it as the cover. You can also clear the
 cover to fall back to the first photo.
+
+Only an image attached to the item as one of its photos can be the cover. An
+image the item holds as a document, for example one first attached to another
+item and then attached here as a document, has no cover button.
 
 Inventario keeps smaller copies of each photo for cards and the item page, and
 loads the one that fits your screen. A photo that has no copy at the size a

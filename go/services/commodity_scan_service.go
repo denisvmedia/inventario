@@ -238,6 +238,20 @@ type ScanCustomFieldOption struct {
 	Label string
 }
 
+// ScanCustomFields turns a group's custom fields into the fields a scan
+// offers. The scan leaves out those of a type it cannot read from a photo.
+func ScanCustomFields(defs []*models.CustomFieldDefinition) []ScanCustomField {
+	out := make([]ScanCustomField, 0, len(defs))
+	for _, d := range defs {
+		f := ScanCustomField{ID: d.ID, Name: d.Name, Type: string(d.Type)}
+		for _, o := range d.Options {
+			f.Options = append(f.Options, ScanCustomFieldOption{ID: o.ID, Label: o.Label})
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 func (in ScanInput) customFieldOptions() []aivision.CustomFieldOption {
 	if len(in.CustomFields) == 0 {
 		return nil

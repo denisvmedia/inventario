@@ -112,6 +112,15 @@ func TestIntakeAPI_Lifecycle(t *testing.T) {
 	rr = env.do(http.MethodPatch, "/intake/sessions/"+sessionID+"/candidates/"+frotherID,
 		`{"data":{"type":"intake_candidates","attributes":{"quantity":0}}}`)
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	// The scan read no custom field for the frother, so none can be accepted.
+	rr = env.do(http.MethodPatch, "/intake/sessions/"+sessionID+"/candidates/"+frotherID,
+		`{"data":{"type":"intake_candidates","attributes":{"accepted_custom_fields":["field-1"]}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, "accepted_custom_fields")
+	rr = env.do(http.MethodPatch, "/intake/sessions/"+sessionID+"/candidates/"+frotherID,
+		`{"data":{"type":"intake_candidates","attributes":{"accepted_custom_fields":[]}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.selected"), false, qt.Commentf("the other choices stay"))
 
 	rr = env.do(http.MethodPost, "/intake/sessions/"+sessionID+"/drafts", "")
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
