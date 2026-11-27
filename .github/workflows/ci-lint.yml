@@ -56,3 +56,9 @@ jobs:
         # The first step of the required `E2E Tests (chromium)` lane: it turns
         # a failed or cancelled build into a red check instead of a green one.
         run: ./scripts/test-e2e-image-gate.sh
+
+      - name: Test the PR-close cleanup's package listing
+        # The reclaim step stops paging at versions older than the pull
+        # request; a wrong stop leaves images behind, a missing one reads the
+        # whole package on every close.
+        run: ./scripts/test-close-cleanup-listing.sh
