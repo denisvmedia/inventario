@@ -1004,7 +1004,7 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
 		r.Route("/upcoming", Upcoming())
 		r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
-		r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService))
+		r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService, auditSvc))
 		r.Route("/settings", Settings())
 		r.Route("/commodities/values", Values())
 		r.Route("/upload-slots", UploadSlots(params.FactorySet))

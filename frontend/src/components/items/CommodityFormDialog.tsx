@@ -151,6 +151,7 @@ import {
 import {
   clearDraftSession,
   clientKeyFor,
+  filesNotSaved,
   forgetBaseRevision,
   forgetItemDraft,
   itemDraftOf,
@@ -1745,12 +1746,27 @@ export function CommodityFormDialog({
     // user can still drop any of them from the Files step before saving.
     // Each file then gets the tag and the title the scan suggests for it
     // (#1626), unless the user set them; a file already staged gets them too.
-    if (sourceFiles.length > 0) {
-      setPendingFiles((prev) =>
-        applyFileSuggestions(mergePendingFiles(prev, sourceFiles), fileSuggestions)
-      )
-    }
+    if (sourceFiles.length > 0) stageFiles(sourceFiles, fileSuggestions)
     setStep("basics")
+  }
+
+  // stageFiles adds files to the staged list, with the scan's suggestions
+  // for them. A file the server draft holds already is left out (#2941): it
+  // stays under "Saved with this draft" with the title and tags it was saved
+  // with, so the next save does not send it again.
+  function stageFiles(files: File[], suggestions: readonly FileSuggestion[] = []) {
+    const stage = (fresh: File[]) =>
+      setPendingFiles((prev) => applyFileSuggestions(mergePendingFiles(prev, fresh), suggestions))
+    const saved = serverMode && serverDraft ? (draftFilesQuery.data ?? []) : []
+    if (saved.length === 0) {
+      stage(files)
+      return
+    }
+    // Matching reads the files. An opening that ends meanwhile stages nothing.
+    const opening = openingRef.current
+    void filesNotSaved(files, saved).then((fresh) => {
+      if (openingRef.current === opening) stage(fresh)
+    })
   }
 
   // The numbered stepper + Back/Next gating only know about FORM_STEPS.
@@ -2121,6 +2137,7 @@ export function CommodityFormDialog({
               <FilesStep
                 pendingFiles={pendingFiles}
                 setPendingFiles={setPendingFiles}
+                onAddFiles={stageFiles}
                 onRemovePending={removePendingFile}
                 statuses={fileStatus}
                 busy={busy}
@@ -3030,6 +3047,8 @@ function ExtrasStep(props: any) {
 interface FilesStepProps {
   pendingFiles: PendingFile[]
   setPendingFiles: (next: PendingFile[] | ((prev: PendingFile[]) => PendingFile[])) => void
+  // Stages the files the user picked.
+  onAddFiles: (files: File[]) => void
   // Takes a staged file off the form; defaults to dropping it from the list.
   onRemovePending?: (entry: PendingFile) => void
   // The status of each staged file in the save that runs or last ran.
@@ -3053,6 +3072,7 @@ interface FilesStepProps {
 function FilesStep({
   pendingFiles,
   setPendingFiles,
+  onAddFiles,
   onRemovePending,
   statuses = {},
   busy = false,
@@ -3068,10 +3088,10 @@ function FilesStep({
   const [dragging, setDragging] = useState(false)
   function add(files: File[]) {
     if (files.length === 0 || busy) return
-    // mergePendingFiles de-dupes by file signature, so re-picking a file
-    // that's already staged (incl. one carried over from the AI scan,
-    // #1983) is a no-op rather than a double-attach.
-    setPendingFiles((prev) => mergePendingFiles(prev, files))
+    // Re-picking a file that's already staged (incl. one carried over from
+    // the AI scan, #1983) or saved with the draft is a no-op rather than a
+    // double-attach.
+    onAddFiles(files)
   }
   function remove(entry: PendingFile) {
     if (onRemovePending) onRemovePending(entry)
@@ -3601,6 +3621,7 @@ interface ChipInputProps {
 }
 
 function ChipInput({ label, helper, placeholder, values, onChange, testId }: ChipInputProps) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState("")
   function commit() {
     const trimmed = draft.trim()
@@ -3627,7 +3648,7 @@ function ChipInput({ label, helper, placeholder, values, onChange, testId }: Chi
             <button
               type="button"
               className="ml-0.5 inline-flex items-center"
-              aria-label={`remove ${v}`}
+              aria-label={t("common:chipInput.remove", { value: v })}
               onClick={() => onChange(values.filter((x) => x !== v))}
             >
               <X className="size-3" aria-hidden="true" />
@@ -3654,7 +3675,7 @@ function ChipInput({ label, helper, placeholder, values, onChange, testId }: Chi
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground"
-            aria-label="add"
+            aria-label={t("common:chipInput.add", { value: draft.trim() })}
             onClick={commit}
           >
             <Plus className="size-3.5" aria-hidden="true" />

@@ -1,8 +1,9 @@
 # Motion
 
-`tw-animate-css` only. Durations short, easings native. Reduced-motion
-is a first-class consumer; the Tailwind utilities respect it
-automatically.
+`tw-animate-css` only. Durations short, easings native. Reduced motion
+is a first-class consumer: under `prefers-reduced-motion: reduce` every
+enter and exit animation fades in place and does not zoom or slide (see
+[Reduced motion](#reduced-motion)).
 
 ## Library: `tw-animate-css`
 
@@ -78,6 +79,9 @@ The defaults are correct.
 | List row enter (URL `+ Add`, file attached, reveal-on-click section) | `animate-in fade-in slide-in-from-top-1` | 150ms ease-out |
 | List row exit (URL × button) | `animate-out fade-out slide-out-to-top-1 fill-mode-forwards` | 150ms ease-in |
 | Page transition between routes | none | — |
+
+Under reduced motion the zoom and slide in these rows are dropped and
+the fades stay; see [Reduced motion](#reduced-motion).
 
 **No page transitions** — switching between routes is instant. Adding a
 fade between pages adds latency the user doesn't want and breaks
@@ -169,8 +173,9 @@ Reference implementation: `StepResizeWrapper` inside
 
 ### List row enter / exit
 
-Use the `tw-animate-css` utilities — they're
-`prefers-reduced-motion`-gated for free.
+Use the `tw-animate-css` utilities. Under reduced motion the row fades
+in place without sliding (see [Reduced motion](#reduced-motion)), so the
+row needs no gate of its own.
 
 **Enter** (e.g. clicking "+ Add" on a URL list, revealing a
 `ChipInput` after `+ Item has additional serial numbers`):
@@ -233,14 +238,31 @@ churn; a row's reveal-on-click affordance → toggle reveal pattern.
 
 ## Reduced motion
 
-`tw-animate-css` (1.4.0) has no reduced-motion rule of its own:
-`animate-in`, `animate-out` and the fade, zoom and slide utilities run the
-same under `prefers-reduced-motion: reduce`. Gate them yourself with
-`motion-safe:` or `motion-reduce:`. The full-screen dialog does this: its
-slide is under `motion-safe:`, so with reduced motion it only fades.
+`tw-animate-css` (1.4.0) has no reduced-motion rule of its own. One rule
+at the end of `frontend/src/index.css` covers every `animate-in` and
+`animate-out` use. The library's enter and exit keyframes read their start
+and end values from `--tw-enter-*` and `--tw-exit-*` properties; under
+`prefers-reduced-motion: reduce` the rule sets the ones that move (scale,
+translate, rotate) back to rest with `!important`. A dialog, menu,
+popover, tooltip or list row then fades in place and does not zoom or
+slide. A sheet panel, which slides without a fade, appears at once while
+its backdrop fades. The opacity and blur properties stay: a fade is not
+motion (the WCAG 2.3.3 Understanding document does not count changes of
+color, blur or opacity as motion animation).
 
-For your own transitions, gate explicitly with the `motion-reduce:`
-prefix:
+A new `zoom-*`, `slide-*` or `spin-*` use needs no gate of its own.
+`frontend/src/__tests__/reduced-motion-css.test.ts` reads the library's
+stylesheet and fails when it gains a movement property the rule does not
+reset, and `e2e/tests/reduced-motion.spec.ts` checks a dialog and a menu
+in a browser with and without the preference. The full-screen dialog's
+phone slide is under `motion-safe:` as well, so with reduced motion it
+fades instead. Sonner toasts have a reduced-motion rule of their own.
+
+The rule covers only the enter and exit utilities. CSS transitions
+(`transition-transform`, `transition-[height]`, the sidebar's width
+transition) and other keyframes (`animate-spin`, `animate-pulse`, your
+own `@keyframes`) are not covered; gate the ones you write with the
+`motion-reduce:` prefix:
 
 ```tsx
 <div className="transition-colors motion-reduce:transition-none">…</div>
@@ -253,9 +275,10 @@ reduced. Use it for non-essential animations:
 <div className="motion-safe:animate-pulse">…</div>
 ```
 
-The Lighthouse `accessibility` audit doesn't currently flag missing
-`motion-reduce:` gating, but the WCAG 2.2 AA bar ([14-accessibility.md](14-accessibility.md))
-asks for it. Treat it as required.
+The Lighthouse `accessibility` audit does not flag a missing
+`motion-reduce:` gate, and WCAG puts it at AAA (2.3.3 Animation from
+Interactions), above the AA bar of [14-accessibility.md](14-accessibility.md).
+Treat it as required anyway.
 
 ## Skeletons over spinners
 
@@ -295,8 +318,9 @@ Sonner ships in/out animations tuned to its drawer:
    primitives need.
 2. **No page transitions.** Routes swap instantly.
 3. **Durations from the table.** `duration-[473ms]` is a smell.
-4. **Reduced-motion respect.** Always use `motion-reduce:` /
-   `motion-safe:` or rely on `tw-animate-css`'s built-in gate.
+4. **Reduced-motion respect.** `animate-in` / `animate-out` are covered
+   by the rule in `index.css`; gate every other transition or keyframe
+   that moves with `motion-reduce:` / `motion-safe:`.
 5. **Skeletons, not spinners.** A spinner is a fallback for genuinely
    indefinite waits (e.g. an export that's running on the server);
    in-flight data goes to a shape skeleton.

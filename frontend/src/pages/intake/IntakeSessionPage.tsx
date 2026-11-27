@@ -24,8 +24,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { CustomField } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { customFieldGuessText, customFieldGuessUsable } from "@/features/customFields/values"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import {
   candidatePrice,
   candidateText,
@@ -69,10 +72,8 @@ export function IntakeSessionPage() {
   const { id = "" } = useParams<{ id: string }>()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  const role = useMyGroupRole()
   const migrationLock = useGroupMigrationLock()
-  const canWrite =
-    (role === "user" || role === "admin" || role === "owner") && !migrationLock.locked
+  const canWrite = useGroupPermissions().canEditContent && !migrationLock.locked
   const session = useIntakeSession(id)
   const itemsPath = `/g/${encodeURIComponent(slug)}/commodities`
 
@@ -489,8 +490,23 @@ function CandidateRow({ sessionId, candidate, canWrite }: CandidateRowProps) {
     .join(" ")
   const price = candidatePrice(candidate)
   const id = candidate.id
+  // The custom fields the scan read a value for, in the group's order. A
+  // field deleted since the scan, or a select option removed since, is not
+  // shown, and its value goes nowhere.
+  const customFields = (useCustomFields().data ?? []).filter((f) => {
+    const guess = candidate.customFields[f.id]
+    return guess !== undefined && customFieldGuessUsable(f, guess.value)
+  })
+  const acceptedCount =
+    candidate.acceptedFields.length +
+    customFields.filter((f) => candidate.acceptedCustomFields.includes(f.id)).length
 
-  async function save(patch: { selected?: boolean; acceptedFields?: string[]; quantity?: number }) {
+  async function save(patch: {
+    selected?: boolean
+    acceptedFields?: string[]
+    acceptedCustomFields?: string[]
+    quantity?: number
+  }) {
     try {
       await review.mutateAsync({ sessionId, candidateId: id, ...patch })
     } catch (err) {
@@ -587,7 +603,7 @@ function CandidateRow({ sessionId, candidate, canWrite }: CandidateRowProps) {
           ) : (
             <ChevronDown className="size-4" aria-hidden="true" />
           )}
-          {t("commodities:intake.candidate.fields", { count: candidate.acceptedFields.length })}
+          {t("commodities:intake.candidate.fields", { count: acceptedCount })}
         </Button>
         {candidate.outcome === "failed" ? (
           <span className="text-xs text-destructive">{draftError(candidate.errorCode)}</span>
@@ -596,8 +612,9 @@ function CandidateRow({ sessionId, candidate, canWrite }: CandidateRowProps) {
       {open ? (
         <FieldList
           candidate={candidate}
+          customFields={customFields}
           editable={editable && !review.isPending}
-          onChange={(acceptedFields) => void save({ acceptedFields })}
+          onChange={(patch) => void save(patch)}
         />
       ) : null}
     </li>
@@ -620,24 +637,35 @@ function OutcomeBadge({ candidate }: { candidate: IntakeCandidate }) {
 
 interface FieldListProps {
   candidate: IntakeCandidate
+  // The custom fields to show, each with a value the scan read.
+  customFields: readonly CustomField[]
   editable: boolean
-  onChange: (acceptedFields: string[]) => void
+  onChange: (patch: { acceptedFields?: string[]; acceptedCustomFields?: string[] }) => void
 }
 
-// FieldList shows what the scan read for one product. A checked field goes
-// into the draft; an unchecked one stays unknown there.
-function FieldList({ candidate, editable, onChange }: FieldListProps) {
+// FieldList shows what the scan read for one product: the item fields, then
+// the group's custom fields. A checked field goes into the draft; an
+// unchecked one stays unknown there.
+function FieldList({ candidate, customFields, editable, onChange }: FieldListProps) {
   const { t } = useTranslation()
   const label = useIntakeFieldLabel()
   const itemTypes = useItemTypeLookup()
   const fields = INTAKE_REVIEW_FIELDS.filter((f) => candidate.fields[f] !== undefined)
   const accepted = new Set(candidate.acceptedFields)
+  const acceptedCustom = new Set(candidate.acceptedCustomFields)
 
   function toggle(field: IntakeReviewField, on: boolean) {
     const next = new Set(accepted)
     if (on) next.add(field)
     else next.delete(field)
-    onChange(INTAKE_REVIEW_FIELDS.filter((f) => next.has(f)))
+    onChange({ acceptedFields: INTAKE_REVIEW_FIELDS.filter((f) => next.has(f)) })
+  }
+
+  function toggleCustom(id: string, on: boolean) {
+    const next = new Set(acceptedCustom)
+    if (on) next.add(id)
+    else next.delete(id)
+    onChange({ acceptedCustomFields: customFields.map((f) => f.id).filter((f) => next.has(f)) })
   }
 
   function display(field: IntakeReviewField): string {
@@ -650,7 +678,7 @@ function FieldList({ candidate, editable, onChange }: FieldListProps) {
     return String(value)
   }
 
-  if (fields.length === 0) {
+  if (fields.length === 0 && customFields.length === 0) {
     return (
       <p className="pl-7 text-xs text-muted-foreground">
         {t("commodities:intake.candidate.noFields")}
@@ -660,29 +688,68 @@ function FieldList({ candidate, editable, onChange }: FieldListProps) {
 
   return (
     <ul className="flex flex-col gap-1.5 pl-7" data-testid={`intake-fields-${candidate.id}`}>
-      {fields.map((field) => {
-        const inputId = `intake-field-${candidate.id}-${field}`
-        const confidence = Math.round((candidate.fields[field]?.confidence ?? 0) * 100)
+      {fields.map((field) => (
+        <GuessRow
+          key={field}
+          id={`intake-field-${candidate.id}-${field}`}
+          label={label(field)}
+          text={display(field)}
+          confidence={candidate.fields[field]?.confidence ?? 0}
+          checked={accepted.has(field)}
+          editable={editable}
+          onToggle={(on) => toggle(field, on)}
+        />
+      ))}
+      {customFields.map((def) => {
+        const guess = candidate.customFields[def.id]
         return (
-          <li key={field} className="flex min-w-0 items-start gap-2 text-sm">
-            <Checkbox
-              id={inputId}
-              className="mt-0.5"
-              checked={accepted.has(field)}
-              disabled={!editable}
-              onCheckedChange={(v) => toggle(field, v === true)}
-              data-testid={`intake-field-${candidate.id}-${field}`}
-            />
-            <label htmlFor={inputId} className="min-w-0 flex-1">
-              <span className="text-muted-foreground">{label(field)}: </span>
-              <span className="break-words">{display(field)}</span>
-            </label>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {t("commodities:intake.candidate.confidence", { value: confidence })}
-            </span>
-          </li>
+          <GuessRow
+            key={def.id}
+            id={`intake-custom-field-${candidate.id}-${def.id}`}
+            label={def.name}
+            text={customFieldGuessText(def, guess?.value, t)}
+            confidence={guess?.confidence ?? 0}
+            checked={acceptedCustom.has(def.id)}
+            editable={editable}
+            onToggle={(on) => toggleCustom(def.id, on)}
+          />
         )
       })}
     </ul>
+  )
+}
+
+interface GuessRowProps {
+  // The checkbox's id and test id.
+  id: string
+  label: string
+  text: string
+  // Between 0 and 1.
+  confidence: number
+  checked: boolean
+  editable: boolean
+  onToggle: (on: boolean) => void
+}
+
+function GuessRow({ id, label, text, confidence, checked, editable, onToggle }: GuessRowProps) {
+  const { t } = useTranslation()
+  return (
+    <li className="flex min-w-0 items-start gap-2 text-sm">
+      <Checkbox
+        id={id}
+        className="mt-0.5"
+        checked={checked}
+        disabled={!editable}
+        onCheckedChange={(v) => onToggle(v === true)}
+        data-testid={id}
+      />
+      <label htmlFor={id} className="min-w-0 flex-1">
+        <span className="text-muted-foreground">{label}: </span>
+        <span className="break-words">{text}</span>
+      </label>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {t("commodities:intake.candidate.confidence", { value: Math.round(confidence * 100) })}
+      </span>
+    </li>
   )
 }

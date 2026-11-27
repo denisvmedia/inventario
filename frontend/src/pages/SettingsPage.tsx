@@ -559,7 +559,9 @@ function DeleteAccountDialog({
               aria-invalid={!!form.formState.errors.confirmEmail}
               data-testid="delete-confirm-email"
               aria-describedby={
-                form.formState.errors.confirmEmail ? "delete-account-email-error" : undefined
+                form.formState.errors.confirmEmail?.message
+                  ? "delete-account-email-error"
+                  : undefined
               }
               {...form.register("confirmEmail")}
             />
@@ -582,7 +584,9 @@ function DeleteAccountDialog({
                 aria-invalid={!!form.formState.errors.password}
                 data-testid="delete-password"
                 aria-describedby={
-                  form.formState.errors.password ? "delete-account-password-error" : undefined
+                  form.formState.errors.password?.message
+                    ? "delete-account-password-error"
+                    : undefined
                 }
                 {...form.register("password")}
               />

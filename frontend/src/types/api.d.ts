@@ -12633,7 +12633,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description An item tag, while a currency migration runs in the group */
+                /** @description A new slug for an item tag, while a currency migration runs in the group */
                 423: {
                     headers: {
                         [name: string]: unknown;
@@ -18334,6 +18334,11 @@ export type components = {
             type?: "intake_candidates";
         };
         "jsonapi.IntakeCandidateReviewAttrs": {
+            /**
+             * @description AcceptedCustomFields are the IDs of the custom fields whose scanned
+             *     value goes into the draft; each must be one the scan read a value for.
+             */
+            accepted_custom_fields?: string[];
             accepted_fields?: string[];
             /** @example 1 */
             quantity?: number;
@@ -20664,8 +20669,18 @@ export type components = {
         /** @enum {string} */
         "models.GroupSection": "warranties" | "maintenance" | "loans" | "upcoming";
         "models.IntakeCandidate": {
+            /**
+             * @description AcceptedCustomFields are the IDs of the custom fields whose scanned
+             *     value goes into the draft.
+             */
+            accepted_custom_fields?: string[];
             accepted_fields?: string[];
             created_at?: string;
+            /**
+             * @description CustomFields is what the scan read for the group's custom fields, by
+             *     field ID, a select field's value as its option ID.
+             */
+            custom_fields?: components["schemas"]["models.IntakeFields"];
             /**
              * @description DraftID is the draft made for the candidate. The draft can be
              *     discarded or promoted later, so there is no foreign key.

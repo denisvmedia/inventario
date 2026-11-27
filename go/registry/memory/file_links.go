@@ -175,13 +175,25 @@ func (r *FileRegistry) Delete(ctx context.Context, id string) error {
 
 // AddLink mirrors the postgres method.
 func (r *FileRegistry) AddLink(_ context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(link, isLiveFile)
+}
+
+// AddLinkIncludingTrashed mirrors the postgres method.
+func (r *FileRegistry) AddLinkIncludingTrashed(_ context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(link, func(*models.FileEntity) bool { return true })
+}
+
+// addLink writes the link when inState holds for the file. The state is read
+// under the write lock that Trash takes, as the postgres method reads it under
+// the row lock.
+func (r *FileRegistry) addLink(link models.FileLink, inState func(*models.FileEntity) bool) (*models.FileLink, bool, error) {
 	if link.FileID == "" {
 		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "FileID"))
 	}
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	file, ok := r.items.Get(link.FileID)
-	if !ok || !r.isItemVisible(file) {
+	if !ok || !r.isItemVisible(file) || !inState(file) {
 		return nil, false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", link.FileID))
 	}
 	stored, created := r.addLinkLocked(file, link)

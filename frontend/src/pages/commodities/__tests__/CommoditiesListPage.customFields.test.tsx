@@ -8,12 +8,14 @@ import { CommoditiesListPage } from "@/pages/commodities/CommoditiesListPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
   areaHandlers,
   customFieldHandlers,
   groupHandlers,
+  memberHandlers,
   savedViewHandlers,
   sellerHandlers,
 } from "@/test/handlers"
@@ -71,6 +73,7 @@ function listing(queries: string[]) {
 function renderList(initialPath = `/g/${SLUG}/commodities`) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -78,7 +81,9 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommoditiesListPage />
+              <WhenRoleKnown>
+                <CommoditiesListPage />
+              </WhenRoleKnown>
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -86,6 +91,13 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 beforeEach(() => {
   clearAuth()

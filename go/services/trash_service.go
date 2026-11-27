@@ -26,6 +26,109 @@ var ErrTrashedWithItem = errx.NewSentinel("the file went to Trash with an item; 
 // it leaves live because something links to it.
 var ErrFileLinked = errx.NewSentinel("the file is linked, so it stays")
 
+// Audit actions of the Trash (#2893). A restore, a delete for good (one entry
+// or several) and an Empty Trash each write one row for the group; the purge
+// worker writes one row per run for each group it deleted entries in.
+const (
+	AuditActionTrashRestore      = "trash_restore"
+	AuditActionTrashPurge        = "trash_purge"
+	AuditActionTrashEmpty        = "trash_empty"
+	AuditActionTrashPurgeExpired = "trash_purge_expired"
+)
+
+// TrashAuditIDLimit is how many IDs of each kind an audit row lists. The
+// counts are always exact; a row whose lists were cut says so in
+// ids_truncated. The breadcrumb lives in a text column that audit scans read,
+// and emptying a large Trash would otherwise write one row of megabytes.
+const TrashAuditIDLimit = 1000
+
+// TrashOutcome is what a Trash restore or delete for good did, by ID: the
+// items and the files it restored or deleted. A file is listed only when the
+// operation restored or deleted it; a file it left where it was (still used
+// by a live entity, or handed to another item in Trash) is not.
+type TrashOutcome struct {
+	ItemIDs []string
+	FileIDs []string
+}
+
+func (o *TrashOutcome) add(other TrashOutcome) {
+	o.ItemIDs = append(o.ItemIDs, other.ItemIDs...)
+	o.FileIDs = append(o.FileIDs, other.FileIDs...)
+}
+
+// Empty reports whether the operation restored or deleted nothing.
+func (o TrashOutcome) Empty() bool {
+	return len(o.ItemIDs) == 0 && len(o.FileIDs) == 0
+}
+
+// AuditExtra is the outcome as an audit row records it: the number and the
+// IDs of the items and of the files (see TrashAuditIDLimit).
+func (o TrashOutcome) AuditExtra() map[string]any {
+	items, itemsCut := auditIDs(o.ItemIDs)
+	files, filesCut := auditIDs(o.FileIDs)
+	extra := map[string]any{
+		"items":    len(o.ItemIDs),
+		"item_ids": items,
+		"files":    len(o.FileIDs),
+		"file_ids": files,
+	}
+	if itemsCut || filesCut {
+		extra["ids_truncated"] = true
+	}
+	return extra
+}
+
+// auditIDs returns ids cut to TrashAuditIDLimit, never nil so the row lists
+// an empty array rather than null, and whether it cut them.
+func auditIDs(ids []string) ([]string, bool) {
+	if len(ids) > TrashAuditIDLimit {
+		return ids[:TrashAuditIDLimit], true
+	}
+	if ids == nil {
+		return []string{}, false
+	}
+	return ids, false
+}
+
+// GroupTrashOutcome is what the purge worker deleted in one group.
+type GroupTrashOutcome struct {
+	TenantID string
+	GroupID  string
+	TrashOutcome
+}
+
+// trashGroups collects outcomes per group, in the order the groups first
+// deleted something.
+type trashGroups struct {
+	order []string
+	by    map[string]*GroupTrashOutcome
+}
+
+func (g *trashGroups) add(tenantID, groupID string, out TrashOutcome) {
+	if out.Empty() {
+		return
+	}
+	if g.by == nil {
+		g.by = map[string]*GroupTrashOutcome{}
+	}
+	key := tenantID + "/" + groupID
+	entry, ok := g.by[key]
+	if !ok {
+		entry = &GroupTrashOutcome{TenantID: tenantID, GroupID: groupID}
+		g.by[key] = entry
+		g.order = append(g.order, key)
+	}
+	entry.add(out)
+}
+
+func (g *trashGroups) list() []GroupTrashOutcome {
+	out := make([]GroupTrashOutcome, 0, len(g.order))
+	for _, key := range g.order {
+		out = append(out, *g.by[key])
+	}
+	return out
+}
+
 // TrashService moves items and files to Trash, restores them and deletes them
 // for good.
 //
@@ -211,10 +314,13 @@ type CommodityRestoreResult struct {
 	AreaRemoved bool
 	// FilesRestored counts the files that came back with the item.
 	FilesRestored int
+	// FileIDs are the files that came back with the item.
+	FileIDs []string
 }
 
 // RestoreCommodity brings a trashed item back with the files that went to
-// Trash with an item and are linked to it, and records a "restored" event.
+// Trash with an item and are linked to it, and records a "restored" event. On
+// an error the result, when not nil, lists the files restored before it.
 //
 // The files come back first and the item last, so a failure leaves the item in
 // Trash and a retry restores the rest. A file that a concurrent delete moves
@@ -234,7 +340,7 @@ func (s *TrashService) RestoreCommodity(ctx context.Context, id string) (*Commod
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list item files in Trash", err)
 	}
-	filesRestored := 0
+	var fileIDs []string
 	for _, file := range files {
 		if file.DeletedWithCommodityID == nil {
 			continue // deleted on its own; it stays in Trash
@@ -243,30 +349,32 @@ func (s *TrashService) RestoreCommodity(ctx context.Context, id string) (*Commod
 			if errors.Is(err, registry.ErrNotFound) {
 				continue
 			}
-			return nil, errxtrace.Wrap("failed to restore item file", err, errx.Attrs("file_id", file.ID))
+			return &CommodityRestoreResult{FilesRestored: len(fileIDs), FileIDs: fileIDs},
+				errxtrace.Wrap("failed to restore item file", err, errx.Attrs("file_id", file.ID))
 		}
-		filesRestored++
+		fileIDs = append(fileIDs, file.ID)
 	}
 
 	restored, err := regs.commodities.Restore(ctx, id)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to restore item", err)
+		return &CommodityRestoreResult{FilesRestored: len(fileIDs), FileIDs: fileIDs}, errxtrace.Wrap("failed to restore item", err)
 	}
 	result := &CommodityRestoreResult{
 		Commodity:     restored,
 		AreaRemoved:   trashed.DeletedFromAreaID != nil && restored.AreaID == nil,
-		FilesRestored: filesRestored,
+		FilesRestored: len(fileIDs),
+		FileIDs:       fileIDs,
 	}
 	s.events.EmitRestored(ctx, restored, RestoreDetails{AreaRemoved: result.AreaRemoved})
 	return result, nil
 }
 
-// PurgeCommodity deletes a trashed item for good. ErrNotFound when the item is
-// not in Trash.
-func (s *TrashService) PurgeCommodity(ctx context.Context, id string) error {
+// PurgeCommodity deletes a trashed item for good and reports what it deleted,
+// also when it fails partway. ErrNotFound when the item is not in Trash.
+func (s *TrashService) PurgeCommodity(ctx context.Context, id string) (TrashOutcome, error) {
 	regs, err := s.userRegistries(ctx)
 	if err != nil {
-		return err
+		return TrashOutcome{}, err
 	}
 	return s.purgeCommodity(ctx, regs, id)
 }
@@ -275,36 +383,43 @@ func (s *TrashService) PurgeCommodity(ctx context.Context, id string) error {
 // Trash with it. It never moves a live file to Trash or deletes one: a live
 // file linked to the item (restored on its own while the item was in Trash,
 // linked by a merge restore, or missed by the delete) only loses its link to
-// the item and stays live.
-func (s *TrashService) purgeCommodity(ctx context.Context, regs trashRegistries, id string) error {
+// the item and stays live. The outcome lists what was deleted before an
+// error too.
+func (s *TrashService) purgeCommodity(ctx context.Context, regs trashRegistries, id string) (TrashOutcome, error) {
+	var out TrashOutcome
 	if _, err := regs.commodities.GetTrashed(ctx, id); err != nil {
-		return errxtrace.Wrap("failed to get trashed item", err)
+		return out, errxtrace.Wrap("failed to get trashed item", err)
 	}
 	// Read before the links go: afterwards nothing ties the files to the item
 	// but deleted_with_commodity_id.
 	files, err := regs.files.ListTrashedLinkedTo(ctx, models.FileLinkCommodity, id)
 	if err != nil {
-		return errxtrace.Wrap("failed to list item files in Trash", err)
+		return out, errxtrace.Wrap("failed to list item files in Trash", err)
 	}
 	deleted, err := regs.commodities.PurgeTrashed(ctx, id)
 	if err != nil {
-		return errxtrace.Wrap("failed to purge item", err)
+		return out, errxtrace.Wrap("failed to purge item", err)
 	}
 	if !deleted {
-		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
+		return out, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
 	}
+	out.ItemIDs = []string{id}
 	if _, err := regs.files.RemoveLinksToEntity(ctx, models.FileLinkCommodity, id); err != nil {
-		return errxtrace.Wrap("failed to remove item file links", err, errx.Attrs("commodity_id", id))
+		return out, errxtrace.Wrap("failed to remove item file links", err, errx.Attrs("commodity_id", id))
 	}
 	for _, file := range files {
 		if file.DeletedWithCommodityID == nil || *file.DeletedWithCommodityID != id {
 			continue
 		}
-		if _, err := s.settleTrashedFile(ctx, regs, file.ID); err != nil {
-			return err
+		gone, err := s.settleTrashedFile(ctx, regs, file.ID)
+		if err != nil {
+			return out, err
+		}
+		if gone {
+			out.FileIDs = append(out.FileIDs, file.ID)
 		}
 	}
-	return nil
+	return out, nil
 }
 
 // settleTrashedFile decides the fate of a file that went to Trash with an item
@@ -384,11 +499,11 @@ const strandedBatch = 100
 // longer in Trash (registry.FileRegistry.ListStrandedTrashed): the files an
 // interrupted purge, restore or delete left with no Trash entry to show them.
 // A file that fails is skipped and its error is joined into the result. It
-// reports how many files it looked at and how many of them it deleted.
-func (s *TrashService) settleStrandedFiles(ctx context.Context, regs trashRegistries, limit int) (seen, deleted int, err error) {
+// reports how many files it looked at and the ones it deleted.
+func (s *TrashService) settleStrandedFiles(ctx context.Context, regs trashRegistries, limit int) (seen int, deleted []*models.FileEntity, err error) {
 	files, err := regs.files.ListStrandedTrashed(ctx, limit)
 	if err != nil {
-		return 0, 0, errxtrace.Wrap("failed to list stranded trashed files", err)
+		return 0, nil, errxtrace.Wrap("failed to list stranded trashed files", err)
 	}
 	var errs []error
 	for _, f := range files {
@@ -398,7 +513,7 @@ func (s *TrashService) settleStrandedFiles(ctx context.Context, regs trashRegist
 			continue
 		}
 		if gone {
-			deleted++
+			deleted = append(deleted, f)
 		}
 	}
 	return len(files), deleted, errors.Join(errs...)
@@ -515,84 +630,101 @@ func (s *TrashService) PurgeFile(ctx context.Context, id string) error {
 // emptyTrashBatch is how many entries one round of EmptyTrash reads.
 const emptyTrashBatch = 100
 
+// EmptyTrashResult is what EmptyTrash deleted.
+type EmptyTrashResult struct {
+	TrashOutcome
+	// FileEntries counts the deleted files that were not deleted with an
+	// item: the files deleted on their own, and those an interrupted purge
+	// left behind. With len(ItemIDs) it is the number of entries the Trash
+	// page reports; FileIDs also lists the files that went with an item.
+	FileEntries int
+}
+
 // EmptyTrash deletes every item and file in the group's Trash for good and
-// reports how many of each it deleted.
-func (s *TrashService) EmptyTrash(ctx context.Context) (items, files int, err error) {
+// reports what it deleted, also when it fails partway.
+func (s *TrashService) EmptyTrash(ctx context.Context) (EmptyTrashResult, error) {
+	var out TrashOutcome
+	withItems := 0
+	result := func() EmptyTrashResult {
+		return EmptyTrashResult{TrashOutcome: out, FileEntries: len(out.FileIDs) - withItems}
+	}
 	regs, err := s.userRegistries(ctx)
 	if err != nil {
-		return 0, 0, err
+		return result(), err
 	}
-	items, err = s.purgeAllItems(ctx, regs)
+	err = s.purgeAllItems(ctx, regs, &out)
+	withItems = len(out.FileIDs)
 	if err != nil {
-		return items, 0, err
+		return result(), err
 	}
-	files, err = s.purgeAllFiles(ctx, regs)
-	if err != nil {
-		return items, files, err
+	if err := s.purgeAllFiles(ctx, regs, &out); err != nil {
+		return result(), err
 	}
 	// Files an interrupted purge left behind are in neither list.
 	for {
 		seen, deleted, err := s.settleStrandedFiles(ctx, regs, strandedBatch)
-		files += deleted
+		for _, f := range deleted {
+			out.FileIDs = append(out.FileIDs, f.ID)
+		}
 		if err != nil {
-			return items, files, err
+			return result(), err
 		}
 		if seen < strandedBatch {
-			return items, files, nil
+			return result(), nil
 		}
 	}
 }
 
-// purgeAllItems purges every item in the group's Trash. Each round deletes
-// what it read, so the next round reads from the top again. An entry that
-// cannot be deleted ends the loop with the error instead of being read over
-// and over.
-func (s *TrashService) purgeAllItems(ctx context.Context, regs trashRegistries) (int, error) {
-	items := 0
+// purgeAllItems purges every item in the group's Trash into out. Each round
+// deletes what it read, so the next round reads from the top again. An entry
+// that cannot be deleted ends the loop with the error instead of being read
+// over and over.
+func (s *TrashService) purgeAllItems(ctx context.Context, regs trashRegistries, out *TrashOutcome) error {
 	for {
 		page, _, err := regs.commodities.ListTrashed(ctx, 0, emptyTrashBatch)
 		if err != nil {
-			return items, errxtrace.Wrap("failed to list trashed items", err)
+			return errxtrace.Wrap("failed to list trashed items", err)
 		}
 		if len(page) == 0 {
-			return items, nil
+			return nil
 		}
 		for _, c := range page {
-			if err := s.purgeCommodity(ctx, regs, c.ID); err != nil {
+			purged, err := s.purgeCommodity(ctx, regs, c.ID)
+			out.add(purged)
+			if err != nil {
 				if errors.Is(err, registry.ErrNotFound) {
 					continue
 				}
-				return items, err
+				return err
 			}
-			items++
 		}
 	}
 }
 
-// purgeAllFiles purges every file deleted on its own in the group's Trash.
-func (s *TrashService) purgeAllFiles(ctx context.Context, regs trashRegistries) (int, error) {
-	files := 0
+// purgeAllFiles purges every file deleted on its own in the group's Trash
+// into out.
+func (s *TrashService) purgeAllFiles(ctx context.Context, regs trashRegistries, out *TrashOutcome) error {
 	for {
 		page, _, err := regs.files.ListTrashed(ctx, 0, emptyTrashBatch)
 		if err != nil {
-			return files, errxtrace.Wrap("failed to list trashed files", err)
+			return errxtrace.Wrap("failed to list trashed files", err)
 		}
 		if len(page) == 0 {
-			return files, nil
+			return nil
 		}
 		progressed := false
 		for _, f := range page {
 			deleted, err := s.fileService.PurgeTrashedFile(ctx, regs.files, f)
 			if err != nil {
-				return files, errxtrace.Wrap("failed to purge file", err, errx.Attrs("file_id", f.ID))
+				return errxtrace.Wrap("failed to purge file", err, errx.Attrs("file_id", f.ID))
 			}
 			if deleted {
-				files++
+				out.FileIDs = append(out.FileIDs, f.ID)
 				progressed = true
 			}
 		}
 		if !progressed {
-			return files, nil
+			return nil
 		}
 	}
 }
@@ -705,9 +837,10 @@ func (s *TrashService) userNames(ctx context.Context) func(*string) string {
 // registries and is safe to repeat: every step re-reads its state and an entry
 // that is gone or restored in the meantime is skipped. An entry that fails is
 // skipped too, so one bad row does not hold up the rest; the errors are joined
-// into the result.
-func (s *TrashService) PurgeExpired(ctx context.Context, cutoff time.Time, batch int) (items, files int, err error) {
+// into the result. It reports what it deleted in each group.
+func (s *TrashService) PurgeExpired(ctx context.Context, cutoff time.Time, batch int) ([]GroupTrashOutcome, error) {
 	regs := s.serviceRegistries()
+	var groups trashGroups
 	var errs []error
 
 	expiredItems, err := regs.commodities.ListTrashedBefore(ctx, cutoff, batch)
@@ -715,17 +848,17 @@ func (s *TrashService) PurgeExpired(ctx context.Context, cutoff time.Time, batch
 		errs = append(errs, errxtrace.Wrap("failed to list expired trashed items", err))
 	}
 	for _, c := range expiredItems {
-		if err := s.purgeCommodity(ctx, regs, c.ID); err != nil {
-			if !errors.Is(err, registry.ErrNotFound) {
-				errs = append(errs, errxtrace.Wrap("failed to purge expired item", err, errx.Attrs("commodity_id", c.ID)))
-			}
-			continue
+		purged, err := s.purgeCommodity(ctx, regs, c.ID)
+		groups.add(c.TenantID, c.GroupID, purged)
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			errs = append(errs, errxtrace.Wrap("failed to purge expired item", err, errx.Attrs("commodity_id", c.ID)))
 		}
-		items++
 	}
 
-	_, deleted, err := s.settleStrandedFiles(ctx, regs, batch)
-	files += deleted
+	_, stranded, err := s.settleStrandedFiles(ctx, regs, batch)
+	for _, f := range stranded {
+		groups.add(f.TenantID, f.GroupID, TrashOutcome{FileIDs: []string{f.ID}})
+	}
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -741,8 +874,8 @@ func (s *TrashService) PurgeExpired(ctx context.Context, cutoff time.Time, batch
 			continue
 		}
 		if deleted {
-			files++
+			groups.add(f.TenantID, f.GroupID, TrashOutcome{FileIDs: []string{f.ID}})
 		}
 	}
-	return items, files, errors.Join(errs...)
+	return groups.list(), errors.Join(errs...)
 }

@@ -52,6 +52,9 @@ export interface EntityFilesPanelProps {
   entityName?: string
   pageSize?: number
   onAttachClick?: () => void
+  // May the caller change and delete files (features/group/roles.ts)? The
+  // file detail sheet offers Edit and Delete only when true.
+  canEdit: boolean
   // Cover-photo wiring (issue #1451 option B). `coverState` flags which
   // file is the resolved cover today (explicit override or first-photo
   // auto-pick); `onSetCover` is the mutation entry-point — it must
@@ -71,6 +74,7 @@ export function EntityFilesPanel({
   entityName,
   pageSize = DEFAULT_PAGE_SIZE,
   onAttachClick,
+  canEdit,
   coverState,
   onSetCover,
   coverBusy,
@@ -214,6 +218,7 @@ export function EntityFilesPanel({
         }}
         // The review page returns here when the user is done.
         onEdit={(id) => navigate(fileReviewHref(slug, id, listContextFromLocation(location)))}
+        canEdit={canEdit}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => setSelectedId(id)}
       />

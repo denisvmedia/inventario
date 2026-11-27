@@ -162,6 +162,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the sticky footer and the confidence column agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
 
+#### 2026-11-27 — Batch review page: custom field values
+
+- **Issue/PR**: #2880
+- **Mock**: No such page in [`design-mocks/src/views/`](../../design-mocks/src/views/); the rows follow the field list of the 2026-11-25 Batch review page entry.
+- **Reality**: The "N fields used" list of a product shows, after the item fields, one row per group custom field the scan read a value for, in the group's field order: the same `Checkbox`, the field's name as the label, the value (a select option by its label, yes/no in words) and the confidence. A field deleted since the scan has no row. "N fields used" counts the ticked custom fields too.
+- **Why**: not present in mock. The issue asks for the custom field guesses as review rows with their confidence, as the single-item scan review shows them.
+- **Approved by**: user (explicit) — pre-approved for #2880 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
+
 #### 2026-11-25 — Views control on the items list toolbar
 
 - **Issue/PR**: #2793 / #2839
@@ -958,6 +967,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Forms & Validation
 
+#### 2026-11-27 — Icon pickers: an invalid state
+
+- **Issue/PR**: #2983
+- **Mock**: The icon grids of [`design-mocks/src/components/LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) (L102–L122) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) (L62–L82) have no error state. The mock has no group icon picker.
+- **Reality**: When the server refuses the icon, the group icon picker (`frontend/src/components/groups/IconPicker.tsx`, on the create group and group settings pages) points its trigger's `aria-describedby` at the field's `FieldError`, and the trigger gets the destructive border and ring that an invalid `Input` has. The location and area picker (`frontend/src/components/locations/IconPicker.tsx`) puts `aria-describedby` on its tile row, now a `role="group"`; its look does not change.
+- **Why**: not present in mock. `devdocs/frontend/forms.md` asks every control that failed to point at its error and to look invalid. `aria-invalid` is not valid ARIA on a button or a group, so the border comes from a class with the colors of the `aria-invalid` classes of `Input`.
+- **Approved by**: user (explicit) — pre-approved for #2983 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws an error state for an icon picker; otherwise permanent.
+
 #### 2026-11-26 — Create group page: what the group is for
 
 - **Issue/PR**: #1607
@@ -1704,6 +1722,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
 - **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-27 — Write actions left out for a role the server refuses
+
+- **Issue/PR**: #2886
+- **Mock**: Every view draws every action for one all-powerful member: [`AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) and [`DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) (Add item), [`ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) (Add item, the bulk bar), [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (Edit, Delete, Change status), [`FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) (Upload, selection), [`LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) (add location and area, edit, delete) and [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) (create, rename, delete). The mock has no read-only or role-limited state.
+- **Reality**: A page offers a write action only when `useGroupPermissions()` (`frontend/src/features/group/roles.ts`) says the caller's role passes the server's gate for it. A viewer gets no Add item (sidebar, Dashboard, Items list), no bulk move, edit or delete (Print labels stays), no Edit, Delete, Change status, quick edit, upload or attach on an item's page, no upload, selection, Edit, Delete or Remove attachment on the Files page and in the file sheet wherever it opens, no create, rename or delete on the Tags, Sellers, Item types and Custom fields pages, no attach or drop zone on the location and area pages, and no add location, add area, edit or delete. The item page's Lend, Service, Supplies, Maintenance and reminder sections keep their buttons for now. A member with the user role gets everything except the location and area writes. The actions are left out, not shown disabled: a card or row whose only actions are refused loses its menu, and an empty state loses its create button. A link to a create or edit route (`/locations/new`, `/locations/:id/edit`, `/areas/:id/edit`, `/commodities/new`, `/commodities/:id/edit`) opens no dialog or form. While the role is unknown (the member list loading or failed) the actions stay hidden.
+- **Why**: not present in mock. The server refuses these writes with 403 (`structuralWriteGate` and `contentWriteGate` in `go/apiserver/apiserver.go`), so an offered action ends in an error after the member has filled in a form. Leaving the action out follows the app's existing role-limited surfaces (the Drafts card, the Inbox, Trash, the Failed jobs card); a disabled button with a reason would need a tooltip per action and still invites the click.
+- **Approved by**: user (explicit) — pre-approved for #2886 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a read-only state for viewers.
 
 #### 2026-11-27 — Every dialog card is never taller than the screen
 

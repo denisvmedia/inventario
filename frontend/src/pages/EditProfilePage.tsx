@@ -357,7 +357,7 @@ export function EditProfilePage() {
                 disabled={updateMutation.isPending}
                 aria-invalid={!!profileForm.formState.errors.name}
                 aria-describedby={
-                  profileForm.formState.errors.name ? "profile-name-error" : undefined
+                  profileForm.formState.errors.name?.message ? "profile-name-error" : undefined
                 }
                 data-testid="profile-name-input"
                 {...profileForm.register("name")}
@@ -524,7 +524,7 @@ export function EditProfilePage() {
                     disabled={changePasswordMutation.isPending}
                     aria-invalid={!!passwordForm.formState.errors.currentPassword}
                     aria-describedby={
-                      passwordForm.formState.errors.currentPassword
+                      passwordForm.formState.errors.currentPassword?.message
                         ? "current-password-error"
                         : undefined
                     }
@@ -547,7 +547,9 @@ export function EditProfilePage() {
                     disabled={changePasswordMutation.isPending}
                     aria-invalid={!!passwordForm.formState.errors.newPassword}
                     aria-describedby={
-                      passwordForm.formState.errors.newPassword ? "new-password-error" : undefined
+                      passwordForm.formState.errors.newPassword?.message
+                        ? "new-password-error"
+                        : undefined
                     }
                     data-testid="new-password"
                     {...passwordForm.register("newPassword")}
@@ -575,7 +577,7 @@ export function EditProfilePage() {
                     disabled={changePasswordMutation.isPending}
                     aria-invalid={!!passwordForm.formState.errors.confirmPassword}
                     aria-describedby={
-                      passwordForm.formState.errors.confirmPassword
+                      passwordForm.formState.errors.confirmPassword?.message
                         ? "confirm-password-error"
                         : undefined
                     }

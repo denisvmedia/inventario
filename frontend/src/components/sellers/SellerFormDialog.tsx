@@ -158,7 +158,7 @@ export function SellerFormDialog({
               autoComplete="off"
               disabled={isPending}
               aria-invalid={!!errors.name}
-              aria-describedby={errors.name ? "seller-name-error" : undefined}
+              aria-describedby={errors.name?.message ? "seller-name-error" : undefined}
               data-testid="seller-name-input"
               {...form.register("name")}
             />
@@ -194,7 +194,7 @@ export function SellerFormDialog({
               autoComplete="off"
               disabled={isPending}
               aria-invalid={!!errors.website}
-              aria-describedby={errors.website ? "seller-website-error" : undefined}
+              aria-describedby={errors.website?.message ? "seller-website-error" : undefined}
               data-testid="seller-website-input"
               {...form.register("website")}
             />
@@ -213,7 +213,7 @@ export function SellerFormDialog({
               autoComplete="off"
               disabled={isPending}
               aria-invalid={!!errors.contact}
-              aria-describedby={errors.contact ? "seller-contact-error" : undefined}
+              aria-describedby={errors.contact?.message ? "seller-contact-error" : undefined}
               data-testid="seller-contact-input"
               {...form.register("contact")}
             />
@@ -232,7 +232,7 @@ export function SellerFormDialog({
               rows={3}
               disabled={isPending}
               aria-invalid={!!errors.note}
-              aria-describedby={errors.note ? "seller-note-error" : undefined}
+              aria-describedby={errors.note?.message ? "seller-note-error" : undefined}
               data-testid="seller-note-input"
               className="resize-none"
               {...form.register("note")}

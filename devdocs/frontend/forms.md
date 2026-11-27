@@ -279,7 +279,7 @@ const err = form.formState.errors.fieldId
   <Input
     id="field-id"
     aria-invalid={!!err}
-    aria-describedby={err ? "field-id-error" : undefined}
+    aria-describedby={err?.message ? "field-id-error" : undefined}
     {...form.register("fieldId")}
   />
   <FieldError id="field-id-error" testId="field-id-error" message={err?.message} />
@@ -291,18 +291,30 @@ i18n key from the zod schema — see [Schema](#schema)), renders nothing when
 the message is empty, and bakes in the `field-error` class the e2e suite
 selects on. Wire `aria-describedby` on the input to the `FieldError` `id`
 so screen readers announce the message when RHF focuses the invalid field.
+Key `aria-describedby` on `err?.message`, as `FieldError` is: an error with
+an empty message renders no `FieldError`, and the attribute would point at
+an id that is not on the page.
 
 A field error is always `<FieldError>`, in a page form and in a dialog
 alike, and the control that failed always carries `aria-invalid` and
 `aria-describedby`. `aria-invalid` is what draws the red border on
 `Input`, `Textarea` and `SelectTrigger`. A custom control takes the same
 two attributes on its focusable root: `TagColorPicker` puts them on its
-`radiogroup` through its `invalid` and `describedBy` props. A field with a
+`radiogroup` through its `invalid` and `describedBy` props. ARIA allows
+`aria-invalid` only on input-like roles, so a control built on a button or a
+plain group takes `describedBy` alone: the group icon picker puts it on its
+trigger button and draws the destructive border from its `invalid` prop,
+and the location and area icon picker puts it on its `group` of tiles. A
+field with a
 hint keeps the hint as its own muted line, and may swap it for the error
 (`errors.x?.message ? <FieldError … /> : <p>hint</p>`).
 
-ESLint enforces this: `no-restricted-syntax` flags `t(errors.<field>.message)`
-and `t(form.formState.errors.<field>.message)` inside JSX. The one sanctioned
+ESLint catches the usual hand-rendered forms: `no-restricted-syntax` flags
+`t(errors.<field>.message)` and `t(form.formState.errors.<field>.message)`
+inside JSX, and `errors.<field>?.message` or `fieldState.error?.message`
+rendered as a JSX child (also behind `??` or `||`). It cannot see an error
+read into a local variable first (`const err = errors.name` and then
+`{t(err.message)}`), so review catches that one. The one sanctioned
 exception is `components/items/BrandModelFields.tsx`, which draws the Add item
 dialog's own error line from the mock (`design-mocks/src/components/AddItemDialog.tsx`)
 and says so in its disable comment.

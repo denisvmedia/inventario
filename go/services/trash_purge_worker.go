@@ -17,16 +17,22 @@ const defaultTrashPurgeInterval = time.Hour
 // deletes.
 const trashPurgeBatch = 100
 
-// TrashPurger deletes expired Trash entries; TrashService implements it.
+// TrashPurger deletes expired Trash entries and reports what it deleted in
+// each group; TrashService implements it.
 type TrashPurger interface {
-	PurgeExpired(ctx context.Context, cutoff time.Time, batch int) (items, files int, err error)
+	PurgeExpired(ctx context.Context, cutoff time.Time, batch int) ([]GroupTrashOutcome, error)
 }
 
 // TrashPurgeWorker deletes, across every group, the items and files that have
 // been in Trash longer than the retention. Every step re-reads its state, so
 // a sweep that stops halfway is finished by the next one.
+//
+// With an audit logger, each sweep writes one trash_purge_expired row for
+// every group it deleted something in (#2893), with no user: the retention
+// deleted those entries, not a member.
 type TrashPurgeWorker struct {
 	purger    TrashPurger
+	audit     AuditLogger
 	retention time.Duration
 	interval  time.Duration
 	pause     PauseChecker
@@ -74,6 +80,16 @@ func WithTrashPurgePauseController(pc PauseChecker) TrashPurgeOption {
 	return func(w *TrashPurgeWorker) {
 		if pc != nil {
 			w.pause = pc
+		}
+	}
+}
+
+// WithTrashPurgeAudit records what each sweep deleted in the audit log. A nil
+// logger leaves the sweeps unrecorded.
+func WithTrashPurgeAudit(audit AuditLogger) TrashPurgeOption {
+	return func(w *TrashPurgeWorker) {
+		if audit != nil {
+			w.audit = audit
 		}
 	}
 }
@@ -139,7 +155,8 @@ func (w *TrashPurgeWorker) Sweep(ctx context.Context) {
 		return
 	}
 	cutoff := w.clock().Add(-w.retention)
-	var totalItems, totalFiles int
+	var groups trashGroups
+	defer func() { w.record(ctx, cutoff, groups.list()) }()
 	for {
 		if ctx.Err() != nil {
 			return
@@ -149,21 +166,53 @@ func (w *TrashPurgeWorker) Sweep(ctx context.Context) {
 			return
 		default:
 		}
-		items, files, err := w.purger.PurgeExpired(ctx, cutoff, trashPurgeBatch)
-		totalItems += items
-		totalFiles += files
+		purged, err := w.purger.PurgeExpired(ctx, cutoff, trashPurgeBatch)
+		items, files := 0, 0
+		for _, g := range purged {
+			groups.add(g.TenantID, g.GroupID, g.TrashOutcome)
+			items += len(g.ItemIDs)
+			files += len(g.FileIDs)
+		}
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to purge expired Trash entries", "error", err, "cutoff", cutoff)
 			if items+files == 0 {
-				break
+				return
 			}
 			continue
 		}
 		if items < trashPurgeBatch && files < trashPurgeBatch {
-			break
+			return
 		}
 	}
-	if totalItems > 0 || totalFiles > 0 {
-		slog.InfoContext(ctx, "Purged expired Trash entries", "items", totalItems, "files", totalFiles, "cutoff", cutoff)
+}
+
+// record logs what a sweep deleted and writes its audit rows, one per group.
+// A sweep cut short by a stop or a canceled context still records what it
+// deleted.
+func (w *TrashPurgeWorker) record(ctx context.Context, cutoff time.Time, groups []GroupTrashOutcome) {
+	var totalItems, totalFiles int
+	for _, g := range groups {
+		totalItems += len(g.ItemIDs)
+		totalFiles += len(g.FileIDs)
+	}
+	if totalItems == 0 && totalFiles == 0 {
+		return
+	}
+	slog.InfoContext(ctx, "Purged expired Trash entries", "items", totalItems, "files", totalFiles, "groups", len(groups), "cutoff", cutoff)
+	if w.audit == nil {
+		return
+	}
+	auditCtx := context.WithoutCancel(ctx)
+	for _, g := range groups {
+		extra := g.AuditExtra()
+		extra["cutoff"] = cutoff.UTC().Format(time.RFC3339)
+		w.audit.LogAuth(auditCtx, AuthEvent{
+			Action:     AuditActionTrashPurgeExpired,
+			TenantID:   new(g.TenantID),
+			EntityType: new("location_group"),
+			EntityID:   new(g.GroupID),
+			Success:    true,
+			Extra:      extra,
+		})
 	}
 }

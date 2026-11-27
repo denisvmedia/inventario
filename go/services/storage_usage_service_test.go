@@ -107,6 +107,10 @@ func (s *stubFileRegistry) AddLink(context.Context, models.FileLink) (*models.Fi
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) AddLinkIncludingTrashed(context.Context, models.FileLink) (*models.FileLink, bool, error) {
+	panic("not implemented")
+}
+
 func (s *stubFileRegistry) RemoveLink(context.Context, string, string) (*models.FileLink, error) {
 	panic("not implemented")
 }

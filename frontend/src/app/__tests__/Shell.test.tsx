@@ -2,12 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
 import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { delay, http, HttpResponse } from "msw"
 
 import { Shell } from "@/app/Shell"
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { TOUR_BLOCKER_GRACE_MS, useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
-import { authHandlers, groupHandlers, savedViewHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  authHandlers,
+  groupHandlers,
+  memberHandlers,
+  savedViewHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -102,8 +109,14 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  // The sidebar lists the group's saved views.
-  server.use(...savedViewHandlers.none("household"), ...savedViewHandlers.none("office"))
+  // The sidebar lists the group's saved views, and offers Add item by the
+  // caller's role: every test runs as the group's owner unless it
+  // registers another role.
+  server.use(
+    ...savedViewHandlers.none("household"),
+    ...savedViewHandlers.none("office"),
+    ...memberHandlers.asRole("g1", "owner")
+  )
 })
 
 afterEach(() => {
@@ -155,6 +168,43 @@ describe("<Shell /> — onboarding tour without a group (#2787)", () => {
     await waitFor(() => expect(window.localStorage.getItem(SEEN_KEY)).toBeNull())
     expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument()
     expect(screen.queryByTestId("onboarding-card")).not.toBeInTheDocument()
+  })
+})
+
+describe("<Shell /> — onboarding tour by role (#2886)", () => {
+  it("waits for the role, so a member list that answers late keeps Add item in the tour", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      http.get(apiUrl("/groups/g1/members"), async () => {
+        await delay(300)
+        return HttpResponse.json({
+          data: [
+            {
+              id: "membership-u1",
+              type: "memberships",
+              attributes: { group_id: "g1", member_user_id: "u1", role: "owner" },
+            },
+          ],
+        })
+      })
+    )
+    renderShell("/g/household")
+    expect(await screen.findByTestId("onboarding-tour")).toBeInTheDocument()
+    expect(screen.getByTestId("onboarding-dots").children).toHaveLength(7)
+  })
+
+  it("leaves Add item out of a viewer's tour", async () => {
+    server.use(...groupHandlers.list(), ...memberHandlers.asRole("g1", "viewer"))
+    const user = userEvent.setup()
+    renderShell("/g/household")
+    expect(await screen.findByTestId("onboarding-tour")).toBeInTheDocument()
+    expect(screen.getByTestId("onboarding-dots").children).toHaveLength(6)
+    await waitFor(() =>
+      expect(screen.getByTestId("onboarding-tour").style.pointerEvents).not.toBe("none")
+    )
+    await user.click(screen.getByTestId("onboarding-next"))
+    expect(screen.getByTestId("onboarding-card")).not.toHaveAttribute("data-step", "addItem")
   })
 })
 

@@ -89,6 +89,12 @@ put back a tag you removed, however many scans suggested it. Once you change
 a suggested title, also back to the file name, later scans leave the title
 alone. A tag you add back by hand is yours and shows without the sparkle.
 
+When you finish a saved draft, a file the draft holds already, under **Saved
+with this draft**, is not added again, whether you scan it again or pick it
+on the **Files** step. It keeps the title and tags it was saved with; the
+scan's suggestions for it are not applied, so change them on its row if you
+want to.
+
 A few things to know:
 
 - If AI finds more than one product, it pre-fills the most prominent one and
@@ -136,7 +142,10 @@ of the whole line.
 
 - Tick the products you want to keep. Every product starts ticked.
 - Change the **Quantity** if the scan read it wrong.
-- Open **N fields used** to see each value the scan read, with its confidence.
+- Open **N fields used** to see each value the scan read, with its confidence,
+  then the values it read for your group's
+  [custom fields](../custom-fields/#custom-fields-read-by-ai) under each
+  field's name. A value read with a confidence under 30% starts unticked.
   Untick a value to leave that field empty in the draft. A value the scan did
   not read stays empty too: an unknown price is not a price of 0. See
   [Unknown is not zero](#unknown-is-not-zero).

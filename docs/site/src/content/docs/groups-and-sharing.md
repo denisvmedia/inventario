@@ -36,7 +36,7 @@ Every group has one **group currency** — the currency all of its item prices a
 The group currency is fixed when you create the group. To change it later you'd use the currency-migration tool in **Group settings → Info**, which reprices every item in the group at an exchange rate you provide. That tool is only available if your server operator has enabled it; if it's switched off you'll see a note saying so.
 :::
 
-While a migration runs, the group's items can't be changed. Adding, editing or deleting an item, restoring one from Trash, editing or deleting an item tag and starting a restore all show **Locked while a currency migration is running.** Try again once the migration has finished. File tags and files are not affected.
+While a migration runs, the group's items can't be changed. Adding, editing or deleting an item, restoring one from Trash, changing the slug of an item tag or deleting one, and starting a restore all show **Locked while a currency migration is running.** Try again once the migration has finished. An item tag's label and color can still be changed, and file tags and files are not affected.
 
 Once a currency migration of the group has started, **Group settings → Info** has a link to the group's migrations: the latest ten, newest first, each with its currencies, rate and status. A migration drops off that list 90 days after it ended, unless your server operator set another period.
 
@@ -157,6 +157,8 @@ Each member of a group has one **role** that controls what they can do. The **Me
 | **Administrator** | Can manage members, group info, locations and areas. |
 | **User** | Can add and remove items (not locations or areas). |
 | **Viewer** | Can view all items, but cannot make any changes. |
+
+Besides items, a **User** can manage the group's files, tags, sellers, item types, and custom fields. Inventario hides the actions a role cannot use. A viewer sees no buttons that add, change, or delete items, files, locations, areas, tags, sellers, item types, or custom fields (printing labels still works). The tabs of an item page that record loans, services, supplies, maintenance, and reminders still show their buttons to a viewer, and saving there fails with an error. A user sees no buttons that add, change, or delete locations and areas.
 
 A group can have more than one owner. The **Members** page also shows quick stats at the top: total **Members**, **Admins & Owners**, and **Pending invites**.
 

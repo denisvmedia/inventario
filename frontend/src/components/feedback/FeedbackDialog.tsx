@@ -244,7 +244,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               placeholder={t("feedback:fields.messagePlaceholder")}
               data-testid="feedback-message"
               aria-invalid={!!errors.message}
-              aria-describedby={errors.message ? `${formId}-message-error` : undefined}
+              aria-describedby={errors.message?.message ? `${formId}-message-error` : undefined}
               {...register("message")}
             />
             <FieldError
@@ -263,7 +263,9 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               placeholder={t("feedback:fields.replyToPlaceholder")}
               data-testid="feedback-reply-to"
               aria-invalid={!!errors.reply_to_email}
-              aria-describedby={errors.reply_to_email ? `${formId}-reply-to-error` : undefined}
+              aria-describedby={
+                errors.reply_to_email?.message ? `${formId}-reply-to-error` : undefined
+              }
               {...register("reply_to_email")}
             />
             {errors.reply_to_email?.message ? (

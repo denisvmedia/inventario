@@ -368,8 +368,11 @@ when to add an entry and where it goes.
   remembered on the device. On the item page the cover sits beside the details
   and opens the full-screen viewer, which goes through the item's photos.
   Thumbnails gain a `large` size (600 px) for these surfaces; a photo uploaded
-  earlier gets it the first time a card shows it
-  ([#2797](https://github.com/denisvmedia/inventario/issues/2797)).
+  earlier gets it the first time a card shows it. Each card loads the
+  thumbnail that fits its width at every screen size, and a photo in Trash is
+  never an item's cover
+  ([#2797](https://github.com/denisvmedia/inventario/issues/2797),
+  [#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 
 - A search field in the top bar of every page, an icon button on phones,
   opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
@@ -434,7 +437,26 @@ when to add an entry and where it goes.
   `trash-purge` worker; `--trash-purge-interval` sets its cadence. Item delete
   toasts have an Undo button. Backups leave Trash out, a full-replace restore
   empties it, and a merge restore skips what is in it and puts a backup file
-  that only trashed items use in Trash with them
+  that only trashed items use in Trash with them. Every restore, delete for
+  good and Empty trash writes an audit row, one per request also for a bulk
+  action, with the member, the operator of an impersonation session, and the
+  items and files restored or deleted; each `trash-purge` sweep writes one row
+  per group it deleted something in
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799),
+  [#2893](https://github.com/denisvmedia/inventario/issues/2893)).
+  restore, admins and owners delete. A file in Trash cannot be attached to an
+  item, location or area, also when it moves there while the attach runs. A
+  restored item gets back its history, loans, services, schedules and the
+  files that went with it, but not a file deleted on its own earlier; an item
+  whose area was deleted in the meantime comes back without a location. While
+  in Trash an item is left out of lists, search, reports, totals and
+  reminders. Trashed files still count toward storage, shown as a separate
+  Trash share on the storage card. Entries are deleted for good after
+  `--trash-retention` (default 30 days) by the new `trash-purge` worker;
+  `--trash-purge-interval` sets its cadence. Item delete toasts have an Undo
+  button. Backups leave Trash out, a full-replace restore empties it, and a
+  merge restore skips what is in it and puts a backup file that only trashed
+  items use in Trash with them
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
@@ -587,6 +609,18 @@ when to add an entry and where it goes.
   `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
   `failed_before` filter
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
+- Custom field values from a batch scan. **Add from files** offers the
+  group's custom fields to the AI scan, as **Fill with AI** does, and the
+  review page lists the values it read for each product after the item
+  fields, with their confidence. A value read with a confidence of 30% or
+  more starts ticked, and each draft gets the ticked values. A value the
+  field cannot hold is not listed, and neither is a value of a field
+  deleted after the scan or of a choice removed since; no draft gets it.
+  A NUL character in scanned text is dropped, since PostgreSQL cannot
+  store it. In the API, an intake candidate carries `custom_fields` and
+  `accepted_custom_fields`, and a candidate review takes
+  `accepted_custom_fields`
+  ([#2880](https://github.com/denisvmedia/inventario/issues/2880)).
 - Failed personal data exports are failed jobs too. The back office
   **Failed jobs** page and `inventario jobs failed` list them as
   `personal-data-export`, with the user's email address as the title and no
@@ -878,6 +912,14 @@ when to add an entry and where it goes.
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
+- In the Add item dialog, a file a saved draft holds is listed once. Scanning
+  it again on the AI step, or picking it again on the **Files** step, staged a
+  second copy beside its row under **Saved with this draft**; the next save
+  dropped the copy, and with it the title and tag the scan suggested. The file
+  now stays on its saved row with the title and tags it was saved with. The
+  remove and add buttons of the tag and number chips are named in the app's
+  language
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
@@ -939,6 +981,15 @@ when to add an entry and where it goes.
   migration that finished before its start request recorded it on the group
   no longer leaves the group shown as migrating
   ([#2918](https://github.com/denisvmedia/inventario/issues/2918)).
+- Viewers saw Add item in the sidebar, on the Dashboard and on the Items
+  list, the bulk move, edit, delete and status actions on items, the upload,
+  edit, delete and remove-attachment actions on files, the attach buttons on
+  location and area pages, and the create, rename and delete actions on the
+  Tags, Sellers, Item types and Custom fields pages, and members with the user
+  role saw add, edit and delete for locations and areas. The server refuses
+  those writes, so the member filled in a form only to get an error. These
+  actions are now offered only to a role the server accepts them from
+  ([#2886](https://github.com/denisvmedia/inventario/issues/2886)).
 - Add item and the batch upload dialog move the uploads they did not use to
   Trash, and could move one that an item used: when another tab or a retried
   save attached the file between the dialog's check and its delete. The
@@ -961,13 +1012,6 @@ when to add an entry and where it goes.
   quota reminders, so a group of many small photos uses more space than the
   card shows
   ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
-- Photo cards on the Items list load the thumbnail that fits the card. The
-  size they announced to the browser was wrong at phone widths and at several
-  tablet and desktop widths, so the browser loaded a larger thumbnail than
-  the card shows. A photo moved to Trash while the list loads is no longer
-  shown as an item's cover, and a failed cover lookup is logged as a warning
-  instead of passing unnoticed; the items still list, without those covers
-  ([#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it
@@ -1044,6 +1088,19 @@ when to add an entry and where it goes.
   kept the whole value in an index whose entries have a size limit. That
   index served no search or filter and is removed
   ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
+- Changing the slug of an item tag or deleting one while a currency
+  migration runs in the group is refused at once with "Locked while a
+  currency migration is running.", as an item change is. Before, the request
+  waited for the migration and ended in a timeout or a server error when
+  the migration took longer than a minute. A new label or color still saves,
+  and file tags are not affected
+  ([#2982](https://github.com/denisvmedia/inventario/issues/2982),
+  [#3011](https://github.com/denisvmedia/inventario/issues/3011)).
+- Creating, saving or deleting a tag that failed with a server or network
+  error showed two error toasts on the Tags page, one of them with the raw
+  request address. It shows one, and a change the server refuses shows the
+  server's reason
+  ([#3011](https://github.com/denisvmedia/inventario/issues/3011)).
 - Editing or deleting an item tag while a currency migration runs in the
   group is refused at once with "Locked while a currency migration is
   running.", as an item change is. Before, the request waited for the
@@ -1087,6 +1144,16 @@ when to add an entry and where it goes.
   after the upgrade it reads the start of every JPEG photo once, in the
   background, and makes the thumbnails of the turned ones again
   ([#2980](https://github.com/denisvmedia/inventario/issues/2980)).
+- With "reduce motion" turned on in the operating system, dialogs, menus,
+  popovers, tooltips and list rows fade in and out in place instead of
+  zooming or sliding, and a side panel appears without sliding in. Before,
+  these animations played the same with the setting on
+  ([#2932](https://github.com/denisvmedia/inventario/issues/2932)).
+
+- The supply link dialog shows its field errors in the language you chose
+  and marks the field that failed, as the other forms do. A refused icon on
+  the create group and group settings pages also marks the icon picker
+  ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
 - Signing out in one tab while another tab renewed its session no longer
   signs you back in, and no longer makes the server take the renewal for a
   stolen session and sign you out on your other devices. A sign-out now waits
@@ -1321,6 +1388,14 @@ when to add an entry and where it goes.
   logged a second time as `Failed to finish stopped draft discards`, which
   now means only that the pass itself could not run
   ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
+- A failed cover lookup on the items list or an item page is logged as a
+  warning, `cover lookup failed; the items are listed without these covers`,
+  with `read` (`named covers` or `first photos`), `count`, `group_id` and
+  `error`. The items still list. An item the failed read was for shows its
+  type icon; an item with a cover chosen by hand does not show its first
+  photo in its place
+  ([#2900](https://github.com/denisvmedia/inventario/issues/2900),
+  [#3049](https://github.com/denisvmedia/inventario/issues/3049)).
 
 ## [0.2.2] - 2026-11-23
 

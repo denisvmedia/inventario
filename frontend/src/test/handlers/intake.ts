@@ -16,6 +16,8 @@ export interface FakeIntakeCandidate {
   sort_order: number
   fields: Record<string, { value: unknown; confidence: number }>
   accepted_fields: string[]
+  custom_fields?: Record<string, { value: unknown; confidence: number }>
+  accepted_custom_fields?: string[]
   quantity: number
   selected: boolean
   outcome: "pending" | "created" | "skipped" | "failed"
@@ -312,6 +314,9 @@ export function backend(
           if (a.selected && c.outcome === "skipped") c.outcome = "pending"
         }
         if (Array.isArray(a.accepted_fields)) c.accepted_fields = a.accepted_fields as string[]
+        if (Array.isArray(a.accepted_custom_fields)) {
+          c.accepted_custom_fields = a.accepted_custom_fields as string[]
+        }
         if (typeof a.quantity === "number") c.quantity = a.quantity
         state.events.push(`review ${c.id}`)
         return HttpResponse.json({

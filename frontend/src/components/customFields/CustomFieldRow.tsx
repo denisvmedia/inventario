@@ -8,8 +8,10 @@ import { cn } from "@/lib/utils"
 
 export interface CustomFieldRowProps {
   field: CustomField
-  onEdit: () => void
-  onDelete: () => void
+  // Left out for a member who may not change it; the row then has no
+  // edit button. The same holds for onDelete.
+  onEdit?: () => void
+  onDelete?: () => void
   className?: string
 }
 
@@ -48,30 +50,36 @@ export function CustomFieldRow({ field, onEdit, onDelete, className }: CustomFie
         </p>
       </div>
 
-      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7"
-          onClick={onEdit}
-          aria-label={t("customFields:list.edit", { name: field.name })}
-          data-testid={`custom-field-row-${field.id}-edit`}
-        >
-          <Pencil aria-hidden="true" className="size-3.5" />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={onDelete}
-          aria-label={t("customFields:list.delete", { name: field.name })}
-          data-testid={`custom-field-row-${field.id}-delete`}
-        >
-          <Trash2 aria-hidden="true" className="size-3.5" />
-        </Button>
-      </div>
+      {onEdit || onDelete ? (
+        <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {onEdit ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={onEdit}
+              aria-label={t("customFields:list.edit", { name: field.name })}
+              data-testid={`custom-field-row-${field.id}-edit`}
+            >
+              <Pencil aria-hidden="true" className="size-3.5" />
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              aria-label={t("customFields:list.delete", { name: field.name })}
+              data-testid={`custom-field-row-${field.id}-delete`}
+            >
+              <Trash2 aria-hidden="true" className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

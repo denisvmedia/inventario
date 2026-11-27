@@ -11203,7 +11203,7 @@ const docTemplate = `{
                         }
                     },
                     "423": {
-                        "description": "An item tag, while a currency migration runs in the group",
+                        "description": "A new slug for an item tag, while a currency migration runs in the group",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -18830,6 +18830,13 @@ const docTemplate = `{
         "jsonapi.IntakeCandidateReviewAttrs": {
             "type": "object",
             "properties": {
+                "accepted_custom_fields": {
+                    "description": "AcceptedCustomFields are the IDs of the custom fields whose scanned\nvalue goes into the draft; each must be one the scan read a value for.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "accepted_fields": {
                     "type": "array",
                     "items": {
@@ -23040,6 +23047,13 @@ const docTemplate = `{
         "models.IntakeCandidate": {
             "type": "object",
             "properties": {
+                "accepted_custom_fields": {
+                    "description": "AcceptedCustomFields are the IDs of the custom fields whose scanned\nvalue goes into the draft.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "accepted_fields": {
                     "type": "array",
                     "items": {
@@ -23048,6 +23062,14 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "custom_fields": {
+                    "description": "CustomFields is what the scan read for the group's custom fields, by\nfield ID, a select field's value as its option ID.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeFields"
+                        }
+                    ]
                 },
                 "draft_id": {
                     "description": "DraftID is the draft made for the candidate. The draft can be\ndiscarded or promoted later, so there is no foreign key.",
