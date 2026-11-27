@@ -89,6 +89,12 @@ put back a tag you removed, however many scans suggested it. Once you change
 a suggested title, also back to the file name, later scans leave the title
 alone. A tag you add back by hand is yours and shows without the sparkle.
 
+When you finish a saved draft, a file the draft holds already, under **Saved
+with this draft**, is not added again, whether you scan it again or pick it
+on the **Files** step. It keeps the title and tags it was saved with; the
+scan's suggestions for it are not applied, so change them on its row if you
+want to.
+
 A few things to know:
 
 - If AI finds more than one product, it pre-fills the most prominent one and

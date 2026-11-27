@@ -196,6 +196,11 @@ or computer can have its own look. Your other preferences travel with your
 account.
 :::
 
+Inventario also follows your device's accessibility setting to reduce motion
+(for example **Reduce motion** on macOS and iOS). With it on, dialogs, menus
+and list rows fade in place instead of zooming or sliding. There is no separate
+switch for it in the app.
+
 The **Notifications** section lets you turn individual email/push reminders on
 or off — warranty expiry, maintenance, loans, the reminders you set on items,
 the weekly digest, price-drop alerts, and which channels to use. Under

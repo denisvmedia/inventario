@@ -1,5 +1,6 @@
 import { Plus, Sparkles, X } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
@@ -66,6 +67,7 @@ export function TagsInput({
   suggestedLabel,
   chipClassName,
 }: TagsInputProps) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState("")
   // Remote suggestions live in local state and are populated via the
   // `<AutocompleteSink>` sub-component below. The sink is only rendered
@@ -200,7 +202,7 @@ export function TagsInput({
             <button
               type="button"
               className="ml-0.5 inline-flex items-center"
-              aria-label={`remove ${displayOf(v)}`}
+              aria-label={t("common:chipInput.remove", { value: displayOf(v) })}
               onClick={() => onChange(values.filter((x) => x !== v))}
             >
               <X className="size-3" aria-hidden="true" />
@@ -297,7 +299,7 @@ export function TagsInput({
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground"
-          aria-label="add"
+          aria-label={t("common:chipInput.add", { value: draft.trim() })}
           onClick={commit}
         >
           <Plus className="size-3.5" aria-hidden="true" />

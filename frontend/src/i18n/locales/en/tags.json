@@ -32,7 +32,7 @@
     "cancel": "Cancel",
     "color": "Color",
     "create": "Create tag",
-    "createError": "Could not create tag: {{error}}",
+    "createError": "Could not create the tag.",
     "createSuccess": "Tag created.",
     "createTitle": "Create tag",
     "editTitle": "Edit tag",
@@ -43,7 +43,7 @@
     "slug": "Slug",
     "slugHint": "Lowercase letters and digits in any language, separated by dashes. Filled in from the label; it identifies the tag on items and files.",
     "slugPlaceholder": "kitchen",
-    "updateError": "Could not update tag: {{error}}",
+    "updateError": "Could not update the tag.",
     "updateSuccess": "Tag updated."
   },
   "inlineCreate": {
@@ -80,7 +80,7 @@
     "confirmAction": "Delete",
     "confirmDescription": "Remove the tag \"{{label}}\" from this group. This cannot be undone.",
     "confirmTitle": "Delete tag?",
-    "deleteError": "Could not delete tag: {{error}}",
+    "deleteError": "Could not delete the tag.",
     "deleteSuccess": "Tag deleted.",
     "forceAction": "Force delete",
     "forceCancel": "Cancel",

@@ -47,6 +47,10 @@ A file in the trash still counts toward your group's storage until it is
 deleted for good. **Group settings → Data & storage** shows how much of the
 used space is in the trash, with a link to the Trash page.
 
+A file in the trash can't be attached to an item, location, or area, and
+**Attach an existing file** doesn't list it; restore it first. If someone
+moves a file to the trash while you attach it, the attach fails with an error.
+
 ## The Trash page
 
 The page has two tabs:

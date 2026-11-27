@@ -882,6 +882,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Item types
 
+#### 2026-11-27 — Item type delete and Collection set removal: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has item types or the Collection set; the dialogs follow the confirm dialog, as the 2026-11-25 Item types page and 2026-11-26 Collection set card entries record.
+- **Reality**: `ItemTypeDeleteDialog` counts the drafts saved on the server (`draft_count`) with the items. With items and drafts, the description adds "N drafts have it too and move with them."; with drafts only, it reads "No item has the type X, but N drafts do. Pick the type they move to; then X is deleted.", the picker is labeled **Move the drafts to** and the button **Move drafts and delete**. A 409 refusal reads the draft count from its meta. In `CollectionSetRemoveDialog`, a type or field that stays because drafts use it names them after the items ("3 drafts have this type."), or alone when no item uses it.
+- **Why**: not present in mock. Drafts name a type and hold field values, so a delete that ignored them left drafts that could not be saved or finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws these dialogs; otherwise permanent.
+
 #### 2026-11-26 — Four more item type icons for the Collection set
 
 - **Issue/PR**: #1607
@@ -901,6 +910,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 ### Custom fields
+
+#### 2026-11-27 — Custom field delete: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has custom fields; the dialog follows `ItemTypeDeleteDialog`, as the 2026-11-25 Custom fields page entry records.
+- **Reality**: `CustomFieldDeleteDialog` counts the drafts with a value of the field (`draft_count`). With items and drafts, the description adds "N drafts have a value too; it is taken out of them."; with drafts only, it reads "No item has a value for this field, but N drafts do. Deleting the field takes the values out of them." The **Delete the values too** checkbox is required in both cases, and the confirmed count sent as `expected_values` includes the drafts.
+- **Why**: not present in mock. A draft's value of a deleted field was lost unseen when the draft was finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws this dialog; otherwise permanent.
 
 #### 2026-11-25 — Custom fields page
 

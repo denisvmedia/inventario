@@ -441,6 +441,20 @@ when to add an entry and where it goes.
   per group it deleted something in
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799),
   [#2893](https://github.com/denisvmedia/inventario/issues/2893)).
+  restore, admins and owners delete. A file in Trash cannot be attached to an
+  item, location or area, also when it moves there while the attach runs. A
+  restored item gets back its history, loans, services, schedules and the
+  files that went with it, but not a file deleted on its own earlier; an item
+  whose area was deleted in the meantime comes back without a location. While
+  in Trash an item is left out of lists, search, reports, totals and
+  reminders. Trashed files still count toward storage, shown as a separate
+  Trash share on the storage card. Entries are deleted for good after
+  `--trash-retention` (default 30 days) by the new `trash-purge` worker;
+  `--trash-purge-interval` sets its cadence. Item delete toasts have an Undo
+  button. Backups leave Trash out, a full-replace restore empties it, and a
+  merge restore skips what is in it and puts a backup file that only trashed
+  items use in Trash with them
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what
@@ -883,6 +897,14 @@ when to add an entry and where it goes.
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
+- In the Add item dialog, a file a saved draft holds is listed once. Scanning
+  it again on the AI step, or picking it again on the **Files** step, staged a
+  second copy beside its row under **Saved with this draft**; the next save
+  dropped the copy, and with it the title and tag the scan suggested. The file
+  now stays on its saved row with the title and tags it was saved with. The
+  remove and add buttons of the tag and number chips are named in the app's
+  language
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
@@ -986,6 +1008,19 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- Deleting an item type or a custom field, and removing the Collection set,
+  now count the drafts saved on the server as well as items. A type that only
+  a draft had was offered for deletion and deleted, and the draft could then
+  neither be saved nor finished until another type was picked; a value a
+  draft held for a deleted field was dropped without a word when the draft
+  was finished. The delete dialogs now say how many drafts use the type or
+  have a value of the field. Deleting a type moves its drafts with its items
+  to the type you pick, deleting a field takes the value out of the drafts
+  once you confirm, and removing the set keeps a type or field that a draft
+  uses. In the API, the item type and custom field lists and their `409`
+  answers carry a `draft_count`, and `expected_values` of a custom field
+  delete counts the drafts with a value too
+  ([#2939](https://github.com/denisvmedia/inventario/issues/2939)).
 - `inventario users delete` left the user's profile photo in storage, where
   nothing pointed at it any more. It now deletes the photo after the account,
   as deleting your own account does; pass `--upload-location` with the
@@ -1036,6 +1071,19 @@ when to add an entry and where it goes.
   kept the whole value in an index whose entries have a size limit. That
   index served no search or filter and is removed
   ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
+- Changing the slug of an item tag or deleting one while a currency
+  migration runs in the group is refused at once with "Locked while a
+  currency migration is running.", as an item change is. Before, the request
+  waited for the migration and ended in a timeout or a server error when
+  the migration took longer than a minute. A new label or color still saves,
+  and file tags are not affected
+  ([#2982](https://github.com/denisvmedia/inventario/issues/2982),
+  [#3011](https://github.com/denisvmedia/inventario/issues/3011)).
+- Creating, saving or deleting a tag that failed with a server or network
+  error showed two error toasts on the Tags page, one of them with the raw
+  request address. It shows one, and a change the server refuses shows the
+  server's reason
+  ([#3011](https://github.com/denisvmedia/inventario/issues/3011)).
 - Editing or deleting an item tag while a currency migration runs in the
   group is refused at once with "Locked while a currency migration is
   running.", as an item change is. Before, the request waited for the
@@ -1079,6 +1127,11 @@ when to add an entry and where it goes.
   after the upgrade it reads the start of every JPEG photo once, in the
   background, and makes the thumbnails of the turned ones again
   ([#2980](https://github.com/denisvmedia/inventario/issues/2980)).
+- With "reduce motion" turned on in the operating system, dialogs, menus,
+  popovers, tooltips and list rows fade in and out in place instead of
+  zooming or sliding, and a side panel appears without sliding in. Before,
+  these animations played the same with the setting on
+  ([#2932](https://github.com/denisvmedia/inventario/issues/2932)).
 
 ### Security
 

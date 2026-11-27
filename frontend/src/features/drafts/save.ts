@@ -203,16 +203,30 @@ function fileName(row: ListedFile): string {
   return `${row.file.path ?? ""}${row.file.ext ?? ""}`
 }
 
-// alreadyAttached reports whether the draft already has this file: the same
+// savedFileOf is the file of the draft that holds this local file: the same
 // SHA-256 when both are known, otherwise the same name and size.
-async function alreadyAttached(entry: PendingFile, attached: ListedFile[]): Promise<boolean> {
-  if (attached.length === 0) return false
-  const hash = await sha256Hex(entry.file)
-  return attached.some((row) => {
+export async function savedFileOf(
+  file: File,
+  saved: readonly ListedFile[]
+): Promise<ListedFile | undefined> {
+  if (saved.length === 0) return undefined
+  const hash = await sha256Hex(file)
+  return saved.find((row) => {
     const known = row.file.sha256
     if (hash && known) return known === hash
-    return fileName(row) === entry.file.name && row.file.size_bytes === entry.file.size
+    return fileName(row) === file.name && row.file.size_bytes === file.size
   })
+}
+
+// filesNotSaved leaves out the files the draft holds already (#2941), so a
+// file the user picks or scans again is not staged a second time.
+export async function filesNotSaved(
+  files: readonly File[],
+  saved: readonly ListedFile[]
+): Promise<File[]> {
+  if (saved.length === 0) return [...files]
+  const held = await Promise.all(files.map((file) => savedFileOf(file, saved)))
+  return files.filter((_, i) => !held[i])
 }
 
 export interface SaveDraftInput {
@@ -430,7 +444,7 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
     try {
       const done = entry.uploadedFileId
         ? attached.some((row) => row.file.id === entry.uploadedFileId)
-        : await alreadyAttached(entry, attached)
+        : (await savedFileOf(entry.file, attached)) !== undefined
       if (!done) {
         // A file an earlier attempt uploaded is attached as it is; only a
         // file that never reached the server, or that was deleted since, is
