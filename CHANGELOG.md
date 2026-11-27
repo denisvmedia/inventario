@@ -506,8 +506,12 @@ when to add an entry and where it goes.
   Uploads compute a SHA-256, and when the group already holds the same content
   the upload dialog offers to attach the existing file instead. Existing
   attachments move to the new shape when the server first starts after the
-  upgrade, and existing files get their checksum in the background
-  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+  upgrade, and existing files get their checksum in the background. A backup
+  stores a shared file once, and a restore brings it back with every item that
+  uses it, also when one of those items cannot be restored; a file that only
+  such items used is left out and counted as an error
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806),
+  [#2876](https://github.com/denisvmedia/inventario/issues/2876)).
 - Editing an item in place. Edit on the item page and in its side panel opens
   a form with the item's main fields where the details were, with a tag
   palette that adds or removes a tag in one click; "All fields" opens the
