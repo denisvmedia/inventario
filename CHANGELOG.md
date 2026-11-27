@@ -648,6 +648,13 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Reminder emails go out only for items in use. An item marked Sold, Lost,
+  Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
+  loan and item reminders, and its reminders, loans and maintenance stayed on
+  the Upcoming page; the weekly digest listed its warranty and maintenance as
+  coming up, and the maintenance of an item in Trash too. Reverting the item
+  to In Use brings back the reminders that are still due
+  ([#2908](https://github.com/denisvmedia/inventario/issues/2908)).
 - A request that waits for a free database connection stops waiting when the
   client gives up or the request times out. Before, it stayed in the queue
   with no deadline, so under load the queue grew instead of shedding
