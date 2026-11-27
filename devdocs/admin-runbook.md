@@ -599,17 +599,43 @@ uses.
 
 | Type | Table | Failed when | Retry |
 | ---- | ----- | ----------- | ----- |
-| `export` | `exports` (`type <> 'imported'`) | the export run returns an error | yes: runs again from the start |
-| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated | yes: reads the uploaded file again |
-| `restore` | `restore_operations` | the restore run returns an error | no: it may have written part of the backup; start a new restore |
+| `export` | `exports` (`type <> 'imported'`) | the export run returns an error, or its worker stops during its third run | yes: runs again from the start |
+| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated, or its worker stops during its third run | yes: reads the uploaded file again |
+| `restore` | `restore_operations` | the restore run returns an error, or its worker stops while it runs | no: it may have written part of the backup; start a new restore |
 | `thumbnail` | `thumbnail_generation_jobs` | the last of its attempts fails | yes: gets a fresh set of attempts |
 | `intake` | `intake_sources` | the scan fails for good, or the sweep gives up on it | yes: due at once, with its attempt count kept |
 | `currency-migration` | `currency_migrations` | the recovery sweep finds it stuck | no: the rate was confirmed for that moment; start a new migration |
 
 The email queue, the reminder sweeps, group purge and the cleanup sweepers
-keep no failed jobs: they retry on their next run. An export, import or
-restore whose process died while it ran stays in progress and never shows
-up here ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
+keep no failed jobs: they retry on their next run.
+
+### Runs whose worker stopped
+
+An export, import or restore whose worker stops in the middle of the run,
+because the process crashed, was killed or was shut down, would otherwise
+stay in progress for good. While a job runs, its worker records a heartbeat
+on the job's row every minute (`heartbeat_at`). Every minute the export,
+import and restore workers each sweep their table for jobs in progress
+whose heartbeat is more than **10 minutes** old, and take their worker for
+dead. How long a job runs does not matter, only whether its worker is
+alive:
+
+- An export or an import goes back to the queue and the next worker runs
+  it again from the start. Each claim counts a run in the job's attempts
+  (the attempts column of `inventario jobs failed list`), a retry's too.
+  A job whose worker stops during its **third** run fails for good with
+  "the worker stopped before the export finished" (or "the import"), so a
+  job that kills its worker every time does not run forever.
+- A restore fails for good at once with "the worker stopped before the
+  restore finished": it may have written part of its backup, so it is not
+  run again.
+
+Each of these failures is listed here and counts once in
+`inventario_jobs_dead_lettered_total`. The sweeps run while a worker type is
+paused, too. A job in progress without any heartbeat was claimed by a
+version that recorded none; it is taken for dead only once the job is a
+day old, so a rolling upgrade does not touch the runs that pods of the old
+version are still working on.
 
 Only the newest thumbnail job of a file counts. While that job is failed and
 nobody has retried or discarded it, viewing the file starts no new job, so a

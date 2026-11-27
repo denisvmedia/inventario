@@ -128,6 +128,11 @@ type RestoreOperation struct {
 	// The row stays, with its error, until its export is deleted.
 	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
 	DiscardedAt PTimestamp `json:"-" db:"discarded_at" userinput:"false"`
+	// HeartbeatAt is the last time the worker running the restore said it is
+	// alive. The claim sets it and the worker renews it while the
+	// restore runs; a restore whose heartbeat stops is taken for dead.
+	//ptah:schema:field name="heartbeat_at" type="TIMESTAMP"
+	HeartbeatAt PTimestamp `json:"-" db:"heartbeat_at" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`

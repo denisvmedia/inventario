@@ -664,6 +664,18 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- An export, import or restore whose worker stopped in the middle of the
+  run, because the process crashed, was killed or was shut down, no longer
+  stays in progress for good. A running job records a heartbeat every
+  minute, and a job whose heartbeat is ten minutes old is taken for dead. An
+  export or an import goes back to the queue and runs again, three runs at
+  most: a worker that stops during the third fails it with "the worker
+  stopped before the export finished" (or "the import"). A restore fails at
+  once with "the worker stopped before the restore finished", since it may
+  have written part of its backup. Each of these failures shows among the
+  failed jobs and counts in `inventario_jobs_dead_lettered_total`
+  ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
@@ -776,6 +788,17 @@ when to add an entry and where it goes.
   exiting with status 2, so the panic is what log alerting and the pod's last
   state showed
   ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
+- The upgrade runs one more database migration, which adds `heartbeat_at`
+  to `exports` and `restore_operations`. During a rolling upgrade, pods
+  that still run v0.2.x fail reads of exports and restores until they are
+  replaced, as described in the entry on unknown columns
+  ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). A run a
+  previous version started has no heartbeat; it is taken for dead only once
+  its job is a day old, so the upgrade leaves alone the runs the old pods
+  are still working on, and the exports, imports and restores that were
+  stuck in progress before the upgrade fail or run again once they are a
+  day old. See the admin runbook §10
+  ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
   each retry and discard to the audit log. Two metrics come with it:

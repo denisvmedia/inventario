@@ -589,8 +589,48 @@ type ExportRegistry interface {
 	// ClaimPending moves an export from pending to in_progress and reports
 	// whether this caller is the one that moved it. The condition lives in
 	// the write, so two workers racing for the same row get one true and one
-	// false instead of both producing an artifact (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// false instead of both producing an artifact (#2472). The claim counts a
+	// run in AttemptCount and records at as the run's first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of the run of an
+	// in_progress export. An export in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// RecoverStalled handles the exports (jobType models.WorkerTypeExport)
+	// or the imports (models.WorkerTypeImport) whose run the sweep takes
+	// for dead. One that has run sweep.MaxRuns times fails with
+	// sweep.ErrorMessage at sweep.Now; the others go back to pending, for
+	// the next claim to run them again. Exports in the trash are left alone.
+	// It works across tenants and is meant for the service registry.
+	RecoverStalled(ctx context.Context, jobType models.WorkerType, sweep StalledJobSweep) (StalledJobs, error)
+}
+
+// StalledJobSweep says which runs of exports, imports and restores a sweep
+// takes for dead, and what it records on the jobs it fails.
+type StalledJobSweep struct {
+	// HeartbeatBefore: a run whose latest heartbeat is older than this is
+	// dead.
+	HeartbeatBefore time.Time
+	// CreatedBefore: a run with no heartbeat at all, claimed by a version
+	// that recorded none, is dead when its job was created before this.
+	CreatedBefore time.Time
+	// Now is when a job the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxRuns is how many runs an export or an import gets before a dead
+	// run fails it instead of queuing it again. A restore is never queued
+	// again, so it ignores this.
+	MaxRuns int
+	// ErrorMessage is stored on each job the sweep fails.
+	ErrorMessage string
+}
+
+// StalledJobs is what one sweep for dead runs changed.
+type StalledJobs struct {
+	// Requeued counts the jobs that went back to pending.
+	Requeued int
+	// Failed counts the jobs that failed for good.
+	Failed int
 }
 
 // FileRegistry stores files and their links.
@@ -2126,8 +2166,20 @@ type RestoreOperationRegistry interface {
 	// ClaimPending moves an operation from pending to running and reports
 	// whether this caller is the one that moved it. Two workers racing for
 	// the same row get one true and one false, rather than both replaying a
-	// restore over live data (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// restore over live data (#2472). The claim records at as the run's
+	// first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of a running
+	// operation. An operation in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// FailStalled fails, with sweep.ErrorMessage at sweep.Now, the running
+	// operations whose run the sweep takes for dead, and returns how many
+	// it failed. A restore is never queued again: it may have written part
+	// of its backup. It works across tenants and is meant for the service
+	// registry.
+	FailStalled(ctx context.Context, sweep StalledJobSweep) (int, error)
 }
 
 // PreviewTokenInputs is the deterministic, replay-resistant payload
