@@ -8,13 +8,28 @@ import (
 
 // ownedSource is one store whose rows name a user as their member or author,
 // the in-memory counterpart of postgres.userOwnedTables. The account-deletion
-// pre-check reads the sources marked deletionPreCheck; the tenant move counts
-// all of them.
+// pre-check reads the sources whose rows block a deletion; the tenant move
+// counts all of them.
 type ownedSource struct {
-	kind             registry.OwnedContentKind
-	deletionPreCheck bool
-	rows             func(context.Context) ([]createdByEntry, error)
+	kind       registry.OwnedContentKind
+	onDeletion accountDeletion
+	rows       func(context.Context) ([]createdByEntry, error)
 }
+
+// accountDeletion is what deleting an account does with a row that names the
+// user in a group that stays, as postgres.accountDeletion.
+type accountDeletion int
+
+const (
+	// deletionBlocks marks the user's content; the pre-check refuses the
+	// deletion while a row exists in a group that stays.
+	deletionBlocks accountDeletion = iota + 1
+	// deletionRemoves marks personal rows, which UserPurger deletes.
+	deletionRemoves
+	// deletionHandsOver marks rows of the group, which UserPurger gives to
+	// another member (see UserPurger.SetGroupRowStores).
+	deletionHandsOver
+)
 
 // ownedSources lists the stores the memory backend can enumerate. Several
 // tables the postgres list covers have no enumerable in-memory store and are
@@ -24,78 +39,78 @@ type ownedSource struct {
 // change audit rows. The postgres backend is the one production runs.
 func ownedSources(fs *registry.FactorySet) []ownedSource {
 	return []ownedSource{
-		{registry.OwnedGroupMemberships, false, membershipRows(fs)},
-		{registry.OwnedLocationGroups, true, createdGroupRows(fs)},
-		{registry.OwnedGroupInvites, false, inviteRows(fs)},
-		{registry.OwnedCommodities, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedGroupMemberships, deletionRemoves, membershipRows(fs)},
+		{registry.OwnedLocationGroups, deletionBlocks, createdGroupRows(fs)},
+		{registry.OwnedGroupInvites, deletionRemoves, inviteRows(fs)},
+		{registry.OwnedCommodities, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			reg := fs.CommodityRegistryFactory.CreateServiceRegistry()
 			return authoredRows(ctx, serviceRows(reg, reg.List))
 		}},
-		{registry.OwnedFiles, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedFiles, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			reg := fs.FileRegistryFactory.CreateServiceRegistry()
 			return authoredRows(ctx, serviceRows(reg, reg.List))
 		}},
-		{registry.OwnedLocations, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedLocations, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.LocationRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedAreas, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedAreas, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.AreaRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedTags, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedTags, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.TagRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedSellers, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedSellers, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.SellerRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedExports, true, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedExports, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.ExportRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedCommodityEvents, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCommodityEvents, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.CommodityEventRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedCommodityLoans, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCommodityLoans, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			reg := fs.CommodityLoanRegistryFactory.CreateServiceRegistry()
 			return authoredRows(ctx, serviceRows(reg, reg.List))
 		}},
-		{registry.OwnedCommodityServices, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCommodityServices, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			reg := fs.CommodityServiceRegistryFactory.CreateServiceRegistry()
 			return authoredRows(ctx, serviceRows(reg, reg.List))
 		}},
-		{registry.OwnedCommoditySupplyLinks, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCommoditySupplyLinks, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.SupplyLinkRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedMaintenanceSchedules, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedMaintenanceSchedules, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			reg := fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry()
 			return authoredRows(ctx, serviceRows(reg, reg.List))
 		}},
-		{registry.OwnedCommodityReminders, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCommodityReminders, deletionRemoves, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.CommodityReminderRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedCommodityDrafts, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCommodityDrafts, deletionRemoves, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.CommodityDraftRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedIntakeSessions, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedIntakeSessions, deletionRemoves, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.IntakeRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedIntakeDocuments, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedIntakeDocuments, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.IntakeDocumentRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedItemTypes, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedItemTypes, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.ItemTypeRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedCustomFieldDefinitions, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCustomFieldDefinitions, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.CustomFieldRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedSavedViews, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedSavedViews, deletionRemoves, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.SavedViewRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedCurrencyMigrations, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedCurrencyMigrations, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedRestoreOperations, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedRestoreOperations, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.RestoreOperationRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedRestoreSteps, false, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedRestoreSteps, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.RestoreStepRegistryFactory.CreateServiceRegistry().List)
 		}},
 	}

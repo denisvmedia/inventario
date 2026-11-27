@@ -11,6 +11,7 @@ import (
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/internal/metrics"
@@ -64,9 +65,8 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get export record: %v", err))
 	}
 
-	// Each run counts, a retry's too (#1307).
+	// The claim moved the row to in_progress and counted the run.
 	exportRecord.Status = models.ExportStatusInProgress
-	exportRecord.AttemptCount++
 	if _, err = expReg.Update(ctx, *exportRecord); err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to update export status: %v", err))
 	}
@@ -199,6 +199,26 @@ type importFileMetaFields struct {
 	MIMEType         string
 	LinkedEntityMeta string
 	Tags             models.StringSlice
+}
+
+// StalledImportError is stored on an import whose worker stopped during its
+// last allowed run.
+const StalledImportError = "the worker stopped before the import finished"
+
+// RecoverStalled handles the imports whose worker stopped in the middle of a
+// run, which stays in_progress otherwise: an import that has runs left goes
+// back to the queue, and one that has used them fails for good and counts as
+// dead-lettered. See package stall for when a run counts as stopped.
+func (s *ImportService) RecoverStalled(ctx context.Context, now time.Time) (registry.StalledJobs, error) {
+	reg := s.factorySet.ExportRegistryFactory.CreateServiceRegistry()
+	out, err := reg.RecoverStalled(ctx, models.WorkerTypeImport, stall.NewSweep(now, StalledImportError))
+	if err != nil {
+		return registry.StalledJobs{}, errxtrace.Wrap("failed to recover stalled imports", err)
+	}
+	for range out.Failed {
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeImport))
+	}
+	return out, nil
 }
 
 // markImportFailed marks an import operation as failed.

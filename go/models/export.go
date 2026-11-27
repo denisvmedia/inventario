@@ -190,10 +190,16 @@ type Export struct {
 	//ptah:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 	// AttemptCount counts the runs the worker started for this export or
-	// import. A retry of a failed job (#1307) does not reset it, so it also
-	// tells how many times the job has been tried in total.
+	// import: each claim adds one. A retry of a failed job (#1307) does not
+	// reset it, so it also tells how many times the job has been tried in
+	// total.
 	//ptah:schema:field name="attempt_count" type="INTEGER" not_null="true" default="0"
 	AttemptCount int `json:"-" db:"attempt_count" userinput:"false"`
+	// HeartbeatAt is the last time the worker running the export or import
+	// said it is alive. The claim sets it and the worker renews it
+	// while the run lasts; a run whose heartbeat stops is taken for dead.
+	//ptah:schema:field name="heartbeat_at" type="TIMESTAMP"
+	HeartbeatAt PTimestamp `json:"-" db:"heartbeat_at" userinput:"false"`
 	// DiscardedAt is when an operator discarded the failed job (#1307). The
 	// row stays, with its error, until the export is deleted.
 	//ptah:schema:field name="discarded_at" type="TIMESTAMP"

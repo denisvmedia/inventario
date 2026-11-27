@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
@@ -129,13 +131,56 @@ func (r *RestoreOperationRegistry) HasActive(ctx context.Context) (bool, error) 
 
 // ClaimPending flips an operation from pending to running, letting the
 // database pick the winner when two workers race for the same row (#2472).
-func (r *RestoreOperationRegistry) ClaimPending(ctx context.Context, id string) (bool, error) {
-	claimed, err := r.newSQLRegistry().ClaimByStatus(ctx, id,
-		string(models.RestoreStatusPending), string(models.RestoreStatusRunning))
+func (r *RestoreOperationRegistry) ClaimPending(ctx context.Context, id string, at time.Time) (bool, error) {
+	var claimed bool
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET status = $1, heartbeat_at = $2 WHERE id = $3 AND status = $4`,
+			r.tableNames.RestoreOperations())
+		res, err := tx.ExecContext(ctx, query, string(models.RestoreStatusRunning), at.UTC(), id,
+			string(models.RestoreStatusPending))
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		claimed = n == 1
+		return err
+	})
 	if err != nil {
 		return false, errxtrace.Wrap("failed to claim pending restore operation", err)
 	}
 	return claimed, nil
+}
+
+func (r *RestoreOperationRegistry) Heartbeat(ctx context.Context, id string, at time.Time) error {
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET heartbeat_at = $1 WHERE id = $2 AND status = $3`, r.tableNames.RestoreOperations())
+		_, err := tx.ExecContext(ctx, query, at.UTC(), id, string(models.RestoreStatusRunning))
+		return err
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to record restore heartbeat", err)
+	}
+	return nil
+}
+
+func (r *RestoreOperationRegistry) FailStalled(ctx context.Context, sweep registry.StalledJobSweep) (int, error) {
+	var failed int64
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET status = $1, error_message = $2, completed_date = $3, heartbeat_at = NULL
+			WHERE status = $4 AND (heartbeat_at < $5 OR (heartbeat_at IS NULL AND created_date < $6))`,
+			r.tableNames.RestoreOperations())
+		res, err := tx.ExecContext(ctx, query, string(models.RestoreStatusFailed), sweep.ErrorMessage, sweep.Now.UTC(),
+			string(models.RestoreStatusRunning), sweep.HeartbeatBefore.UTC(), sweep.CreatedBefore.UTC())
+		if err != nil {
+			return err
+		}
+		failed, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to fail stalled restore operations", err)
+	}
+	return int(failed), nil
 }
 
 func (r *RestoreOperationRegistry) Count(ctx context.Context) (int, error) {
