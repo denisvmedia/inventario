@@ -10,11 +10,17 @@ import (
 )
 
 // ReminderTargetActive reports whether reminders on the item may still be
-// sent and listed. Every path that sends or lists item reminders asks this
-// one function. A nil commodity is a deleted one; an item in Trash gets no
-// reminders until it is restored, and keeps them for when it is.
+// sent and listed. Every path that sends or lists item reminders, warranty
+// expiries, loan due dates and maintenance due dates asks this one function:
+// the reminder workers, the Upcoming page and the weekly digest.
+//
+// Only an item the group still has gets them. A nil commodity is a deleted
+// one. An item in Trash waits until it is restored, and an item whose status
+// is not in_use (sold, lost, stolen and the other end statuses) waits until
+// it is back in use. A waiting item writes no send record, so the reminders
+// still due go out once it is active again.
 func ReminderTargetActive(c *models.Commodity) bool {
-	return c != nil && !c.IsTrashed()
+	return c != nil && !c.IsTrashed() && c.Status == models.CommodityStatusInUse
 }
 
 // CommodityReminderService holds the write rules for item reminders

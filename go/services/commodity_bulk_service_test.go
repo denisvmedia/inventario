@@ -552,6 +552,25 @@ func TestCommodityBulkService_UpdateStatus(t *testing.T) {
 	c.Assert(got.StatusNote, qt.Equals, "")
 }
 
+// A bulk edit that sets the type and the status records both changes.
+func TestCommodityBulkService_UpdateTypeAndStatus(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	lamp := f.item(c, "Lamp")
+
+	patch := parsePatch(c, services.CommodityPatchInput{
+		Type:   new(string(models.CommodityTypeElectronics)),
+		Status: &services.CommodityStatusInput{Value: "donated", Date: "2026-11-25"},
+	})
+	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, byID(lamp.ID), patch)
+
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{lamp.ID})
+	c.Assert(f.eventKinds(c, lamp.ID), qt.DeepEquals, []models.CommodityEventKind{
+		models.CommodityEventKindStatusChanged,
+		models.CommodityEventKindUpdated,
+	})
+}
+
 func TestCommodityBulkService_MoveAndDelete(t *testing.T) {
 	c := qt.New(t)
 	f := newBulkFixture(c)
