@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react"
+import { screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import { SendForServiceDialog } from "@/components/services/SendForServiceDialog"
 import { initI18n } from "@/i18n"
+import { renderWithProviders } from "@/test/render"
 
 beforeAll(async () => {
   await initI18n({ lng: "en" })
@@ -13,7 +14,9 @@ describe("<SendForServiceDialog />", () => {
   it("marks an empty provider name invalid and describes it by its message", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
-    render(<SendForServiceDialog open onSubmit={onSubmit} onOpenChange={vi.fn()} />)
+    renderWithProviders({
+      children: <SendForServiceDialog open onSubmit={onSubmit} onOpenChange={vi.fn()} />,
+    })
 
     await user.click(screen.getByTestId("service-submit"))
 
