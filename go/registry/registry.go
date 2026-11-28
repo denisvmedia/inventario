@@ -573,11 +573,13 @@ type CommodityRegistry interface {
 	// as "Added this item". An item with no such event (added before the
 	// history existed, or by a backup restore, which writes no history)
 	// keeps an empty date. Trashed items are dated too. It is idempotent and
-	// safe to run while the app serves requests: a row a request holds
-	// locked is left for the next pass, and the revision does not move,
-	// because an edit form does not send the date back. Returns how many
-	// rows it dated. Meant for the service registry.
-	BackfillRegisteredDates(ctx context.Context) (int, error)
+	// safe to run while the app serves requests: a row another transaction
+	// holds locked (a request, a currency migration) is skipped, not waited
+	// for, and the revision does not move, because an edit form does not
+	// send the date back. Returns how many rows it dated, and pending when
+	// a row it could date is still undated because it was locked; the
+	// caller runs another pass later. Meant for the service registry.
+	BackfillRegisteredDates(ctx context.Context) (dated int, pending bool, err error)
 
 	// ListPaginated returns a paginated list of commodities along with the total count,
 	// optionally filtered and sorted via opts. Pass a zero CommodityListOptions for the

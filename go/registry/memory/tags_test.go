@@ -2,7 +2,12 @@ package memory_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -298,6 +303,81 @@ func TestTagRegistry_Memory_StripSlugReferences(t *testing.T) {
 	gotFile, err := fx.fileReg.Get(fx.ctx, file1.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert([]string(gotFile.Tags), qt.DeepEquals, []string{"kitchen"})
+}
+
+// TestTagRegistry_Memory_RenameKeepsConcurrentEdits checks that a tag
+// rename changes each item as stored: an edit saved while the rename runs
+// keeps its fields and the date it gave the item.
+func TestTagRegistry_Memory_RenameKeepsConcurrentEdits(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagFixture(c, "group-1")
+
+	const items = 1000
+	ids := make([]string, items)
+	for i := range ids {
+		created, err := fx.commodityReg.Create(fx.ctx, models.Commodity{
+			Name:             fmt.Sprintf("item-%d", i),
+			Status:           models.CommodityStatusInUse,
+			Type:             models.CommodityTypeOther,
+			Tags:             models.ValuerSlice[string]{"kitchen"},
+			LastModifiedDate: models.ToPDate("2021-03-04"),
+		})
+		c.Assert(err, qt.IsNil)
+		ids[i] = created.ID
+	}
+
+	// The edits are checked saves built from a fresh read, as an edit form
+	// sends them; one that the rename got ahead of is read again. They run
+	// from the last item back, so they meet the rename in the middle and
+	// reach most items before it does.
+	firstDay := models.NewDate(time.Now())
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var editErr, renameErr error
+	var renamed int
+	wg.Go(func() {
+		<-start
+		for _, id := range slices.Backward(ids) {
+			if editErr = editComments(fx, id, "edited"); editErr != nil {
+				return
+			}
+		}
+	})
+	wg.Go(func() {
+		<-start
+		renamed, _, renameErr = fx.tagReg.RewriteSlugReferences(fx.ctx, models.TagKindCommodity, "kitchen", "kitchen-area")
+	})
+	close(start)
+	wg.Wait()
+	c.Assert(editErr, qt.IsNil)
+	c.Assert(renameErr, qt.IsNil)
+	c.Assert(renamed, qt.Equals, items)
+
+	days := []models.Date{firstDay, models.NewDate(time.Now())}
+	for _, id := range ids {
+		got, err := fx.commodityReg.Get(fx.ctx, id)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Comments, qt.Equals, "edited")
+		c.Check([]string(got.Tags), qt.DeepEquals, []string{"kitchen-area"})
+		c.Assert(got.LastModifiedDate, qt.IsNotNil)
+		c.Check(days, qt.Contains, *got.LastModifiedDate)
+	}
+}
+
+// editComments saves comments on the item through a checked save, reading
+// the item again when another write got in between.
+func editComments(fx tagFixture, id, comments string) error {
+	for {
+		item, err := fx.commodityReg.Get(fx.ctx, id)
+		if err != nil {
+			return err
+		}
+		item.Comments = comments
+		_, err = fx.commodityReg.Update(registry.WithExpectedRevision(fx.ctx, item.Revision), *item)
+		if !errors.Is(err, registry.ErrRevisionConflict) {
+			return err
+		}
+	}
 }
 
 func TestTagRegistry_Memory_SearchRanksByUsage(t *testing.T) {

@@ -4739,7 +4739,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/{commodityID}/draft": {
             "patch": {
-                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field but the last-modified date, which\nbecomes today, and the revision, which moves on: a later\nchecked save must send the revision this response returns. The\nitem with the new mark must pass the validation a full update\nruns.",
+                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field but the last-modified date, which\nbecomes today, and the revision, which moves on. A later\nchecked save must send the revision this response returns and\nbe built from the item it returns, not from values read before\nthe mark changed: those pass the revision check and would write\nback what an edit saved in between changed. The item with the\nnew mark must pass the validation a full update runs.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -22304,7 +22304,7 @@ const docTemplate = `{
                     "x-nullable": "true"
                 },
                 "registered_date": {
-                    "description": "RegisteredDate is the day the item was added, in UTC. The registry\nsets it to today on create unless the caller gives one (a backup\nrestore keeps the archived day), and an update keeps the stored day\nwhen it gives none.",
+                    "description": "RegisteredDate is the day the item was added, in UTC. The registry\nsets it to today on create unless the caller gives one (a backup\nrestore keeps the archived day, and a restored item whose backup has\nnone gets the day of the restore), and an update keeps the stored day\nwhen it gives none. It can be empty: an item stored before the\nregistry dated new items, with no \"created\" history event to date it\nfrom, has none, and a restore that merges an archived item without a\ndate into such an item leaves it so.",
                     "type": "string"
                 },
                 "revision": {

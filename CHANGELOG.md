@@ -1197,7 +1197,7 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   and sorting by Date added put it last. A new item gets today, in UTC, as
   both dates unless the request supplies them, and every edit sets Last
   Edited to today, a bulk change and Mark as reviewed included. A restore
-  keeps the dates its backup carries, and gives an item whose backup has
+  keeps the dates its backup carries, and gives a new item whose backup has
   none the day of the restore. When the server starts, an existing item
   without a Date Added gets the day its History shows as "Added this item".
   An item that an earlier release restored from a backup without dates has

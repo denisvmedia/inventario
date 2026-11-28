@@ -130,7 +130,8 @@ func TestCommodityRegistry_BackfillRegisteredDates_NothingToDate(t *testing.T) {
 	created := createPriced(c, ctx, set, models.Commodity{Name: "item"})
 	c.Assert(created.RegisteredDate, qt.IsNotNil)
 
-	dated, err := set.CommodityRegistry.BackfillRegisteredDates(ctx)
+	dated, pending, err := set.CommodityRegistry.BackfillRegisteredDates(ctx)
 	c.Assert(err, qt.IsNil)
 	c.Assert(dated, qt.Equals, 0)
+	c.Assert(pending, qt.IsFalse)
 }

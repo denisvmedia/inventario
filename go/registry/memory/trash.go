@@ -264,26 +264,6 @@ func (r *CommodityRegistry) purgeTrashedRow(id string) bool {
 	return true
 }
 
-// rewriteTrashedTags applies fn to the tags of every visible trashed item. Tag
-// renames and deletes cover trashed items too, so a restored item carries no
-// stale slug.
-func (r *CommodityRegistry) rewriteTrashedTags(fn func(models.ValuerSlice[string]) (bool, models.ValuerSlice[string])) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		c := pair.Value
-		if c == nil || !c.IsTrashed() || !r.isItemVisible(c) {
-			continue
-		}
-		if changed, tags := fn(c.Tags); changed {
-			next := *c
-			next.Tags = tags
-			next.Revision++
-			r.items.Set(c.ID, &next)
-		}
-	}
-}
-
 // GetTrashed returns a trashed file with its links.
 func (r *FileRegistry) GetTrashed(_ context.Context, id string) (*models.FileEntity, error) {
 	r.lock.RLock()
@@ -501,23 +481,6 @@ func (r *FileRegistry) PurgeTrashed(_ context.Context, id string) (bool, error) 
 	r.items.Delete(id)
 	delete(r.links.byFile, id)
 	return true, nil
-}
-
-// rewriteTrashedTags applies fn to the tags of every visible trashed file.
-func (r *FileRegistry) rewriteTrashedTags(fn func(models.StringSlice) (bool, models.StringSlice)) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-		f := pair.Value
-		if f == nil || !f.IsTrashed() || !r.isItemVisible(f) {
-			continue
-		}
-		if changed, tags := fn(f.Tags); changed {
-			next := *f
-			next.Tags = tags
-			r.items.Set(f.ID, &next)
-		}
-	}
 }
 
 // page returns items[offset:offset+limit], clamped.

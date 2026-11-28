@@ -39,9 +39,10 @@ func TestCommodityRegistry_BackfillRegisteredDates(t *testing.T) {
 	current := f.create(c, models.Commodity{Name: "current", RegisteredDate: models.ToPDate("2020-01-02")})
 	recordEvent(current.ID, models.CommodityEventKindCreated, addedAt)
 
-	dated, err := f.service.BackfillRegisteredDates(c.Context())
+	dated, pending, err := f.service.BackfillRegisteredDates(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(dated, qt.Equals, 1)
+	c.Assert(pending, qt.IsFalse)
 
 	got, err := f.set.CommodityRegistry.Get(f.ctx, withHistory.ID)
 	c.Assert(err, qt.IsNil)
@@ -58,9 +59,47 @@ func TestCommodityRegistry_BackfillRegisteredDates(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.RegisteredDate, qt.DeepEquals, models.ToPDate("2020-01-02"))
 
-	dated, err = f.service.BackfillRegisteredDates(c.Context())
+	dated, pending, err = f.service.BackfillRegisteredDates(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(dated, qt.Equals, 0)
+	c.Assert(pending, qt.IsFalse)
+}
+
+// TestCommodityRegistry_BackfillRegisteredDates_LockedRow checks that a pass
+// skips a row another transaction holds locked, as a currency migration
+// does, without waiting for it, and reports the row as pending so the
+// caller runs another pass; the next pass after the lock is gone dates it.
+func TestCommodityRegistry_BackfillRegisteredDates_LockedRow(t *testing.T) {
+	f := newUnknownPricePGFixture(t)
+	c := qt.New(t)
+
+	item := f.create(c, models.Commodity{Name: "locked"})
+	_, err := f.db.ExecContext(c.Context(), `UPDATE commodities SET registered_date = NULL WHERE id = $1`, item.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = f.set.CommodityEventRegistry.Create(f.ctx, models.CommodityEvent{
+		CommodityID: item.ID, Kind: models.CommodityEventKindCreated, OccurredAt: time.Date(2025, 6, 7, 12, 0, 0, 0, time.UTC),
+	})
+	c.Assert(err, qt.IsNil)
+
+	tx, err := f.db.BeginTxx(c.Context(), nil)
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(c.Context(), `SELECT id FROM commodities WHERE id = $1 FOR UPDATE`, item.ID)
+	c.Assert(err, qt.IsNil)
+
+	dated, pending, err := f.service.BackfillRegisteredDates(c.Context())
+	c.Assert(err, qt.IsNil)
+	c.Assert(dated, qt.Equals, 0)
+	c.Assert(pending, qt.IsTrue)
+
+	c.Assert(tx.Rollback(), qt.IsNil)
+	dated, pending, err = f.service.BackfillRegisteredDates(c.Context())
+	c.Assert(err, qt.IsNil)
+	c.Assert(dated, qt.Equals, 1)
+	c.Assert(pending, qt.IsFalse)
+	got, err := f.set.CommodityRegistry.Get(f.ctx, item.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.RegisteredDate, qt.DeepEquals, models.ToPDate("2025-06-07"))
 }
 
 func TestCommodityRegistry_UpdateKeepsBackfilledRegisteredDate(t *testing.T) {
@@ -79,7 +118,7 @@ func TestCommodityRegistry_UpdateKeepsBackfilledRegisteredDate(t *testing.T) {
 	stale, err := f.set.CommodityRegistry.Get(f.ctx, item.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stale.RegisteredDate, qt.IsNil)
-	_, err = f.service.BackfillRegisteredDates(c.Context())
+	_, _, err = f.service.BackfillRegisteredDates(c.Context())
 	c.Assert(err, qt.IsNil)
 
 	stale.Comments = "edited"

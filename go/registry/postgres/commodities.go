@@ -1269,8 +1269,7 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 // SetDraft sets or clears the draft mark of a live item, under the row lock
 // that Update takes too.
 func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error) {
-	var locked models.Commodity
-	today := models.NewDate(time.Now())
+	var locked, stored models.Commodity
 	table := r.tableNames.Commodities()
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -1283,26 +1282,32 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 		if err := loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &locked); err != nil {
 			return err
 		}
+		// The day is taken under the row lock, as in Patch, so a wait for the
+		// lock across midnight UTC dates the change the day it is stored.
+		// check sees the item as the update below stores it.
+		today := models.NewDate(time.Now())
 		next := locked
 		next.Draft = draft
+		next.Revision = locked.Revision + 1
+		next.LastModifiedDate = new(today)
 		next.CustomFields = locked.CustomFields.Clone()
 		if check != nil {
 			if err := check(next); err != nil {
 				return err
 			}
 		}
-		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2, revision = revision + 1, last_modified_date = $3 WHERE id = $1`, table), id, draft, today)
-		return err
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2, revision = $3, last_modified_date = $4 WHERE id = $1`, table),
+			id, draft, next.Revision, today); err != nil {
+			return err
+		}
+		stored = next
+		stored.CustomFields = locked.CustomFields.Clone()
+		return nil
 	})
 	if err != nil {
 		return nil, nil, errxtrace.Wrap("failed to set the draft mark", err, errx.Attrs("commodity_id", id))
 	}
-	next := locked
-	next.Draft = draft
-	next.Revision = locked.Revision + 1
-	next.LastModifiedDate = new(today)
-	next.CustomFields = locked.CustomFields.Clone()
-	return &locked, &next, nil
+	return &locked, &stored, nil
 }
 
 // Restore makes a trashed item live again.

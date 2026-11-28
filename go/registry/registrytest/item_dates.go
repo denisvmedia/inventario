@@ -15,7 +15,8 @@ import (
 // dates. Update keeps the day the item was added when the caller gives none
 // and dates the change, whatever date the caller sends; under
 // registry.WithKeptModifiedDate it keeps the date the caller gives. Patch and
-// SetDraft date the change. newEnv is called once per subtest and must
+// SetDraft date the change, and SetDraft hands its check the item with the
+// date and revision it stores. newEnv is called once per subtest and must
 // return an empty group.
 func RunItemDatesContract(t *testing.T, newEnv func(t *testing.T) TrashEnv) {
 	t.Run("create dates a new item today", func(t *testing.T) {
@@ -128,13 +129,19 @@ func RunItemDatesContract(t *testing.T, newEnv func(t *testing.T) TrashEnv) {
 		item := datedItem(c, env, "Bike", "2021-03-04", "2021-03-04")
 
 		days := dayWindow()
-		_, after, err := env.Commodities.SetDraft(env.Ctx, item.ID, true, nil)
+		var seen models.Commodity
+		_, after, err := env.Commodities.SetDraft(env.Ctx, item.ID, true, func(next models.Commodity) error {
+			seen = next
+			return nil
+		})
 		c.Assert(err, qt.IsNil)
 		stored, err := env.Commodities.Get(env.Ctx, item.ID)
 		c.Assert(err, qt.IsNil)
-		for _, got := range []*models.Commodity{after, stored} {
+		for _, got := range []*models.Commodity{&seen, after, stored} {
 			c.Check(got.RegisteredDate, qt.DeepEquals, models.ToPDate("2021-03-04"))
 			assertDatedToday(c, got.LastModifiedDate, days())
+			// check sees the item as it is stored: the next revision too.
+			c.Check(got.Revision, qt.Equals, item.Revision+1)
 		}
 	})
 }

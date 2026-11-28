@@ -101,6 +101,6 @@ func (r *CommodityRegistry) BackfillLegacyPrices(ctx context.Context) (int, erro
 // BackfillRegisteredDates has nothing to date here: Create stores a
 // registered date on every item and Update keeps it, so no item of this
 // registry is without one. See registry.CommodityRegistry for the contract.
-func (*CommodityRegistry) BackfillRegisteredDates(context.Context) (int, error) {
-	return 0, nil
+func (*CommodityRegistry) BackfillRegisteredDates(context.Context) (dated int, pending bool, err error) {
+	return 0, false, nil
 }

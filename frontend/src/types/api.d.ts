@@ -5861,10 +5861,12 @@ export type paths = {
          * Mark an item as draft or as reviewed
          * @description Sets (`true`) or clears (`false`) the draft mark of an item
          *     and changes no other field but the last-modified date, which
-         *     becomes today, and the revision, which moves on: a later
-         *     checked save must send the revision this response returns. The
-         *     item with the new mark must pass the validation a full update
-         *     runs.
+         *     becomes today, and the revision, which moves on. A later
+         *     checked save must send the revision this response returns and
+         *     be built from the item it returns, not from values read before
+         *     the mark changed: those pass the revision check and would write
+         *     back what an edit saved in between changed. The item with the
+         *     new mark must pass the validation a full update runs.
          */
         patch: {
             parameters: {
@@ -20274,8 +20276,12 @@ export type components = {
             /**
              * @description RegisteredDate is the day the item was added, in UTC. The registry
              *     sets it to today on create unless the caller gives one (a backup
-             *     restore keeps the archived day), and an update keeps the stored day
-             *     when it gives none.
+             *     restore keeps the archived day, and a restored item whose backup has
+             *     none gets the day of the restore), and an update keeps the stored day
+             *     when it gives none. It can be empty: an item stored before the
+             *     registry dated new items, with no "created" history event to date it
+             *     from, has none, and a restore that merges an archived item without a
+             *     date into such an item leaves it so.
              */
             registered_date?: string;
             /**

@@ -557,8 +557,15 @@ counts as a change, and so do a
 [bulk change](#select-and-change-items-in-bulk) and
 [**Mark as reviewed**](../inbox/#review-an-item); renaming or deleting a tag
 the item carries does not.
+An item added before Inventario set these dates gets its Date Added from the
+**Added this item** row of its History when the server starts. An item without
+that row, such as one an earlier release restored from a backup, keeps an empty
+Date Added, and the Last Edited of such an older item stays empty until the
+item next changes.
 A [restored](../backup-and-restore/) item keeps the dates its backup carries,
-and one whose backup has none gets the day of the restore.
+and a date the backup lacks becomes the day of the restore. The exception is a
+restore that merges into an item you already have: when the backup has no Date
+Added, the item keeps its own, or stays without one if it had none.
 
 :::note
 Lending, service, and supplies tracking are only available on single-unit

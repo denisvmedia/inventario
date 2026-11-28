@@ -19,8 +19,8 @@ import (
 )
 
 // tagAtomicMu serializes RenameAtomic / DeleteAtomic in the memory
-// backend with each other so the iterate-then-update sequences they run
-// (List → Update per tag) don't interleave.
+// backend with each other so the check-then-write sequences they run (slug
+// clash or usage check, reference rewrite, tag write) don't interleave.
 //
 // **Scope caveat:** the lock does NOT cover commodity / file Create or
 // Update on the memory backend — those write paths persist into the
@@ -501,114 +501,106 @@ func (r *TagRegistry) computePerScopeUsageMap(ctx context.Context) (map[string]r
 	return usage, nil
 }
 
-func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.TagKind, oldSlug, newSlug string) (commodityRows, fileRows int, err error) {
+func (r *TagRegistry) RewriteSlugReferences(_ context.Context, kind models.TagKind, oldSlug, newSlug string) (commodityRows, fileRows int, err error) {
 	if oldSlug == newSlug {
 		return 0, 0, nil
 	}
-
-	if kind == models.TagKindFile {
-		files, err := r.fileRegistry.List(ctx)
-		if err != nil {
-			return 0, 0, errxtrace.Wrap("failed to list files", err)
-		}
-		fileCount := 0
-		for _, f := range files {
-			changed, newTags := replaceTagSlugString(f.Tags, oldSlug, newSlug)
-			if !changed {
-				continue
-			}
-			f.Tags = newTags
-			if _, err := r.fileRegistry.Update(ctx, *f); err != nil {
-				return 0, fileCount, errxtrace.Wrap("failed to rewrite file tag", err)
-			}
-			fileCount++
-		}
-		if fr, ok := r.fileRegistry.(*FileRegistry); ok {
-			fr.rewriteTrashedTags(func(tags models.StringSlice) (bool, models.StringSlice) {
-				return replaceTagSlugString(tags, oldSlug, newSlug)
-			})
-		}
-		return 0, fileCount, nil
-	}
-
-	commodities, err := r.commodityRegistry.List(ctx)
-	if err != nil {
-		return 0, 0, errxtrace.Wrap("failed to list commodities", err)
-	}
-	commodityCount := 0
-	for _, c := range commodities {
-		changed, newTags := replaceTagSlug(c.Tags, oldSlug, newSlug)
-		if !changed {
-			continue
-		}
-		c.Tags = newTags
-		c.CustomFields = nil // only the tags change
-		// A tag change is not an edit of the item: it keeps its
-		// last-modified date, as in the postgres registry.
-		if _, err := r.commodityRegistry.Update(registry.WithKeptModifiedDate(ctx), *c); err != nil {
-			return commodityCount, 0, errxtrace.Wrap("failed to rewrite commodity tag", err)
-		}
-		commodityCount++
-	}
-	if cr, ok := r.commodityRegistry.(*CommodityRegistry); ok {
-		cr.rewriteTrashedTags(func(tags models.ValuerSlice[string]) (bool, models.ValuerSlice[string]) {
+	return r.rewriteTagLists(kind,
+		func(tags models.ValuerSlice[string]) (bool, models.ValuerSlice[string]) {
 			return replaceTagSlug(tags, oldSlug, newSlug)
+		},
+		func(tags models.StringSlice) (bool, models.StringSlice) {
+			return replaceTagSlugString(tags, oldSlug, newSlug)
 		})
-	}
-	return commodityCount, 0, nil
 }
 
-func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKind, slug string) (commodityRows, fileRows int, err error) {
-	if kind == models.TagKindFile {
-		files, err := r.fileRegistry.List(ctx)
-		if err != nil {
-			return 0, 0, errxtrace.Wrap("failed to list files", err)
-		}
-		fileCount := 0
-		for _, f := range files {
-			changed, newTags := stripTagSlugString(f.Tags, slug)
-			if !changed {
-				continue
-			}
-			f.Tags = newTags
-			if _, err := r.fileRegistry.Update(ctx, *f); err != nil {
-				return 0, fileCount, errxtrace.Wrap("failed to strip file tag", err)
-			}
-			fileCount++
-		}
-		if fr, ok := r.fileRegistry.(*FileRegistry); ok {
-			fr.rewriteTrashedTags(func(tags models.StringSlice) (bool, models.StringSlice) {
-				return stripTagSlugString(tags, slug)
-			})
-		}
-		return 0, fileCount, nil
-	}
+func (r *TagRegistry) StripSlugReferences(_ context.Context, kind models.TagKind, slug string) (commodityRows, fileRows int, err error) {
+	return r.rewriteTagLists(kind,
+		func(tags models.ValuerSlice[string]) (bool, models.ValuerSlice[string]) {
+			return stripTagSlug(tags, slug)
+		},
+		func(tags models.StringSlice) (bool, models.StringSlice) {
+			return stripTagSlugString(tags, slug)
+		})
+}
 
-	commodities, err := r.commodityRegistry.List(ctx)
-	if err != nil {
-		return 0, 0, errxtrace.Wrap("failed to list commodities", err)
+// rewriteTagLists applies the change to the tags of every item, or for a
+// file tag every file, the registry sees, live or in Trash, so a restored
+// row carries no stale slug. It returns how many live rows changed. Each
+// row is changed as stored, under its registry's write lock, as the
+// postgres UPDATE changes it: an edit saved after anything listed the row
+// keeps its other fields and its dates.
+func (r *TagRegistry) rewriteTagLists(
+	kind models.TagKind,
+	commodityTags func(models.ValuerSlice[string]) (bool, models.ValuerSlice[string]),
+	fileTags func(models.StringSlice) (bool, models.StringSlice),
+) (commodityRows, fileRows int, err error) {
+	if kind == models.TagKindFile {
+		fr, ok := r.fileRegistry.(*FileRegistry)
+		if !ok {
+			return 0, 0, errors.New("tag rewrite needs the memory file registry")
+		}
+		return 0, fr.rewriteTags(fileTags), nil
 	}
-	commodityCount := 0
-	for _, c := range commodities {
-		changed, newTags := stripTagSlug(c.Tags, slug)
+	cr, ok := r.commodityRegistry.(*CommodityRegistry)
+	if !ok {
+		return 0, 0, errors.New("tag rewrite needs the memory commodity registry")
+	}
+	return cr.rewriteTags(commodityTags), 0, nil
+}
+
+// rewriteTags applies fn to the tags of every visible item, live or in
+// Trash, under the write lock, and returns how many live items changed. A
+// changed item gets the next revision and keeps its dates: a tag rename or
+// delete is not an edit of the item.
+func (r *CommodityRegistry) rewriteTags(fn func(models.ValuerSlice[string]) (bool, models.ValuerSlice[string])) int {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	live := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		c := pair.Value
+		if c == nil || !r.isItemVisible(c) {
+			continue
+		}
+		changed, tags := fn(c.Tags)
 		if !changed {
 			continue
 		}
-		c.Tags = newTags
-		c.CustomFields = nil // only the tags change
-		// A tag change is not an edit of the item: it keeps its
-		// last-modified date, as in the postgres registry.
-		if _, err := r.commodityRegistry.Update(registry.WithKeptModifiedDate(ctx), *c); err != nil {
-			return commodityCount, 0, errxtrace.Wrap("failed to strip commodity tag", err)
+		next := *c
+		next.Tags = tags
+		next.Revision++
+		r.items.Set(c.ID, &next)
+		if !c.IsTrashed() {
+			live++
 		}
-		commodityCount++
 	}
-	if cr, ok := r.commodityRegistry.(*CommodityRegistry); ok {
-		cr.rewriteTrashedTags(func(tags models.ValuerSlice[string]) (bool, models.ValuerSlice[string]) {
-			return stripTagSlug(tags, slug)
-		})
+	return live
+}
+
+// rewriteTags applies fn to the tags of every visible file, live or in
+// Trash, under the write lock, and returns how many live files changed.
+// Only the tags change, as in the postgres registry.
+func (r *FileRegistry) rewriteTags(fn func(models.StringSlice) (bool, models.StringSlice)) int {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	live := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		f := pair.Value
+		if f == nil || !r.isItemVisible(f) {
+			continue
+		}
+		changed, tags := fn(f.Tags)
+		if !changed {
+			continue
+		}
+		next := *f
+		next.Tags = tags
+		r.items.Set(f.ID, &next)
+		if !f.IsTrashed() {
+			live++
+		}
 	}
-	return commodityCount, 0, nil
+	return live
 }
 
 // RenameAtomic mirrors the postgres semantics: re-read the tag, run the

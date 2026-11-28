@@ -726,10 +726,12 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 // @Summary Mark an item as draft or as reviewed
 // @Description Sets (`true`) or clears (`false`) the draft mark of an item
 // @Description and changes no other field but the last-modified date, which
-// @Description becomes today, and the revision, which moves on: a later
-// @Description checked save must send the revision this response returns. The
-// @Description item with the new mark must pass the validation a full update
-// @Description runs.
+// @Description becomes today, and the revision, which moves on. A later
+// @Description checked save must send the revision this response returns and
+// @Description be built from the item it returns, not from values read before
+// @Description the mark changed: those pass the revision check and would write
+// @Description back what an edit saved in between changed. The item with the
+// @Description new mark must pass the validation a full update runs.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api

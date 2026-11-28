@@ -15,9 +15,8 @@ type keptModifiedDateCtxKey struct{}
 // LastModifiedDate the caller gives instead of today. A backup restore sets
 // it, so a restored item keeps the archived date through the writes that
 // follow its creation (the cover photo, the item links, a merge into an
-// existing item). A write that only follows a change elsewhere, such as the
-// memory registry's tag rename, sets it too and passes the item's own date.
-// An empty date is still stamped with today. The API path never sets it.
+// existing item). An empty date is still stamped with today. The API path
+// never sets it.
 func WithKeptModifiedDate(ctx context.Context) context.Context {
 	return context.WithValue(ctx, keptModifiedDateCtxKey{}, true)
 }
