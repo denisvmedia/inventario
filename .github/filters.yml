@@ -73,11 +73,12 @@ go_schema_plan:
 # frontend targets too.
 #
 # CHANGELOG.md is not here, although the build reads it for the What's new
-# page (#1386). Nearly every pull request adds an entry to it, so listing it
-# would run the whole frontend suite, and through `image_inputs` the image
-# build and e2e, on every docs or backend change. An Unreleased entry never
-# reaches the bundle anyway. What a change to the file can break is the
-# parse, and the `changelog` filter below runs that check on its own.
+# page (#1386). Listing it would run the whole frontend suite, and through
+# `image_inputs` the image build and e2e, for a change that is only a
+# release's notes or a fix to a released entry. What such a change can break
+# is the parse, and the `changelog` filter below runs that check on its own.
+# New entries wait in changelog.d/ (see the `markdown` filter), which the
+# build does not read.
 frontend:
   - 'frontend/**'
   - 'Makefile'
@@ -199,7 +200,11 @@ renovate_config:
   - 'renovate.json'
 
 # ---- Markdown lint -------------------------------------------------------
-# Any markdown file anywhere in the repo, plus the linter's own config.
+# Any markdown file anywhere in the repo, plus the linter's own config and
+# the changelog fragment check (.github/scripts/changelog-assemble.sh
+# --check), which the same job runs over changelog.d/ and CHANGELOG.md.
+# Nothing else triggers on .github/scripts/, so a change to the script
+# re-runs the check here; its test runs in CI Lint on every pull request.
 # Used by `markdown-lint.yml` to skip the run when no documentation
 # changed. Note: this filter doesn't include `ci` paths — the workflow
 # OR-s `needs.changes.outputs.ci` into its own gate the usual way, so
@@ -208,6 +213,7 @@ markdown:
   - '**/*.md'
   - '.markdownlint.jsonc'
   - '.markdownlint-cli2.jsonc'
+  - '.github/scripts/changelog-assemble.sh'
 
 # ---- CI self-reference ---------------------------------------------------
 # Any change to a workflow file, a composite action, the shared tool pins,

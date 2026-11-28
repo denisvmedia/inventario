@@ -25,6 +25,12 @@
   //   - frontend/coverage/** Vitest coverage HTML
   //   - frontend/dist/**    built bundle
   //   - **/CHANGELOG.md     conventionally machine-generated
+  //   - changelog.d/[a-z0-9]*.md  pieces of CHANGELOG.md waiting for a release;
+  //                          a fragment starts at a `###` heading, so MD041
+  //                          fails on every one. Fragment names are lowercase
+  //                          (.github/scripts/changelog-assemble.sh refuses
+  //                          others), so the pattern leaves
+  //                          changelog.d/README.md linted
   //   - .git/**             internal git state (e.g. ephemeral PR/issue drafts)
   //   - .claude/**          local agent state (untracked; worktrees, memories)
   //   - .augment/**         local agent rules (machine-generated)
@@ -44,6 +50,7 @@
     "frontend/coverage/**",
     "frontend/dist/**",
     "**/CHANGELOG.md",
+    "changelog.d/[a-z0-9]*.md",
     ".git/**",
     ".claude/**",
     ".augment/**"
