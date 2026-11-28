@@ -10,7 +10,7 @@ Agents in this repository spent most of their context on whole-file reads and mo
 ## Start
 
 1. Work in a worktree under `.claude/worktrees/<name>/` branched off fresh `origin/master` (AGENTS.md, "Git Worktrees").
-2. Run `cd .claude/worktrees/<name> && .agents/skills/agent-workflow/scripts/worktree-setup.sh`. It refuses the main checkout, a symlinked `node_modules` and a nearly full disk, runs `npm ci` in `frontend/` when `node_modules` does not match the lock, and fills the Go module cache. Add `--e2e` when the task runs Playwright.
+2. Run `cd .claude/worktrees/<name> && .agents/skills/agent-workflow/scripts/worktree-setup.sh`. It refuses the main checkout and a symlinked `node_modules`. Below 3 GiB free it removes what can be rebuilt (stale `go-build*` temp directories, node's compile cache, then the Go build cache) and stops only if that is not enough. It runs `npm ci` in `frontend/` when `node_modules` does not match the lock, and fills the Go module cache. Add `--e2e` when the task runs Playwright.
 3. Read `devdocs/code-map.md` before exploring the tree. It names the canonical file for each pattern, the regeneration commands and the files to read only in ranges.
 
 Do not repair the environment by hand. Rerun the setup script, and report what it cannot fix. Never install into or reset the main checkout, never delete the shared Playwright browser cache or another agent's worktree, and never run `git stash` (the stash stack is shared by every worktree).

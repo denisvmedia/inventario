@@ -120,7 +120,8 @@ current directory and refuse the main checkout, so `cd` into the worktree in
 the same command (`cd .claude/worktrees/<name> && <script>`):
 
 - `.agents/skills/agent-workflow/scripts/worktree-setup.sh`: disk, npm,
-  Playwright and Go module checks for a fresh worktree.
+  Playwright and Go module checks for a fresh worktree; below 3 GiB free it
+  cleans up rebuildable caches first.
 - `.agents/skills/agent-workflow/scripts/lint-changed.sh`: linters on what
   the branch changed.
 - `.agents/skills/agent-workflow/scripts/test-changed.sh`: tests of the

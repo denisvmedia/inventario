@@ -8,11 +8,16 @@
 #
 #   --e2e               also install e2e/ dependencies when they are missing
 #                       or stale; the Playwright browser check needs them
-#   --min-free-gib <n>  refuse to run below <n> GiB free on the volume that
-#                       holds the worktree (default $AGENT_MIN_FREE_GIB, then 15)
+#   --min-free-gib <n>  clean up below <n> GiB free on the volume that holds
+#                       the worktree (default $AGENT_MIN_FREE_GIB, then 3)
 #
 # What it checks, in order:
-#   disk        free space on the worktree's volume
+#   disk        free space on the worktree's volume. Below the bar it removes
+#               what can be rebuilt, step by step until there is room again:
+#               go-build* directories in the temp directory not touched for
+#               6 hours (leftovers of killed go commands), node's compile
+#               cache, then the Go build cache (`go clean -cache`). It refuses
+#               only when that is still not enough.
 #   frontend    `npm ci --prefer-offline` when frontend/node_modules is missing
 #               or was installed from another package-lock.json, Node major or
 #               platform (a stamp in node_modules records what was installed)
@@ -34,7 +39,7 @@ usage() {
 }
 
 with_e2e=no
-min_free_gib="${AGENT_MIN_FREE_GIB:-15}"
+min_free_gib="${AGENT_MIN_FREE_GIB:-3}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --e2e) with_e2e=yes; shift ;;
@@ -71,17 +76,44 @@ done
 
 # --- Disk -------------------------------------------------------------------
 # POSIX df output: the fourth column is the space available, in KiB.
-free_kib="$(df -Pk "$root" | awk 'NR == 2 { print $4 }')"
-free_gib=$((free_kib / 1024 / 1024))
+free_gib_now() {
+  df -Pk "$root" | awk 'NR == 2 { print int($4 / 1024 / 1024) }'
+}
+
+free_gib="$(free_gib_now)"
 if [ "$free_gib" -lt "$min_free_gib" ]; then
-  mount="$(df -Pk "$root" | awk 'NR == 2 { print $6 }')"
-  say "only ${free_gib} GiB free on ${mount}; ${min_free_gib} GiB required."
-  say "Free space first (remove your own finished worktrees: git worktree list),"
-  say "or lower the bar with --min-free-gib / AGENT_MIN_FREE_GIB if you know the task is small."
-  say "Killed go commands leave go-build* directories in ${TMPDIR:-/tmp}; report them rather than"
-  say "deleting them, since a running build of another agent may own one."
-  say "Do not delete shared caches (Playwright browsers, Go, npm) or other agents' worktrees."
-  exit 1
+  start_gib="$free_gib"
+  cleaned=()
+  # Every step removes only what is rebuilt on demand, and each runs only
+  # while space is still short. A running go command keeps its go-build
+  # directory fresh, so one untouched for 6 hours belongs to a process that
+  # was killed. Playwright browsers, npm's cache and worktrees are never
+  # touched: they are slow to restore or hold someone's work.
+  for t in "$tmp" "$(cd go && go env GOTMPDIR 2>/dev/null || true)"; do
+    [ -n "$t" ] && [ -d "$t" ] || continue
+    find "$t" -mindepth 1 -maxdepth 1 -type d -name 'go-build*' -mmin +360 \
+      -exec rm -rf {} + 2>/dev/null || true
+  done
+  cleaned+=("stale go-build directories")
+  if [ "$(free_gib_now)" -lt "$min_free_gib" ] && [ -d "${tmp%/}/node-compile-cache" ]; then
+    rm -rf "${tmp%/}/node-compile-cache"
+    cleaned+=("node's compile cache")
+  fi
+  if [ "$(free_gib_now)" -lt "$min_free_gib" ]; then
+    (cd go && go clean -cache) || true
+    cleaned+=("the Go build cache")
+  fi
+  free_gib="$(free_gib_now)"
+  list="${cleaned[0]}"
+  for c in "${cleaned[@]:1}"; do list="$list, $c"; done
+  if [ "$free_gib" -lt "$min_free_gib" ]; then
+    mount="$(df -Pk "$root" | awk 'NR == 2 { print $6 }')"
+    say "only ${free_gib} GiB free on ${mount} after removing ${list}; ${min_free_gib} GiB required."
+    say "Remove your own finished worktrees (git worktree list) and report the rest to the owner."
+    say "Do not delete the Playwright browser cache, npm's cache or other agents' worktrees."
+    exit 1
+  fi
+  did+=("a cleanup that freed $((free_gib - start_gib)) GiB (${list})")
 fi
 
 # --- npm dependencies -------------------------------------------------------
