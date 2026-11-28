@@ -763,6 +763,9 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
 
 ### Fixed
 
+- The print view of an item shows its brand and model, its seller and the
+  custom fields it has a value for, as the item page does. Values the item
+  doesn't have are left out.
 - The **Active sessions**, **Login history** and **API tokens** pages keep the
   active group. The sidebar showed "Select a group" with empty sections there,
   and the rows under **Privacy & security** in Settings opened these pages
