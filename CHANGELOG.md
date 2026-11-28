@@ -1207,6 +1207,13 @@ when to add an entry and where it goes.
   change saved on the item at the same time
   ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
 
+- The password-changed, password reset, sign-in link and welcome emails are
+  sent in the language you chose in your settings. They always arrived in
+  English. The log line of a failed send now carries the request ID.
+- Opening a sign-in link while the database cannot be reached answers with a
+  server error, which can be retried, instead of "Invalid or expired sign-in
+  link". The link stays usable.
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.
@@ -1442,6 +1449,19 @@ when to add an entry and where it goes.
   photo in its place
   ([#2900](https://github.com/denisvmedia/inventario/issues/2900),
   [#3049](https://github.com/denisvmedia/inventario/issues/3049)).
+- Background worker log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  A thumbnail job that fails and will run again logs `Thumbnail generation
+  job failed` as a warning; it stays an error on the last attempt. A failed
+  thumbnail job is logged once: `Failed to process thumbnail generation job`
+  is gone, and the lookups it covered log their own errors. `Requested
+  thumbnail generation` and `Starting thumbnail generation` are debug lines.
+  A restore that waits for another restore, and an export or import worker
+  that stops while it waits for a slot, log at debug instead of warning and
+  error. A recovered currency migration whose audit entry cannot be written
+  logs an error instead of a warning. Renamed keys: `duration` (a string) on
+  `Currency migration completed` is `duration_ms` (an integer), and `slug`
+  on `group purged` is `group_slug`
 - Sign-in, session and tenant log lines follow the
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
   These refusals are logged as warnings, not errors: a user who reaches
@@ -1458,6 +1478,23 @@ when to add an entry and where it goes.
   `internal server error` line. A password that cannot be hashed at
   registration and a request that reaches a tenant-only route without a
   tenant are now logged
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- Startup, backup, seed data and registry log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  A JWT secret, file signing key or OAuth state key set to a public
+  placeholder is logged once, as `Failed to configure JWT secret`, `Failed
+  to configure file signing key` or `Failed to wire OAuth providers`, without
+  a second `refusing to start` line. A failed probe listener in `run
+  workers` is logged once, and `init-config` reports a failure only through
+  the error it prints. A Redis URL that does not parse no longer puts its
+  password into the readiness warning. A refused upload's content type is a
+  debug line through slog instead of an `Invalid MIME` line through the
+  standard logger. A personal data export build that starts over is a
+  warning, and a superseded file blob that a restore keeps because another
+  file still uses it is a debug line. `Failed to read config` names its
+  `section`. The seed data lines carry `tenant_slug` and `email`, and the
+  memory registry's `Getting item` line carries `entity_id` and
+  `entity_type`
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23

@@ -243,7 +243,7 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
-			slog.ErrorContext(ctx, "Failed to acquire semaphore", "error", err)
+			slog.DebugContext(ctx, "Failed to acquire semaphore", "error", err)
 			return
 		}
 
@@ -309,7 +309,7 @@ func (w *ExportWorker) processPersonalDataExports(ctx context.Context) {
 		}
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(key)
-			slog.ErrorContext(ctx, "Failed to acquire semaphore", "error", err)
+			slog.DebugContext(ctx, "Failed to acquire semaphore", "error", err)
 			return
 		}
 		claimed, err := w.personal.Claim(ctx, export.ID)

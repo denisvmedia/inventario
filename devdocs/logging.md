@@ -115,7 +115,7 @@ them as each area is touched:
 | `user_id` for a back-office user (`apiserver/backoffice_auth*.go`) | 22 | `admin_id` |
 | `user_tenant`, `callback_tenant` (tenant ids, `apiserver/oauth.go`, `apiserver/tenant_context.go`) | 7 | `user_tenant_id`, `callback_tenant_id` |
 | `tenant` (a slug, `debug/seeddata`) | 2 | `tenant_slug` |
-| `item_id` (`registry/memory/registry.go`) | 1 | `commodity_id` |
+| `item_id`, `item_type` (`registry/memory/registry.go`, which holds every entity type) | 1 | `entity_id`, `entity_type` |
 | `id` | 3 | the entity's own key, such as `verification_id` |
 
 ## What never goes into a log

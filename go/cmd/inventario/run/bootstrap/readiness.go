@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/redis/go-redis/v9"
@@ -111,7 +112,7 @@ func NewReadinessRedisPinger(cfg *Config) *ReadinessRedisPinger {
 				"dependencies",
 				strings.Join(dependencyNames, ","),
 				"error",
-				err,
+				withoutURL(err),
 			)
 			continue
 		}
@@ -126,4 +127,14 @@ func NewReadinessRedisPinger(cfg *Config) *ReadinessRedisPinger {
 	}
 
 	return &ReadinessRedisPinger{targets: targets}
+}
+
+// withoutURL drops the URL that url.Parse quotes in its error. A Redis URL
+// carries its password, and a URL with credentials never goes into a log
+// (devdocs/logging.md). What is left still says what is wrong with it.
+func withoutURL(err error) error {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
+		return urlErr.Err
+	}
+	return err
 }

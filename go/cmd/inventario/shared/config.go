@@ -43,7 +43,7 @@ func ReadSection(sectionName string, target any) error {
 
 	if err := cleanenv.ReadConfig(configFile, wrapper); err != nil {
 		if err := cleanenv.ReadEnv(wrapper); err != nil {
-			slog.Error("Failed to read config", "error", err)
+			slog.Error("Failed to read config", "section", sectionName, "error", err)
 		}
 	}
 
@@ -79,7 +79,7 @@ func ReadVirtualSection(sectionName string, target any) error {
 	wrapper := reflect.New(wrapperType).Interface()
 	if err := cleanenv.ReadConfig(configFile, wrapper); err != nil {
 		if err = cleanenv.ReadEnv(wrapper); err != nil {
-			slog.Error("Failed to read config", "error", err)
+			slog.Error("Failed to read config", "section", sectionName, "error", err)
 		} else {
 			slog.Debug("Read config from environment variables")
 		}

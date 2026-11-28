@@ -445,7 +445,7 @@ func (w *CurrencyMigrationWorker) runSweep(ctx context.Context) {
 		}
 
 		if err := w.processor.WriteSweepFailureAuditLog(ctx, op); err != nil {
-			slog.WarnContext(ctx, "Currency migration: failed to write recovery audit log",
+			slog.ErrorContext(ctx, "Currency migration: failed to write recovery audit log",
 				"migration_id", op.ID, "group_id", op.GroupID, "error", err,
 			)
 		}
@@ -548,7 +548,7 @@ func (w *CurrencyMigrationWorker) runWork(ctx context.Context, op *models.Curren
 		"total_before", summary.TotalBefore.String(),
 		"total_after", summary.TotalAfter.String(),
 		"acquisition_fills", summary.AcquisitionFillsCount,
-		"duration", summary.Duration.String(),
+		"duration_ms", summary.Duration.Milliseconds(),
 	)
 }
 

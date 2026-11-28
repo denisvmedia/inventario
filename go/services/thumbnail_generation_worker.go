@@ -285,10 +285,10 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 			defer wg.Done()
 			defer cancel()
 
-			err := w.thumbnailService.ProcessThumbnailGeneration(jobCtx, jobID)
-			if err != nil {
-				slog.ErrorContext(jobCtx, "Failed to process thumbnail generation job", "job_id", jobID, "error", err)
-			}
+			// ProcessThumbnailGeneration logs each failure at the level its
+			// outcome deserves, so the error is not logged a second time here
+			// (devdocs/logging.md, Levels).
+			_ = w.thumbnailService.ProcessThumbnailGeneration(jobCtx, jobID)
 		}(job.ID, jobCtx, cancel)
 	}
 

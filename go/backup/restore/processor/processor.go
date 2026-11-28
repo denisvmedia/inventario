@@ -1444,7 +1444,8 @@ func (w *inbWalker) deleteSupersededBlob(staleBlobKey, newBlobKey string) {
 		return
 	}
 	if shared {
-		slog.WarnContext(w.ctx, "keeping superseded file blob: another file row still references it (#2250)",
+		// Another row still uses the blob, so the check did its job.
+		slog.DebugContext(w.ctx, "keeping superseded file blob: another file row still references it (#2250)",
 			"stale_blob_key", staleBlobKey, "new_blob_key", newBlobKey)
 		return
 	}

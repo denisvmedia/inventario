@@ -31,15 +31,15 @@ Counts are per invocation. "Measured" values come from the job logs of the
 runs for PR #3050, head `72fdeda`, on 2026-11-27 at 21:23 UTC: a Go-only change
 that built an image, with a short runner queue (the manifest was published
 about 6 minutes after the push). That run used the workflows as they were
-after #2985 and before this change. "Estimated" values are read from the
+after #2985 and before #3058. "Estimated" values are read from the
 action's behavior and were not logged.
 
 | Consumer | Where | Trigger | Endpoint family | Requests per invocation | Per push |
 | --- | --- | --- | --- | --- | --- |
 | Changed-file detection (`dorny/paths-filter`) | `changes` job of 22 workflows (two of them behind a workflow-level `paths:` filter) | every pull request push | none: a `git fetch` of one commit and a local diff | 0 | 0 (through `GET /repos/{r}/pulls/{n}/files` it was 1 per 100 changed files: 21 for the measured diff) |
 | Image waiter (`_wait-for-docker-image.yml`) | `helm-kind-smoke-test.yml` | pull requests touching the chart, previews or CI; master | `GET .../actions/workflows/docker.yml/runs`, `GET .../actions/runs/{id}/jobs` | 1 per poll while the run is queued, 2 while it runs; one poll a minute | 2·D (measured: 6 polls, 12 requests) |
-| PR-close drain | `docker.yml` `cleanup` | pull request closed | `GET .../actions/runs?head_sha=` | 1 per minute until no run is left, at most 30 | 1–30 per close (measured: 1) |
-| PR-close reclaim | `docker.yml` `cleanup` | pull request closed | PR commits, owner lookup, package versions, deletes | 2 + 1 per 100 package versions + 1 per deleted version | not measured; the step now logs the version count |
+| PR-close drain | `docker.yml` `cleanup` | pull request closed | `GET .../actions/runs?head_sha=` | 1 per minute until no run is left, at most 30 | 1–30 per close (measured: 1 on #3050, 16 on #3058) |
+| PR-close reclaim | `docker.yml` `cleanup` | pull request closed | PR commits, owner lookup, package versions, deletes | 2 + 1 per 100 versions published since the PR was opened, plus one page + 1 per deleted version | 129 for the listing alone before it was bounded (12,845 versions, #3058); bounded: about 1 per hour the PR was open, logged on every close |
 | SARIF upload (`github/codeql-action/upload-sarif`) | `docker.yml` `scan-image` | every image build | code scanning upload and processing status | estimated 3–5 | 3–5 |
 | `actions/dependency-review-action` | `dependency-review.yml` | every pull request push | dependency graph compare | estimated 1–2 | 1–2 |
 | `dependabot/fetch-metadata`, `gh pr merge`, `gh pr comment` | `dependabot-automerge.yml` | bot pull requests only | pulls, comments | estimated 3–6 | bot PRs only |
@@ -48,7 +48,7 @@ action's behavior and were not logged.
 | Migration plan comment | `migration-plan.yml` | schema-changing pull requests | issue comments | estimated 2 | schema PRs only |
 | GoReleaser, chart push | `release.yml` | `v*` tags | releases, assets | tens | tags only |
 
-Before this change, two more consumers ran on every image-building push. Both
+Before #3058, two more consumers ran on every image-building push. Both
 are gone:
 
 | Removed consumer | Requests per push |
@@ -68,8 +68,8 @@ manifest. It is about 6 on an idle fleet and has reached 20 on a busy one.
 | --- | --- | --- | --- | --- |
 | Before #2985 (15 s polls, about 4 requests each, 3 waiters) | 48·D | about 31 | about 320 | about 990 |
 | After #2985 (60 s polls, 1–2 requests, 3 waiters) | 3·D to 6·D | about 31 | about 65 (measured 32 + 23 + estimates) | 90–150 |
-| After this change, chart pull request | 2·D | about 27 | about 39 | about 67 |
-| After this change, any other pull request | 0 | about 27 | about 27 | about 27 |
+| After #3058, chart pull request | 2·D | about 27 | about 39 | about 67 |
+| After #3058, any other pull request | 0 | about 27 | about 27 | about 27 |
 
 The row before #2985 is a model from the description in #2985 and the failed
 job in #3025: that waiter was refused on its first request at 16:25:43 UTC
@@ -87,14 +87,29 @@ touching the chart, and 6 closes an hour.
 | | Requests per hour at that load | Share of 1,000 |
 | --- | --- | --- |
 | Before #2985 | about 24,000 | spent within minutes |
-| After #2985 | about 2,200–3,600 | 2 to 4 times over |
-| After this change | about 810, plus at least 4 per close and the package listing | about 85 % |
-| With changed-file detection through git | about 310, plus closes | about 35 % |
+| After #2985 | about 2,200–3,600 plus closes | 2 to 4 times over |
+| Lanes behind `needs: merge` (#3058), close listing every version | about 810 + 6 × about 150 = about 1,700 | 1.7 times over |
+| Close listing bounded to the pull request's lifetime | about 810 + 6 × 10–30 = 870–990 | 87–99 % |
+| Changed-file detection through git | about 310 + 6 × 10–30 = 370–490 | 37–49 % |
 
 The target is to stay under **700 requests an hour** at that load, which
-leaves 300 for reruns, bot pull requests, previews and the tag release. This
-change brings readiness coordination to zero for everything except the Helm
-kind lane, which takes the load under the limit but not yet under the target.
+leaves 300 for reruns, bot pull requests, previews and the tag release.
+Readiness coordination costs nothing except for the Helm kind lane.
+
+A close cost about 150 requests before its listing was bounded: 129 to page
+through all 12,845 versions of the `inventario` package (measured on the close
+of #3058), up to 30 for the drain, and the deletes. No job sweeps the package
+on a schedule, so that count only grows. The reclaim step now stops paging at
+the first page whose versions are all older than the pull request, less an
+hour of slack: a pull request's images are built by its own pull request
+runs, so none of them is older than the pull request. The listing then costs
+one page per 100 versions published while the pull request was open, plus
+one. The package holds about four versions per `docker.yml` run (12,845 over
+about 3,460 runs), so at the sizing load it grows by about a page an hour,
+and a close costs about one request per hour the pull request was open. The
+step logs the pages it read on every close; the 10–30 per close above is an
+estimate until those logs replace it.
+
 Changed-file detection diffs with git and makes no request; through the
 pull request files API it cost 21 requests a push, 504 an hour at that load.
 See [Conditional CI execution](conditional-execution.md#how-it-works).
@@ -172,9 +187,13 @@ changes ─┬─ build (amd64, arm64) ── merge ─┬─ E2E Tests (chromiu
    `_wait-for-docker-image.yml` and its verdict test.
 3. **Narrow the close drain** to runs that can still pull the image. With the
    lanes inside `docker.yml`, only the Helm kind lane is left outside it.
-4. **Count the package listing.** The reclaim step now logs how many versions
-   it listed; if that is hundreds of pages per close, list only tagged
-   versions or rely on the retention sweep.
+4. **Sweep old package versions.** Nothing deletes a version that a closed
+   pull request left behind (commits that were force-pushed away, a close
+   whose drain gave up), and the reclaim step deletes only tagged versions,
+   so the untagged per-architecture and attestation manifests of every build
+   stay. A scheduled job with its own budget would keep the package small;
+   until then the bounded listing keeps a close cheap whatever the package
+   size.
 5. **Honor the limit's reset.** The waiter retries a failed call every 60
    seconds; reading `x-ratelimit-reset` and `Retry-After` would stop it
    spending retries before the reset, and a 401 or 404 should fail at once.
