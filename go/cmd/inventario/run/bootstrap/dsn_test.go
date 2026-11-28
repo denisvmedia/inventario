@@ -55,3 +55,24 @@ func TestBuild_BannerMasksAPasswordQueryParameter(t *testing.T) {
 	c.Assert(buf.String(), qt.Contains, "password=xxxxxx")
 	c.Assert(buf.String(), qt.Not(qt.Contains), "s3cret")
 }
+
+// A "/" in the password ends the host part early, so the rest of the
+// password is the database name. The startup refuses such a DSN before it
+// connects; a failed connection would quote the database name.
+func TestBuild_RefusesAnAtAfterTheHost(t *testing.T) {
+	c := qt.New(t)
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	c.Cleanup(func() { slog.SetDefault(previous) })
+
+	_, err := bootstrap.Build(&bootstrap.Config{}, &shared.DatabaseConfig{
+		DBDSN: "postgres://app:12/tail@host/x",
+	}, bootstrap.ModeAPIServer)
+
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Equals,
+		"invalid --db-dsn: the database URL has an @ after the host; percent-encode @ in the password or the database name as %40")
+	c.Assert(buf.String(), qt.Not(qt.Contains), "tail")
+}

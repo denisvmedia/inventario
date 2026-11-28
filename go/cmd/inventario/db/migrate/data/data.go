@@ -116,6 +116,10 @@ func (c *Command) setupData(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 	}
 	fmt.Println()
 
+	if err := urlerr.CheckDatabaseURL(dsn); err != nil {
+		return err
+	}
+
 	// Connect to database
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {

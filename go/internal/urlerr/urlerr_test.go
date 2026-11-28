@@ -78,3 +78,48 @@ func TestWithoutURL_OtherErrorPassesThrough(t *testing.T) {
 	c.Assert(urlerr.WithoutURL(other), qt.ErrorIs, other)
 	c.Assert(urlerr.WithoutURL(nil), qt.IsNil)
 }
+
+// A "/", "?" or "#" in the password ends the host part early, and the rest of
+// the password, with the "@" of the userinfo, lands after the host.
+func TestCheckDatabaseURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		dsn     string
+		wantErr string
+	}{
+		{name: "a / in the password", dsn: "postgres://app:12/tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
+		{name: "a ? in the password", dsn: "postgres://app:12?tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
+		{name: "a # in the password", dsn: "postgres://app:12#tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
+		{name: "the postgresql scheme", dsn: "postgresql://app:12/tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
+		{name: "an @ in a query value", dsn: "postgres://app:pw@host/x?application_name=a@b", wantErr: urlerr.ErrAtAfterHost.Error()},
+		{name: "a DSN that does not parse", dsn: "postgres://app:p#ss@db/x", wantErr: "invalid port after host" + hint},
+		{name: "an @ in the password", dsn: "postgres://app:p@ss@host/x"},
+		{name: "a percent-encoded @ in the password", dsn: "postgres://app:p%40ss@host/x"},
+		{name: "a percent-encoded @ in the database name", dsn: "postgres://app:pw@host/db%40x"},
+		{name: "a percent-encoded @ in a query value", dsn: "postgres://app:pw@host/x?application_name=a%40b"},
+		{name: "a keyword DSN", dsn: "host=db user=app password=12/tail@host dbname=x"},
+		{name: "the memory registry", dsn: "memory://"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			err := urlerr.CheckDatabaseURL(tt.dsn)
+
+			if tt.wantErr == "" {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Equals, tt.wantErr)
+		})
+	}
+}
+
+func TestErrAtAfterHost(t *testing.T) {
+	c := qt.New(t)
+
+	c.Assert(urlerr.CheckDatabaseURL("postgres://app:12/tail@host/x"), qt.ErrorIs, urlerr.ErrAtAfterHost)
+	c.Assert(urlerr.ErrAtAfterHost.Error(), qt.Equals,
+		"the database URL has an @ after the host; percent-encode @ in the password or the database name as %40")
+}

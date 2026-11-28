@@ -1621,6 +1621,21 @@ when to add an entry and where it goes.
   memory registry's `Getting item` line carries `entity_id` and
   `entity_type`
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- A `postgres://` or `postgresql://` DSN with an `@` after the host, in the
+  path, the query or the fragment, is refused before anything connects:
+  `inventario run` and every command that opens the database, the `db`
+  commands and `db bootstrap apply` included, stop with `the database URL
+  has an @ after the host; percent-encode @ in the password or the database
+  name as %40`. Such a DSN
+  usually comes from a `/`, `?` or `#` in the password: the host part ends
+  there, the rest of the password becomes the database name, and the
+  driver's error quoted that name when it could not connect. Before you
+  upgrade, percent-encode the reserved characters of the password in
+  `--db-dsn` (`INVENTARIO_DB_DSN`, and `MIGRATOR_DB_DSN` with the Helm
+  chart): `@` as `%40`, `/` as `%2F`, `?` as `%3F` and `#` as `%23`. A DSN
+  that works today is refused only when its database name or a query value
+  holds a literal `@`; write it as `%40`
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

@@ -44,3 +44,30 @@ func TestMigrateUp_LogLeavesThePasswordOut(t *testing.T) {
 	c.Assert(buf.String(), qt.Contains, "127.0.0.1:1/inventario")
 	c.Assert(buf.String(), qt.Not(qt.Contains), "s3cret")
 }
+
+// A "/" in the password ends the host part early, so the rest of the
+// password is the database name, which a failed connection quotes. Every
+// entry point refuses such a DSN before it connects.
+func TestMigrator_RefusesAnAtAfterTheHost(t *testing.T) {
+	const want = "the database URL has an @ after the host; percent-encode @ in the password or the database name as %40"
+	m := migrator.New("postgres://app:12/tail@host/x", fstest.MapFS{})
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "migrate up", run: func() error { return m.MigrateUp(context.Background(), migrator.Args{}) }},
+		{name: "verify", run: func() error { return m.VerifySchemaUpToDate(context.Background()) }},
+		{name: "drop tables", run: func() error { return m.DropTables(context.Background(), false, true) }},
+		{name: "drop database", run: func() error { return m.DropDatabase(context.Background(), false, true) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			err := tt.run()
+
+			c.Assert(err, qt.ErrorMatches, ".*"+want)
+			c.Assert(err.Error(), qt.Not(qt.Contains), "tail")
+		})
+	}
+}

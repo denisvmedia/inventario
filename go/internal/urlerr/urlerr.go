@@ -26,10 +26,22 @@ type Error struct {
 	// Reason is the kind of problem, such as "invalid port after host". It is
 	// fixed text and never holds a value taken from the URL.
 	Reason string
+	// Hint is the fix, when it is more specific than the general one. It is
+	// fixed text too.
+	Hint string
 }
 
 func (e *Error) Error() string {
+	if e.Hint != "" {
+		return e.Reason + "; " + e.Hint
+	}
 	return e.Reason + " (" + hint + ")"
+}
+
+// ErrAtAfterHost refuses a database URL with an "@" after the host.
+var ErrAtAfterHost = &Error{
+	Reason: "the database URL has an @ after the host",
+	Hint:   "percent-encode @ in the password or the database name as %40",
 }
 
 // Parse is url.Parse with an *Error in place of the error url.Parse returns.
@@ -39,6 +51,34 @@ func Parse(rawURL string) (*url.URL, error) {
 		return nil, WithoutURL(err)
 	}
 	return u, nil
+}
+
+// CheckDatabaseURL refuses a postgres:// or postgresql:// DSN that does not
+// parse, or that has an "@" in its path, query or fragment, and accepts any
+// other DSN, such as a keyword DSN or memory://.
+//
+// The userinfo ends with the last "@" before the host. A "/", "?" or "#" in
+// the password ends the host part early, so the rest of the password, with
+// that "@", lands in the path, the query or the fragment:
+// `postgres://app:12/tail@db/x` parses as host "app", port 12 and database
+// "tail@db/x". The URL still parses, and a driver that fails to connect
+// quotes the database name, the rest of the password included. Run the check
+// before handing a DSN to a driver.
+func CheckDatabaseURL(dsn string) error {
+	lower := strings.ToLower(dsn)
+	if !strings.HasPrefix(lower, "postgres://") && !strings.HasPrefix(lower, "postgresql://") {
+		return nil
+	}
+	u, err := Parse(dsn)
+	if err != nil {
+		return err
+	}
+	// The escaped forms keep a %40 as it is written, so an "@" percent-encoded
+	// as the hint says passes.
+	if strings.Contains(u.EscapedPath()+u.RawQuery+u.EscapedFragment(), "@") {
+		return ErrAtAfterHost
+	}
+	return nil
 }
 
 // WithoutURL replaces a *url.Error with an *Error that names the same kind

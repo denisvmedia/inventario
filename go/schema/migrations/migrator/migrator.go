@@ -110,6 +110,10 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 		m.logger.InfoContext(ctx, "Dry run mode enabled - no actual changes will be made")
 	}
 
+	if err := urlerr.CheckDatabaseURL(m.dbURL); err != nil {
+		return err
+	}
+
 	// Connect to database using standard ptah approach
 	// When using a shared pool, we still create a separate connection for migrations
 	// but the pool limits will prevent connection exhaustion
@@ -706,6 +710,9 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 // parsePostgreSQLDSN parses a PostgreSQL DSN and returns the database name and an admin DSN
 // that connects to the 'postgres' database for administrative operations
 func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err error) {
+	if err := urlerr.CheckDatabaseURL(m.dbURL); err != nil {
+		return "", "", err
+	}
 	parsed, err := urlerr.Parse(m.dbURL)
 	if err != nil {
 		return "", "", errxtrace.Wrap("failed to parse database URL", err)
@@ -732,12 +739,11 @@ func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err err
 
 // openDB opens dsn with lib/pq. lib/pq parses a URL DSN on first use and
 // returns the error of url.Parse, which quotes the DSN, password included.
-// Parsing it here first returns that error without the DSN.
+// Checking it here first returns that error without the DSN, and refuses a
+// DSN whose password spilled past the host (urlerr.CheckDatabaseURL).
 func openDB(dsn string) (*sql.DB, error) {
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		if _, err := urlerr.Parse(dsn); err != nil {
-			return nil, err
-		}
+	if err := urlerr.CheckDatabaseURL(dsn); err != nil {
+		return nil, err
 	}
 	return sql.Open("postgres", dsn)
 }
