@@ -1,6 +1,7 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,6 +44,11 @@ type AsyncEmailService struct {
 	retryBaseDelay    time.Duration
 	retryMaxDelay     time.Duration
 	sendTimeout       time.Duration
+	// dequeueBackoffBase and dequeueBackoffMax pace a worker whose Dequeue
+	// fails, so a queue outage does not turn every worker into a busy loop.
+	// Zero uses defaultDequeueBackoffBase and defaultDequeueBackoffMax.
+	dequeueBackoffBase time.Duration
+	dequeueBackoffMax  time.Duration
 
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -349,7 +355,13 @@ func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	return s.queue.Enqueue(ctx, payload)
 }
 
+const (
+	defaultDequeueBackoffBase = 250 * time.Millisecond
+	defaultDequeueBackoffMax  = 30 * time.Second
+)
+
 func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
+	failures := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -364,9 +376,20 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 			if isContextShutdownError(err) {
 				return
 			}
-			slog.ErrorContext(ctx, "Email worker dequeue failed", "worker_id", workerID, "error", err)
+			failures++
+			delay := s.dequeueBackoff(failures)
+			slog.ErrorContext(ctx, "Email worker dequeue failed",
+				"worker_id", workerID,
+				"attempt", failures,
+				"retry_in", delay.String(),
+				"error", err,
+			)
+			if !s.wait(ctx, delay) {
+				return
+			}
 			continue
 		}
+		failures = 0
 		if payload == nil {
 			continue
 		}
@@ -380,6 +403,33 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 			continue
 		}
 		s.processJob(ctx, job, workerID)
+	}
+}
+
+// dequeueBackoff is the pause after the given number of Dequeue failures in a
+// row: the base delay, doubled for each further failure, up to the maximum.
+func (s *AsyncEmailService) dequeueBackoff(failures int) time.Duration {
+	base := cmp.Or(s.dequeueBackoffBase, defaultDequeueBackoffBase)
+	limit := cmp.Or(s.dequeueBackoffMax, defaultDequeueBackoffMax)
+	delay := base
+	for i := 1; i < failures && delay < limit; i++ {
+		delay *= 2
+	}
+	return min(delay, limit)
+}
+
+// wait pauses for d and reports whether the worker should go on. It returns
+// false as soon as ctx is canceled or Stop is called.
+func (s *AsyncEmailService) wait(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-s.stopCh:
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 

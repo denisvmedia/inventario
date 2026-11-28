@@ -17355,6 +17355,12 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/apiserver.RegisterRequest'
+      - description: The UI language the account registers in. The first of en, cs
+          or ru it names becomes the new account's language setting, which the verification
+          and welcome emails use.
+        in: header
+        name: Accept-Language
+        type: string
       produces:
       - application/json
       responses:

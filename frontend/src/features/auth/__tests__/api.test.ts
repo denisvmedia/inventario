@@ -5,7 +5,8 @@ import { http, HttpResponse } from "msw"
 
 import { server } from "@/test/server"
 import { apiUrl } from "@/test/handlers"
-import { getCurrentUser, login, logout } from "@/features/auth/api"
+import { getCurrentUser, login, logout, register } from "@/features/auth/api"
+import { i18next } from "@/i18n"
 import { getRecent, pushRecent, recentScope } from "@/features/search/recent"
 import { clearAuth, getAccessToken, getCsrfToken, setAccessToken } from "@/lib/auth-storage"
 import { loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
@@ -66,6 +67,28 @@ describe("login", () => {
     }
     expect(getAccessToken()).toBeNull()
     expect(getCsrfToken()).toBeNull()
+  })
+})
+
+describe("register", () => {
+  // The server stores this as the new account's language setting, so the
+  // verification and welcome emails go out in it (#3069).
+  it("sends the UI language the user registers in", async () => {
+    await i18next.changeLanguage("cs")
+    onTestFinished(async () => {
+      await i18next.changeLanguage("en")
+    })
+    let acceptLanguage: string | null = null
+    server.use(
+      http.post(apiUrl("/register"), ({ request }) => {
+        acceptLanguage = request.headers.get("Accept-Language")
+        return HttpResponse.json({ message: "ok" })
+      })
+    )
+
+    await register({ email: "new@example.com", password: "Password123", name: "New" })
+
+    expect(acceptLanguage).toBe("cs")
   })
 })
 

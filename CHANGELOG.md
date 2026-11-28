@@ -1213,6 +1213,14 @@ when to add an entry and where it goes.
 - Opening a sign-in link while the database cannot be reached answers with a
   server error, which can be retried, instead of "Invalid or expired sign-in
   link". The link stays usable.
+- A new account starts with the language the app showed when you signed up,
+  so its verification and welcome emails are in that language. They were in
+  English until you picked a language in your settings
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
+- Opening an email verification link while the database cannot be reached
+  answers with a server error, which can be retried, instead of "User not
+  found". The link stays usable
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
 
 ### Security
 
@@ -1385,6 +1393,17 @@ when to add an entry and where it goes.
   header to the frontend. The conventions behind the field are in the new
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md)
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- An email worker that cannot read its queue, as during a Redis outage, waits
+  before it tries again: 250 ms after the first failure, doubling up to 30 s,
+  and 250 ms again once a read succeeds. It used to retry at once, which kept
+  a CPU core busy per worker and wrote `Email worker dequeue failed` many
+  thousands of times a second. The line now carries `attempt` and `retry_in`
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
+- A `loan_reminder_sent` item event records whether the reminder email went
+  out, in `emailed`, instead of the recipient's address in `recipient`. The
+  recipient is the loan's creator, whom the event already names in
+  `created_by_user_id`. Events written before keep their `recipient`
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
 - Tenant management in the back office. A `platform_admin` creates a tenant
   (**New tenant** on the Tenants page), edits its name, slug and custom
   domain, suspends and reactivates it with a reason, and deletes it after

@@ -60,6 +60,10 @@ func (m *accountEmailRecorder) SendMagicLinkEmail(ctx context.Context, _, _, _ s
 	return m.record(ctx, "magic_link")
 }
 
+func (m *accountEmailRecorder) SendVerificationEmail(ctx context.Context, _, _, _ string) error {
+	return m.record(ctx, "verification")
+}
+
 // next waits for the one email the request sends.
 func (m *accountEmailRecorder) next(c *qt.C) accountEmailSent {
 	c.Helper()

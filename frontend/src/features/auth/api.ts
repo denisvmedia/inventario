@@ -1,6 +1,7 @@
 // Pure functions that talk to the backend. Hooks (`./hooks.ts`) wrap these
 // in TanStack Query — keeping fetch logic separate from React makes them
 // trivial to test with MSW and reuse outside React (e.g. boot probes).
+import { i18next } from "@/i18n"
 import { http, withSignOut } from "@/lib/http"
 import { clearAuth, setAccessToken, setCsrfToken } from "@/lib/auth-storage"
 import { clearItemFormRecovery } from "@/features/commodities/draft"
@@ -248,8 +249,17 @@ export async function logout(): Promise<void> {
 // returns 200 with a generic message regardless of whether the email is
 // already taken (anti-enumeration), so callers should treat `message` as
 // success copy and never as an "email exists" probe.
+//
+// Accept-Language carries the UI language the user registers in. The server
+// stores it as the new account's language setting, so the verification and
+// welcome emails go out in it and the UI keeps it after the first sign-in.
 export async function register(req: RegisterRequest): Promise<string> {
-  const body = await http.post<MessageResponse>("/register", req)
+  const language = i18next.resolvedLanguage ?? i18next.language
+  const body = await http.post<MessageResponse>(
+    "/register",
+    req,
+    language ? { headers: { "Accept-Language": language } } : {}
+  )
   return body.message ?? ""
 }
 
