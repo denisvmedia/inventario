@@ -307,7 +307,7 @@ func (s *PersonalDataExportService) build(ctx context.Context, user *models.User
 	for attempt := 1; ; attempt++ {
 		size, stats, err := s.buildOnce(ctx, bucket, user, export, key)
 		if errors.Is(err, errPersonalFileVanished) && attempt < personalBuildAttempts {
-			slog.InfoContext(ctx, "A file was deleted during a personal data export build, starting over",
+			slog.WarnContext(ctx, "A file was deleted during a personal data export build, starting over",
 				"export_id", export.ID, "attempt", attempt, "error", err)
 			continue
 		}

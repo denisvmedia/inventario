@@ -133,10 +133,10 @@ func TenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantReg
 			// SECURITY: Validate that the authenticated user belongs to this tenant
 			if user.TenantID != "" && user.TenantID != tenantID {
 				// Log security violation
-				slog.ErrorContext(r.Context(), "Security violation: user attempted to access different tenant",
+				slog.WarnContext(r.Context(), "Security violation: user attempted to access different tenant",
 					"user_id", user.ID,
-					"user_tenant", user.TenantID,
-					"requested_tenant", tenantID,
+					"user_tenant_id", user.TenantID,
+					"requested_tenant_id", tenantID,
 					"user_agent", r.UserAgent(),
 					"remote_addr", r.RemoteAddr,
 					"method", r.Method,
@@ -172,6 +172,7 @@ func RequireTenant() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenant := TenantFromContext(r.Context())
 			if tenant == nil {
+				slog.ErrorContext(r.Context(), "Tenant context required but missing", "path", r.URL.Path)
 				http.Error(w, "Tenant context required", http.StatusInternalServerError)
 				return
 			}
@@ -316,7 +317,7 @@ func tenantByRequestSlug(w http.ResponseWriter, r *http.Request, resolver Tenant
 			return nil
 		}
 		slog.DebugContext(r.Context(), "Host did not resolve; using the catch-all tenant",
-			"host", r.Host, "catch_all", catchAllSlug, "error", err)
+			"host", r.Host, "catch_all_tenant_slug", catchAllSlug, "error", err)
 		slug = catchAllSlug
 	}
 
@@ -337,7 +338,7 @@ func tenantByRequestSlug(w http.ResponseWriter, r *http.Request, resolver Tenant
 	// turn an outage into a silent mis-route.
 	if errors.Is(err, registry.ErrNotFound) && catchAllSlug != "" && slug != catchAllSlug {
 		slog.DebugContext(r.Context(), "No tenant for host; using the catch-all tenant",
-			"host", r.Host, "slug", slug, "catch_all", catchAllSlug)
+			"host", r.Host, "tenant_slug", slug, "catch_all_tenant_slug", catchAllSlug)
 		tenant, err = tenantRegistry.GetBySlug(r.Context(), catchAllSlug)
 	}
 	if err != nil {

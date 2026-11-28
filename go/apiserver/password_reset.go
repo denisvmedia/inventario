@@ -15,6 +15,7 @@ import (
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/notifications"
 )
 
 const (
@@ -33,6 +34,9 @@ type PasswordResetAPI struct {
 	rateLimiter           services.AuthRateLimiter
 	publicBaseURL         string
 	apiTokens             *services.APITokenService
+	// emailPrefs reads the recipient's UI language for the reset and
+	// password-changed emails. Nil sends them in English.
+	emailPrefs *notifications.Service
 }
 
 // PasswordResetParams holds all dependencies needed by the password-reset API.
@@ -48,6 +52,9 @@ type PasswordResetParams struct {
 	// APITokenService revokes the user's personal API tokens on a reset
 	// (#2808). Nil skips that step.
 	APITokenService *services.APITokenService
+	// SettingsRegistryFactory reads the recipient's UI language, so the reset
+	// and password-changed emails go out in it. Nil sends them in English.
+	SettingsRegistryFactory registry.SettingsRegistryFactory
 }
 
 // ForgotPasswordRequest is the body for POST /forgot-password.
@@ -73,6 +80,7 @@ func PasswordReset(params PasswordResetParams) func(r chi.Router) {
 		rateLimiter:           params.RateLimiter,
 		publicBaseURL:         strings.TrimSpace(params.PublicBaseURL),
 		apiTokens:             params.APITokenService,
+		emailPrefs:            newAccountEmailPrefs(params.SettingsRegistryFactory),
 	}
 	return func(r chi.Router) {
 		r.With(PasswordResetRateLimitMiddleware(params.RateLimiter)).Post("/forgot-password", api.handleForgotPassword)
@@ -218,7 +226,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 
 	// Invalidate all active refresh tokens so existing sessions are terminated.
 	api.invalidateUserSessions(r.Context(), user.ID)
-	api.sendPasswordChangedNotification(user)
+	api.sendPasswordChangedNotification(r, user)
 
 	api.logAuth(r, "password_reset", &user.ID, true, "")
 	slog.InfoContext(r.Context(), "Password reset successful", "user_id", user.ID, "email", user.Email)
@@ -271,22 +279,27 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 	go func() {
 		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendPasswordResetEmail(ctx, user.Email, user.Name, resetURL); err != nil {
-			slog.ErrorContext(r.Context(), "Failed to send password-reset email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to send password-reset email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
 
-func (api *PasswordResetAPI) sendPasswordChangedNotification(user *models.User) {
+func (api *PasswordResetAPI) sendPasswordChangedNotification(r *http.Request, user *models.User) {
 	if api.emailService == nil || user == nil {
 		return
 	}
 
+	// Keep the request's values (the request ID among them) but not its
+	// cancelation: the notice must go out after the response is written.
+	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
-			slog.Error("Failed to send password-changed notification email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to send password-changed notification email", "user_id", user.ID, "error", err)
 		}
 	}()
 }

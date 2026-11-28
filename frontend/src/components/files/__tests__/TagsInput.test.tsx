@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event"
 
 import { TagsInput } from "@/components/files/TagsInput"
 import { i18next } from "@/i18n"
-import ruCommon from "@/i18n/locales/ru/common.json"
 import { renderWithProviders } from "@/test/render"
 
 describe("<TagsInput />", () => {
@@ -45,12 +44,13 @@ describe("<TagsInput />", () => {
 
   // #2941: the chip buttons are named in the language of the app.
   it("names its remove and add buttons in the user's language", async () => {
-    // The suite boots with the en bundle only.
-    i18next.addResourceBundle("ru", "common", ruCommon)
+    // The lazy backend loads the ru catalogs (#3018). The shared instance is
+    // used by every file in this worker, so its bundles are left alone:
+    // removeResourceBundle also takes the namespace out of options.ns, and
+    // after that no language loads it.
     await i18next.changeLanguage("ru")
     onTestFinished(async () => {
       await i18next.changeLanguage("en")
-      i18next.removeResourceBundle("ru", "common")
     })
     const user = userEvent.setup()
     render(<TagsInput values={["alpha"]} onChange={vi.fn()} testId="t" />)

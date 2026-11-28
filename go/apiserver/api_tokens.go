@@ -296,7 +296,7 @@ func (api *apiTokensAPI) reauthenticate(w http.ResponseWriter, r *http.Request, 
 	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "API token create: MFA lookup failed", "user_id", user.ID, "error", err)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return "", false
 	}
 	if !consumeMFACode(r.Context(), api.mfaService, api.mfaRegistry, user, row, req.TOTPCode, req.BackupCode) {
@@ -367,7 +367,7 @@ func (api *apiTokensAPI) discardMintedToken(w http.ResponseWriter, r *http.Reque
 	}
 	if checkErr != nil {
 		slog.ErrorContext(r.Context(), "API token create: credential re-check failed", "user_id", user.ID, "error", checkErr)
-		_ = internalServerError(w, r, checkErr)
+		_ = renderInternalServerError(w, r, checkErr)
 		return
 	}
 	api.logTokenEvent(r, "api_token_create", user, tokenID, false, new("account credentials changed during creation"))

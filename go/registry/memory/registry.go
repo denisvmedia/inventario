@@ -71,7 +71,7 @@ func (r *Registry[_, P]) Get(ctx context.Context, id string) (P, error) {
 	// Debug, not Info: this fires on every read, and the access log already
 	// records the request that caused it. The type and user id are here for
 	// tracing a visibility decision, which is a debugging question.
-	slog.DebugContext(ctx, "Getting item", "item_id", id, "user_id", r.userID, "item_type", fmt.Sprintf("%T", zero))
+	slog.DebugContext(ctx, "Getting item", "entity_id", id, "user_id", r.userID, "entity_type", fmt.Sprintf("%T", zero))
 
 	// The item is read and copied under the lock: a writer may change a
 	// stored item in place while it holds the write lock.

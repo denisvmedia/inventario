@@ -216,7 +216,7 @@ func verifySchemaMatchesBinary(dsn string) error {
 	m := migrator.NewWithFallback(dsn, "")
 	if err := m.VerifySchemaUpToDate(ctx); err != nil {
 		if errors.Is(err, migrator.ErrSchemaLagsBinary) {
-			slog.Error("refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
+			slog.ErrorContext(ctx, "refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
 				"error", err,
 			)
 		}
