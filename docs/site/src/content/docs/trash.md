@@ -63,6 +63,8 @@ The page has two tabs:
 Each row shows when it was deleted and by whom, and the date it will be
 deleted for good.
 
+![The Trash page with two deleted items, each with Restore and Delete now](../../assets/screenshots/trash.png)
+
 What you can do depends on your [role](../groups-and-sharing/#members-and-roles)
 in the group:
 

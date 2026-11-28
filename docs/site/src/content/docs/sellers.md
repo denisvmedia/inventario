@@ -26,6 +26,8 @@ they are set. The count includes drafts and items that are no longer in use
 Type in the search box to keep the sellers whose name contains the text. Upper
 and lower case and extra spaces don't matter.
 
+![The Sellers page listing four sellers with their websites, item counts, contacts, and notes](../../assets/screenshots/sellers.png)
+
 ## Add a seller
 
 1. Click **New seller**.
