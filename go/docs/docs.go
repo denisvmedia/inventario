@@ -13060,6 +13060,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/apiserver.RegisterRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "The UI language the account registers in. The first of en, cs or ru it names becomes the new account's language setting, which the verification and welcome emails use.",
+                        "name": "Accept-Language",
+                        "in": "header"
                     }
                 ],
                 "responses": {

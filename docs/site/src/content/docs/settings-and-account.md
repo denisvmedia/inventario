@@ -179,7 +179,8 @@ change applies immediately.
   lists. Stored on this device.
 - **Language** — switch the app's language between **English**, **Čeština**, and
   **Русский**. This also sets the language Inventario uses for emails it sends
-  you.
+  you. A new account starts with the language the app showed when you signed
+  up, so the verification and welcome emails are already in it.
 - **Default view** — whether the Items list opens as **Photo cards**,
   **Compact cards**, or a **List**. A layout you pick from the Items list
   toolbar wins on that device until you change this setting there.

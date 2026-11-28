@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
@@ -31,6 +32,9 @@ type RegistrationAPI struct {
 	// emailPrefs reads the recipient's UI language for the verification and
 	// welcome emails. Nil sends them in English.
 	emailPrefs *notifications.Service
+	// settings stores the language a new account registers in. Nil stores
+	// nothing.
+	settings registry.SettingsRegistryFactory
 }
 
 // RegistrationParams holds all dependencies needed by the registration API.
@@ -49,8 +53,9 @@ type RegistrationParams struct {
 	// PublicBaseURL, when set, is used to build absolute verification links.
 	// Example: https://inventario.example.com
 	PublicBaseURL string
-	// SettingsRegistryFactory reads the recipient's UI language, so the
-	// verification and welcome emails go out in it. Nil sends them in English.
+	// SettingsRegistryFactory stores the UI language a new account registers
+	// in as its language setting and reads it back, so the verification and
+	// welcome emails go out in it. Nil sends them in English.
 	SettingsRegistryFactory registry.SettingsRegistryFactory
 }
 
@@ -91,6 +96,7 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 		groupService:         params.GroupService,
 		publicBaseURL:        strings.TrimSpace(params.PublicBaseURL),
 		emailPrefs:           newAccountEmailPrefs(params.SettingsRegistryFactory),
+		settings:             params.SettingsRegistryFactory,
 	}
 	return func(r chi.Router) {
 		r.With(RegistrationRateLimitMiddleware(params.RateLimiter)).Post("/register", api.handleRegister)
@@ -128,6 +134,7 @@ func resolveRegistrationMode(ctx context.Context) models.RegistrationMode {
 // @Accept json
 // @Produce json
 // @Param data body RegisterRequest true "Registration data (optionally including invite_token)"
+// @Param Accept-Language header string false "The UI language the account registers in. The first of en, cs or ru it names becomes the new account's language setting, which the verification and welcome emails use."
 // @Success 200 {object} map[string]string "OK - registration accepted"
 // @Failure 400 {string} string "Bad Request - invalid body, expired/used invite, invalid password, or registration email (trim + case-insensitive) does not match invitee email"
 // @Failure 403 {string} string "Forbidden - registrations are closed and no valid invite was supplied"
@@ -229,6 +236,8 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Failed to create account", http.StatusInternalServerError)
 		return
 	}
+	// Before the verification email, which reads the language back.
+	api.recordRegistrationLanguage(r, created)
 
 	switch {
 	case inviteBypass:
@@ -244,6 +253,27 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 	api.logAuth(r, "register", &created.ID, true, "")
 	slog.InfoContext(r.Context(), "User registered", "user_id", created.ID, "email", created.Email, "mode", mode, "invite", inviteBypass)
 	writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
+}
+
+// recordRegistrationLanguage stores the UI language the registration request
+// names in Accept-Language as the new account's language setting. A request
+// that names no supported language stores nothing, and the account's emails
+// stay in English until the user picks a language in Settings. A failed write
+// does not fail the registration.
+func (api *RegistrationAPI) recordRegistrationLanguage(r *http.Request, user *models.User) {
+	lang := uiLanguageFromAcceptLanguage(r.Header.Get("Accept-Language"))
+	if lang == "" || api.settings == nil {
+		return
+	}
+	ctx := appctx.WithUser(r.Context(), user)
+	settings, err := api.settings.CreateUserRegistry(ctx)
+	if err == nil {
+		err = settings.Save(ctx, models.SettingsObject{AppearanceLanguage: &lang})
+	}
+	if err != nil {
+		slog.WarnContext(r.Context(), "Failed to store the language of a new account; its emails stay in English",
+			"user_id", user.ID, "error", err)
+	}
 }
 
 // registrationError pairs a status code with a user-facing message so the
@@ -372,7 +402,14 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 
 	user, err := api.userRegistry.Get(r.Context(), ev.UserID)
 	if err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
+		if errors.Is(err, registry.ErrNotFound) {
+			slog.WarnContext(r.Context(), "Verification token names a missing user", "verification_id", ev.ID, "user_id", ev.UserID)
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		// Not the link's fault: answer 500 so the user retries the same link.
+		slog.ErrorContext(r.Context(), "Failed to load the user of a verification token", "verification_id", ev.ID, "user_id", ev.UserID, "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 

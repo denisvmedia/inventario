@@ -416,9 +416,12 @@ func (s *LoanReminderService) lookupLender(ctx context.Context, l *models.Commod
 }
 
 // emitAuditEvent writes a commodity_events row of kind loan_reminder_sent.
-// `recipient` is empty when the flag flipped without a send (no-recipient
-// or stub path) so the timeline still records the worker decision —
-// useful for an operator scanning "why didn't this loan get a reminder?"
+// `recipient` is the address the reminder was for, empty when there is
+// none. The row records only whether an email went out (`emailed`), false
+// for the no-recipient and stub paths, so the timeline still records the
+// worker decision — useful for an operator scanning "why didn't this loan
+// get a reminder?" It does not copy the address: the recipient is the
+// loan's creator, whom the row already names in created_by_user_id.
 func (s *LoanReminderService) emitAuditEvent(ctx context.Context, l *models.CommodityLoan, kind registry.LoanReminderKind, recipient string) error {
 	if s.factorySet.CommodityEventRegistryFactory == nil {
 		return nil
@@ -426,9 +429,7 @@ func (s *LoanReminderService) emitAuditEvent(ctx context.Context, l *models.Comm
 	payload := models.CommodityEventPayload{
 		"kind":    string(kind),
 		"loan_id": l.ID,
-	}
-	if recipient != "" {
-		payload["recipient"] = recipient
+		"emailed": recipient != "" && s.emailSvc != nil,
 	}
 	event := models.CommodityEvent{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
