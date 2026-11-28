@@ -443,7 +443,7 @@ The **Help & support** section gives you five quick links:
 - **Keyboard shortcuts** — opens the full list of shortcuts (you can also press
   `?` anywhere in the app).
 - **What's new** — opens the [What's new](#whats-new) page. The badge next to
-  it shows the version you run, such as `v0.2`.
+  it shows the version you run, such as `v0.3`.
 - **Contact support / share feedback** — opens a form to ask a question, report
   a bug, or suggest a feature. The same form is your channel for reaching the
   team directly.
