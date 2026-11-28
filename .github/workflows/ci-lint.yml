@@ -62,3 +62,9 @@ jobs:
         # request; a wrong stop leaves images behind, a missing one reads the
         # whole package on every close.
         run: ./scripts/test-close-cleanup-listing.sh
+
+      - name: Test the preview limits check
+        # Helm Lint's `preview-manifests.py limits` step stands between a
+        # chart change and PR previews whose pods the cluster refuses; this
+        # runs it on hand-written renders that must pass or fail.
+        run: ./scripts/test-preview-limits.sh

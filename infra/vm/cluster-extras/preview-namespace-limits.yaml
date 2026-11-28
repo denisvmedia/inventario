@@ -19,7 +19,8 @@
 #     limit of at most 2Gi. A chart that drops its quota cannot start new pods,
 #     and its LimitRange cannot raise the per-container ceiling, because the
 #     limits are checked on the pod after the LimitRange has filled in its
-#     defaults.
+#     defaults. This policy selects namespaces by the `inventario-preview:
+#     pull-request` label, not by name (see the policy below).
 #   - preview-service-exposure: Services that ArgoCD applies must be
 #     ClusterIP without externalIPs. LoadBalancer and NodePort Services, and
 #     externalIPs, are published on the node's own addresses (on k3s,
@@ -34,7 +35,9 @@
 # service accounts in the `argocd` namespace, the only route by which a pull
 # request's content reaches the cluster; the cluster admin is not affected.
 # The pod policy applies to every pod created in a PR namespace, because pods
-# are created by the Deployment and Job controllers, not by ArgoCD.
+# are created by the Deployment and Job controllers, not by ArgoCD. The PR
+# ApplicationSet labels its namespaces, and preview-namespace-pod-security.yaml
+# refuses a PR namespace from ArgoCD without the label.
 # inv-vcl01-master and inv-vcl01-longevity run the chart from master and are
 # not matched.
 #
@@ -99,14 +102,19 @@ spec:
     apiVersion: v1
     kind: ResourceQuota
   matchConstraints:
+    # The API server looks the parameters up before it evaluates
+    # matchConditions, so a CEL condition on the namespace name would come
+    # too late: every pod in a namespace without a quota (kube-system
+    # included) would be refused. The namespace selector is checked first.
+    # A label selector cannot match a name prefix, hence the label.
+    namespaceSelector:
+      matchLabels:
+        inventario-preview: pull-request
     resourceRules:
       - apiGroups: [""]
         apiVersions: ["v1"]
         operations: ["CREATE"]
         resources: ["pods"]
-  matchConditions:
-    - name: pr-preview-namespace
-      expression: request.namespace.startsWith('inv-vcl01-pr')
   variables:
     - name: containers
       expression: >-

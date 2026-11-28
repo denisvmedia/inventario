@@ -643,9 +643,11 @@ jobs:
       - name: Verify the PR preview stays within the cluster's caps
         # infra/vm/cluster-extras/preview-namespace-limits.yaml refuses a PR
         # preview's ResourceQuota above its caps and pods whose containers
-        # exceed 2 CPU / 2Gi. The script reads those caps and fails when the
-        # chart rendered with the PR preview values goes past them, which
-        # would leave every preview unable to sync or to start its pods.
+        # lack a CPU or memory limit or exceed 2 CPU / 2Gi. The script reads
+        # those caps and fails when the chart rendered with the PR preview
+        # values goes past them, which would leave every preview unable to
+        # sync or to start its pods. It also checks that the PR namespaces
+        # carry the label the pod policy selects them by.
         run: .github/scripts/preview-manifests.py limits
 
       - name: Render chart with setupJob.argocdMode (combined + demo)

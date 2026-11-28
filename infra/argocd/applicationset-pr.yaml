@@ -167,13 +167,21 @@ spec:
         # as their image's root user. `warn` and `audit` at `restricted` keep
         # that gap visible on every sync.
         #
-        # The master and longevity ApplicationSets carry the same labels; the
-        # smoke test fails when the three blocks differ.
+        # The master and longevity ApplicationSets carry the same Pod
+        # Security labels; the smoke test fails when they differ.
+        #
+        # `inventario-preview: pull-request` marks the namespace as a PR
+        # preview for the pod policy in
+        # infra/vm/cluster-extras/preview-namespace-limits.yaml, which selects
+        # its namespaces by this label. preview-namespace-pod-security.yaml
+        # refuses a PR namespace from ArgoCD without it, so a chart that
+        # renders its own Namespace cannot drop it.
         managedNamespaceMetadata:
           labels:
             pod-security.kubernetes.io/enforce: baseline
             pod-security.kubernetes.io/warn: restricted
             pod-security.kubernetes.io/audit: restricted
+            inventario-preview: pull-request
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

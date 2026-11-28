@@ -175,6 +175,7 @@ helm:
   - 'infra/argocd/**'
   - 'infra/helm-overlays/**'
   - 'infra/vm/cluster-extras/preview-namespace-limits.yaml'
+  - 'infra/vm/cluster-extras/preview-namespace-pod-security.yaml'
   - '.github/scripts/preview-manifests.py'
 
 # ---- Renovate configuration ----------------------------------------------
