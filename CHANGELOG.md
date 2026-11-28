@@ -763,6 +763,16 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
 
 ### Fixed
 
+- The **Active sessions**, **Login history** and **API tokens** pages keep the
+  active group. The sidebar showed "Select a group" with empty sections there,
+  and the rows under **Privacy & security** in Settings opened these pages
+  without the group you were working in
+  ([#2872](https://github.com/denisvmedia/inventario/issues/2872)).
+- The top bar and the browser tab name every page. Sellers, Item types,
+  Custom fields, Tags, Warranties, Lent out, In service, Maintenance,
+  Upcoming and the Backup & Restore pages showed the previous page's title,
+  or none after a reload
+  ([#2872](https://github.com/denisvmedia/inventario/issues/2872)).
 - Signing out no longer signs you back in. A request that was still running
   when you signed out was refused, the app renewed the session to retry it,
   and a moment later you were signed in again. Signing out in one tab while
