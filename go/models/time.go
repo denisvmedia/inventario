@@ -151,6 +151,18 @@ func (d *Date) Equal(other *Date) bool {
 	}
 }
 
+// NewDate returns the calendar day of t in UTC. A day the server records,
+// such as the day an item was added, is taken in UTC so that it is the day
+// the item's History shows for the same instant (#1680).
+func NewDate(t time.Time) Date {
+	return Date(t.UTC().Format(dateFormat))
+}
+
+// IsEmpty reports whether d holds no date: nil or "".
+func (d *Date) IsEmpty() bool {
+	return d == nil || *d == ""
+}
+
 // ToPDate converts a Date to a PDate. If the Date is empty, it returns nil.
 func ToPDate(d Date) PDate {
 	if d == "" {

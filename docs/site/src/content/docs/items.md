@@ -552,6 +552,15 @@ status changes, price changes, moves, cover-photo changes, and a change of
 each status, price, area, or cover change, and one more row for the other
 fields it changed, such as the name or the type.
 
+**Date Added** is the day the item was added and **Last Edited** the day it
+last changed, both in UTC, the time zone of the History times. Every edit
+counts as a change, and so do a
+[bulk change](#select-and-change-items-in-bulk) and
+[**Mark as reviewed**](../inbox/#review-an-item); renaming or deleting a tag
+the item carries does not.
+A [restored](../backup-and-restore/) item keeps the dates its backup carries,
+and one whose backup has none gets the day of the restore.
+
 :::note
 Lending, service, and supplies tracking are only available on single-unit
 items, not bundles.

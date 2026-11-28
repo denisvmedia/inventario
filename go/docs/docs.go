@@ -4739,7 +4739,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/{commodityID}/draft": {
             "patch": {
-                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field. The item with the new mark must\npass the validation a full update runs.",
+                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field but the last-modified date, which\nbecomes today. The item with the new mark must pass the\nvalidation a full update runs.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -22269,6 +22269,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "last_modified_date": {
+                    "description": "LastModifiedDate is the day the item was last changed, in UTC. The\nregistry sets it to today on create unless the caller gives one, and\non every edit, bulk edits and the draft mark included, whatever the\ncaller sends.",
                     "type": "string"
                 },
                 "model": {
@@ -22298,6 +22299,7 @@ const docTemplate = `{
                     "x-nullable": "true"
                 },
                 "registered_date": {
+                    "description": "RegisteredDate is the day the item was added, in UTC. The registry\nsets it to today on create unless the caller gives one (a backup\nrestore keeps the archived day), and an update keeps the stored day\nwhen it gives none.",
                     "type": "string"
                 },
                 "revision": {

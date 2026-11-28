@@ -108,6 +108,9 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 		return l.markRestoreFailed(ctx, err, "failed to get user")
 	}
 	ctx = appctx.WithUser(ctx, user)
+	// A restored item keeps the archived last-modified date through every
+	// write the restore makes to it after creating it.
+	ctx = registry.WithKeptModifiedDate(ctx)
 
 	// Resolve the export's group and inject it into ctx. The restore runs from
 	// a background worker with no request middleware, so the group (and its

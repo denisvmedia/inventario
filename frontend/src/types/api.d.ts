@@ -5860,8 +5860,9 @@ export type paths = {
         /**
          * Mark an item as draft or as reviewed
          * @description Sets (`true`) or clears (`false`) the draft mark of an item
-         *     and changes no other field. The item with the new mark must
-         *     pass the validation a full update runs.
+         *     and changes no other field but the last-modified date, which
+         *     becomes today. The item with the new mark must pass the
+         *     validation a full update runs.
          */
         patch: {
             parameters: {
@@ -20236,6 +20237,12 @@ export type components = {
             draft?: boolean;
             extra_serial_numbers?: string[];
             id?: string;
+            /**
+             * @description LastModifiedDate is the day the item was last changed, in UTC. The
+             *     registry sets it to today on create unless the caller gives one, and
+             *     on every edit, bulk edits and the draft mark included, whatever the
+             *     caller sends.
+             */
             last_modified_date?: string;
             /**
              * @description Model is the maker's model name or number ("SMV6ZCX42E"), as plain
@@ -20254,6 +20261,12 @@ export type components = {
             part_numbers?: string[];
             /** @description PurchaseDate is nil when the date is unknown. */
             purchase_date?: string | null;
+            /**
+             * @description RegisteredDate is the day the item was added, in UTC. The registry
+             *     sets it to today on create unless the caller gives one (a backup
+             *     restore keeps the archived day), and an update keeps the stored day
+             *     when it gives none.
+             */
             registered_date?: string;
             /**
              * @description Revision counts the writes to the item: a new item has revision 1, and

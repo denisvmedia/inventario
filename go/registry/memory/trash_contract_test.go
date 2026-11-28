@@ -39,6 +39,10 @@ func TestLocationFilterContract_Memory(t *testing.T) {
 	registrytest.RunLocationFilterContract(t, newMemoryTrashEnv)
 }
 
+func TestItemDatesContract_Memory(t *testing.T) {
+	registrytest.RunItemDatesContract(t, newMemoryTrashEnv)
+}
+
 // newMemoryTrashEnv returns registries scoped to one empty group, with two
 // areas of one location to place items in and an area of a second location.
 func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {

@@ -409,11 +409,11 @@ test.describe('Commodities — bulk + filter round-trips', () => {
     }
 
     try {
-      // The BE schema for `registered_date` is `TEXT` with no
-      // server-side default, so sequential POSTs that omit it all end
-      // up with the same empty value and the `sort=-registered_date`
-      // ordering is undefined. Pass distinct day-spaced values so the
-      // expected order is deterministic.
+      // The server dates a new item with today when the POST omits
+      // `registered_date`, so sequential POSTs in one run share a date
+      // and the `sort=-registered_date` ordering among them is
+      // undefined. Pass distinct day-spaced values so the expected
+      // order is deterministic.
       const seeds = [
         { tag: 'oldest', registeredDate: '2024-01-01' },
         { tag: 'middle', registeredDate: '2024-06-15' },

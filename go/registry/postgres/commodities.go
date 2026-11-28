@@ -181,6 +181,9 @@ func prepareNewCommodity(ctx context.Context, commodity *models.Commodity) int {
 	commodity.AssetNumber = nil
 	// So is the revision: a new item starts at 1.
 	commodity.Revision = 1
+	// The day the item was added and last changed: today unless the caller
+	// carries them, as a backup restore does.
+	registry.StampNewCommodity(commodity, time.Now())
 	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
 	return requested
 }
@@ -993,6 +996,12 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		}
 		row.Revision = current.Revision + 1
 		commodity.Revision = row.Revision
+		// The day the item was added comes from the row as locked, so a
+		// backfill that dated it meanwhile is not undone; the day it was
+		// last changed is today.
+		registry.StampEditedCommodity(ctx, row, current.RegisteredDate, time.Now())
+		commodity.RegisteredDate = row.RegisteredDate
+		commodity.LastModifiedDate = row.LastModifiedDate
 		if row.Type != current.Type {
 			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
 				return err
@@ -1019,18 +1028,19 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	return &commodity, nil
 }
 
-// lockedCommodity is the type and revision of an item as its row lock
-// holder reads them.
+// lockedCommodity is the type, revision and registered date of an item as
+// its row lock holder reads them.
 type lockedCommodity struct {
-	Type     models.CommodityType `db:"type"`
-	Revision int64                `db:"revision"`
+	Type           models.CommodityType `db:"type"`
+	Revision       int64                `db:"revision"`
+	RegisteredDate models.PDate         `db:"registered_date"`
 }
 
-// lockedCommodityState returns the type and revision of the commodity id,
-// which the caller's transaction has already locked.
+// lockedCommodityState returns the type, revision and registered date of the
+// commodity id, which the caller's transaction has already locked.
 func lockedCommodityState(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (lockedCommodity, error) {
 	var current lockedCommodity
-	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type, revision FROM %s WHERE id = $1`, table), id); err != nil {
+	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type, revision, registered_date FROM %s WHERE id = $1`, table), id); err != nil {
 		return lockedCommodity{}, errxtrace.Wrap("failed to read commodity type and revision", err, errx.Attrs("commodity_id", id))
 	}
 	return current, nil
@@ -1260,6 +1270,7 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 // that Update takes too.
 func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error) {
 	var locked models.Commodity
+	today := models.NewDate(time.Now())
 	table := r.tableNames.Commodities()
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -1280,7 +1291,7 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 				return err
 			}
 		}
-		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2, revision = revision + 1 WHERE id = $1`, table), id, draft)
+		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2, revision = revision + 1, last_modified_date = $3 WHERE id = $1`, table), id, draft, today)
 		return err
 	})
 	if err != nil {
@@ -1289,6 +1300,7 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 	next := locked
 	next.Draft = draft
 	next.Revision = locked.Revision + 1
+	next.LastModifiedDate = new(today)
 	next.CustomFields = locked.CustomFields.Clone()
 	return &locked, &next, nil
 }

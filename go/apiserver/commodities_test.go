@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -67,8 +69,8 @@ func TestCommoditiesList(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.tags"), expectedCommodities[0].Tags)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.status"), string(expectedCommodities[0].Status))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.purchase_date"), expectedCommodities[0].PurchaseDate)
-	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.registered_date"), expectedCommodities[0].RegisteredDate)
-	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.last_modified_date"), expectedCommodities[0].LastModifiedDate)
+	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.registered_date"), string(*expectedCommodities[0].RegisteredDate))
+	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.last_modified_date"), string(*expectedCommodities[0].LastModifiedDate))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.comments"), expectedCommodities[0].Comments)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.draft"), expectedCommodities[0].Draft)
 }
@@ -112,8 +114,8 @@ func TestCommodityGet(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.tags"), commodity.Tags)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.status"), string(commodity.Status))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.purchase_date"), commodity.PurchaseDate)
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.registered_date"), commodity.RegisteredDate)
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), commodity.LastModifiedDate)
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.registered_date"), string(*commodity.RegisteredDate))
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), string(*commodity.LastModifiedDate))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.comments"), commodity.Comments)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.draft"), commodity.Draft)
 }
@@ -319,6 +321,7 @@ func TestCommodityUpdate(t *testing.T) {
 	addTestUserAuthHeader(req, testUser.ID)
 
 	rr := httptest.NewRecorder()
+	sent := time.Now()
 
 	mockRestoreWorker := &mockRestoreWorker{hasRunningRestores: false}
 	handler := apiserver.APIServer(params, mockRestoreWorker)
@@ -347,7 +350,11 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.status"), string(models.CommodityStatusInUse))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.purchase_date"), "2022-01-01")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.registered_date"), "2022-01-02")
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.last_modified_date"), "2022-01-03")
+	// The day of the change, whatever the request says.
+	days := []any{string(models.NewDate(sent)), string(models.NewDate(time.Now()))}
+	c.Check(body, checkers.JSONPathMatches("$.data.attributes.last_modified_date", qt.Satisfies), func(v any) bool {
+		return slices.Contains(days, v)
+	})
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.comments"), "Updated commodity comments")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.draft"), false)
 }

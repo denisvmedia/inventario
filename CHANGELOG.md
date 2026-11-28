@@ -1164,6 +1164,18 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   answers with a server error, which can be retried, instead of "User not
   found". The link stays usable
   ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
+- An item shows the day it was added and the day it was last edited. Nothing
+  set the two dates on an item added from the Add item form, the API, a
+  draft, Add from files or a delivered document, so its page showed "Date
+  Added —" and "Last Edited —", the dashboard's Recently added left it out,
+  and sorting by Date added put it last. A new item now gets today, in UTC,
+  as both dates, and every edit sets Last Edited to today, a bulk change and
+  Mark as reviewed included. A restore keeps the dates its backup carries, and gives
+  an item whose backup has none the day of the restore. When the server
+  starts, an item without a Date Added gets the day its History shows as
+  "Added this item"; an item restored from a backup that carried no date
+  has no such row and stays without one. Last Edited of an existing item
+  stays empty until the item changes.
 
 ### Security
 

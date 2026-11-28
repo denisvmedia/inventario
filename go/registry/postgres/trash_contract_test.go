@@ -36,6 +36,10 @@ func TestLocationFilterContract_Postgres(t *testing.T) {
 	registrytest.RunLocationFilterContract(t, newPostgresTrashEnv)
 }
 
+func TestItemDatesContract_Postgres(t *testing.T) {
+	registrytest.RunItemDatesContract(t, newPostgresTrashEnv)
+}
+
 // newPostgresTrashEnv returns registries scoped to the test group, with two
 // areas of one location to place items in and an area of a second location.
 func newPostgresTrashEnv(t *testing.T) registrytest.TrashEnv {

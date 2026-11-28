@@ -190,6 +190,7 @@ func (r *CommodityRegistry) SetDraft(_ context.Context, id string, draft bool, c
 	next := copyOut(c)
 	next.Draft = draft
 	next.Revision++
+	next.LastModifiedDate = new(models.NewDate(time.Now()))
 	if check != nil {
 		if err := check(*copyOut(next)); err != nil {
 			return nil, nil, err

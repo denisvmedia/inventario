@@ -467,6 +467,14 @@ type CommodityName struct {
 // when the context names another revision (WithExpectedRevision). A new
 // writer of a column an edit form sends back adds one as well, or a form
 // opened before it can undo its change.
+//
+// Dates: Create stores today, in UTC, as the day the item was added
+// (RegisteredDate) and last changed (LastModifiedDate), unless the caller
+// gives them (StampNewCommodity). Update, Patch and SetDraft store today as
+// the last-modified date, and Update keeps the stored registered date when
+// the caller gives none (StampEditedCommodity). A write that follows a
+// change elsewhere (a tag rename or delete, an item type delete, a currency
+// migration, a backfill) is not an edit of the item and keeps both dates.
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 	CreatorLister[models.Commodity]
@@ -502,7 +510,7 @@ type CommodityRegistry interface {
 	Restore(ctx context.Context, id string) (*models.Commodity, error)
 
 	// SetDraft sets or clears the draft mark of a live item and writes no
-	// other column. It reads and writes the item under the item's row lock,
+	// other column but the last-modified date. It reads and writes the item under the item's row lock,
 	// so it and an Update of the same item run one after the other and
 	// neither undoes the other's change. check, when not nil, receives the
 	// item as it will be stored, under that lock; an error from it is
@@ -558,6 +566,18 @@ type CommodityRegistry interface {
 	// rows written since the flag existed are never touched. Returns how many
 	// rows it rewrote. Meant for the service registry.
 	BackfillLegacyPrices(ctx context.Context) (int, error)
+
+	// BackfillRegisteredDates dates the items stored without the day they
+	// were added: an item whose history holds a "created" event gets the
+	// day, in UTC, of its earliest one, the instant the History tab shows
+	// as "Added this item". An item with no such event (added before the
+	// history existed, or by a backup restore, which writes no history)
+	// keeps an empty date. Trashed items are dated too. It is idempotent and
+	// safe to run while the app serves requests: a row a request holds
+	// locked is left for the next pass, and the revision does not move,
+	// because an edit form does not send the date back. Returns how many
+	// rows it dated. Meant for the service registry.
+	BackfillRegisteredDates(ctx context.Context) (int, error)
 
 	// ListPaginated returns a paginated list of commodities along with the total count,
 	// optionally filtered and sorted via opts. Pass a zero CommodityListOptions for the

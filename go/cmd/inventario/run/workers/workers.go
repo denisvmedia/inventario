@@ -178,6 +178,7 @@ func (c *Command) run() error {
 			bootstrap.StartBusinessMetricsWorker,
 			bootstrap.StartFailedJobDepthWorker,
 			bootstrap.StartAssetNumberBackfill,
+			bootstrap.StartRegisteredDateBackfill,
 			bootstrap.StartItemTypeBackfill,
 			bootstrap.StartFileChecksumBackfill,
 		}},
