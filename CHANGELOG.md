@@ -1472,6 +1472,23 @@ when to add an entry and where it goes.
   registration and a request that reaches a tenant-only route without a
   tenant are now logged
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- Startup, backup, seed data and registry log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  A JWT secret, file signing key or OAuth state key set to a public
+  placeholder is logged once, as `Failed to configure JWT secret`, `Failed
+  to configure file signing key` or `Failed to wire OAuth providers`, without
+  a second `refusing to start` line. A failed probe listener in `run
+  workers` is logged once, and `init-config` reports a failure only through
+  the error it prints. A Redis URL that does not parse no longer puts its
+  password into the readiness warning. A refused upload's content type is a
+  debug line through slog instead of an `Invalid MIME` line through the
+  standard logger. A personal data export build that starts over is a
+  warning, and a superseded file blob that a restore keeps because another
+  file still uses it is a debug line. `Failed to read config` names its
+  `section`. The seed data lines carry `tenant_slug` and `email`, and the
+  memory registry's `Getting item` line carries `entity_id` and
+  `entity_type`
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

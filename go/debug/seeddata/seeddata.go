@@ -130,7 +130,7 @@ type SeedOptions struct {
 // a valid context.
 func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded bool, err error) { //nolint:gocyclo // orchestrator: many sequential boot steps
 	slog.Info("Seeding database",
-		"user_email", opts.UserEmail,
+		"email", opts.UserEmail,
 		"tenant_slug", opts.TenantSlug,
 		"upload_location_set", opts.UploadLocation != "",
 	)
@@ -200,8 +200,8 @@ func SeedData(factorySet *registry.FactorySet, opts SeedOptions) (alreadySeeded 
 		return false, fmt.Errorf("failed to count existing locations for user 1: %w", err)
 	}
 	if locCount > 0 {
-		slog.Info("Database already seeded; skipping data creation",
-			"user", user1.Email,
+		slog.InfoContext(ctx, "Database already seeded; skipping data creation",
+			"email", user1.Email,
 			"location_count", locCount,
 		)
 		// The data tables are populated, but the bundled fixture BLOBS
@@ -733,7 +733,7 @@ func reconcileBlockTargetDrift(ctx context.Context, registrySet *registry.Set, u
 
 // createTestUsers creates test users.
 func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (primary *models.User, secondary *models.User, err error) {
-	slog.InfoContext(ctx, "Creating test users", "tenant", tenant.Slug)
+	slog.InfoContext(ctx, "Creating test users", "tenant_slug", tenant.Slug)
 
 	testUser1 := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
