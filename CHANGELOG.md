@@ -1253,6 +1253,23 @@ when to add an entry and where it goes.
   ends because it could not be renewed, and a change the previous account
   saved that finishes after the switch no longer shows up for the next one
   ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
+- A Redis URL that did not parse put its password, or part of it, into the
+  log, in every release since v0.1.0. The URL parser quotes the whole URL in
+  its error and the part it could not read in the reason, and go-redis quotes
+  the path or an option value. With a `#`, `/` or `?` in the password, that
+  part is a piece of the password. The token blacklist, the auth and global
+  rate limiters, the CSRF store, the email queue and the readiness check
+  logged that error when they fell back to memory or skipped the check. The
+  error now names the kind of problem, such as an invalid port, quotes
+  nothing from the URL, and says to percent-encode the characters a URL
+  reserves in the user name and password. If `--token-blacklist-redis-url`,
+  `--auth-rate-limit-redis-url`, `--global-rate-limit-redis-url`,
+  `--csrf-redis-url` or `--email-queue-redis-url` (or the matching
+  `INVENTARIO_RUN_*_REDIS_URL` variable) ever failed to parse, purge or
+  restrict the logs from that time and rotate the Redis password that
+  appears in them, even in part
+  ([#521](https://github.com/denisvmedia/inventario/issues/521),
+  [#3065](https://github.com/denisvmedia/inventario/pull/3065)).
 - `inventario db migrate up` logged the database DSN it was given, password
   included, on every run, in every release since v0.1.0. With the Helm chart
   that is the `migrate` init container of every app pod; with Docker Compose
@@ -1261,11 +1278,20 @@ when to add an entry and where it goes.
   migrator and of `db migrate data`, and into the error of the `tenants`,
   `users`, `admin`, `jobs` and `workers` commands. The migrate line now
   masks the password, a DSN that does not parse stops `inventario run` with
-  an error instead of a panic, and these errors keep the reason and leave the
-  DSN out. If your logs hold the output of `inventario db migrate up`, or of
-  a command run with a `--db-dsn` (`INVENTARIO_DB_DSN`) that did not parse,
-  purge or restrict those logs and rotate the database password that appears
-  in them ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+  an error instead of a panic, and these errors name the kind of problem and
+  quote nothing from the DSN, not even the start of a password with a `#` in
+  it that the URL parser reads as a port. The `Starting API server` and
+  `Starting workers` lines and the `Database:` line the commands print
+  masked only the password in the user part of the DSN. They now also mask a
+  `password` or `sslpassword` query parameter and the `password=` keyword of
+  a keyword DSN, and show `<redacted>` for a DSN they cannot mask with
+  certainty, such as one whose password a `/`, `?` or `#` cut short. If your
+  logs hold the output of `inventario db migrate up`, or of a command run
+  with a `--db-dsn` (`INVENTARIO_DB_DSN`) that did not parse, that carried
+  the password in a query parameter or keyword, or whose password contains
+  an unescaped `/`, `?` or `#`, purge or restrict those logs and rotate the
+  database password that appears in them, even in part
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 - The API no longer writes secrets from refused requests to its log. Every
   release since v0.1.0 logged the signature (`sig`) of a refused signed URL,
   in the query string on `Invalid signed URL access attempt` and in the
@@ -1520,6 +1546,7 @@ when to add an entry and where it goes.
   logs an error instead of a warning. Renamed keys: `duration` (a string) on
   `Currency migration completed` is `duration_ms` (an integer), and `slug`
   on `group purged` is `group_slug`
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 - Sign-in, session and tenant log lines follow the
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
   These refusals are logged as warnings, not errors: a user who reaches

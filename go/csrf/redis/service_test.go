@@ -12,6 +12,7 @@ import (
 
 	"go.5x5.cz/inventario/csrf"
 	csrfredis "go.5x5.cz/inventario/csrf/redis"
+	"go.5x5.cz/inventario/internal/urlerr"
 )
 
 // Compile-time interface check.
@@ -36,6 +37,18 @@ func TestNewFromURL_InvalidURL(t *testing.T) {
 	c := qt.New(t)
 	_, err := csrfredis.NewFromURL("://bad-url")
 	c.Assert(err, qt.IsNotNil)
+}
+
+// The caller logs this error, so it must not carry the URL and its password.
+func TestNewFromURL_InvalidURLErrorLeavesThePasswordOut(t *testing.T) {
+	c := qt.New(t)
+
+	_, err := csrfredis.NewFromURL("redis://:s3cret-password#tail@localhost:6379/0")
+
+	var urlErr *urlerr.Error
+	c.Assert(err, qt.ErrorAs, &urlErr)
+	c.Assert(urlErr.Reason, qt.Equals, "invalid port after host")
+	c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret")
 }
 
 func TestService_GenerateToken(t *testing.T) {

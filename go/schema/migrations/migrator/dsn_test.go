@@ -13,14 +13,15 @@ import (
 )
 
 // lib/pq parses the DSN on first use and returns the url.Parse error, which
-// quotes the DSN with its password. The migrator returns the reason only.
+// quotes the DSN with its password. The migrator returns the kind of problem
+// only.
 func TestVerifySchemaUpToDate_UnparseableDSNErrorLeavesThePasswordOut(t *testing.T) {
 	c := qt.New(t)
 
-	m := migrator.New("postgres://app:s3cret%zz@db:5432/inventario", fstest.MapFS{})
+	m := migrator.New("postgres://app:s3cret#tail@db:5432/inventario", fstest.MapFS{})
 	err := m.VerifySchemaUpToDate(context.Background())
 
-	c.Assert(err, qt.ErrorMatches, `.*invalid URL escape "%zz".*`)
+	c.Assert(err, qt.ErrorMatches, `.*invalid port after host.*`)
 	c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret")
 }
 

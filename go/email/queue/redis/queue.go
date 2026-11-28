@@ -9,6 +9,7 @@ import (
 	redisv9 "github.com/redis/go-redis/v9"
 
 	"go.5x5.cz/inventario/email/queue"
+	"go.5x5.cz/inventario/internal/redisurl"
 )
 
 const (
@@ -55,7 +56,7 @@ type Queue struct {
 
 // NewFromConfig builds a Redis queue from configuration.
 func NewFromConfig(cfg Config) (*Queue, error) {
-	opts, err := redisv9.ParseURL(cfg.RedisURL)
+	opts, err := redisurl.Parse(cfg.RedisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
 	}

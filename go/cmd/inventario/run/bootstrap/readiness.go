@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 
 	"github.com/redis/go-redis/v9"
+
+	"go.5x5.cz/inventario/internal/redisurl"
 )
 
 type redisReadinessTarget struct {
@@ -105,14 +106,14 @@ func NewReadinessRedisPinger(cfg *Config) *ReadinessRedisPinger {
 	targets := make([]redisReadinessTarget, 0, len(orderedURLs))
 	for _, redisURL := range orderedURLs {
 		dependencyNames := groupedNamesByURL[redisURL]
-		opts, err := redis.ParseURL(redisURL)
+		opts, err := redisurl.Parse(redisURL)
 		if err != nil {
 			slog.Warn(
 				"Invalid Redis URL for readiness check; Redis dependency checks will be skipped",
 				"dependencies",
 				strings.Join(dependencyNames, ","),
 				"error",
-				withoutURL(err),
+				err,
 			)
 			continue
 		}
@@ -127,14 +128,4 @@ func NewReadinessRedisPinger(cfg *Config) *ReadinessRedisPinger {
 	}
 
 	return &ReadinessRedisPinger{targets: targets}
-}
-
-// withoutURL drops the URL that url.Parse quotes in its error. A Redis URL
-// carries its password, and a URL with credentials never goes into a log
-// (devdocs/logging.md). What is left still says what is wrong with it.
-func withoutURL(err error) error {
-	if urlErr, ok := errors.AsType[*url.Error](err); ok {
-		return urlErr.Err
-	}
-	return err
 }
