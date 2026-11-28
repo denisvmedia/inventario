@@ -1,0 +1,38 @@
+name: "Pull request merge base"
+description: "Outputs the commit a pull request run's merge commit was made on, as the base for dorny/paths-filter"
+outputs:
+  sha:
+    description: >-
+      The first parent of the checked-out merge commit on a pull_request
+      event. Empty on other events, and when HEAD is not a merge of two
+      parents.
+    value: ${{ steps.parent.outputs.sha }}
+runs:
+  using: "composite"
+  steps:
+    # A pull request run checks out refs/pull/<N>/merge, GitHub's merge of
+    # the head into the base. Its first parent is the base commit that merge
+    # was made on, so a diff against it lists exactly what the pull request
+    # changes there, the same files as the pull request files API.
+    # github.event.pull_request.base.sha is not that commit: it can lag the
+    # base branch by days, and a diff against it adds every base change in
+    # between (#3056 had base.sha 293073c, its merge was made on f8a8273).
+    # The commit object names its parents even in a depth-1 checkout;
+    # paths-filter fetches the parent itself. With an empty output,
+    # paths-filter falls back to base.sha.
+    - name: Read the merge commit's first parent
+      id: parent
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        [ "$EVENT" = "pull_request" ] || exit 0
+        parents="$(git cat-file -p HEAD | awk '/^parent /{print $2}')"
+        if [ "$(printf '%s\n' "$parents" | grep -c .)" -ne 2 ]; then
+          echo "::warning::HEAD is not a merge of two parents; changed files are compared with the event's base.sha."
+          exit 0
+        fi
+        sha="$(printf '%s\n' "$parents" | head -n 1)"
+        echo "Comparing with ${sha}, the first parent of $(git rev-parse HEAD)."
+        echo "sha=${sha}" >> "$GITHUB_OUTPUT"
