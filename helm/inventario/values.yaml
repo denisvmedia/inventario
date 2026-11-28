@@ -1,6 +1,7 @@
 # ============================================================
 # Inventario Helm Chart — values.yaml
 # ============================================================
+# PR preview canary: this line exists only on a draft PR that is closed unmerged.
 
 # -- Container image configuration
 image:
