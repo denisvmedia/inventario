@@ -109,11 +109,13 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	return r.attachLinks(files), nil
 }
 
-// Create stores the file and the links it carries.
+// Create stores the file and the links it carries. It drops the legacy link
+// fields, as the postgres INSERT leaves their columns out.
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	links := file.Links
 	file.Links = nil
 	file.ClearTrashState()
+	file.LegacyFileLink = models.LegacyFileLink{}
 	created, err := r.Registry.Create(ctx, file)
 	if err != nil {
 		return nil, err
@@ -130,8 +132,8 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 }
 
 // Update writes the file's own fields. Links and the legacy link fields are
-// kept as stored, and so is the checksum when file carries none and the
-// thumbnail orientation mark.
+// kept as stored (the postgres UPDATE leaves the legacy columns out), and so is
+// the checksum when file carries none and the thumbnail orientation mark.
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	r.lock.RLock()
 	existing, ok := r.items.Get(file.ID)
@@ -395,6 +397,15 @@ func (r *FileRegistry) SetThumbnailsOriented(_ context.Context, id string) error
 	return nil
 }
 
+// legacyValue reads one legacy link field. Nil is a column holding NULL, which
+// the postgres move treats as empty.
+func legacyValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
 // MoveLegacyLinks mirrors the postgres method.
 func (r *FileRegistry) MoveLegacyLinks(_ context.Context, limit int) (int, error) {
 	if limit <= 0 {
@@ -405,14 +416,14 @@ func (r *FileRegistry) MoveLegacyLinks(_ context.Context, limit int) (int, error
 	moved := 0
 	for pair := r.items.Oldest(); pair != nil && moved < limit; pair = pair.Next() {
 		f := pair.Value
-		if f == nil || f.LegacyLinkedEntityType == "" {
+		if f == nil || legacyValue(f.LegacyLinkedEntityType) == "" {
 			continue
 		}
-		if f.LegacyLinkedEntityID != "" {
+		if legacyValue(f.LegacyLinkedEntityID) != "" {
 			r.addLinkLocked(f, models.FileLink{
-				EntityType: f.LegacyLinkedEntityType,
-				EntityID:   f.LegacyLinkedEntityID,
-				Meta:       f.LegacyLinkedEntityMeta,
+				EntityType: legacyValue(f.LegacyLinkedEntityType),
+				EntityID:   legacyValue(f.LegacyLinkedEntityID),
+				Meta:       legacyValue(f.LegacyLinkedEntityMeta),
 				CreatedAt:  f.CreatedAt,
 			})
 		}

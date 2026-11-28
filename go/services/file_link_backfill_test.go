@@ -9,6 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -22,15 +23,17 @@ func TestMoveLegacyFileLinks(t *testing.T) {
 		Type:     models.FileTypeDocument,
 		Category: models.FileCategoryDocuments,
 		LegacyFileLink: models.LegacyFileLink{
-			LegacyLinkedEntityType: models.FileLinkCommodity,
-			LegacyLinkedEntityID:   com.ID,
-			LegacyLinkedEntityMeta: models.FileLinkMetaDocuments,
+			LegacyLinkedEntityType: new(models.FileLinkCommodity),
+			LegacyLinkedEntityID:   new(com.ID),
+			LegacyLinkedEntityMeta: new(models.FileLinkMetaDocuments),
 		},
 		File: &models.File{Path: "manual", OriginalPath: "files/manual", Ext: ".pdf", MIMEType: "application/pdf"},
 	}
+	// Only a row an older release wrote carries legacy values; FileRegistry.Create
+	// drops them, so the rows go through the base registry.
 	var ids []string
 	for range 3 {
-		f, err := fx.set.FileRegistry.Create(fx.ctx, legacy)
+		f, err := fx.set.FileRegistry.(*memory.FileRegistry).Registry.Create(fx.ctx, legacy)
 		c.Assert(err, qt.IsNil)
 		ids = append(ids, f.ID)
 	}
