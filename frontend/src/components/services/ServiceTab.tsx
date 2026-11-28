@@ -48,7 +48,8 @@ export function ServiceTab({
   const toast = useAppToast()
   const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
-  useHoldItem(open)
+  // A dialog stays open only while the role may write (#3038), and so does the hold.
+  useHoldItem(canEdit && open)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useServicesForCommodity(commodityId)
@@ -178,7 +179,8 @@ export function ServiceTab({
           />
         ) : !isBundle && !list.isLoading ? (
           <p className="text-sm text-muted-foreground" data-testid="service-empty-state">
-            {t("services:tab.emptyState")}
+            {/* A viewer cannot send the item, so the line says only the state (#3038). */}
+            {canEdit ? t("services:tab.emptyState") : t("services:tab.emptyStateReadOnly")}
           </p>
         ) : null}
 

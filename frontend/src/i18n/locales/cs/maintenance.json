@@ -48,6 +48,7 @@
   "tab": {
     "add": "Přidat plán",
     "empty": "Zatím žádné plány údržby. Přidejte plán a sledujte opakovanou péči, jako jsou výměny filtrů, výměny oleje nebo odvápňování.",
+    "emptyReadOnly": "Zatím žádné plány údržby.",
     "heading": "Údržba",
     "subheading": "Připomenutí opakované péče. Zašleme vám e-mail 14, 7 a 1 den před každým termínem."
   },

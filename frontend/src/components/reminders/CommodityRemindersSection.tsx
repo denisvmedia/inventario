@@ -45,7 +45,8 @@ export function CommodityRemindersSection({
   const confirm = useHoldingConfirm()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Reminder | null>(null)
-  useHoldItem(dialogOpen)
+  // A dialog stays open only while the role may write (#3038), and so does the hold.
+  useHoldItem(canEdit && dialogOpen)
 
   const list = useRemindersForCommodity(commodityId)
   const create = useCreateReminder(commodityId)

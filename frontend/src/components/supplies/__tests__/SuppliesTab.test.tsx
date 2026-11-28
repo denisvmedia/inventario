@@ -74,7 +74,11 @@ describe("<SuppliesTab />", () => {
       ...supplyHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
     )
     renderTab()
-    expect(await screen.findByTestId("supplies-empty")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId("supplies-empty")).toHaveTextContent(
+        "No supply links yet. Add the URL where you re-buy this item's consumables."
+      )
+    )
     expect(screen.getByTestId("supplies-add")).toBeInTheDocument()
     expect(screen.queryByTestId("supplies-list")).not.toBeInTheDocument()
   })
@@ -188,6 +192,19 @@ describe("<SuppliesTab />", () => {
 // #3038: the server refuses supply link writes to a viewer, so the tab lists
 // the links with Open only.
 describe("<SuppliesTab /> for a role that cannot change the item", () => {
+  it("says there are no links without asking a viewer to add one", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...supplyHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
+    )
+    renderTab({ canEdit: false })
+    // The tab refetches once the group loads; read the line off one render.
+    await waitFor(() =>
+      expect(screen.getByTestId("supplies-empty")).toHaveTextContent(/^No supply links yet\.$/)
+    )
+    expect(screen.queryByTestId("supplies-add")).not.toBeInTheDocument()
+  })
+
   it("lists the links with Open and nothing that changes them", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

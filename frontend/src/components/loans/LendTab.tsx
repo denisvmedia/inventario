@@ -50,7 +50,8 @@ export function LendTab({ commodityId, commodityCount, canStart = true, canEdit 
   const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<(LoanEntity & { id: string }) | null>(null)
-  useHoldItem(open || editing !== null)
+  // A dialog stays open only while the role may write (#3038), and so does the hold.
+  useHoldItem(canEdit && (open || editing !== null))
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useLoansForCommodity(commodityId)
@@ -198,7 +199,8 @@ export function LendTab({ commodityId, commodityCount, canStart = true, canEdit 
           />
         ) : !isBundle && !list.isLoading ? (
           <p className="text-sm text-muted-foreground" data-testid="lend-empty-state">
-            {t("loans:tab.emptyState")}
+            {/* A viewer cannot start a loan, so the line says only the state (#3038). */}
+            {canEdit ? t("loans:tab.emptyState") : t("loans:tab.emptyStateReadOnly")}
           </p>
         ) : null}
 

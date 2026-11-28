@@ -42,6 +42,7 @@
   "tab": {
     "add": "Add schedule",
     "empty": "No maintenance schedules yet. Add one to track recurring care like filter changes, oil changes, or descaling.",
+    "emptyReadOnly": "No maintenance schedules yet.",
     "heading": "Maintenance",
     "subheading": "Recurring care reminders. We'll email you 14, 7, and 1 day before each due date."
   },

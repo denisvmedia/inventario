@@ -40,7 +40,8 @@ export function SuppliesTab({ commodityId, canEdit }: SuppliesTabProps) {
   const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<(SupplyLinkEntity & { id: string }) | null>(null)
-  useHoldItem(open || editing !== null)
+  // A dialog stays open only while the role may write (#3038), and so does the hold.
+  useHoldItem(canEdit && (open || editing !== null))
 
   const list = useSupplyLinksForCommodity(commodityId)
   const create = useCreateSupplyLink()
@@ -164,10 +165,13 @@ export function SuppliesTab({ commodityId, canEdit }: SuppliesTabProps) {
             </p>
           ) : links.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="supplies-empty">
-              {t("supplies:empty", {
-                defaultValue:
-                  "No supply links yet. Add the URL where you re-buy this item's consumables.",
-              })}
+              {/* A viewer cannot add a link, so the line says only the state (#3038). */}
+              {canEdit
+                ? t("supplies:empty", {
+                    defaultValue:
+                      "No supply links yet. Add the URL where you re-buy this item's consumables.",
+                  })
+                : t("supplies:emptyReadOnly", { defaultValue: "No supply links yet." })}
             </p>
           ) : (
             <ul className="divide-y" data-testid="supplies-list">

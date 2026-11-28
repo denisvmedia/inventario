@@ -1,12 +1,14 @@
-import { screen, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import { useState } from "react"
 import { Route } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { LendTab } from "@/components/loans/LendTab"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { ItemHoldContext, type HoldItem } from "@/hooks/useItemHold"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
@@ -314,6 +316,58 @@ describe("<LendTab />", () => {
       expect(screen.getByTestId("lend-empty-state")).toBeInTheDocument()
       expect(screen.queryByTestId("commodity-detail-lend-button")).toBeNull()
       expect(screen.queryByTestId("lend-history-row-loan-2-edit")).toBeNull()
+    })
+
+    // The item page keeps a held item on screen after Mark as reviewed. When
+    // write access ends while the Lend dialog is open, the dialog closes and
+    // the hold must go with it.
+    it("lets go of the item when write access ends while the Lend dialog is open", async () => {
+      server.use(
+        ...groupHandlers.list(groupFixture),
+        ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
+      )
+      let holds = 0
+      const hold: HoldItem = () => {
+        holds++
+        return () => {
+          holds--
+        }
+      }
+      let setCanEdit: (canEdit: boolean) => void = () => {}
+      function Harness() {
+        const [canEdit, set] = useState(true)
+        setCanEdit = set
+        return (
+          <ItemHoldContext.Provider value={hold}>
+            <LendTab commodityId={COMMODITY_ID} canEdit={canEdit} />
+          </ItemHoldContext.Provider>
+        )
+      }
+      renderWithProviders({
+        initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
+        routes: (
+          <Route
+            path="/g/:groupSlug/commodities/:id"
+            element={
+              <ConfirmProvider>
+                <GroupProvider>
+                  <WhenGroupLoaded>
+                    <Harness />
+                  </WhenGroupLoaded>
+                </GroupProvider>
+              </ConfirmProvider>
+            }
+          />
+        ),
+      })
+      const user = userEvent.setup()
+      await user.click(await screen.findByTestId("commodity-detail-lend-button"))
+      expect(await screen.findByTestId("lend-dialog")).toBeVisible()
+      expect(holds).toBe(1)
+
+      act(() => setCanEdit(false))
+      await waitFor(() => expect(screen.queryByTestId("lend-dialog")).not.toBeInTheDocument())
+      expect(holds).toBe(0)
     })
 
     it("shows the open loan without Mark returned, Edit or Delete", async () => {

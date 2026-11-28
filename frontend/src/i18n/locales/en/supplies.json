@@ -12,6 +12,7 @@
   },
   "edit": "Edit supply link",
   "empty": "No supply links yet. Add the URL where you re-buy this item's consumables.",
+  "emptyReadOnly": "No supply links yet.",
   "fields": {
     "label": "Label",
     "labelPlaceholder": "e.g. Water filter",

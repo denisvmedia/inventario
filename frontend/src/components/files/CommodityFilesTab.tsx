@@ -183,7 +183,9 @@ export function CommodityFilesTab({
   // leaves the commodity detail page (mirrors EntityFilesPanel, #1963).
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [attachExistingOpen, setAttachExistingOpen] = useState(false)
-  useHoldItem(attachExistingOpen || selectedId !== null)
+  // The attach dialog renders only with onAttachClick, which the page drops
+  // for a role that may not write; the hold follows the dialog.
+  useHoldItem((onAttachClick !== undefined && attachExistingOpen) || selectedId !== null)
 
   // The list is one page of the active chip's filter, resolved server-side;
   // the chip counts come from the category-counts endpoint, so a commodity

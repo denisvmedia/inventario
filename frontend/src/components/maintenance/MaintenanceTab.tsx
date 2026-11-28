@@ -55,7 +55,8 @@ export function MaintenanceTab({
   const confirm = useHoldingConfirm()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<ScheduleRow | null>(null)
-  useHoldItem(dialogOpen)
+  // A dialog stays open only while the role may write (#3038), and so does the hold.
+  useHoldItem(canEdit && dialogOpen)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useMaintenanceForCommodity(commodityId, { enabled: !!commodityId && !isBundle })
@@ -168,10 +169,15 @@ export function MaintenanceTab({
       ) : schedules.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground text-sm">
-            {t("maintenance:tab.empty", {
-              defaultValue:
-                "No maintenance schedules yet. Add one to track recurring care like filter changes, oil changes, or descaling.",
-            })}
+            {/* A viewer cannot add a schedule, so the line says only the state (#3038). */}
+            {canEdit
+              ? t("maintenance:tab.empty", {
+                  defaultValue:
+                    "No maintenance schedules yet. Add one to track recurring care like filter changes, oil changes, or descaling.",
+                })
+              : t("maintenance:tab.emptyReadOnly", {
+                  defaultValue: "No maintenance schedules yet.",
+                })}
           </CardContent>
         </Card>
       ) : (
