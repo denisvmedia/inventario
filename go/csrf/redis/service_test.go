@@ -38,6 +38,16 @@ func TestNewFromURL_InvalidURL(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
+// The caller logs this error, so it must not carry the URL and its password.
+func TestNewFromURL_InvalidURLErrorLeavesThePasswordOut(t *testing.T) {
+	c := qt.New(t)
+
+	_, err := csrfredis.NewFromURL("redis://:s3cret-password@localhost:notaport/0")
+
+	c.Assert(err, qt.ErrorMatches, `invalid redis URL: invalid port ":notaport" after host`)
+	c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret-password")
+}
+
 func TestService_GenerateToken(t *testing.T) {
 	c := qt.New(t)
 	svc, mr := newTestService(t)

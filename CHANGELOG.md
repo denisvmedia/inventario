@@ -1223,6 +1223,18 @@ when to add an entry and where it goes.
   ends because it could not be renewed, and a change the previous account
   saved that finishes after the switch no longer shows up for the next one
   ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
+- A Redis URL that did not parse put its password into the log, in every
+  release since v0.1.0. The URL parser quotes the whole URL in its error, and
+  the token blacklist, the auth and global rate limiters, the CSRF store, the
+  email queue and the readiness check logged that error when they fell back
+  to memory or skipped the check. The error now keeps the reason, such as an
+  invalid port, and leaves the URL out. If `--token-blacklist-redis-url`,
+  `--auth-rate-limit-redis-url`, `--global-rate-limit-redis-url`,
+  `--csrf-redis-url` or `--email-queue-redis-url` (or the matching
+  `INVENTARIO_RUN_*_REDIS_URL` variable) ever failed to parse, purge or
+  restrict the logs from that time and rotate the Redis password that appears
+  in them ([#521](https://github.com/denisvmedia/inventario/issues/521),
+  [#3065](https://github.com/denisvmedia/inventario/pull/3065)).
 
 ### Operators
 
