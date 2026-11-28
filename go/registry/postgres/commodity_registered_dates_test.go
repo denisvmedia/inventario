@@ -73,13 +73,7 @@ func TestCommodityRegistry_BackfillRegisteredDates_LockedRow(t *testing.T) {
 	f := newUnknownPricePGFixture(t)
 	c := qt.New(t)
 
-	item := f.create(c, models.Commodity{Name: "locked"})
-	_, err := f.db.ExecContext(c.Context(), `UPDATE commodities SET registered_date = NULL WHERE id = $1`, item.ID)
-	c.Assert(err, qt.IsNil)
-	_, err = f.set.CommodityEventRegistry.Create(f.ctx, models.CommodityEvent{
-		CommodityID: item.ID, Kind: models.CommodityEventKindCreated, OccurredAt: time.Date(2025, 6, 7, 12, 0, 0, 0, time.UTC),
-	})
-	c.Assert(err, qt.IsNil)
+	item := f.undatedItem(c, "locked")
 
 	tx, err := f.db.BeginTxx(c.Context(), nil)
 	c.Assert(err, qt.IsNil)
@@ -102,17 +96,33 @@ func TestCommodityRegistry_BackfillRegisteredDates_LockedRow(t *testing.T) {
 	c.Assert(got.RegisteredDate, qt.DeepEquals, models.ToPDate("2025-06-07"))
 }
 
+// TestCommodityRegistry_BackfillRegisteredDates_KeyShareLockedRow checks that
+// a pass dates a row another transaction holds FOR KEY SHARE, the lock the
+// foreign key check of an insert into commodity_events takes on the item,
+// instead of skipping it.
+func TestCommodityRegistry_BackfillRegisteredDates_KeyShareLockedRow(t *testing.T) {
+	f := newUnknownPricePGFixture(t)
+	c := qt.New(t)
+
+	item := f.undatedItem(c, "referenced")
+
+	tx, err := f.db.BeginTxx(c.Context(), nil)
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(c.Context(), `SELECT id FROM commodities WHERE id = $1 FOR KEY SHARE`, item.ID)
+	c.Assert(err, qt.IsNil)
+
+	dated, pending, err := f.service.BackfillRegisteredDates(c.Context())
+	c.Assert(err, qt.IsNil)
+	c.Assert(dated, qt.Equals, 1)
+	c.Assert(pending, qt.IsFalse)
+}
+
 func TestCommodityRegistry_UpdateKeepsBackfilledRegisteredDate(t *testing.T) {
 	f := newUnknownPricePGFixture(t)
 	c := qt.New(t)
 
-	item := f.create(c, models.Commodity{Name: "item"})
-	_, err := f.db.ExecContext(c.Context(), `UPDATE commodities SET registered_date = NULL WHERE id = $1`, item.ID)
-	c.Assert(err, qt.IsNil)
-	_, err = f.set.CommodityEventRegistry.Create(f.ctx, models.CommodityEvent{
-		CommodityID: item.ID, Kind: models.CommodityEventKindCreated, OccurredAt: time.Date(2025, 6, 7, 12, 0, 0, 0, time.UTC),
-	})
-	c.Assert(err, qt.IsNil)
+	item := f.undatedItem(c, "item")
 
 	// An edit form opened before the backfill, saved after it.
 	stale, err := f.set.CommodityRegistry.Get(f.ctx, item.ID)
@@ -128,4 +138,18 @@ func TestCommodityRegistry_UpdateKeepsBackfilledRegisteredDate(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.RegisteredDate, qt.DeepEquals, models.ToPDate("2025-06-07"))
 	c.Assert(got.Comments, qt.Equals, "edited")
+}
+
+// undatedItem creates an item stored without the day it was added, as an
+// older binary stored it, whose history records its creation on 7 June 2025.
+func (f *unknownPricePGFixture) undatedItem(c *qt.C, name string) *models.Commodity {
+	c.Helper()
+	item := f.create(c, models.Commodity{Name: name})
+	_, err := f.db.ExecContext(c.Context(), `UPDATE commodities SET registered_date = NULL WHERE id = $1`, item.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = f.set.CommodityEventRegistry.Create(f.ctx, models.CommodityEvent{
+		CommodityID: item.ID, Kind: models.CommodityEventKindCreated, OccurredAt: time.Date(2025, 6, 7, 12, 0, 0, 0, time.UTC),
+	})
+	c.Assert(err, qt.IsNil)
+	return item
 }

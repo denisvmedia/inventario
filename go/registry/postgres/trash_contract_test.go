@@ -40,6 +40,10 @@ func TestItemDatesContract_Postgres(t *testing.T) {
 	registrytest.RunItemDatesContract(t, newPostgresTrashEnv)
 }
 
+func TestTagRewriteContract_Postgres(t *testing.T) {
+	registrytest.RunTagRewriteContract(t, newPostgresTrashEnv)
+}
+
 // newPostgresTrashEnv returns registries scoped to the test group, with two
 // areas of one location to place items in and an area of a second location.
 func newPostgresTrashEnv(t *testing.T) registrytest.TrashEnv {
@@ -55,6 +59,7 @@ func newPostgresTrashEnv(t *testing.T) registrytest.TrashEnv {
 		Commodities:  fx.set.CommodityRegistry,
 		Files:        fx.set.FileRegistry,
 		ServiceFiles: fx.factorySet.FileRegistryFactory.CreateServiceRegistry(),
+		Tags:         fx.set.TagRegistry,
 		AreaID:       area.ID,
 		OtherAreaID:  other.ID,
 

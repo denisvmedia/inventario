@@ -22,6 +22,11 @@ const registeredDateBatchSize = 500
 // that the work is done: a plain read, which takes no row lock and waits on
 // none, then tells whether a skipped row is still undated (pending). See
 // registry.CommodityRegistry for the contract.
+//
+// The lock is FOR NO KEY UPDATE, as registered_date is no key column. It
+// does not conflict with the FOR KEY SHARE lock an insert into
+// commodity_events takes on the item, so such an insert makes the batch skip
+// no row.
 func (r *CommodityRegistry) BackfillRegisteredDates(ctx context.Context) (dated int, pending bool, err error) {
 	commodities := string(r.tableNames.Commodities())
 	events := string(r.tableNames.CommodityEvents())
@@ -35,7 +40,7 @@ func (r *CommodityRegistry) BackfillRegisteredDates(ctx context.Context) (dated 
 			WHERE %[3]s
 			ORDER BY c.id
 			LIMIT $2
-			FOR UPDATE SKIP LOCKED
+			FOR NO KEY UPDATE SKIP LOCKED
 		)
 		UPDATE %[1]s c
 		SET registered_date = to_char(
