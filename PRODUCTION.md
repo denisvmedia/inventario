@@ -21,7 +21,7 @@ Placeholders you substitute (no angle brackets in the final command):
 
 | Placeholder | Meaning | Example |
 | --- | --- | --- |
-| `<VERSION>` | release tag you are cutting/deploying | `v0.1.0` |
+| `<VERSION>` | release tag you are cutting/deploying | `v0.3.0` |
 | `<DOMAIN>` | public hostname | `inventario.example.com` |
 | `<NAMESPACE>` | target namespace | `inventario` |
 | `<R2_ACCOUNT_ID>` | Cloudflare account id | `a1b2c3…` |
@@ -60,7 +60,7 @@ Fill these in before you start; they parameterize the rest of the runbook.
 
 | Decision | This runbook's worked example |
 | --- | --- |
-| Release version | `v0.1.0` (first tag) |
+| Release version | `v0.3.0` |
 | Kubernetes distro | k3s (GKE / DOKS notes inline) |
 | PostgreSQL | **External** — managed or in-cluster operator (your choice; see §B3) |
 | Object storage | **Cloudflare R2** (S3-compatible) |
@@ -82,32 +82,36 @@ would have nothing to pull.
   first. The gates: `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`,
   `frontend-lint`, `frontend-test`, `frontend-codegen`, `frontend-i18n`, `docker`,
   `e2e-tests`, `helm-lint`, and `release` (goreleaser dry-run).
-- [ ] **Pick the version.** First release is `v0.1.0` (pre-1.0 = no SemVer API-stability
-  promise yet). Use annotated tags.
-- [ ] **Delete the stale `v0.0.1` *draft* GitHub Release** if present (it is an untagged
-  June-2025 leftover and only causes confusion).
+- [ ] **Pick the version.** Before 1.0 there is no SemVer API-stability promise: a
+  release that adds features or changes something an operator must act on bumps the
+  minor version (`v0.2.2` → `v0.3.0`), and a release of fixes alone bumps the patch
+  version. Use annotated tags.
+- [ ] **Merge the release pull request first.** It renames the CHANGELOG section and
+  sets `version` and `appVersion` in `helm/inventario/Chart.yaml`; see "Cutting a
+  release" in [CONTRIBUTING.md](CONTRIBUTING.md#cutting-a-release). `release.yml`
+  refuses a tag whose chart does not match it.
 - [ ] **Tag the exact `master` commit and push:**
 
   ```bash
   git checkout master && git pull --ff-only
-  git tag -a v0.1.0 -m "Inventario v0.1.0"
-  git push origin v0.1.0
+  git tag -a <VERSION> -m "Inventario <VERSION>"
+  git push origin <VERSION>
   ```
 
 - [ ] **Let CI build the release.** The tag push fires two workflows:
   - `release.yml` → goreleaser publishes the GitHub Release (multi-platform binaries,
     archives, checksums, changelog).
   - `docker.yml` → native amd64 **and** arm64 builds merged into a multi-arch manifest,
-    pushed to GHCR as `:v0.1.0`, `:v0.1`, `:v0`, and `:latest`.
+    pushed to GHCR as `:vX.Y.Z`, `:vX.Y`, `:vX`, and `:latest`.
 - [ ] **Verify the image landed (multi-arch):**
 
   ```bash
-  docker buildx imagetools inspect ghcr.io/denisvmedia/inventario:v0.1.0
+  docker buildx imagetools inspect ghcr.io/denisvmedia/inventario:<VERSION>
   ```
 
   You should see both `linux/amd64` and `linux/arm64`.
 - [ ] **Verify the GitHub Release** is published with binaries + `checksums.txt`.
-- [ ] **Record the immutable tag** you will deploy: `ghcr.io/denisvmedia/inventario:v0.1.0`.
+- [ ] **Record the immutable tag** you will deploy: `ghcr.io/denisvmedia/inventario:<VERSION>`.
   ⚠️ Always deploy a concrete `:vX.Y.Z`, never `:latest` (the chart `appVersion` is
   the released version, so a stock install resolves it without `--set`).
 
@@ -166,7 +170,7 @@ cert-manager.
 
   ```bash
   git clone https://github.com/denisvmedia/inventario.git
-  cd inventario && git checkout v0.1.0   # chart pinned to the same release
+  cd inventario && git checkout <VERSION>   # chart pinned to the same release
   ```
 
 ### B2. Generate and store secrets
@@ -374,7 +378,7 @@ storing a tenant nobody can reach.
 
   ```bash
   helm template inventario ./helm/inventario -n <NAMESPACE> \
-    -f values-prod.yaml --set image.tag=v0.1.0 | less
+    -f values-prod.yaml --set image.tag=<VERSION> | less
   ```
 
 - [ ] **Install / upgrade:**
@@ -382,7 +386,7 @@ storing a tenant nobody can reach.
   ```bash
   helm upgrade --install inventario ./helm/inventario \
     -n <NAMESPACE> --create-namespace \
-    -f values-prod.yaml --set image.tag=v0.1.0
+    -f values-prod.yaml --set image.tag=<VERSION>
   ```
 
   The setup hook runs `bootstrap → migrate → init-data` (idempotent). It creates the
@@ -818,15 +822,55 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 - [ ] A failed migration fails the setup Job, and `--wait --wait-for-jobs` fails with it,
   so the Deployment is never touched and the old release keeps serving. Read the Job logs,
   fix forward, re-run. Do not reach for `migrate down` in production — see Appendix D.
-- [ ] **Upgrading from v0.2.x.** v0.2.x refuses a row that has a column it does not
-  know, and later versions add columns to items, files, groups and other tables. Later
-  versions also store an unknown price as NULL, and v0.2.x cannot read one. The chart
-  rolls pods over one at a time (`maxUnavailable: 0`, `maxSurge: 1`), so old and new pods
-  overlap. While they do, an old pod fails every request that reads a table the migration
-  added a column to, it fails on every item the new pods' startup backfill has given an
-  unknown price, and an old pod that saves an item writes 0 into a price the backfill has
-  already cleared, which the new version then shows as a known zero. Avoid the overlap:
-  scale the chart's Deployments to zero, then run `helm upgrade`:
+- [ ] **Upgrade release by release.** Do not skip a release on the way to a later one: a
+  release can finish moving data that the next one deletes. From v0.2.x, upgrade to
+  v0.3.x first and follow "Upgrading from v0.2.x" below.
+- [ ] Watch the rollout and the Grafana dashboard for error-rate / latency regressions.
+
+### Upgrading from v0.2.x
+
+v0.3.0 is the release after v0.2.2. Its upgrade applies 29 migrations, and v0.2.x pods
+cannot run against the result. The `### Operators` part of the 0.3.0 section in
+[CHANGELOG.md](CHANGELOG.md) has the details behind each step.
+
+Before `helm upgrade`:
+
+- [ ] **Take a database backup** (§B11) and keep it until the upgrade has settled.
+  Rolling the image back to v0.2.x after the migrations ran is not supported; this backup
+  is the way back (Appendix D).
+- [ ] **Check the database URLs.** v0.3.0 refuses a `postgres://` or `postgresql://` DSN
+  with an `@` after the host, in the path, the query or the fragment, before it connects
+  or logs anything, so the setup Job, the `migrate` init container or the app pod that
+  was given it fails to start. This covers `secrets.dbDsn` and `secrets.migratorDbDsn`
+  (`INVENTARIO_DB_DSN` and `MIGRATOR_DB_DSN` in `secrets.existingSecret`) and the superuser
+  DSN of `setupJob.bootstrap`. Such a DSN usually comes from a `/`, `?` or `#` in the
+  password, which ends the host part early, so it did not connect on v0.2.x either:
+  percent-encode those characters as `%2F`, `%3F` and `%23`. Encoding only the `@` does
+  not fix it. A DSN that works on v0.2.x is refused only when its database name or a
+  query value holds a literal `@`; write it as `%40`.
+- [ ] **Check that no two tenants share a domain.** The upgrade makes `tenants.domain`
+  unique, and `migrate up` stops before it applies anything when two tenants share one.
+  `inventario db migrate up --dry-run` with the new image (see "Look at the pending
+  migrations" above) names each shared domain. Leave each domain with one tenant, with
+  `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes it).
+- [ ] **Decide how long to keep finished currency migrations.** The currency migration
+  worker now deletes completed and failed currency migrations, with their per-item audit
+  rows, 90 days after they ended, and its first check after the upgrade deletes the older
+  ones. To keep them longer, set `INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION` (for
+  example `8760h`) before the upgrade. The chart has no value for it: put it in a
+  ConfigMap or Secret and name that in `extraEnvFrom`.
+- [ ] **Subscription plans are hidden by default.** Set `features.plans=true` to keep the
+  plan badge, the Upgrade links, the `/plans` page and the plan on the admin tenant pages.
+  No plan limit is enforced either way.
+- [ ] **Scale the Deployments to zero.** v0.2.x refuses a row that has a column it does
+  not know, and v0.3.0 adds columns to items, files, groups and other tables. v0.3.0 also
+  stores an unknown price as NULL, and v0.2.x cannot read one. The chart rolls pods over
+  one at a time (`maxUnavailable: 0`, `maxSurge: 1`), so old and new pods overlap. While
+  they do, an old pod fails every request that reads a table the migration added a column
+  to, it fails on every item the new pods' startup backfill has given an unknown price,
+  and an old pod that saves an item writes 0 into a price the backfill has already
+  cleared, which the new version then shows as a known zero. Avoid the overlap: scale the
+  chart's Deployments to zero, then run `helm upgrade`:
 
   ```bash
   kubectl -n <NAMESPACE> scale deploy -l app.kubernetes.io/instance=inventario --replicas=0
@@ -835,7 +879,53 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
   If a few minutes of errors on item, file and group pages are acceptable, a plain
   rolling upgrade works too, but an item saved on an old pod during the rollout may keep
   a zero price that should be unknown.
-- [ ] Watch the rollout and the Grafana dashboard for error-rate / latency regressions.
+
+After `helm upgrade`:
+
+- [ ] **Let the file link move finish, and stay on v0.3.x until it has.** v0.2.x keeps a
+  file's attachment in the `linked_entity_type`, `linked_entity_id` and
+  `linked_entity_meta` columns of `files`. Every v0.3.x pod moves these to the new
+  `file_links` table when it starts and logs `legacy file links moved` with the number of
+  files. A later release drops the old columns, and an attachment still in them then is
+  lost. The move has finished when this returns 0:
+
+  ```sql
+  SELECT count(*) FROM files WHERE COALESCE(linked_entity_type, '') <> '';
+  ```
+
+- [ ] **Expect a slower first start.** Before it answers its probes, each pod moves the
+  file links and rewrites the prices that v0.2.x stored as zero for "not entered", each
+  pass for up to two minutes before it goes on in the background. On a small database
+  this takes seconds. On a large one the liveness probe (10 s initial delay, three
+  failures 15 s apart) can restart a pod before it listens; each pass goes on where the
+  last one stopped, so the pods settle, and raising
+  `run.<role>.livenessProbe.initialDelaySeconds` for this upgrade avoids the restarts. Asset
+  IDs, the item types of existing groups, file checksums and upright thumbnails of
+  portrait photos are filled in the background by the worker groups.
+- [ ] **Clear the failed jobs from before the upgrade.** The new
+  `inventario_jobs_dead_letter_depth` gauge counts them from its first collection, so an
+  alert on a depth above zero fires on day one. After a `--dry-run`, discard them with
+  `inventario jobs failed discard --failed-before <the upgrade date>`.
+- [ ] **Exports, imports and restores that were stuck in progress before the upgrade**
+  fail or run again once their job is a day old: a run v0.2.x started has no heartbeat.
+  See §10 of `devdocs/admin-runbook.md`.
+- [ ] **Bucket lifecycle rules.** New profile photos are stored under
+  `t/<tenant>/avatars/<user>/` instead of `avatars/<user>/`; a rule that matches
+  `avatars/` needs the new prefix too.
+- [ ] **Purge the logs that hold secrets, and rotate what they hold.** Every release
+  before v0.3.0 wrote secrets to its logs in these cases:
+  - `inventario db migrate up` printed the database DSN, password included, on every
+    run. With the chart that is the `migrate` init container of the setup Job, or of the
+    app pods when the migrations run in the pod. Rotate the password of the DSN it ran
+    with: `secrets.migratorDbDsn`, or `secrets.dbDsn` without one.
+  - A database DSN or a Redis URL that did not parse put its password, or part of it,
+    into the error, the log line or the panic that reported it. A `/`, `?` or `#` in the
+    password made that likely. Rotate those passwords too.
+  - The API logged the `sig` of refused signed URLs, and up to 200 bytes of a request
+    body refused for a tenant field, which can hold a user's password.
+
+  Purge those logs or restrict who can read them. The Security part of the 0.3.0
+  section in [CHANGELOG.md](CHANGELOG.md) lists the exact cases.
 
 ## Appendix D — Rollback
 

@@ -447,6 +447,14 @@ For the complete default surface, see `helm/inventario/values.yaml`.
 
   The CLI `--workers-only` / `--workers-exclude` flags still accept the old family names (`exports`, `imports`, `restores`, `thumbnails`, `token-cleanup`) for one release and log a deprecation warning; Helm values surface only the group keys.
 
+### Upgrading to chart 0.3.0 (release v0.3.0)
+
+No values need to change, but the upgrade from v0.2.x needs the steps in `PRODUCTION.md` (Appendix C, "Upgrading from v0.2.x"): v0.2.x pods fail against the migrated schema, so scale the Deployments to zero before `helm upgrade`, and v0.3.0 refuses a database URL with an `@` after the host, which is what a `/`, `?` or `#` left unencoded in the password of `secrets.dbDsn`, `secrets.migratorDbDsn` or the bootstrap superuser DSN produces; percent-encode them. Upgrade release by release: v0.3.x moves file attachments out of columns that a later release drops. What is different in the chart:
+
+- `features.plans` (default `false`) hides the subscription plan screens. Set it to `true` to keep showing them.
+- `oauth.*` and `secrets.oauth*` configure sign-in with Google, GitHub or a self-hosted OpenID Connect provider. Nothing is on until a provider's client id and secret are set. With more than one API pod, set `secrets.oauthStateKey` too. See [Sign-in providers](https://denisvmedia.github.io/inventario/sign-in-providers/).
+- The Grafana dashboard's "Scrape target up" panel works under the Prometheus Operator, and the install notes name the `SETUP_ADMIN_EMAIL` and `SETUP_ADMIN_PASSWORD` keys when `secrets.existingSecret` is set.
+
 ### Upgrading to chart 0.2.2 (release v0.2.2)
 
 No values need to change. With `setupJob.bootstrap.superuserDsn`, the runtime Secret no longer carries `SETUP_SUPERUSER_DSN`; the setup Job still reads the value from its own spec. If you keep `SETUP_SUPERUSER_DSN` in `secrets.existingSecret`, every app pod gets it too: move it to a Secret of its own and name that one in `setupJob.bootstrap.superuserSecret`. The first admin's email can now come from a `SETUP_ADMIN_EMAIL` key in that Secret; keep it the same address as before, because the setup step finds the admin by its email.
@@ -466,9 +474,9 @@ No values need to change. What is different:
 - A fresh install applies the setup Job as an ordinary release object; upgrades still run it as the `pre-upgrade` hook. See [What runs when](#what-runs-when).
 - From this release on, the chart is published to `oci://ghcr.io/denisvmedia/charts/inventario`.
 
-### Upgrading from chart 0.2.0 → 0.3.x
+### Upgrading from chart 0.2.0 → 0.3.x (old chart numbers, before release v0.2.0)
 
-Chart 0.3.0 reshaped the run-topology surface from a flat set of pod-shape keys at the chart root into the `run.*` hierarchy that supports both combined (`run all`) and split (`run apiserver` + `run workers`) deployments. The following top-level keys were **removed**; if your existing `values.yaml` (or `--set` arguments) still sets them, the chart silently falls back to its new defaults and your overrides are lost. Move each one under the matching `run.*` block before upgrading.
+This section uses the chart's old numbers, which were never published: its 0.3.0 is not the chart of release v0.3.0. That chart 0.3.0 reshaped the run-topology surface from a flat set of pod-shape keys at the chart root into the `run.*` hierarchy that supports both combined (`run all`) and split (`run apiserver` + `run workers`) deployments. The following top-level keys were **removed**; if your existing `values.yaml` (or `--set` arguments) still sets them, the chart silently falls back to its new defaults and your overrides are lost. Move each one under the matching `run.*` block before upgrading.
 
 | 0.2.0 (top-level) | 0.3.x (combined mode) | 0.3.x (split mode — API server) | 0.3.x (split mode — worker group) |
 | --- | --- | --- | --- |

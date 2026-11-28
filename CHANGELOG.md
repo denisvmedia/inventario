@@ -12,6 +12,11 @@ when to add an entry and where it goes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
+A summary of this release, with what to do before upgrading from v0.2.x, is
+in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
+
 ### Added
 
 - The Collection set. A group admin or owner can add it from **Sections** in
@@ -28,8 +33,8 @@ when to add an entry and where it goes.
   shown as taken and not created again. Removing asks first, from a
   status checked again when the confirmation opens, listing what is deleted
   and what stays and why. It deletes only the types and fields the
-  confirmation listed that the set created and no item uses, Trash included,
-  names any it kept because they changed in between, and keeps the group's
+  confirmation listed that the set created and no item or draft uses, Trash
+  included, names any it kept because they changed in between, and keeps the group's
   last type only when the removal would leave it none. Links the set made to the group's own types and fields stay. The
   create group page asks what the group is for: **Household items**, or
   **Collection**, which creates the group with the set and with Warranties
@@ -59,8 +64,9 @@ when to add an entry and where it goes.
   and tags on the **Files** step and can be changed there. In a batch of
   files, a file gets the tag and the title its scan suggests in the same
   step that marks it scanned, so the batch page, the batch list and the
-  inbox show them as soon as the scan is done, without a reload (#1626,
-  #2940).
+  inbox show them as soon as the scan is done, without a reload
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626),
+  [#2940](https://github.com/denisvmedia/inventario/issues/2940)).
 - Personal data export (GDPR Art. 20). `POST /users/me/data-exports` asks for
   a copy of the caller's own data: their profile, settings and group
   memberships, and in each group the items, files with their bytes, loans,
@@ -105,7 +111,8 @@ when to add an entry and where it goes.
   invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
   others, and the title. Only a file that still has the title and the tags
   of its upload changes, so a file you renamed or gave one of those tags
-  keeps what you gave it and a rescan does not change it again (#1626).
+  keeps what you gave it and a rescan does not change it again
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date
@@ -142,11 +149,12 @@ when to add an entry and where it goes.
   zero, `false` and empty text are values, distinct from no value. A number
   is returned as a decimal string, so no digit is lost; a write takes a
   string or a JSON number. Renaming a field or a select option keeps its
-  values, and deleting a field that items have values for asks to confirm
-  with the number of items that lose a value, and asks again when that
-  number changed meanwhile (the API needs `delete_values=true`, 409
-  `custom_field.in_use` otherwise, with the item counts, and refuses a
-  delete whose `expected_values` is not the current count). A field can be
+  values, and deleting a field that items or saved drafts have values for
+  asks to confirm with the number of items and drafts that lose a value,
+  and asks again when that number changed meanwhile (the API needs
+  `delete_values=true`, 409 `custom_field.in_use` otherwise, with the item
+  and draft counts, and refuses a delete whose `expected_values`, drafts
+  included, is not the current count). A field can be
   offered on some item types, each with an optional default: picking the
   type in an item form shows the field and fills in the default where the
   item has no value. On **All Items**, the **Fields** menu filters by custom
@@ -155,7 +163,8 @@ when to add an entry and where it goes.
   them as **Columns**, and search finds their text and names the field it
   matched. A saved view or link that names a deleted field marks it
   "Deleted field".
-  The API gains `/g/{slug}/custom-fields`; item writes take `custom_fields`
+  The API gains `/g/{slug}/custom-fields`, whose list gives each field's
+  `draft_count`; item writes take `custom_fields`
   and refuse a value its field cannot hold with 422
   `custom_field.invalid_value`, the reasons under
   `data.attributes.custom_fields.<field id>`; the items list filters
@@ -344,15 +353,17 @@ when to add an entry and where it goes.
   groups and on first use for new ones; members see their names in their own
   language until someone renames them. A new Item types page adds, renames and
   deletes types, each with a name (up to 50 characters, unique in the group)
-  and one of 38 icons, and counts the items of each type, Trash included.
-  Deleting a type that items have moves them to a type the member picks, which
-  is also how two types are merged; a group keeps at least one type and at
+  and one of 38 icons, and counts the items of each type, Trash included, and
+  the drafts saved on the server. Deleting a type that items or drafts have
+  moves them to a type the member picks, which is also how two types are
+  merged; a group keeps at least one type and at
   most 100 (409 `item_type.limit`). A type stays with the group when the
   member who added it deletes their account. The item forms pick from the
   group's types and create one with "New type". Items keep their type:
   `commodities.type` stays the type's slug, so the `type` filter, saved views,
   the reports and the icons work as before. The API gains
-  `/g/{slug}/item-types` (`DELETE` takes `reassign_to`), and an item write
+  `/g/{slug}/item-types` (`DELETE` takes `reassign_to`; the list and its 409
+  answers give a `draft_count`), and an item write
   with a type the group does not have fails with 422 `item_type.unknown`; a
   bulk type change picks from the group's types and refuses another with 422
   on `type` before any item changes. AI scan offers the group's types. Backups
@@ -427,8 +438,10 @@ when to add an entry and where it goes.
   so does "Delete everything" on a location or area for the items inside. The
   new Trash page in the sidebar restores entries under the same id and asset
   ID, deletes them for good, or empties the trash. Viewers see it, users
-  restore, admins and owners delete. A restored item gets back its history,
-  loans, services, schedules and the files that went with it, but not a file
+  restore, admins and owners delete. A file in Trash cannot be attached to an
+  item, location or area, also when it moves there while the attach runs. A
+  restored item gets back its history, loans, services, schedules and the
+  files that went with it, but not a file
   deleted on its own earlier; an item whose area was deleted in the meantime
   comes back without a location. While in Trash an item is left out of lists,
   search, reports, totals and reminders. Trashed files still count toward
@@ -444,20 +457,6 @@ when to add an entry and where it goes.
   per group it deleted something in
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799),
   [#2893](https://github.com/denisvmedia/inventario/issues/2893)).
-  restore, admins and owners delete. A file in Trash cannot be attached to an
-  item, location or area, also when it moves there while the attach runs. A
-  restored item gets back its history, loans, services, schedules and the
-  files that went with it, but not a file deleted on its own earlier; an item
-  whose area was deleted in the meantime comes back without a location. While
-  in Trash an item is left out of lists, search, reports, totals and
-  reminders. Trashed files still count toward storage, shown as a separate
-  Trash share on the storage card. Entries are deleted for good after
-  `--trash-retention` (default 30 days) by the new `trash-purge` worker;
-  `--trash-purge-interval` sets its cadence. Item delete toasts have an Undo
-  button. Backups leave Trash out, a full-replace restore empties it, and a
-  merge restore skips what is in it and puts a backup file that only trashed
-  items use in Trash with them
-  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what
@@ -655,8 +654,13 @@ when to add an entry and where it goes.
   its extension by default. **Discard** in the Add item dialog, and closing the
   batch intake dialog before its batch is queued, move the files they uploaded
   to the Trash instead of leaving them as standalone files; **Discard** keeps a
-  draft the user saved since
-  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+  draft the user saved since. A file that an item or a draft links by then,
+  for example after a save retried in another tab, stays where it is: the
+  server checks the links and moves the file in one step. The API takes it
+  as `DELETE /files/{id}?unless_linked=true`, which answers 409 `file.linked`
+  for a file it keeps
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626),
+  [#2930](https://github.com/denisvmedia/inventario/issues/2930)).
 
 - On a phone (a screen narrower than 640px) the dialogs that hold a longer
   form fill the screen: adding and editing an item, locations, areas, custom
@@ -665,10 +669,14 @@ when to add an entry and where it goes.
   and loans, sending for service, maintenance schedules, reminders, API
   tokens and feedback. The title and the close button stay at the top, the
   buttons stay at the bottom, and the form scrolls between them.
-  Confirmations and short dialogs stay small cards. Wider screens keep the
-  centered dialog, which now scrolls when it is taller than the screen, as on
-  a phone held sideways
-  ([#1627](https://github.com/denisvmedia/inventario/issues/1627)).
+  Confirmations and short dialogs stay small cards, and wider screens keep the
+  centered dialog. While you type, the buttons of a form that fills the
+  screen stay above the on-screen keyboard, and a toast shown while it is
+  open sits above them. The back gesture closes such a form as its close
+  button does, so Add item still asks whether to save what was entered, and
+  the page under it stays
+  ([#1627](https://github.com/denisvmedia/inventario/issues/1627),
+  [#2931](https://github.com/denisvmedia/inventario/issues/2931)).
 
 - An item's cover photo is one of its photos: an image attached to the item
   in another section of its Files tab can no longer be set as the cover, and
@@ -757,10 +765,14 @@ when to add an entry and where it goes.
 
 - Signing out no longer signs you back in. A request that was still running
   when you signed out was refused, the app renewed the session to retry it,
-  and a moment later you were signed in again. The back office had the same
-  problem. When the timing went the other way, the server took the renewal
-  for a stolen session and signed you out on your other devices too
-  ([#3026](https://github.com/denisvmedia/inventario/issues/3026)).
+  and a moment later you were signed in again. Signing out in one tab while
+  another tab renewed its session did the same. When the timing went the
+  other way, the server took the renewal for a stolen session and signed you
+  out on your other devices too. A sign-out now waits for a renewal another
+  tab has started, and a tab that needs a renewal while the sign-out runs
+  waits for it and then stops. The back office had the same problem
+  ([#3026](https://github.com/denisvmedia/inventario/issues/3026),
+  [#3034](https://github.com/denisvmedia/inventario/issues/3034)).
 - Reminder emails go out only for items in use. An item marked Sold, Lost,
   Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
   loan and item reminders, and its reminders, loans and maintenance stayed on
@@ -813,9 +825,7 @@ when to add an entry and where it goes.
 - Renaming or deleting a tag while someone saves an item or file that
   carries it no longer fails one of the two with a server error. The save
   and the tag change could each wait for the other until the database gave
-  up on one of them. A tag rename or delete, and an item type delete that
-  moves items to another type, now also wait for a running currency
-  migration of the group instead of rewriting the items it is converting
+  up on one of them
   ([#2874](https://github.com/denisvmedia/inventario/issues/2874)).
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
@@ -836,7 +846,8 @@ when to add an entry and where it goes.
 
 - Text length limits count characters in every language. The server counted
   most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
-  borrower, supply link, maintenance title, file description and other text
+  borrower, supply link, maintenance title, file title, file description and
+  other text
   was refused with 422 at about half the length the form allowed. Form fields
   now also count an emoji as one character, as the server does, where they
   stopped at half the limit. An account name has 100 characters at most, which
@@ -844,7 +855,8 @@ when to add an entry and where it goes.
   limits stay in bytes because they bound storage rather than text a person
   reads: the query of a saved view and the external system, instance and
   document identifiers of the intake API
-  ([#2919](https://github.com/denisvmedia/inventario/issues/2919)).
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626),
+  [#2919](https://github.com/denisvmedia/inventario/issues/2919)).
 
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
@@ -856,11 +868,6 @@ when to add an entry and where it goes.
   that refused a code typed in lower case. It starts on the group currency,
   and the cost is saved only when an amount is entered
   ([#2909](https://github.com/denisvmedia/inventario/issues/2909)).
-
-- A file title may have 255 characters in any language. The server counted
-  the limit in UTF-8 bytes, so a Czech or Russian title of more than about
-  127 letters was refused with 422
-  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - The tag sort, the bulk "move to" pickers on the items and files lists, the
   file category pickers on the upload dialog and the file edit page, and the
@@ -914,16 +921,10 @@ when to add an entry and where it goes.
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
-- In the Add item dialog, a file a saved draft holds is listed once. Scanning
-  it again on the AI step, or picking it again on the **Files** step, staged a
-  second copy beside its row under **Saved with this draft**; the next save
-  dropped the copy, and with it the title and tag the scan suggested. The file
-  now stays on its saved row with the title and tags it was saved with, and a
-  file picked just before **Add item** is saved with the item even when it is
-  large and takes a while to read. The remove and add buttons of the tag and
-  number chips are named in the app's language
-  ([#2941](https://github.com/denisvmedia/inventario/issues/2941),
-  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
+- The remove and add buttons of the tag chips in the item and file forms,
+  and of the serial and part number chips in the item form, are named in the
+  app's language. They had fixed English names
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
@@ -979,8 +980,7 @@ when to add an entry and where it goes.
   the group at the same moment. A rename that met a deletion brought the
   group back; it is now refused, and the group is deleted. A rename that met
   a currency migration as it finished put the group back on its old currency
-  with its prices already converted, and a rename also wrote back the hidden
-  sections it had read. Each of these writes now changes only its own
+  with its prices already converted. Each of these writes now changes only its own
   columns, and a write to a group whose deletion has started is refused. A
   migration that finished before its start request recorded it on the group
   no longer leaves the group shown as migrating
@@ -994,14 +994,6 @@ when to add an entry and where it goes.
   those writes, so the member filled in a form only to get an error. These
   actions are now offered only to a role the server accepts them from
   ([#2886](https://github.com/denisvmedia/inventario/issues/2886)).
-- Add item and the batch upload dialog move the uploads they did not use to
-  Trash, and could move one that an item used: when another tab or a retried
-  save attached the file between the dialog's check and its delete. The
-  server now checks the links and trashes the file in one step, and keeps a
-  file that something links. The API takes it as
-  `DELETE /files/{id}?unless_linked=true`, which answers 409 `file.linked`
-  for a file it keeps
-  ([#2930](https://github.com/denisvmedia/inventario/issues/2930)).
 - The version badge in Settings → Help and the version a feedback report
   carries now show the release you run. Before, every release showed 0.1.0.
   A build without a release number, such as the `edge` image, shows no badge
@@ -1029,45 +1021,12 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
-- Deleting an item type or a custom field, and removing the Collection set,
-  now count the drafts saved on the server as well as items. A type that only
-  a draft had was offered for deletion and deleted, and the draft could then
-  neither be saved nor finished until another type was picked; a value a
-  draft held for a deleted field was dropped without a word when the draft
-  was finished. The delete dialogs now say how many drafts use the type or
-  have a value of the field. Deleting a type moves its drafts with its items
-  to the type you pick, deleting a field takes the value out of the drafts
-  once you confirm, and removing the set keeps a type or field that a draft
-  uses. A draft that shows the field empty is left as it is, so a member
-  editing it is not told that it changed elsewhere. In the API, the item type
-  and custom field lists and their `409` answers carry a `draft_count`, and
-  `expected_values` of a custom field delete counts the drafts with a value
-  too
-  ([#2939](https://github.com/denisvmedia/inventario/issues/2939),
-  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - `inventario users delete` left the user's profile photo in storage, where
   nothing pointed at it any more. It now deletes the photo after the account,
   as deleting your own account does; pass `--upload-location` with the
   server's upload location. The admin user page and the admin membership
   editor show the users' photos instead of their initials
   ([#2894](https://github.com/denisvmedia/inventario/issues/2894)).
-- On a 360 px wide screen the titles in the search window and on the search
-  page were cut to a few letters, because the subtitle and the **Show items**
-  label took the row. On a narrow screen the subtitle now goes under the title
-  and the button shows only its icon
-  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
-- Documents delivered by other systems stay consistent after rare failures.
-  An item made from a delivered draft now shows its **Source** also when the
-  delivery stopped before it recorded the draft and was never sent again. A
-  delivery refused with `intake.document_conflict` keeps neither its record
-  nor its file, also when the conflicting batch appeared while it was being
-  stored, or the conflicting draft became an item meanwhile: that item is not
-  linked to the refused delivery's record. A second batch that a delivery
-  made and could not delete is deleted by the next delivery of the document,
-  and running a merge restore again records the item on a delivered document
-  that the first restore left without it
-  ([#2879](https://github.com/denisvmedia/inventario/issues/2879),
-  [#3008](https://github.com/denisvmedia/inventario/issues/3008)).
 - A group with more than 50 locations or more than 50 areas showed only the
   first 50 in the location and area pickers of the item form, on the
   Locations page, in the backup item picker and wherever an item's location
@@ -1083,33 +1042,18 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
-- On the item page, a dialog or a confirmation open in one of the tabs, such
-  as a new reminder, a loan, a service record or **Attach an existing file**,
-  keeps you on the item after **Mark as reviewed**, as the page's own dialogs
-  do. Before, the page opened the next item and the dialog closed with what
-  you had typed. Moving to the previous or next item of a list keeps the tab
-  and the **Files** tab's filter. The cover button shows only on the images
-  the item can take as its cover; before, an image attached to the item as a
-  document offered it and setting it failed
-  ([#2881](https://github.com/denisvmedia/inventario/issues/2881)).
 - Picking **Čeština** or **Русский** as the language in Settings, or opening
   the app in a browser set to Czech or Russian, now shows the app in that
   language. It stayed in English, and the language selector switched back to
   English, although both translations ship with the app
   ([#3018](https://github.com/denisvmedia/inventario/issues/3018)).
 
-- A web address custom field value of up to 2,048 characters saves whatever
-  its alphabet. A long address written in Cyrillic or another script with
-  two- or more-byte letters failed with a server error, because the database
-  kept the whole value in an index whose entries have a size limit. That
-  index served no search or filter and is removed
-  ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
 - Changing the slug of an item tag or deleting one while a currency
   migration runs in the group is refused at once with "Locked while a
-  currency migration is running.", as an item change is. Before, the request
-  waited for the migration and ended in a timeout or a server error when
-  the migration took longer than a minute. A new label or color still saves,
-  and file tags are not affected
+  currency migration is running.", as an item change is. Before, the change
+  rewrote the group's items while the migration was converting them, and
+  one of the two could fail with a server error. A new label or color still
+  saves, and file tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982),
   [#3011](https://github.com/denisvmedia/inventario/issues/3011)).
 - Creating, saving or deleting a tag that failed with a server or network
@@ -1117,12 +1061,6 @@ when to add an entry and where it goes.
   request address. It shows one, and a change the server refuses shows the
   server's reason
   ([#3011](https://github.com/denisvmedia/inventario/issues/3011)).
-- Editing or deleting an item tag while a currency migration runs in the
-  group is refused at once with "Locked while a currency migration is
-  running.", as an item change is. Before, the request waited for the
-  migration and ended in a timeout or a server error when the migration
-  took longer than a minute. File tags are not affected
-  ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
 - A restore on PostgreSQL records its step-by-step log, and **View log** in
   the export's **Restore history** shows it. Before, every step failed to
   save because it had no tenant or group, so the log of every restore stayed
@@ -1186,27 +1124,12 @@ when to add an entry and where it goes.
   out removes them. Before, they were kept for the group only, so the next
   person to sign in on the same browser saw what the last one opened there
   ([#3023](https://github.com/denisvmedia/inventario/issues/3023)).
-- Signing out in one tab while another tab renewed its session no longer
-  signs you back in, and no longer makes the server take the renewal for a
-  stolen session and sign you out on your other devices. A sign-out now waits
-  for a renewal another tab has started, and a tab that needs a renewal while
-  the sign-out runs waits for it and then stops. The back office had the same
-  problem
-  ([#3034](https://github.com/denisvmedia/inventario/issues/3034)).
 - `inventario users delete` refuses a user who is the only owner of a group
   that has other members, before it changes anything, as deleting your own
   account does. The message names the group, so another member can be made
   an owner first. Before, the delete went through and left the group with
   its members and no owner, so nobody could manage or delete it
   ([#3051](https://github.com/denisvmedia/inventario/issues/3051)).
-- On a phone, a form that fills the screen (Add item, a location, an area and
-  the other long forms) keeps its buttons above the on-screen keyboard while
-  you type. The back gesture closes it as its close button does, so Add item
-  still asks whether to save what was entered, and the page under it stays.
-  A toast shown while it is open sits above its buttons. Before, the keyboard
-  covered the buttons, the back gesture left the page and lost the form, and
-  a toast covered the buttons for a few seconds
-  ([#2931](https://github.com/denisvmedia/inventario/issues/2931)).
 
 - Saving an item from an edit form opened before someone changed the item on
   another device, or before a tag on it was renamed, no longer puts back what
@@ -1227,10 +1150,12 @@ when to add an entry and where it goes.
 
 - The password-changed, password reset, sign-in link and welcome emails are
   sent in the language you chose in your settings. They always arrived in
-  English. The log line of a failed send now carries the request ID.
+  English. The log line of a failed send now carries the request ID
+  ([#3063](https://github.com/denisvmedia/inventario/pull/3063)).
 - Opening a sign-in link while the database cannot be reached answers with a
   server error, which can be retried, instead of "Invalid or expired sign-in
-  link". The link stays usable.
+  link". The link stays usable
+  ([#3063](https://github.com/denisvmedia/inventario/pull/3063)).
 - A new account starts with the language the app showed when you signed up,
   so its verification and welcome emails are in that language. They were in
   English until you picked a language in your settings
@@ -1275,8 +1200,9 @@ when to add an entry and where it goes.
   [#3065](https://github.com/denisvmedia/inventario/pull/3065)).
 - `inventario db migrate up` logged the database DSN it was given, password
   included, on every run, in every release since v0.1.0. With the Helm chart
-  that is the `migrate` init container of every app pod; with Docker Compose
-  it is the migrate service. A DSN that did not parse also put its password
+  that is the `migrate` init container of the setup Job, or of every app pod
+  when the migrations run in the pod; with Docker Compose it is the migrate
+  service. A DSN that did not parse also put its password
   into the panic `inventario run` stopped with, into the errors of the
   migrator and of `db migrate data`, and into the error of the `tenants`,
   `users`, `admin`, `jobs` and `workers` commands. The migrate line now
@@ -1309,18 +1235,20 @@ when to add an entry and where it goes.
 
 ### Operators
 
-- A tenant domain is unique in the database. The upgrade runs a migration
-  that replaces the index on `tenants.domain` with a unique one, so two
-  creates or edits that give one domain to two tenants at the same time no
-  longer both succeed; the second gets `409 tenant.domain_taken`. Tenants
-  written before domains were checked can share one, and the index cannot
-  be built over them: `inventario db migrate up` then stops before it
-  applies anything and names each shared domain with the slugs of its
-  tenants. Leave each domain with one tenant, with
+- Two tenants can no longer share a custom domain: creating a tenant with
+  another tenant's domain, or giving a tenant one, is refused with
+  `409 tenant.domain_taken`, also when two such requests run at the same
+  time. The tenant name limit of 100 counts characters instead of bytes. The
+  upgrade runs a migration that replaces the index on `tenants.domain` with
+  a unique one. Tenants written before domains were checked can share one,
+  and the index cannot be built over them: `inventario db migrate up` then
+  stops before it applies anything and names each shared domain with the
+  slugs of its tenants. Leave each domain with one tenant, with
   `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes
   it) or in the back office, and run the migrations again.
   `db migrate up --dry-run` runs the same check before the upgrade
-  ([#2948](https://github.com/denisvmedia/inventario/issues/2948)).
+  ([#1037](https://github.com/denisvmedia/inventario/issues/1037),
+  [#2948](https://github.com/denisvmedia/inventario/issues/2948)).
 - `inventario tenants update` accepts `--name`, `--slug`, `--domain`,
   `--status`, `--settings`, `--dry-run` and `--interactive`. Only
   `--registration-mode` was registered, so the commands README and the
@@ -1338,14 +1266,29 @@ when to add an entry and where it goes.
   v0.2.x") describes. `PRODUCTION.md` and the chart README list the schema
   changes a rolling upgrade survives
   ([#2873](https://github.com/denisvmedia/inventario/issues/2873)).
+- Upgrade release by release. The file attachments of v0.2.x are stored in
+  the `linked_entity_type`, `linked_entity_id` and `linked_entity_meta`
+  columns of `files`; every `inventario run` process of this release moves
+  them to the new `file_links` table when it starts, before it answers
+  requests, and logs `legacy file links moved` with the number of files. A
+  move that fails or takes longer than two minutes logs
+  `legacy file link move failed at startup; retrying in the background` and
+  goes on in the background. A later
+  release drops those columns, so run this release until the move has
+  finished before you upgrade to the next one: an attachment still in the
+  old columns then would be lost. The move has finished when
+  `SELECT count(*) FROM files WHERE COALESCE(linked_entity_type, '') <> ''`
+  returns 0
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806),
+  [#2898](https://github.com/denisvmedia/inventario/issues/2898)).
 - `inventario run apiserver` and `inventario run all` exit with status 1 and
   the bind error when the API address or the probe address is already taken.
   They logged the error and then panicked with `close of closed channel`,
   exiting with status 2, so the panic is what log alerting and the pod's last
   state showed
   ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
-- The upgrade runs one more database migration, which adds `heartbeat_at`
-  to `exports` and `restore_operations`. A run a previous version started
+- The upgrade runs a database migration that adds `heartbeat_at` to
+  `exports` and `restore_operations`. A run a previous version started
   has no heartbeat, and the upgrade stops the pod that worked on it. Such a
   run is taken for dead once its job is a day old, so the exports, imports
   and restores that were stuck in progress before the upgrade fail or run
@@ -1358,7 +1301,7 @@ when to add an entry and where it goes.
   runs workers, and the `inventario_jobs_dead_letter_depth{type}` gauge of
   jobs nobody retried or discarded, collected by the housekeeping worker
   group (or `run all`) every `--business-metrics-interval`. The upgrade runs
-  one more database migration: it adds `discarded_at` to `exports`,
+  a database migration that adds `discarded_at` to `exports`,
   `restore_operations`, `thumbnail_generation_jobs`, `intake_sources` and
   `currency_migrations`, `attempt_count` to `exports`, and an index on the
   failed intake sources. During a rolling upgrade, pods that still run
@@ -1380,12 +1323,7 @@ when to add an entry and where it goes.
   `GET /feature-flags` reports it as `plans`. With it on,
   `GET /g/{slug}/plan` reports the tenant's plan again
   ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
-- The upgrade runs one more database migration, which adds a `set_entry`
-  column to `item_types` and `custom_field_definitions`. Both tables are new
-  in this release, so v0.2.x pods do not read them
-  ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
-- The upgrade runs two more database migrations. One adds the
-  `hidden_sections` column to `location_groups`. During a rolling upgrade,
+- The upgrade adds the `hidden_sections` column to `location_groups`. During a rolling upgrade,
   pods that still run v0.2.x fail every read of a group until
   they are replaced, because they read all columns of the table and do not
   know the new one. Expect group pages and group API calls served by those
@@ -1393,20 +1331,23 @@ when to add an entry and where it goes.
   on unknown columns
   ([#1607](https://github.com/denisvmedia/inventario/issues/1607),
   [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
-  The other adds the `personal_data_exports` table for personal data exports.
+  It also adds the `personal_data_exports` table for personal data exports.
   The archives are stored with the uploads under `t/<tenant>/personal-exports/`;
   the export worker deletes each one 7 days after it is finished
   ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
-  Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
-  `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
-  the endpoints come from the issuer's discovery document.
-  `OAUTH_OIDC_BACKCHANNEL_URL` covers a server that cannot reach the issuer's
+  Keycloak or Authentik. Set `INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL`,
+  `INVENTARIO_RUN_OAUTH_OIDC_CLIENT_ID`,
+  `INVENTARIO_RUN_OAUTH_OIDC_CLIENT_SECRET` and, for the button,
+  `INVENTARIO_RUN_OAUTH_OIDC_DISPLAY_NAME` (or the matching
+  `--oauth-oidc-*` flags); the endpoints come from the issuer's discovery
+  document. `INVENTARIO_RUN_OAUTH_OIDC_BACKCHANNEL_URL` covers a server that
+  cannot reach the issuer's
   public address. The Helm chart gets `oauth.*` values and `secrets.oauth*`
   keys for all three providers. Setup is described on the new "Sign-in
   providers" page of the user guide
   ([#2789](https://github.com/denisvmedia/inventario/pull/2789)).
-- The upgrade runs one more database migration. It writes the descriptions of
+- The upgrade runs a database migration that writes the descriptions of
   the row-level security policies and of the RLS helper functions into the
   database as comments (`COMMENT ON POLICY`, `COMMENT ON FUNCTION`). The models
   always declared them, but earlier migrations never wrote them. It changes no
@@ -1417,13 +1358,15 @@ when to add an entry and where it goes.
   Kubernetes. The panel asked for `up{job="inventario"}`, a job name only the
   compose stack uses. Under the Prometheus Operator the job is named after the
   Service (for example `inventario-inventario`), so the panel stayed empty. It
-  now shows every job that reports Inventario's metrics.
+  now shows every job that reports Inventario's metrics
+  ([#2851](https://github.com/denisvmedia/inventario/pull/2851)).
 - The Helm chart's install notes point to the right place for the admin's
   email and password when `secrets.existingSecret` is set: the
   `SETUP_ADMIN_EMAIL` and `SETUP_ADMIN_PASSWORD` keys of that Secret. Before,
   they printed `setupJob.initData.adminEmail`, which that Secret's email
   overrides, and pointed to `setupJob.initData.adminPassword`, which an
-  existing Secret does not use.
+  existing Secret does not use
+  ([#2851](https://github.com/denisvmedia/inventario/pull/2851)).
 - `inventario users update --tenant` moves a user only when they belong to no
   group and own or authored nothing in their tenant, typically an account
   created in the wrong tenant. Otherwise it refuses, lists what blocks the
@@ -1500,11 +1443,6 @@ when to add an entry and where it goes.
   impersonated. The sign-in page says the user's site is suspended, in the
   reader's language
   ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
-- Two tenants can no longer share a custom domain: creating a tenant with
-  another tenant's domain, or giving a tenant one, is refused. The tenant
-  name limit of 100 counts characters instead of bytes
-  ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
-
 - Building the frontend now reads `CHANGELOG.md` from the repository root, for
   the What's new page, and fails without it. The project's Dockerfile copies
   the file; a custom image build that copies only `frontend/` has to copy
@@ -1809,7 +1747,8 @@ launch. The full announcement, including what the release does, what it needs,
 and the known gaps it ships with, is in
 [the v0.1.0 release notes](.github/release-notes/v0.1.0.md).
 
-[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/denisvmedia/inventario/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/denisvmedia/inventario/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/denisvmedia/inventario/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/denisvmedia/inventario/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/denisvmedia/inventario/compare/v0.1.0...v0.2.0
