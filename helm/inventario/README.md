@@ -461,7 +461,7 @@ chart numbers.
 
 No values need to change. What is different:
 
-- `podSecurityContext` sets the `RuntimeDefault` seccomp profile, so the pods pass Pod Security `restricted`. If you set `podSecurityContext` yourself, add `seccompProfile` to it.
+- `podSecurityContext` sets the `RuntimeDefault` seccomp profile, so the chart's own pods pass Pod Security `restricted`. If you set `podSecurityContext` yourself, add `seccompProfile` to it. The demo Redis (`demo.redis.enabled`) and the demo MinIO bucket Job (`demo.minio.enabled`) run as root, so a release with either one needs a namespace that enforces `baseline`.
 - `extraVolumes` and `extraVolumeMounts` are new, for example for the database server's CA.
 - A fresh install applies the setup Job as an ordinary release object; upgrades still run it as the `pre-upgrade` hook. See [What runs when](#what-runs-when).
 - From this release on, the chart is published to `oci://ghcr.io/denisvmedia/charts/inventario`.

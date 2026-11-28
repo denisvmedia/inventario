@@ -80,7 +80,10 @@ spec:
       labels:
         inventario-preview: "true"
     spec:
-      project: previews
+      # Not `previews`: a PR chart may write to any namespace its project
+      # allows, and this namespace holds the sops-sourced inventario-admin
+      # Secret. See appproject-master.yaml.
+      project: master-previews
 
       # Multi-source: source[0] is the chart pinned to the master commit
       # the image was built from (`{{ .sha }}` from the pin file); source[1]
@@ -190,6 +193,13 @@ spec:
             duration: 15s
             factor: 2
             maxDuration: 3m
+        # Same Pod Security labels as the PR previews; see
+        # applicationset-pr.yaml for the reasoning.
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: baseline
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
