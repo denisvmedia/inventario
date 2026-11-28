@@ -108,6 +108,9 @@ The OKLCH tokens are tuned for WCAG AA contrast (4.5:1 for body text,
 - `text-muted-foreground` on `bg-card` — secondary text. Verified at
   light + dark.
 - `text-destructive` on `bg-card` — error text.
+- `text-item-status-*` on `bg-item-status-*/10` — item status pills.
+  `src/__tests__/item-status-contrast.test.ts` measures each status in
+  both modes, over the card and the page background.
 
 Hard rules:
 
