@@ -20,6 +20,7 @@ type TrashEnv struct {
 	Commodities  registry.CommodityRegistry
 	Files        registry.FileRegistry
 	ServiceFiles registry.FileRegistry
+	Tags         registry.TagRegistry
 	AreaID       string
 	OtherAreaID  string
 	// LocationID is the location of AreaID and OtherAreaID;

@@ -43,6 +43,10 @@ func TestItemDatesContract_Memory(t *testing.T) {
 	registrytest.RunItemDatesContract(t, newMemoryTrashEnv)
 }
 
+func TestTagRewriteContract_Memory(t *testing.T) {
+	registrytest.RunTagRewriteContract(t, newMemoryTrashEnv)
+}
+
 // newMemoryTrashEnv returns registries scoped to one empty group, with two
 // areas of one location to place items in and an area of a second location.
 func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
@@ -82,6 +86,7 @@ func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
 		Commodities:  set.CommodityRegistry,
 		Files:        set.FileRegistry,
 		ServiceFiles: fs.FileRegistryFactory.CreateServiceRegistry(),
+		Tags:         set.TagRegistry,
 		AreaID:       area.GetID(),
 		OtherAreaID:  other.GetID(),
 

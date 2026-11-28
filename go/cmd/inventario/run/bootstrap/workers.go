@@ -702,8 +702,9 @@ func StartAssetNumberBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 	}
 }
 
-// registeredDateBackfillRetryInterval spaces the retries of a failed
-// registered date backfill pass.
+// registeredDateBackfillRetryInterval spaces the registered date backfill
+// passes that follow a pass that failed or a pass that left rows pending
+// because another transaction held them locked.
 const registeredDateBackfillRetryInterval = time.Minute
 
 // StartRegisteredDateBackfill dates, in the background, the commodities
