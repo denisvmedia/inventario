@@ -248,6 +248,37 @@ describe("<SettingsPage />", () => {
     expect(screen.queryByTestId("connected-accounts-card")).not.toBeInTheDocument()
   })
 
+  // The pages these rows open sit outside /g/:slug, so the row has to carry
+  // the active group in ?g=; without it the sidebar there lost the group and
+  // showed empty Inventory, Group and Reports sections.
+  it("privacy rows keep the active group in ?g=", async () => {
+    server.use(
+      ...withGroupHandlers(),
+      msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: [] })),
+      msw.get(api("/users/me/api-tokens"), () => HttpResponse.json({ tokens: [] })),
+      msw.get(api("/auth/mfa/status"), () =>
+        HttpResponse.json({ state: "none", backup_codes_remaining: 0 })
+      )
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-privacy"))
+    await waitFor(() =>
+      expect(screen.getByTestId("privacy-row-activeSessions")).toHaveAttribute(
+        "href",
+        "/profile/sessions?g=household"
+      )
+    )
+    expect(screen.getByTestId("privacy-row-loginHistory")).toHaveAttribute(
+      "href",
+      "/profile/login-history?g=household"
+    )
+    expect(screen.getByTestId("privacy-row-apiTokens")).toHaveAttribute(
+      "href",
+      "/profile/api-tokens?g=household"
+    )
+  })
+
   // #2147 — self-service account deletion. The danger-zone button now
   // opens a typed-confirmation dialog (email + password) wired to
   // DELETE /auth/me, replacing the old "not yet available" confirm stub.

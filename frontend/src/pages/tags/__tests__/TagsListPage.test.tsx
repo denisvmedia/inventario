@@ -125,6 +125,8 @@ describe("<TagsListPage />", () => {
   it("renders the commodity stats bar (default view) with values from /tags/stats", async () => {
     seed()
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Tags · Inventario"))
     await waitFor(() =>
       expect(screen.getByTestId("tags-stats-commodity-tags-total")).toHaveTextContent("2")
     )

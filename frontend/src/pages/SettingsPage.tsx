@@ -1240,6 +1240,7 @@ function LeadTimeRow({
 
 function PrivacySection() {
   const { t } = useTranslation()
+  const { currentGroup } = useCurrentGroup()
   // Sessions count drives the badge on the "Active sessions" row. Loading +
   // error are intentionally silent — the row keeps the link affordance even
   // when the count can't be fetched; the page itself renders the real state.
@@ -1268,7 +1269,7 @@ function PrivacySection() {
               : null
           }
           badgeVariant="secondary"
-          to="/profile/sessions"
+          to={withGroupQuery("/profile/sessions", currentGroup?.slug)}
           testId="privacy-row-activeSessions"
         />
         <PrivacyRow
@@ -1276,7 +1277,7 @@ function PrivacySection() {
           description={t("settings:privacy.rows.loginHistoryDescription")}
           badge={null}
           badgeVariant="secondary"
-          to="/profile/login-history"
+          to={withGroupQuery("/profile/login-history", currentGroup?.slug)}
           testId="privacy-row-loginHistory"
         />
         <PrivacyRow
@@ -1288,7 +1289,7 @@ function PrivacySection() {
               : null
           }
           badgeVariant="secondary"
-          to="/profile/api-tokens"
+          to={withGroupQuery("/profile/api-tokens", currentGroup?.slug)}
           testId="privacy-row-apiTokens"
         />
       </div>

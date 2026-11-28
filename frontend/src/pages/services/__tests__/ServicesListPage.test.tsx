@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { Route } from "react-router-dom"
@@ -57,6 +57,8 @@ describe("<ServicesListPage />", () => {
   it("renders the empty state when there are no service rows", async () => {
     server.use(...groupHandlers.list(groupFixture), ...serviceHandlers.listGroup(SLUG, []))
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("In service · Inventario"))
     expect(await screen.findByTestId("in-service-empty")).toBeInTheDocument()
     expect(screen.queryByTestId("in-service-table")).toBeNull()
   })

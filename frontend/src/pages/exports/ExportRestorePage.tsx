@@ -7,6 +7,7 @@ import {
   RestoreOptionsForm,
   type RestoreOptionsFormValue,
 } from "@/components/exports/RestoreOptionsForm"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Page, PageHeader } from "@/components/ui/page"
@@ -83,6 +84,7 @@ export function ExportRestorePage() {
   if (!groupReady || exportQuery.isLoading) {
     return (
       <Page width="narrow" className="gap-4" data-testid="page-export-restore-loading">
+        <RouteTitle title={t("exports:restore.title")} />
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-64 w-full" />
       </Page>
@@ -92,6 +94,7 @@ export function ExportRestorePage() {
   if (!exp) {
     return (
       <Page width="narrow" className="gap-4" data-testid="page-export-restore-not-found">
+        <RouteTitle title={t("exports:restore.title")} />
         <Alert variant="destructive">
           <AlertTitle>{t("exports:detail.notFound")}</AlertTitle>
         </Alert>
@@ -104,6 +107,7 @@ export function ExportRestorePage() {
 
   return (
     <Page width="narrow" data-testid="page-export-restore">
+      <RouteTitle title={t("exports:restore.title")} />
       <PageHeader
         size="detail"
         title={t("exports:restore.title")}

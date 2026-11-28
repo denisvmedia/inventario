@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { Route } from "react-router-dom"
@@ -61,6 +61,8 @@ describe("<LoansListPage />", () => {
   it("renders the empty state when there are no loans", async () => {
     server.use(...groupHandlers.list(groupFixture), ...loanHandlers.listGroup(SLUG, []))
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Lent out · Inventario"))
     expect(await screen.findByTestId("lent-empty")).toBeInTheDocument()
     expect(screen.queryByTestId("lent-table")).toBeNull()
   })
