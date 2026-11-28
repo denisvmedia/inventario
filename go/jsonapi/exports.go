@@ -138,6 +138,11 @@ func (cr *ExportCreateRequest) ValidateWithContext(ctx context.Context) error {
 type ImportExportAttributes struct {
 	Description    string `json:"description"`
 	SourceFilePath string `json:"source_file_path"`
+	// SourceFileName is the name of the backup file the user picked. The file
+	// of the imported backup is named after it, without the extension, and
+	// downloads under that name. Without it the file is named after the
+	// uploaded blob.
+	SourceFileName string `json:"source_file_name,omitempty" example:"inventario-backup-2026-11-28.inb"`
 }
 
 func (a *ImportExportAttributes) ValidateWithContext(ctx context.Context) error {
@@ -145,6 +150,7 @@ func (a *ImportExportAttributes) ValidateWithContext(ctx context.Context) error 
 	fields = append(fields,
 		validation.Field(&a.Description, validation.Required, validation.RuneLength(1, 500)),
 		validation.Field(&a.SourceFilePath, validation.Required, validation.RuneLength(1, 1000)),
+		validation.Field(&a.SourceFileName, validation.RuneLength(0, 1000)),
 	)
 	return validation.ValidateStructWithContext(ctx, a, fields...)
 }

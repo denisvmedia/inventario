@@ -1182,6 +1182,11 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   Add items from files, and to documents delivered by other systems. Files
   already uploaded keep their names, and a restore keeps the names its backup
   carries.
+- Downloading an imported backup saves it under the name of the file you
+  uploaded. It was saved under the name of the stored copy, an ID followed by
+  the name in lowercase and a number ("3f2a…-home-backup-1795863438.inb").
+  Backups imported before keep that name
+  ([#3087](https://github.com/denisvmedia/inventario/issues/3087)).
 
 ### Security
 

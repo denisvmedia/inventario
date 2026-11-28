@@ -18632,6 +18632,11 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "source_file_name": {
+                    "description": "SourceFileName is the name of the backup file the user picked. The file\nof the imported backup is named after it, without the extension, and\ndownloads under that name. Without it the file is named after the\nuploaded blob.",
+                    "type": "string",
+                    "example": "inventario-backup-2026-11-28.inb"
+                },
                 "source_file_path": {
                     "type": "string"
                 }

@@ -218,6 +218,9 @@ export async function uploadRestoreFile(file: File): Promise<UploadRestoreFileRe
 export interface ImportBackupRequest {
   description: string
   source_file_path: string
+  // The name of the file the user picked. The imported backup's file is
+  // named after it and downloads under that name.
+  source_file_name?: string
 }
 
 export async function importBackup(req: ImportBackupRequest): Promise<Export> {

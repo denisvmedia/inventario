@@ -109,6 +109,7 @@ func TestINBBackupRoundTripPostgres(t *testing.T) {
 		Status:                   models.ExportStatusPending,
 		Imported:                 true,
 		FilePath:                 exportRec.FilePath,
+		SourceFileName:           "Home backup 2026-11-28.inb",
 		Description:              "inb round-trip import",
 	})
 	c.Assert(err, qt.IsNil)
@@ -121,4 +122,11 @@ func TestINBBackupRoundTripPostgres(t *testing.T) {
 	c.Assert(importRec.Status, qt.Equals, models.ExportStatusCompleted,
 		qt.Commentf("imported export must reach Completed; Failed here means the group-scoped FileEntity insert was rejected"))
 	c.Assert(importRec.FileID, qt.IsNotNil, qt.Commentf("a backing FileEntity must have been created for the import"))
+
+	// The file is named after the backup file the user picked, which the
+	// pending import kept.
+	c.Assert(importRec.SourceFileName, qt.Equals, "Home backup 2026-11-28.inb")
+	file, err := srv.FileRegistry.Get(ctx, *importRec.FileID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(file.File.Path, qt.Equals, "Home backup 2026-11-28")
 }

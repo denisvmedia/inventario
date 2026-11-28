@@ -3569,6 +3569,14 @@ definitions:
     properties:
       description:
         type: string
+      source_file_name:
+        description: |-
+          SourceFileName is the name of the backup file the user picked. The file
+          of the imported backup is named after it, without the extension, and
+          downloads under that name. Without it the file is named after the
+          uploaded blob.
+        example: inventario-backup-2026-11-28.inb
+        type: string
       source_file_path:
         type: string
     type: object

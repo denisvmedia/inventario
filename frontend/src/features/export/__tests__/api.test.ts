@@ -154,7 +154,7 @@ describe("features/export/api", () => {
     await expect(uploadRestoreFile(f)).rejects.toThrow(/fileNames/)
   })
 
-  it("importBackup posts the description+source_file_path and returns the imported export", async () => {
+  it("importBackup posts the description, source path and file name and returns the imported export", async () => {
     let body: unknown = null
     server.use(
       http.post(apiUrl("/g/g1/exports/import"), async ({ request }) => {
@@ -174,13 +174,18 @@ describe("features/export/api", () => {
     const result = await importBackup({
       description: "from disk",
       source_file_path: "restores/2026/05/abc.xml",
+      source_file_name: "Home backup.inb",
     })
     expect(result.id).toBe("imp-1")
     expect(result.imported).toBe(true)
     expect(body).toEqual({
       data: {
         type: "exports",
-        attributes: { description: "from disk", source_file_path: "restores/2026/05/abc.xml" },
+        attributes: {
+          description: "from disk",
+          source_file_path: "restores/2026/05/abc.xml",
+          source_file_name: "Home backup.inb",
+        },
       },
     })
   })
