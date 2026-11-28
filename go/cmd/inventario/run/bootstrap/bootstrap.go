@@ -119,16 +119,20 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 	// vars (no INVENTARIO_RUN_ prefix — see the sentry package doc). A malformed
 	// DSN fails fast here; an unset DSN leaves Sentry disabled with a no-op
 	// flush. Done last so it covers the serving lifetime of every run mode;
-	// startup failures above are fatal and already logged to stderr.
+	// startup failures above are fatal and logged where they happen.
 	sentryCfg, err := sentry.LoadConfig()
 	if err != nil {
 		serverSetup.closeReadinessRedisPinger()
-		return nil, fmt.Errorf("loading sentry config: %w", err)
+		err = fmt.Errorf("loading sentry config: %w", err)
+		slog.Error("Invalid Sentry configuration", "error", err)
+		return nil, err
 	}
 	sentryFlush, err := sentry.Init(sentryCfg)
 	if err != nil {
 		serverSetup.closeReadinessRedisPinger()
-		return nil, fmt.Errorf("initialising sentry: %w", err)
+		err = fmt.Errorf("initialising sentry: %w", err)
+		slog.Error("Failed to initialize Sentry", "error", err)
+		return nil, err
 	}
 
 	// The Trash list shows when each entry expires, so the API server needs
@@ -226,10 +230,11 @@ func verifySchemaMatchesBinary(dsn string) error {
 
 	m := migrator.NewWithFallback(dsn, "")
 	if err := m.VerifySchemaUpToDate(ctx); err != nil {
-		if errors.Is(err, migrator.ErrSchemaLagsBinary) {
-			slog.ErrorContext(ctx, "refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
-				"error", err,
-			)
+		// A schema behind the binary is logged by the migrator, with both
+		// versions; anything else, such as a database that cannot be
+		// reached, is logged here. Either way the failure is logged once.
+		if !errors.Is(err, migrator.ErrSchemaLagsBinary) {
+			slog.ErrorContext(ctx, "Refusing to start: could not check the database schema", "error", err)
 		}
 		return err
 	}

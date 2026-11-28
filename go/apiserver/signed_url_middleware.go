@@ -64,7 +64,6 @@ func SignedURLMiddleware(
 				slog.WarnContext(r.Context(), "Signed URL access attempt by inactive user",
 					"user_id", claims.UserID,
 					"file_id", claims.FileID,
-					"email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "User account disabled", http.StatusForbidden)
 				return
