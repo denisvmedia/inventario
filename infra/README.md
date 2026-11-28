@@ -657,7 +657,7 @@ with kubectl" is self-correcting; no manual re-sync needed.
 | `make -C infra status VM=user@host` | Snapshot of k3s + tailscaled + kubectl get nodes,pods -A. |
 | `make -C infra logs VM=user@host` | Tails `journalctl -u k3s.service`. Override the unit with `SVC=tailscaled.service`, etc. |
 | `make -C infra shell VM=user@host` | Plain SSH into the VM. |
-| `make -C infra destroy VM=user@host` | Runs `k3s-uninstall.sh`, which stops k3s and wipes `/etc/rancher/k3s`, `/var/lib/rancher/k3s` (PVC data included) and `/var/lib/kubelet`. Also removes a vcluster standalone install if it finds one, rebooting the VM to stop its containers. Tailscale membership preserved. Doesn't touch the VM's OS. |
+| `make -C infra destroy VM=user@host` | Runs `k3s-uninstall.sh`, which stops k3s and wipes `/etc/rancher/k3s`, `/var/lib/rancher/k3s` (PVC data included) and `/var/lib/kubelet`. Also removes a vcluster standalone install if it finds one: the `vcluster`, `kubelet` and `containerd` units, their binaries in `/usr/local/bin`, the CNI plugins and `/var/lib/containerd` (the old image store, tens of GB). It reboots the VM first, to stop the containers those units leave running. Tailscale membership preserved. Doesn't touch the VM's OS. |
 | `make -C infra restore-longevity VM=user@host` | Interactive Velero restore of `inv-vcl01-longevity` from an R2 backup (#1865). Lists backups, prompts which, freezes ArgoCD, deletes + restores the namespace. See §6. |
 
 ---

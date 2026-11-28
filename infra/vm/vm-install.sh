@@ -192,10 +192,13 @@ fi
 
 # --- k3s (one node: server and agent on this VM) ---
 # k3s cannot share the host with vcluster standalone: both run their own
-# kubelet and containerd. `make destroy` removes a vcluster install and
-# reboots the VM to stop the containers it leaves behind.
-if [ -e /etc/systemd/system/vcluster.service ] || systemctl is-active --quiet vcluster.service; then
-    echo "vcluster.service is installed on this VM; k3s cannot run beside it." >&2
+# kubelet and containerd, on the same ports (10250 and 10010). vcluster writes
+# kubelet.service and containerd.service next to its own unit, and they stay
+# when it is stopped, so any of the three blocks the install. `make destroy`
+# removes them and reboots the VM to stop the containers they leave behind.
+if [ -e /etc/systemd/system/vcluster.service ] || systemctl is-active --quiet vcluster.service \
+    || [ -e /etc/systemd/system/kubelet.service ] || [ -e /etc/systemd/system/containerd.service ]; then
+    echo "A vcluster standalone install is on this VM (vcluster, kubelet or containerd unit); k3s cannot run beside it." >&2
     echo "Run 'make -C infra destroy VM=...' (it removes vcluster and reboots the VM), then bootstrap again." >&2
     exit 1
 fi
