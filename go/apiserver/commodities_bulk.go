@@ -302,7 +302,7 @@ func bulkResultFail(ctx context.Context, resource string, f services.BulkFailure
 		out.Field, out.Reason = validationFieldReason(f.Err)
 	default:
 		out.Code, out.Error = "failed", "could not be changed"
-		slog.WarnContext(ctx, "bulk action: entity failed", "resource", resource, "id", f.ID, "err", f.Err)
+		slog.WarnContext(ctx, "bulk action: entity failed", "resource", resource, "entity_id", f.ID, "error", f.Err)
 	}
 	return out
 }

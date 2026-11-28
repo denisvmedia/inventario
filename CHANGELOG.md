@@ -1213,6 +1213,14 @@ when to add an entry and where it goes.
 - Opening a sign-in link while the database cannot be reached answers with a
   server error, which can be retried, instead of "Invalid or expired sign-in
   link". The link stays usable.
+- A new account starts with the language the app showed when you signed up,
+  so its verification and welcome emails are in that language. They were in
+  English until you picked a language in your settings
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
+- Opening an email verification link while the database cannot be reached
+  answers with a server error, which can be retried, instead of "User not
+  found". The link stays usable
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
 
 ### Security
 
@@ -1230,6 +1238,17 @@ when to add an entry and where it goes.
   ends because it could not be renewed, and a change the previous account
   saved that finishes after the switch no longer shows up for the next one
   ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
+- The API no longer writes secrets from refused requests to its log. Every
+  release since v0.1.0 logged the signature (`sig`) of a refused signed URL,
+  in the query string on `Invalid signed URL access attempt` and in the
+  `query_params` attribute that `logSecurityViolation` adds to its
+  security violation lines. It also logged up to 200 bytes of a request
+  body refused for a tenant field
+  (`Security violation: user-provided tenant ID in request body`), and that
+  body can hold a password. Lines written by earlier versions can contain
+  either: purge those logs or restrict who can read them, and treat a
+  password that appears in one as exposed
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ### Operators
 
@@ -1385,6 +1404,17 @@ when to add an entry and where it goes.
   header to the frontend. The conventions behind the field are in the new
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md)
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- An email worker that cannot read its queue, as during a Redis outage, waits
+  before it tries again: 250 ms after the first failure, doubling up to 30 s,
+  and 250 ms again once a read succeeds. It used to retry at once, which kept
+  a CPU core busy per worker and wrote `Email worker dequeue failed` many
+  thousands of times a second. The line now carries `attempt` and `retry_in`
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
+- A `loan_reminder_sent` item event records whether the reminder email went
+  out, in `emailed`, instead of the recipient's address in `recipient`. The
+  recipient is the loan's creator, whom the event already names in
+  `created_by_user_id`. Events written before keep their `recipient`
+  ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
 - Tenant management in the back office. A `platform_admin` creates a tenant
   (**New tenant** on the Tenants page), edits its name, slug and custom
   domain, suspends and reactivates it with a reason, and deletes it after
@@ -1490,6 +1520,31 @@ when to add an entry and where it goes.
   email queue that cannot be created, so the server falls back to the
   in-memory queue, as a warning. The stub's weekly digest line is
   `STUB email: weekly digest`
+- Request, file, upload and back-office log lines in the API follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  The tenant field checks log their refusals as warnings, not errors
+  (`Security violation: user-provided tenant ID in header`, `in query
+  parameter` and `in request body`, `Security violation: forbidden tenant
+  header detected`, the tenant-scan size cap and an unreadable body). So do
+  a missing item (`CommodityCtx: Failed to get commodity`), a back-office
+  block or unblock the user registry refuses, a seed request with a bad
+  body, and an upload whose signed URLs or inline thumbnail could not be
+  made; a database failure on those paths stays an error. These are errors
+  now: `Signed URL cross-tenant access attempt`, a signed URL lookup that
+  fails for a reason other than a missing row, and the two steps that end a
+  user's sessions on a back-office block or session revoke, renamed
+  `admin end sessions: failed to revoke refresh tokens` and
+  `admin end sessions: failed to blacklist access tokens`. An invalid public
+  URL is logged once, by the line for the link that could not be built, and
+  no longer also as
+  `Invalid public URL configuration`. The group invite line no longer
+  carries the recipient's address. `user_email` is `email`, and the
+  per-request debug lines `RLS Security: User context validated` and
+  `Signed URL file access granted` carry no address. `file_path` and
+  `filename` holding a storage key are `blob_key`, and `slug` on the group
+  resolver line is `group_slug`. The seed endpoint logs `Seed endpoint
+  called` and, at debug, `Parsed seed request`. A failed back-office user or
+  worker step is logged once, without a second `internal server error` line
 - Startup, backup, seed data and registry log lines follow the
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
   A JWT secret, file signing key or OAuth state key set to a public

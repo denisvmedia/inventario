@@ -2,7 +2,10 @@ package apiserver
 
 import (
 	"context"
+	"slices"
 	"time"
+
+	"golang.org/x/text/language"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
@@ -25,6 +28,26 @@ func newAccountEmailPrefs(settings registry.SettingsRegistryFactory) *notificati
 		return nil
 	}
 	return notifications.NewService(settings)
+}
+
+// uiLanguages are the languages the frontend ships (frontend/src/i18n).
+var uiLanguages = []string{"en", "cs", "ru"}
+
+// uiLanguageFromAcceptLanguage returns the first UI language an
+// Accept-Language header names, in the header's order of preference, or ""
+// when it names none.
+func uiLanguageFromAcceptLanguage(header string) string {
+	tags, _, err := language.ParseAcceptLanguage(header)
+	if err != nil {
+		return ""
+	}
+	for _, tag := range tags {
+		base, confidence := tag.Base()
+		if confidence == language.Exact && slices.Contains(uiLanguages, base.String()) {
+			return base.String()
+		}
+	}
+	return ""
 }
 
 // withRecipientLanguage adds the recipient's UI language from their settings

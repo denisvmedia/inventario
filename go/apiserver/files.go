@@ -1202,7 +1202,7 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	}
 	if _, err := io.Copy(w, reader); err != nil {
 		// Log error but don't send response as headers are already sent
-		slog.ErrorContext(r.Context(), "Failed to stream file", "error", err, "file_path", filePath)
+		slog.ErrorContext(r.Context(), "Failed to stream file", "error", err, "blob_key", filePath)
 	}
 }
 

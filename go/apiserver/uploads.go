@@ -189,7 +189,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID, binding)
 	if err != nil {
 		// Log error but don't fail the upload - signed URLs are optional
-		slog.ErrorContext(r.Context(), "Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		slog.WarnContext(r.Context(), "Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
 		// Return response without signed URLs
 		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
 		if err := render.Render(w, r, resp); err != nil {
@@ -480,7 +480,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 		// upload error the caller is about to render.
 		if delErr := b.Delete(ctx, filename); delErr != nil {
 			slog.WarnContext(ctx, "failed to delete partial upload blob after rejected upload (best-effort)",
-				"filename", filename, "error", delErr.Error())
+				"blob_key", filename, "error", delErr.Error())
 		}
 	}()
 	defer func() {
@@ -573,7 +573,7 @@ func (api *uploadsAPI) generateThumbnailInline(ctx context.Context, file *models
 	err := api.fileService.GenerateThumbnails(ctx, file)
 	if err != nil {
 		// Log error but don't fail the upload - thumbnails are optional
-		slog.ErrorContext(ctx, "Failed to generate thumbnail inline",
+		slog.WarnContext(ctx, "Failed to generate thumbnail inline",
 			"error", err.Error(),
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,

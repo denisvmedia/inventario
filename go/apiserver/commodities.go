@@ -106,7 +106,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	// the list.
 	linked, err := linkedItemSummaries(r.Context(), regSet, result.Commodities...)
 	if err != nil {
-		slog.WarnContext(r.Context(), "items list: linked item lookup failed; rendering without it", "err", err)
+		slog.WarnContext(r.Context(), "items list: linked item lookup failed; rendering without it", "error", err)
 		linked = nil
 	}
 
@@ -139,7 +139,7 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 	}
 	digest, ok, err := commodityquery.SelectionDigest(ctx, regSet, query, result.Total)
 	if err != nil {
-		slog.WarnContext(ctx, "items list: selection digest lookup failed; rendering without it", "err", err)
+		slog.WarnContext(ctx, "items list: selection digest lookup failed; rendering without it", "error", err)
 		return ""
 	}
 	if !ok {

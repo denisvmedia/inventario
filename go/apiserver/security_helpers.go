@@ -62,10 +62,10 @@ func ValidateUserContext(r *http.Request) (*models.User, *SecurityError) {
 	return user, nil
 }
 
-// HandleSecurityError renders a security error with consistent format and logging
+// HandleSecurityError renders a security error with a consistent format. It
+// does not log: the validator that returned secErr has logged the violation
+// (devdocs/logging.md, Levels: log an error once).
 func HandleSecurityError(w http.ResponseWriter, r *http.Request, secErr *SecurityError) {
-	logSecurityViolation(r, secErr.Type, secErr.Message)
-
 	// Return 404 for RLS violations and resource access issues as per project standards
 	if secErr.Type == "resource_not_found" ||
 		secErr.Type == "user_context_invalid" ||
@@ -166,13 +166,11 @@ func logSecurityViolationWithContext(r *http.Request, violationType, message str
 		"severity", severity,
 		"user_id", userID,
 		"tenant_id", tenantID,
-		"user_email", userEmail,
+		"email", userEmail,
 		"method", r.Method,
 		"path", r.URL.Path,
 		"remote_addr", r.RemoteAddr,
 		"user_agent", r.UserAgent(),
-		"query_params", r.URL.RawQuery,
-		"timestamp", "now",
 	}
 
 	// Add context-specific fields
@@ -208,19 +206,6 @@ func logSecurityViolationWithContext(r *http.Request, violationType, message str
 		slog.InfoContext(r.Context(), "Security event detected", logFields...)
 	default:
 		slog.WarnContext(r.Context(), "Security violation detected", logFields...)
-	}
-
-	// Additional monitoring for critical violations
-	if severity == "critical" || severity == "high" {
-		// This could trigger alerts, rate limiting, or account suspension
-		slog.ErrorContext(r.Context(), "Security alert triggered",
-			"alert_type", "security_violation",
-			"violation_type", violationType,
-			"user_id", userID,
-			"tenant_id", tenantID,
-			"remote_addr", r.RemoteAddr,
-			"requires_investigation", true,
-		)
 	}
 }
 
