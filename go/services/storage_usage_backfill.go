@@ -130,7 +130,7 @@ func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *bl
 			// pass.
 			if !errors.Is(attrErr, context.Canceled) {
 				slog.DebugContext(ctx, "storage backfill: missing blob",
-					"file_id", file.ID, "path", file.OriginalPath, "error", attrErr.Error())
+					"file_id", file.ID, "blob_key", file.OriginalPath, "error", attrErr.Error())
 			}
 			res.failed++
 			continue

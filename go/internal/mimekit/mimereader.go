@@ -3,7 +3,7 @@ package mimekit
 import (
 	"bytes"
 	"io"
-	"log"
+	"log/slog"
 	"mime"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -78,7 +78,9 @@ func (mr *MIMEReader) Read(p []byte) (n int, err error) {
 				"detected", mtype,
 				"parsed", mt,
 			))
-			log.Printf("=================== Invalid MIME: %s", mr.err.Error())
+			// The caller turns the error into the response, so the refusal
+			// itself is detail: Debug, with the type the error does not name.
+			slog.Debug("Content type not allowed", "content_type", mtype.String())
 			return n, mr.err
 		}
 		mr.mimetype = mt
