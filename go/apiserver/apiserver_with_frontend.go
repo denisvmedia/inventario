@@ -21,7 +21,7 @@ func FrontendHandler() http.Handler {
 		// Embed layout drift (root directory renamed/missing) is the only
 		// way fs.Sub can error in practice. Return a 500 handler instead of
 		// proceeding with a nil FS that http.FileServer would panic on.
-		slog.Error("Failed to prepare frontend filesystem", "err", err)
+		slog.Error("Failed to prepare frontend filesystem", "error", err)
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		})

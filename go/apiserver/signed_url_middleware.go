@@ -37,9 +37,10 @@ func SignedURLMiddleware(
 			binding := services.ExtractSessionBinding(r)
 			claims, err := fileSigningService.ValidateSignedURL(r.URL.Path, r.URL.Query(), binding)
 			if err != nil {
+				// The query is not logged: it carries the signature
+				// (devdocs/logging.md, What never goes into a log).
 				slog.WarnContext(r.Context(), "Invalid signed URL access attempt",
 					"path", r.URL.Path,
-					"query", r.URL.RawQuery,
 					"error", err.Error(),
 					"remote_addr", r.RemoteAddr,
 					"user_agent", r.UserAgent())
@@ -50,7 +51,7 @@ func SignedURLMiddleware(
 			// Validate that the user still exists and is active
 			user, err := userRegistry.Get(r.Context(), claims.UserID)
 			if err != nil {
-				slog.WarnContext(r.Context(), "Signed URL access attempt with invalid user",
+				slog.Log(r.Context(), errorLogLevel(err), "Signed URL access attempt with invalid user",
 					"user_id", claims.UserID,
 					"file_id", claims.FileID,
 					"error", err.Error(),
@@ -63,7 +64,7 @@ func SignedURLMiddleware(
 				slog.WarnContext(r.Context(), "Signed URL access attempt by inactive user",
 					"user_id", claims.UserID,
 					"file_id", claims.FileID,
-					"user_email", user.Email,
+					"email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "User account disabled", http.StatusForbidden)
 				return
@@ -83,7 +84,7 @@ func SignedURLMiddleware(
 			fileServiceReg := fileRegistryFactory.CreateServiceRegistry()
 			file, err := fileServiceReg.Get(ctx, claims.FileID)
 			if err != nil {
-				slog.WarnContext(r.Context(), "Signed URL access attempt for missing file",
+				slog.Log(r.Context(), errorLogLevel(err), "Signed URL access attempt for missing file",
 					"user_id", user.ID,
 					"file_id", claims.FileID,
 					"error", err.Error(),
@@ -96,7 +97,7 @@ func SignedURLMiddleware(
 			// HMAC already scopes to user+file, so this is only reachable
 			// if someone manages to forge a collision — fail closed.
 			if file.TenantID != user.TenantID {
-				slog.WarnContext(r.Context(), "Signed URL cross-tenant access attempt",
+				slog.ErrorContext(r.Context(), "Signed URL cross-tenant access attempt",
 					"user_id", user.ID,
 					"file_id", claims.FileID,
 					"file_tenant_id", file.TenantID,
@@ -109,7 +110,7 @@ func SignedURLMiddleware(
 			if file.GroupID != "" {
 				group, err := groupRegistry.Get(ctx, file.GroupID)
 				if err != nil {
-					slog.WarnContext(r.Context(), "Signed URL access attempt for file whose group cannot be loaded",
+					slog.Log(r.Context(), errorLogLevel(err), "Signed URL access attempt for file whose group cannot be loaded",
 						"user_id", user.ID,
 						"file_id", claims.FileID,
 						"group_id", file.GroupID,
@@ -124,7 +125,6 @@ func SignedURLMiddleware(
 			// Log successful file access for security monitoring
 			slog.DebugContext(r.Context(), "Signed URL file access granted",
 				"user_id", user.ID,
-				"user_email", user.Email,
 				"file_id", claims.FileID,
 				"group_id", file.GroupID,
 				"expires_at", claims.ExpiresAt,

@@ -78,7 +78,7 @@ type SeedResponse struct {
 // @Router /seed [post].
 func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 	// Log request details
-	slog.InfoContext(r.Context(), "=== SEED ENDPOINT CALLED ===",
+	slog.InfoContext(r.Context(), "Seed endpoint called",
 		"method", r.Method,
 		"content_type", r.Header.Get("Content-Type"),
 		"content_length", r.ContentLength,
@@ -88,13 +88,13 @@ func (api *seedAPI) seedDatabase(w http.ResponseWriter, r *http.Request) {
 	var req SeedRequest
 	if err := render.DecodeJSON(r.Body, &req); err != nil && r.ContentLength > 0 {
 		// Only error if body was provided but failed to parse
-		slog.ErrorContext(r.Context(), "Failed to decode JSON body", "error", err, "content_length", r.ContentLength)
+		slog.WarnContext(r.Context(), "Failed to decode the seed request body", "error", err, "content_length", r.ContentLength)
 		badRequest(w, r, err)
 		return
 	}
 
-	slog.InfoContext(r.Context(), "=== PARSED SEED REQUEST ===",
-		"user_email", req.UserEmail,
+	slog.DebugContext(r.Context(), "Parsed seed request",
+		"email", req.UserEmail,
 		"tenant_slug", req.TenantSlug,
 		"user_email_len", len(req.UserEmail),
 		"tenant_slug_len", len(req.TenantSlug),
