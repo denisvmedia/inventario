@@ -207,8 +207,8 @@ if [ -n "$TS_HOSTNAME_REMOTE" ] && [ -n "$TAILNET_NAME" ]; then
         "$LAPTOP_KUBECONFIG"
     # Strip any legacy `tls-server-name: 127.0.0.1` line left by a pre-#1892
     # bootstrap run. The FQDN-based server matches the cert SAN directly
-    # (assuming extraSANs is in place — vm-install.sh writes it), so no
-    # server-name override is needed.
+    # (vm-install.sh adds it as tls-san), so no server-name override is
+    # needed.
     perl -i -ne 'print unless /^\s*tls-server-name:\s*127\.0\.0\.1\s*$/' \
         "$LAPTOP_KUBECONFIG"
     note "kubeconfig server rewritten to https://${TS_FQDN}:<port>"
