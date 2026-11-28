@@ -275,7 +275,7 @@ func (api *intakeDeliveryAPI) readMultipart(r *http.Request, tenantID string) (s
 		}
 		file = &services.IntakeDeliveredFile{
 			BlobKey:  saved.FilePath,
-			Name:     saved.Basename,
+			Name:     part.FileName(),
 			MIMEType: saved.MIMEType,
 			Size:     saved.Size,
 			SHA256:   saved.SHA256,

@@ -102,6 +102,36 @@ func TestDownloadName(t *testing.T) {
 	}
 }
 
+// DisplayName is the title an upload gets: the name the client sent without
+// its last extension and without the timestamp UploadFileName adds, as the
+// upload dialogs pre-fill it.
+func TestDisplayName(t *testing.T) {
+	long := strings.Repeat("ž", 300)
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"drops the extension and keeps the name as given", "Invoice 121.pdf", "Invoice 121"},
+		{"drops only the last extension", "report.v2.pdf", "report.v2"},
+		{"a compound extension loses its last part", "backup.tar.gz", "backup.tar"},
+		{"a name without an extension is kept", "README", "README"},
+		{"a leading dot does not start an extension", ".env", ".env"},
+		{"keeps letters outside ASCII", "Účtenka Žižkov.jpg", "Účtenka Žižkov"},
+		{"trims surrounding spaces", "  receipt .png", "receipt"},
+		{"drops control characters", "rec\x00ei\x1bpt\n.pdf", "receipt"},
+		{"drops bytes that are not UTF-8", "rec\xffeipt.pdf", "receipt"},
+		{"cuts to 255 characters", long + ".pdf", strings.Repeat("ž", 255)},
+		{"nothing left gives an empty name", " \t .pdf", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(filekit.DisplayName(tt.in), qt.Equals, tt.want)
+		})
+	}
+}
+
 // #2131: a dot in the NAME is not an extension. `report.v2.pdf` used to yield
 // extension ".v2.pdf", which moved half the filename out of the title the
 // user sees and produced a nonsense extension. Only the compound extensions

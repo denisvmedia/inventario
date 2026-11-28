@@ -60,6 +60,8 @@ describe("<ExportsListPage />", () => {
   it("renders the empty state when there are no exports", async () => {
     seed([])
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Backup & Restore · Inventario"))
     expect(await screen.findByTestId("exports-list-empty")).toBeVisible()
   })
 

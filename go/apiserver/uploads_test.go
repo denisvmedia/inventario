@@ -23,6 +23,7 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/internal/inb"
 )
@@ -442,6 +443,39 @@ func TestUploads_file_sameNameSameSecond_distinctBlobKeys(t *testing.T) {
 	c.Assert(firstName, qt.Contains, "receipt")
 	c.Assert(firstKey, qt.Not(qt.Contains), "receipt",
 		qt.Commentf("a key derived from the filename is exactly what collided"))
+}
+
+// The title and Path of an upload are the name the client sent without its
+// extension: no timestamp, no lowercasing, no dashes for spaces. The upload
+// dialogs send a title only when the user changed the one they pre-filled
+// from that name, so this is the title the user sees.
+func TestUploads_file_titleIsTheClientName(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	handler := apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false})
+
+	var imgBuf bytes.Buffer
+	c.Assert(jpeg.Encode(&imgBuf, image.NewRGBA(image.Rect(0, 0, 4, 4)), &jpeg.Options{Quality: 80}), qt.IsNil)
+	bodyBuf := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuf)
+	fileWriter, err := bodyWriter.CreatePart(CreateFormFileMIME("file", "Invoice 121.v2.jpg", "image/jpeg"))
+	c.Assert(err, qt.IsNil)
+	_, err = fileWriter.Write(imgBuf.Bytes())
+	c.Assert(err, qt.IsNil)
+	c.Assert(bodyWriter.Close(), qt.IsNil)
+
+	req, err := http.NewRequest("POST", "/api/v1/g/"+testGroup.Slug+"/uploads/file", bodyBuf)
+	c.Assert(err, qt.IsNil)
+	req.Header.Set("Content-Type", bodyWriter.FormDataContentType())
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+
+	body := rr.Body.Bytes()
+	c.Check(body, checkers.JSONPathEquals("$.attributes.title"), "Invoice 121.v2")
+	c.Check(body, checkers.JSONPathEquals("$.attributes.path"), "Invoice 121.v2")
 }
 
 // TestUploads_file_tooLarge is the #2101 regression test: a POST

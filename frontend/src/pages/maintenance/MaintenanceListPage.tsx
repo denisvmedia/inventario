@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Badge } from "@/components/ui/badge"
 import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,6 +27,7 @@ export function MaintenanceListPage() {
 
   return (
     <Page width="wide" data-testid="page-maintenance">
+      <RouteTitle title={t("maintenance:list.heading")} />
       <PageHeader
         title={t("maintenance:list.heading")}
         subtitle={t("maintenance:list.subheading")}

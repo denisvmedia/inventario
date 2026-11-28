@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Badge } from "@/components/ui/badge"
 import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -139,6 +140,7 @@ export function WarrantiesListPage() {
 
   return (
     <Page width="wide" data-testid="page-warranties">
+      <RouteTitle title={t("warranties:list.title")} />
       <PageHeader title={t("warranties:list.title")} subtitle={t("warranties:list.subtitle")} />
 
       {/* Status summary cards — counts mirror the per-tab badges. */}

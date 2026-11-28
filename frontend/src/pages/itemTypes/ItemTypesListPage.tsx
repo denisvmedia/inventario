@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom"
 import { ItemTypeDeleteDialog } from "@/components/itemTypes/ItemTypeDeleteDialog"
 import { ItemTypeFormDialog } from "@/components/itemTypes/ItemTypeFormDialog"
 import { ItemTypeRow } from "@/components/itemTypes/ItemTypeRow"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -93,6 +94,7 @@ export function ItemTypesListPage() {
 
   return (
     <Page width="wide" data-testid="page-item-types">
+      <RouteTitle title={t("itemTypes:title")} />
       <PageHeader
         title={t("itemTypes:title")}
         subtitle={t("itemTypes:description")}

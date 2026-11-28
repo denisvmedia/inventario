@@ -115,6 +115,34 @@ describe("GroupContext", () => {
     expect(screen.getByTestId("loc").getAttribute("data-search")).toContain("g=household")
   })
 
+  // Each Privacy & security page outside /g/:slug needs the same pin as
+  // /profile, or its sidebar shows "Select a group" over empty sections.
+  it.each(["/profile/sessions", "/profile/login-history", "/profile/api-tokens"])(
+    "auto-sets ?g=<defaultSlug> on %s",
+    async (path) => {
+      server.use(msw.get(api("/groups"), () => HttpResponse.json(groupsResponse)))
+      renderWithProviders({
+        initialPath: path,
+        routes: (
+          <Route
+            path={path}
+            element={
+              <GroupProvider>
+                <ProbeGroup />
+                <LocationEcho />
+              </GroupProvider>
+            }
+          />
+        ),
+      })
+      await waitFor(() =>
+        expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("household")
+      )
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe(path)
+      expect(screen.getByTestId("loc").getAttribute("data-search")).toContain("g=household")
+    }
+  )
+
   it("respects an explicit ?g=<slug> on stable non-group routes", async () => {
     // When the URL already carries a valid ?g=, GroupProvider must NOT
     // overwrite it with the default. Mirrors clicking a "Profile" link

@@ -766,6 +766,16 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
 - The print view of an item shows its brand and model, its seller and the
   custom fields it has a value for, as the item page does. Values the item
   doesn't have are left out.
+- The **Active sessions**, **Login history** and **API tokens** pages keep the
+  active group. The sidebar showed "Select a group" with empty sections there,
+  and the rows under **Privacy & security** in Settings opened these pages
+  without the group you were working in
+  ([#2872](https://github.com/denisvmedia/inventario/issues/2872)).
+- The top bar and the browser tab name every page. Sellers, Item types,
+  Custom fields, Tags, Warranties, Lent out, In service, Maintenance,
+  Upcoming and the Backup & Restore pages showed the previous page's title,
+  or none after a reload
+  ([#2872](https://github.com/denisvmedia/inventario/issues/2872)).
 - Signing out no longer signs you back in. A request that was still running
   when you signed out was refused, the app renewed the session to retry it,
   and a moment later you were signed in again. Signing out in one tab while
@@ -1167,6 +1177,14 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   answers with a server error, which can be retried, instead of "User not
   found". The link stays usable
   ([#3069](https://github.com/denisvmedia/inventario/issues/3069)).
+- An uploaded file gets the title the upload dialog shows: its file name
+  without the extension, as you named it. The server built the title and the
+  filename from the name of the stored copy instead, in lowercase, with
+  dashes for spaces and a number at the end ("invoice-121-1795863438"). That
+  happened to every file whose title you left as it was, to files added with
+  Add items from files, and to documents delivered by other systems. Files
+  already uploaded keep their names, and a restore keeps the names its backup
+  carries.
 
 ### Security
 

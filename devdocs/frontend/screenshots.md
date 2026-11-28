@@ -43,7 +43,7 @@ for screenshots.
 ### 3. Run the server
 
 ```bash
-./bin/inventario run \
+INVENTARIO_RUN_MEMORY_TENANT_SLUG=test-org ./bin/inventario run \
   --addr=":3333" \
   --db-dsn="memory://" \
   --no-auth-rate-limit \
@@ -54,6 +54,11 @@ for screenshots.
 `--enable-seed-endpoint` mounts the public `POST /api/v1/seed` route the next
 step curls. It is OFF by default — the route runs a privileged, RLS-bypassing
 operation — and must never be enabled in a real deployment (#2039).
+
+`INVENTARIO_RUN_MEMORY_TENANT_SLUG=test-org` names the tenant that
+`memory://` creates at start. The seed fills only the `test-org` tenant and
+refuses the default one ("refusing to seed into pre-existing tenant
+'default'"), so without it the seed step returns 500.
 
 `memory://` means data lives in process memory and goes away on restart —
 fine for screenshots, useless for anything else. Drop the rate-limit

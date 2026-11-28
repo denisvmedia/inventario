@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { TagFormDialog } from "@/components/tags/TagFormDialog"
 import { TagInlineCreate } from "@/components/tags/TagInlineCreate"
 import { TagRow, type TagRowPreviewItem } from "@/components/tags/TagRow"
@@ -506,6 +507,7 @@ export function TagsListPage() {
 
   return (
     <Page width="wide" data-testid="page-tags">
+      <RouteTitle title={t("tags:title")} />
       <PageHeader
         title={t("tags:title")}
         subtitle={t("tags:description")}
