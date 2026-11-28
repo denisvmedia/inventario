@@ -53,6 +53,10 @@ spec:
   template:
     metadata:
       name: inv-vcl01-longevity
+      # Server-Side Diff fails on the setup and init-data Jobs and leaves the
+      # Application at sync status Unknown; see applicationset-pr.yaml.
+      annotations:
+        argocd.argoproj.io/compare-options: ServerSideDiff=false
       labels:
         inventario-preview: "true"
     spec:
