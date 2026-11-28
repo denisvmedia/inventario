@@ -18278,6 +18278,14 @@ export type components = {
         };
         "jsonapi.ImportExportAttributes": {
             description?: string;
+            /**
+             * @description SourceFileName is the name of the backup file the user picked. The file
+             *     of the imported backup is named after it, without the extension, and
+             *     downloads under that name. Without it the file is named after the
+             *     uploaded blob.
+             * @example inventario-backup-2026-11-28.inb
+             */
+            source_file_name?: string;
             source_file_path?: string;
         };
         "jsonapi.ImportExportRequest": {

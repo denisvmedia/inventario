@@ -204,16 +204,22 @@ type Export struct {
 	// row stays, with its error, until the export is deleted.
 	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
 	DiscardedAt PTimestamp `json:"-" db:"discarded_at" userinput:"false"`
+	// SourceFileName is the name of the backup file the user picked for an
+	// import. The import names the file row of the backup after it, without
+	// the extension; "" names it after the uploaded blob.
+	//ptah:schema:field name="source_file_name" type="TEXT" not_null="true" default=""
+	SourceFileName string `json:"-" db:"source_file_name" userinput:"false"`
 }
 
-func NewImportedExport(description, sourceFilePath string) Export {
+func NewImportedExport(description, sourceFilePath, sourceFileName string) Export {
 	return Export{
-		Description: description,
-		Type:        ExportTypeImported,
-		Status:      ExportStatusPending,
-		CreatedDate: PNow(),
-		FilePath:    sourceFilePath, // Temporary: will be replaced by FileID during import processing
-		Imported:    true,
+		Description:    description,
+		Type:           ExportTypeImported,
+		Status:         ExportStatusPending,
+		CreatedDate:    PNow(),
+		FilePath:       sourceFilePath, // Temporary: will be replaced by FileID during import processing
+		SourceFileName: sourceFileName,
+		Imported:       true,
 	}
 }
 

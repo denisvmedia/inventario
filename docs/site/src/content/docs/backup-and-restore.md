@@ -68,7 +68,7 @@ If you have an `.inb` file from before — perhaps from another Inventario insta
 3. Optionally add a **Description** so you can find the import in the list later.
 4. Click **Upload and continue**.
 
-The file is staged on the server first and only inspected when you start the restore. After a successful upload, Inventario sends you straight to the restore form so you can finish the job. The imported export shows an **Imported** badge in the list and a note on its detail page.
+The file is staged on the server first and only inspected when you start the restore. After a successful upload, Inventario sends you straight to the restore form so you can finish the job. The imported export shows an **Imported** badge in the list and a note on its detail page. **Download** on it saves the backup under the name of the file you uploaded.
 
 :::caution[Backups stay with your group]
 A backup restores only into the current group. Inventario confines an uploaded backup to the group that owns it — you can't import or restore someone else's backup into your group, and yours can't be pulled into theirs.

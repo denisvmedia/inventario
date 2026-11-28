@@ -472,7 +472,8 @@ func (api *exportsAPI) importExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create export record with pending status and source file path
-	importedExport := models.NewImportedExport(data.Data.Attributes.Description, src)
+	attrs := data.Data.Attributes
+	importedExport := models.NewImportedExport(attrs.Description, src, attrs.SourceFileName)
 
 	if importedExport.TenantID == "" {
 		importedExport.TenantID = user.TenantID
