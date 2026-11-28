@@ -240,7 +240,7 @@ func TestIntakeDelivery_MultipartWithFile(t *testing.T) {
 	files := len(must.Must(regs.FileRegistry.List(ctx))) + 1
 	const blobs = 1
 
-	contentType, body := multipartDelivery(c, paperlessForm("117"), "file", "invoice-117.pdf", pdf)
+	contentType, body := multipartDelivery(c, paperlessForm("117"), "file", "Invoice 117.pdf", pdf)
 	rr := env.raw(token, path, contentType, body)
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
 	doc := decodeIntakeDocument(c, rr)
@@ -248,22 +248,23 @@ func TestIntakeDelivery_MultipartWithFile(t *testing.T) {
 
 	file := must.Must(regs.FileRegistry.Get(ctx, *doc.Attributes.FileID))
 	c.Assert(file.File.MIMEType, qt.Equals, "application/pdf")
-	// Named as an upload of the file would be.
-	c.Assert(file.Title, qt.Matches, `invoice-117-\d+`)
+	// Named after the file the sender gave, without its extension.
+	c.Assert(file.Title, qt.Equals, "Invoice 117")
+	c.Assert(file.File.Path, qt.Equals, "Invoice 117")
 	attached := must.Must(regs.FileRegistry.ListByLinkedEntity(ctx, models.FileLinkDraft, *doc.Attributes.DraftID))
 	c.Assert(attached, qt.HasLen, 1)
 	c.Assert(must.Must(bucket.Exists(context.Background(), file.File.OriginalPath)), qt.IsTrue)
 
 	// A replay stores the file again only to find it is not needed, and
 	// removes the blob.
-	contentType, body = multipartDelivery(c, paperlessForm("117"), "file", "invoice-117.pdf", pdf)
+	contentType, body = multipartDelivery(c, paperlessForm("117"), "file", "Invoice 117.pdf", pdf)
 	rr = env.raw(token, path, contentType, body)
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
 	c.Assert(must.Must(regs.FileRegistry.List(ctx)), qt.HasLen, files)
 	c.Assert(blobCount(c, bucket), qt.Equals, blobs)
 
 	// Another file under the same document is a change; its blob goes too.
-	contentType, body = multipartDelivery(c, paperlessForm("117"), "file", "invoice-117.pdf", append(bytes.Clone(pdf), '\n'))
+	contentType, body = multipartDelivery(c, paperlessForm("117"), "file", "Invoice 117.pdf", append(bytes.Clone(pdf), '\n'))
 	rr = env.raw(token, path, contentType, body)
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf(rr.Body.String()))
 	c.Assert(blobCount(c, bucket), qt.Equals, blobs)

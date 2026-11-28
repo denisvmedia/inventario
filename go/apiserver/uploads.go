@@ -60,10 +60,12 @@ type uploadedFile struct {
 	// to. Post-#1793 this is always tenant-prefixed
 	// (`t/<tenant>/files/<basename>` or `t/<tenant>/restores/<basename>`).
 	FilePath string
-	// Basename is the sanitized filename from filekit.UploadFileName —
-	// preserved separately so handlers can derive a human-readable
-	// title from it without having to parse the tenant-prefixed key.
+	// Basename is the sanitized, timestamped filename from
+	// filekit.UploadFileName that named the blob.
 	Basename string
+	// Name is the file name the client sent. The title and Path of the
+	// file come from it (filekit.DisplayName).
+	Name     string
 	MIMEType string
 	Size     int64
 	// SHA256 is the hex SHA-256 of the stored bytes, computed while they
@@ -79,6 +81,17 @@ func uploadedFilesFromContext(ctx context.Context) []uploadedFile {
 		return nil
 	}
 	return uploadedFiles
+}
+
+// uploadDisplayName is the title and Path of an uploaded file: the name the
+// client sent without its extension. A name with nothing left once
+// filekit.DisplayName has cleaned it (only spaces or control characters)
+// falls back to the blob's basename.
+func uploadDisplayName(f uploadedFile) string {
+	if name := filekit.DisplayName(f.Name); name != "" {
+		return name
+	}
+	return strings.TrimSuffix(f.Basename, filepath.Ext(f.Basename))
 }
 
 type uploadsAPI struct {
@@ -136,10 +149,11 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	// `OriginalPath` carries the tenant-prefixed blob key
 	// (`t/<tenant>/files/<basename>`) — see `uploadFiles` middleware.
 	originalPath := f.FilePath
-	// `Path` / Title come from the human-readable basename, NOT the
-	// blob key — otherwise the user would see `t/<tenant>/files/...`
-	// as the title of every uploaded file.
-	pathWithoutExt := strings.TrimSuffix(f.Basename, filepath.Ext(f.Basename))
+	// `Path` / Title come from the name the client sent, without its
+	// extension, NOT from the blob key or the timestamped basename: the
+	// upload dialogs send a title only when the user changed the one they
+	// pre-filled from that name.
+	pathWithoutExt := uploadDisplayName(f)
 
 	// Auto-detect file type based on MIME type
 	fileType := detectFileType(f.MIMEType)
@@ -375,6 +389,7 @@ func (api *uploadsAPI) readUploadedFiles(r *http.Request, tenantID string, kind 
 		if err != nil {
 			return nil, err
 		}
+		uf.Name = rawName
 		uploadedFiles = append(uploadedFiles, uf)
 	}
 }

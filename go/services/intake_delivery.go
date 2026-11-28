@@ -19,6 +19,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/internal/aivision"
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/internal/mimekit"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -64,7 +65,9 @@ type IntakeDelivery struct {
 // IntakeDeliveredFile is the file of a delivery, already stored as a blob by
 // the caller.
 type IntakeDeliveredFile struct {
-	BlobKey  string
+	BlobKey string
+	// Name is the file name the sender gave. The file's title comes from
+	// it, without the extension.
 	Name     string
 	MIMEType string
 	Size     int64
@@ -558,7 +561,7 @@ func recordPromotion(ctx context.Context, set *registry.Set, result *IntakeDeliv
 
 // storeDeliveredFile creates the file entity of a delivered blob.
 func (s *IntakeService) storeDeliveredFile(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile) (*models.FileEntity, error) {
-	title := strings.TrimSuffix(file.Name, extOf(file.Name))
+	title := filekit.DisplayName(file.Name)
 	if title == "" {
 		title = n.Title
 	}
@@ -813,13 +816,4 @@ func (s *IntakeService) ListDocuments(ctx context.Context, draftIDs, commodityID
 		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
 	})
 	return out, nil
-}
-
-// extOf returns the extension of a file name with its dot, or "".
-func extOf(name string) string {
-	i := strings.LastIndexByte(name, '.')
-	if i <= 0 || strings.ContainsRune(name[i:], '/') {
-		return ""
-	}
-	return name[i:]
 }

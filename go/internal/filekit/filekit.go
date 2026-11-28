@@ -5,23 +5,55 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.5x5.cz/inventario/internal/textutils"
 )
 
 var NowFunc = time.Now
 
-// UploadFileName generates a sanitized, HUMAN-READABLE file name with a
-// timestamp for the given file name input, in the format
-// [sanitized_file_name]-[timestamp].[file_extension].
+// displayNameMaxRunes is the longest title the file API accepts, in
+// characters.
+const displayNameMaxRunes = 255
+
+// DisplayName is the name an uploaded file is shown under, its Title and its
+// Path: the name the client sent without its last extension, as the upload
+// dialogs pre-fill the title ("Invoice 121.pdf" gives "Invoice 121"). A dot
+// that starts the name does not start an extension, so ".env" keeps its name.
+// Bytes that are not UTF-8 and control characters are dropped, since a text
+// column cannot store some of them, surrounding spaces are trimmed, and the
+// result is cut to 255 characters, the longest title the file API accepts.
+// It returns "" when nothing is left.
+func DisplayName(fileName string) string {
+	name := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, strings.ToValidUTF8(fileName, ""))
+	if i := strings.LastIndexByte(name, '.'); i > 0 {
+		name = name[:i]
+	}
+	name = strings.TrimSpace(name)
+	if runes := []rune(name); len(runes) > displayNameMaxRunes {
+		name = strings.TrimSpace(string(runes[:displayNameMaxRunes]))
+	}
+	return name
+}
+
+// UploadFileName generates a sanitized file name with a timestamp for the
+// given file name input, in the format
+// [sanitized_file_name]-[timestamp].[file_extension]. It names the blob of a
+// backup uploaded for a restore (blobkeys.BuildRestoreUploadKey) and gives the
+// blob key of an uploaded file its extension. The title of an uploaded file
+// comes from DisplayName, without the timestamp.
 //
-// It is NOT unique and MUST NOT be used to derive a blob key. The timestamp has
-// SECOND granularity and there is no randomness, so two uploads of the same
-// filename within one second produce the identical string — which is precisely
-// how #2241 turned a file delete into the destruction of another live file's
-// bytes. Blob keys are minted from a server-side UUID via
-// blobkeys.BuildFileBlobKey; this name exists so the user sees "invoice-…"
-// rather than a UUID as the title of their upload.
+// It is NOT unique and MUST NOT be used alone to derive a blob key. The
+// timestamp has SECOND granularity and there is no randomness, so two uploads
+// of the same filename within one second produce the identical string — which
+// is precisely how #2241 turned a file delete into the destruction of another
+// live file's bytes. Blob keys are minted from a server-side UUID via
+// blobkeys.BuildFileBlobKey.
 //
 // The timestamp is obtained from the NowFunc function, which can be mocked for
 // testing purposes. The file name is sanitized by converting it to lowercase and

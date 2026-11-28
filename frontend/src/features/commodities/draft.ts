@@ -96,8 +96,8 @@ export function pendingFileTitle(entry: PendingFile): string {
 
 // placePendingFile gives an uploaded file the staged title and tags, then
 // attaches it to the entity. Both requests can be repeated. The title is
-// always sent: the upload names the file after the stored blob, and
-// PUT /files/{id} replaces the title, the description and the tags together.
+// always sent, because PUT /files/{id} replaces the title, the description
+// and the tags together.
 export async function placePendingFile(
   entry: PendingFile,
   fileId: string,
