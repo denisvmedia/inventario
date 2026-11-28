@@ -349,19 +349,25 @@ type FileEntity struct {
 }
 
 // LegacyFileLink holds the single-link columns of files that file_links
-// replaces. Nothing reads or writes them except the startup move into
-// file_links (FileRegistry.MoveLegacyLinks), which empties each row it moves.
-// The columns are dropped by a later migration, once every installation has run
-// that move.
+// replaces. Nothing uses them except the startup move into file_links
+// (FileRegistry.MoveLegacyLinks), which empties each row it moves. The columns
+// are dropped by a later migration, once every installation has run that move
+// (#2898).
+//
+// No INSERT or UPDATE names them (`dbwrite:"false"`), so this release keeps
+// creating and editing files after the columns are gone, which is what its pods
+// meet while the release that drops them rolls out. The columns default to an
+// empty string, so a row inserted without them reads the way earlier releases
+// wrote it: those releases scan the columns into plain strings and fail on NULL.
 type LegacyFileLink struct {
-	//ptah:schema:field name="linked_entity_type" type="TEXT"
-	LegacyLinkedEntityType string `json:"-" db:"linked_entity_type" userinput:"false"`
+	//ptah:schema:field name="linked_entity_type" type="TEXT" default=""
+	LegacyLinkedEntityType string `json:"-" db:"linked_entity_type" dbwrite:"false" userinput:"false"`
 
-	//ptah:schema:field name="linked_entity_id" type="TEXT"
-	LegacyLinkedEntityID string `json:"-" db:"linked_entity_id" userinput:"false"`
+	//ptah:schema:field name="linked_entity_id" type="TEXT" default=""
+	LegacyLinkedEntityID string `json:"-" db:"linked_entity_id" dbwrite:"false" userinput:"false"`
 
-	//ptah:schema:field name="linked_entity_meta" type="TEXT"
-	LegacyLinkedEntityMeta string `json:"-" db:"linked_entity_meta" userinput:"false"`
+	//ptah:schema:field name="linked_entity_meta" type="TEXT" default=""
+	LegacyLinkedEntityMeta string `json:"-" db:"linked_entity_meta" dbwrite:"false" userinput:"false"`
 }
 
 // PostgreSQL-specific indexes for files

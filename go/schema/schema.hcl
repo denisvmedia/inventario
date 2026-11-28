@@ -2166,14 +2166,17 @@ table "files" {
   column "linked_entity_type" {
     type = TEXT
     null = true
+    default = ""
   }
   column "linked_entity_id" {
     type = TEXT
     null = true
+    default = ""
   }
   column "linked_entity_meta" {
     type = TEXT
     null = true
+    default = ""
   }
   column "path" {
     type = TEXT

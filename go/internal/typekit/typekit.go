@@ -261,9 +261,10 @@ func extractDBFields(t reflect.Type, v reflect.Value, fields, placeholders *[]st
 		if dbTag == "" || dbTag == "-" {
 			continue
 		}
-		// `dbwrite:"false"` marks a column the database computes (a
-		// generated column): it is read back by SELECT but must never
-		// appear in an INSERT or UPDATE, which PostgreSQL rejects.
+		// `dbwrite:"false"` marks a column that SELECT reads back but no
+		// INSERT or UPDATE may name: a column the database computes (a
+		// generated column, which PostgreSQL refuses to have written), or
+		// a legacy column the code must keep working without.
 		if field.Tag.Get("dbwrite") == "false" {
 			continue
 		}

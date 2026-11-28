@@ -458,6 +458,8 @@ func (r *FileRegistry) createFile(ctx context.Context, file models.FileEntity) (
 	links := file.Links
 	file.Links = nil
 	file.ClearTrashState()
+	// The INSERT leaves the legacy link columns out; the returned file says so.
+	file.LegacyFileLink = models.LegacyFileLink{}
 	file.SetID(uuid.NewString())
 	file.SetUUID(uuid.NewString())
 	if !r.service {

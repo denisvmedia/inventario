@@ -294,16 +294,25 @@ func TestFileRegistry_Memory_MoveLegacyLinks(t *testing.T) {
 	reg := factory.MustCreateUserRegistry(ctx)
 	svc := factory.CreateServiceRegistry()
 
-	legacy := func(name, typ, id, meta string) models.FileEntity {
+	// Only a row an older release wrote carries legacy values, so they are
+	// stored through the base registry, below the file registry's Create.
+	legacy := func(name, typ, id, meta string) *models.FileEntity {
 		fe := newLinkTestFile(name, 1)
 		fe.LegacyFileLink = models.LegacyFileLink{LegacyLinkedEntityType: typ, LegacyLinkedEntityID: id, LegacyLinkedEntityMeta: meta}
-		return fe
+		stored, err := reg.(*memory.FileRegistry).Registry.Create(ctx, fe)
+		c.Assert(err, qt.IsNil)
+		return stored
 	}
-	a, err := reg.Create(ctx, legacy("a", "commodity", "tv", "images"))
-	c.Assert(err, qt.IsNil)
-	b, err := reg.Create(ctx, legacy("b", "location", "home", "files"))
-	c.Assert(err, qt.IsNil)
+	a := legacy("a", "commodity", "tv", "images")
+	b := legacy("b", "location", "home", "files")
 	standalone, err := reg.Create(ctx, newLinkTestFile("standalone", 1))
+	c.Assert(err, qt.IsNil)
+
+	// An edit keeps the legacy values for the move.
+	edit := *a
+	edit.Title = "a edited"
+	edit.LegacyFileLink = models.LegacyFileLink{}
+	_, err = reg.Update(ctx, edit)
 	c.Assert(err, qt.IsNil)
 
 	moved, err := svc.MoveLegacyLinks(ctx, 1)
@@ -326,6 +335,24 @@ func TestFileRegistry_Memory_MoveLegacyLinks(t *testing.T) {
 	gotS, err := reg.Get(ctx, standalone.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(gotS.Links, qt.HasLen, 0)
+}
+
+// Create leaves the legacy link fields out, as the postgres INSERT leaves out
+// their columns.
+func TestFileRegistry_Memory_CreateDropsLegacyLinkFields(t *testing.T) {
+	c := qt.New(t)
+	ctx := fileLinkTestContext(c, "group-1")
+	reg := memory.NewFileRegistryFactory().MustCreateUserRegistry(ctx)
+
+	fe := newLinkTestFile("a", 1)
+	fe.LegacyFileLink = models.LegacyFileLink{LegacyLinkedEntityType: "commodity", LegacyLinkedEntityID: "tv"}
+	created, err := reg.Create(ctx, fe)
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.LegacyFileLink, qt.Equals, models.LegacyFileLink{})
+
+	got, err := reg.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.LegacyFileLink, qt.Equals, models.LegacyFileLink{})
 }
 
 func fileIDs(files []*models.FileEntity) []string {

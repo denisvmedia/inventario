@@ -109,11 +109,13 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	return r.attachLinks(files), nil
 }
 
-// Create stores the file and the links it carries.
+// Create stores the file and the links it carries. It drops the legacy link
+// fields, as the postgres INSERT leaves their columns out.
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	links := file.Links
 	file.Links = nil
 	file.ClearTrashState()
+	file.LegacyFileLink = models.LegacyFileLink{}
 	created, err := r.Registry.Create(ctx, file)
 	if err != nil {
 		return nil, err
@@ -130,8 +132,8 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 }
 
 // Update writes the file's own fields. Links and the legacy link fields are
-// kept as stored, and so is the checksum when file carries none and the
-// thumbnail orientation mark.
+// kept as stored (the postgres UPDATE leaves the legacy columns out), and so is
+// the checksum when file carries none and the thumbnail orientation mark.
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	r.lock.RLock()
 	existing, ok := r.items.Get(file.ID)
