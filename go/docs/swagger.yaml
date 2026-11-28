@@ -9569,6 +9569,10 @@ paths:
           description: Too Many Requests - account locked
           schema:
             type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
       summary: Verify a magic-link sign-in
       tags:
       - auth

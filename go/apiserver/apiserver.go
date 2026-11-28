@@ -725,6 +725,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			UserPurger:               params.FactorySet.UserPurger,
 			AccountDeletionService:   accountDeletionSvc,
 			APITokenService:          apiTokenSvc,
+			SettingsRegistryFactory:  params.FactorySet.SettingsRegistryFactory,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely
@@ -768,24 +769,26 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(GlobalRateLimitMiddleware(globalRateLimiter, params.GlobalRateTrustedProxyNets))
 			r.Group(Registration(RegistrationParams{
-				UserRegistry:         params.FactorySet.UserRegistry,
-				VerificationRegistry: params.FactorySet.EmailVerificationRegistry,
-				EmailService:         emailSvc,
-				AuditService:         auditSvc,
-				RateLimiter:          rateLimiter,
-				GroupService:         groupService,
-				PublicBaseURL:        params.PublicURL,
+				UserRegistry:            params.FactorySet.UserRegistry,
+				VerificationRegistry:    params.FactorySet.EmailVerificationRegistry,
+				EmailService:            emailSvc,
+				AuditService:            auditSvc,
+				RateLimiter:             rateLimiter,
+				GroupService:            groupService,
+				PublicBaseURL:           params.PublicURL,
+				SettingsRegistryFactory: params.FactorySet.SettingsRegistryFactory,
 			}))
 			r.Group(PasswordReset(PasswordResetParams{
-				UserRegistry:          params.FactorySet.UserRegistry,
-				PasswordResetRegistry: params.FactorySet.PasswordResetRegistry,
-				RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
-				BlacklistService:      blacklist,
-				EmailService:          emailSvc,
-				AuditService:          auditSvc,
-				RateLimiter:           rateLimiter,
-				PublicBaseURL:         params.PublicURL,
-				APITokenService:       apiTokenSvc,
+				UserRegistry:            params.FactorySet.UserRegistry,
+				PasswordResetRegistry:   params.FactorySet.PasswordResetRegistry,
+				RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
+				BlacklistService:        blacklist,
+				EmailService:            emailSvc,
+				AuditService:            auditSvc,
+				RateLimiter:             rateLimiter,
+				PublicBaseURL:           params.PublicURL,
+				APITokenService:         apiTokenSvc,
+				SettingsRegistryFactory: params.FactorySet.SettingsRegistryFactory,
 			}))
 			r.Route("/currencies", Currencies())
 			// Feature flags are deployment-scoped (operator kill-switches,
