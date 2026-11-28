@@ -95,7 +95,7 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 					http.Error(w, "Group not found", http.StatusNotFound)
 					return
 				}
-				slog.ErrorContext(r.Context(), "GroupSlugResolverMiddleware: GetGroupBySlug failed", "slug", slug, "tenant_id", user.TenantID, "error", err)
+				slog.ErrorContext(r.Context(), "GroupSlugResolverMiddleware: GetGroupBySlug failed", "group_slug", slug, "tenant_id", user.TenantID, "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
@@ -1052,9 +1052,8 @@ func (api *groupsAPI) buildInviteURL(r *http.Request, token string) string {
 		if err == nil {
 			return built
 		}
-		// buildPublicURL already logs the misconfiguration. Fall
-		// through to the request-derived path so a bad operator config
-		// doesn't break the feature outright.
+		// Fall through to the request-derived path so a bad operator
+		// config doesn't break the feature outright.
 		slog.WarnContext(r.Context(), "Falling back to request-derived invite URL due to invalid public_url",
 			"public_url", api.publicBaseURL,
 			"error", err,
@@ -1106,7 +1105,6 @@ func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *mod
 		slog.WarnContext(ctx, "Failed to enqueue group invite email",
 			"invite_id", invite.ID,
 			"group_id", group.ID,
-			"to", to,
 			"error", err,
 		)
 	}

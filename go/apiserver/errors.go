@@ -1,7 +1,6 @@
 package apiserver
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -579,7 +578,10 @@ func userTenantSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	}, true
 }
 
-func toJSONAPIError(ctx context.Context, err error) jsonapi.Error {
+// toJSONAPIError maps err to the JSON:API error the API answers it with. An
+// error it does not recognise maps to a 500, the only 5xx it returns, and
+// renderEntityError logs that one.
+func toJSONAPIError(err error) jsonapi.Error {
 	// Sentinel families extracted into early-return helpers so this switch
 	// stays under the gocyclo budget (admin guards #1745/#1747/#1750,
 	// account-deletion #2147). Each returns ok=false when err isn't one of
@@ -692,13 +694,39 @@ func toJSONAPIError(ctx context.Context, err error) jsonapi.Error {
 	case errors.Is(err, ErrInvalidUploadSlot):
 		return NewBadRequestError(err)
 	default:
-		slog.ErrorContext(ctx, "internal server error", "error", err)
 		return NewInternalServerError(err)
 	}
 }
 
 func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error {
-	jsErr := toJSONAPIError(r.Context(), err)
+	jsErr := toJSONAPIError(err)
+	if jsErr.HTTPStatusCode >= http.StatusInternalServerError {
+		slog.ErrorContext(r.Context(), "internal server error", "error", err)
+	}
+	return renderMappedEntityError(w, r, err, jsErr)
+}
+
+// renderLoggedEntityError renders err as renderEntityError does, without
+// logging, for a handler that has already logged err with its own message and
+// attributes at errorLogLevel(err). An error is logged once
+// (devdocs/logging.md, Levels).
+func renderLoggedEntityError(w http.ResponseWriter, r *http.Request, err error) error {
+	return renderMappedEntityError(w, r, err, toJSONAPIError(err))
+}
+
+// errorLogLevel is the level for a line that logs err: Warn when the API
+// answers err with a 4xx, such as a missing row or a refused change, and Error
+// when it answers with a 500 (devdocs/logging.md, Levels: a request that ends
+// in a 4xx is Warn at most). A handler that answers with a fixed 4xx whatever
+// the error uses it too, so a failed lookup is not logged as a refusal.
+func errorLogLevel(err error) slog.Level {
+	if toJSONAPIError(err).HTTPStatusCode >= http.StatusInternalServerError {
+		return slog.LevelError
+	}
+	return slog.LevelWarn
+}
+
+func renderMappedEntityError(w http.ResponseWriter, r *http.Request, err error, jsErr jsonapi.Error) error {
 	// The default arm of toJSONAPIError maps any unrecognised error to a 500;
 	// report those (and any explicit 5xx) to Sentry (#844). Mapped 4xx — the
 	// common case — are expected business outcomes and are not captured. No-op

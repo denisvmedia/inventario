@@ -524,8 +524,8 @@ func (api *adminTenantsAPI) respondTenantWithStatus(w http.ResponseWriter, r *ht
 func (api *adminTenantsAPI) readTenantDetail(w http.ResponseWriter, r *http.Request, tenantID string) (*jsonapi.AdminTenantResponse, bool) {
 	item, err := api.factorySet.TenantRegistry.GetAdmin(r.Context(), tenantID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "Failed to read the tenant back after an admin write", "tenant_id", tenantID, "error", err)
-		_ = renderEntityError(w, r, err)
+		slog.Log(r.Context(), errorLogLevel(err), "Failed to read the tenant back after an admin write", "tenant_id", tenantID, "error", err)
+		_ = renderLoggedEntityError(w, r, err)
 		return nil, false
 	}
 	return jsonapi.NewAdminTenantResponse(item), true

@@ -117,7 +117,7 @@ func (api *adminWorkersAPI) listWorkers(w http.ResponseWriter, r *http.Request) 
 	rows, err := api.factorySet.WorkerControlRegistry.List(r.Context())
 	if err != nil {
 		slog.ErrorContext(r.Context(), "admin listWorkers: failed to list worker controls", "error", err)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (api *adminWorkersAPI) pauseWorker(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		slog.ErrorContext(r.Context(), "admin pauseWorker: failed to pause worker", "worker_type", string(wt), "error", err)
 		api.logWorkerOutcome(r, AuditActionAdminWorkerPause, actor.ID, string(wt), req.Reason, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -226,7 +226,7 @@ func (api *adminWorkersAPI) resumeWorker(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "admin resumeWorker: failed to resume worker", "worker_type", string(wt), "error", err)
 		api.logWorkerOutcome(r, AuditActionAdminWorkerResume, actor.ID, string(wt), "", false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
