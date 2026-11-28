@@ -246,11 +246,13 @@ with its entries exactly as they will read in the changelog, each under its
 heading: `### Added`, `### Changed`, `### Deprecated`, `### Removed`,
 `### Fixed`, `### Security` or `### Operators`.
 [`changelog.d/README.md`](changelog.d/README.md) describes the format, and
-`./scripts/changelog-assemble.sh --check` validates it. Markdown Lint runs the
+`.github/scripts/changelog-assemble.sh --check` validates it. Markdown Lint runs the
 same check on every pull request that changes a Markdown file, and it also
 fails when `## [Unreleased]` holds text: that section stays empty until a
 release is cut. A correction to
 a release that is already in `CHANGELOG.md` is made in the file itself.
+Between the release pull request and the tag, an entry for a change that
+ships in that release goes into that release's section of `CHANGELOG.md`.
 
 Add an entry when your change is one a user or an operator would notice:
 
@@ -291,8 +293,9 @@ section heading the page cannot read.
 
 ### Cutting a release
 
-1. Run `./scripts/changelog-assemble.sh X.Y.Z`, with `--date YYYY-MM-DD`
-   when the release is not dated today. It inserts `## [X.Y.Z] - YYYY-MM-DD`
+1. Run `.github/scripts/changelog-assemble.sh X.Y.Z`, with
+   `--date YYYY-MM-DD` when the release is not dated today in UTC. The
+   version must be newer than the newest release in the file. It inserts `## [X.Y.Z] - YYYY-MM-DD`
    under the empty `## [Unreleased]` with the entries of every fragment in
    `changelog.d/`, under the headings in the order listed above, updates the
    link definitions at the foot of the file, and deletes the fragments.

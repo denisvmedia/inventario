@@ -66,6 +66,6 @@ jobs:
 
       - name: Test the changelog assembly
         # The release pull request builds the published release notes with
-        # scripts/changelog-assemble.sh, and Markdown Lint runs its --check
+        # .github/scripts/changelog-assemble.sh, and Markdown Lint runs its --check
         # on every pull request with a fragment.
-        run: ./scripts/test-changelog-assemble.sh
+        run: ./.github/scripts/test-changelog-assemble.sh

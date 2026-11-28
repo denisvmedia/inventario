@@ -9,8 +9,10 @@ entry and how to write one.
 ## File name
 
 Name the file after your branch, with `/` replaced by `-`: branch
-`feat/1607-collection-set` adds `feat-1607-collection-set.md`. A name uses
-lowercase letters, digits, `.`, `_` and `-`, and ends in `.md`.
+`feat/1607-collection-set` adds `feat-1607-collection-set.md`. If a file of
+that name already exists on master, as it can for a reused branch name such
+as a Renovate one, add `-2`, `-3`, and so on. A name uses lowercase letters,
+digits, `.`, `_` and `-`, and ends in `.md`.
 
 ## Content
 
@@ -38,12 +40,17 @@ one or more section headings:
   exactly so.
 - Each heading has at least one entry. An entry is a list item that starts
   with `-` and a space, and its continuation lines are indented by two
-  spaces.
+  spaces. Every other line under a heading is blank.
 - Nothing comes before the first heading, and there are no other headings.
+- Links are inline, `[text](url)`. A reference definition such as
+  `[docs]: https://…` would end the release where it lands, both in the
+  published notes and on the What's new page.
 
 To change an entry that is already here, edit its file, whichever branch
-added it.
+added it. Between the release pull request and the tag, an entry for a change
+that ships in that release goes into that release's section of
+`CHANGELOG.md` instead.
 
-`./scripts/changelog-assemble.sh --check` validates every fragment; Markdown
+`.github/scripts/changelog-assemble.sh --check` validates every fragment; Markdown
 Lint runs it on each pull request that changes a Markdown file. markdownlint
 skips the fragments, as it skips `CHANGELOG.md`.

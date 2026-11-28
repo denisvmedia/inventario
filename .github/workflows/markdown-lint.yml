@@ -73,4 +73,4 @@ jobs:
       # both.
       - name: Check the changelog fragments
         if: ${{ !cancelled() }}
-        run: ./scripts/changelog-assemble.sh --check
+        run: ./.github/scripts/changelog-assemble.sh --check

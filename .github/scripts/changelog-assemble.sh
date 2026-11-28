@@ -3,8 +3,8 @@
 # release section of CHANGELOG.md.
 #
 # Usage:
-#   ./scripts/changelog-assemble.sh [--date YYYY-MM-DD] X.Y.Z
-#   ./scripts/changelog-assemble.sh --check [X.Y.Z]
+#   ./.github/scripts/changelog-assemble.sh [--date YYYY-MM-DD] X.Y.Z
+#   ./.github/scripts/changelog-assemble.sh --check [X.Y.Z]
 #
 # The release pull request runs the first form. It inserts
 # `## [X.Y.Z] - YYYY-MM-DD` under the empty `## [Unreleased]` heading with the
@@ -15,17 +15,21 @@
 # the fragments. The date defaults to today in UTC.
 #
 # --check changes nothing. It validates the fragments and the parts of
-# CHANGELOG.md the assembly edits; with a version it also checks that the
-# version is new and prints the section the assembly would insert. Markdown
-# Lint runs it on pull requests.
+# CHANGELOG.md the assembly edits; with a version it also checks the version
+# and prints the section the assembly would insert. Markdown Lint runs it on
+# pull requests.
 #
 # Both forms fail on a fragment with a bad file name, an unknown section, a
-# section without entries or no section at all; on an `## [Unreleased]`
-# section that holds text; and on a version CHANGELOG.md already has. The
-# fragment format is in changelog.d/README.md.
+# section without entries or no section at all, or a line under a section
+# that is neither a `- ` entry nor an indented continuation of one; on an
+# `## [Unreleased]` section that holds text; and on a version that is not
+# newer than the newest release in CHANGELOG.md. The version is X.Y.Z: the
+# script does not assemble pre-releases, though it accepts X.Y.Z after an
+# X.Y.Z-something written by hand. The fragment format is in
+# changelog.d/README.md.
 #
 # --root DIR works on DIR/CHANGELOG.md and DIR/changelog.d/ instead of the
-# repository's own; scripts/test-changelog-assemble.sh uses it.
+# repository's own; .github/scripts/test-changelog-assemble.sh uses it.
 set -euo pipefail
 
 # The headings a release may have, in the order a release lists them. The
@@ -40,7 +44,7 @@ usage() {
 }
 
 check=false
-root="$(dirname "$0")/.."
+root="$(dirname "$0")/../.."
 release_date=""
 version=""
 while [ $# -gt 0 ]; do
@@ -70,13 +74,13 @@ while [ $# -gt 0 ]; do
 done
 $check || [ -n "$version" ] || usage
 
-if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-  echo "not a version: $version (want X.Y.Z or X.Y.Z-prerelease)" >&2
+if [ -n "$version" ] && ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "not a version: $version (want X.Y.Z; pre-releases are not assembled)" >&2
   exit 2
 fi
 [ -n "$release_date" ] || release_date="$(date -u +%Y-%m-%d)"
-if ! printf '%s\n' "$release_date" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
-  echo "not a date: $release_date (want YYYY-MM-DD)" >&2
+if ! printf '%s\n' "$release_date" | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'; then
+  echo "not a date: $release_date (want YYYY-MM-DD, month 01-12, day 01-31)" >&2
   exit 2
 fi
 
@@ -106,6 +110,9 @@ if [ -d changelog.d ]; then
       failed=1
     elif [ ! -s "$path" ]; then
       echo "$path: empty fragment" >&2
+      failed=1
+    elif [ "$(head -c 3 "$path" | od -An -tx1 | tr -d ' \n')" = efbbbf ]; then
+      echo "$path: starts with a UTF-8 byte order mark; save it without one" >&2
       failed=1
     else
       fragments+=("$path")
@@ -139,6 +146,14 @@ function end_file() {
 }
 FNR == 1 { end_file(); file = FILENAME; headings = 0; text = 0 }
 { sub(/\r$/, "") }
+# A link reference definition, such as `[docs]: https://...`.
+# changelog-section.sh, which cuts the release body, and the What's new
+# parser both read it as the start of the link definitions at the foot of
+# CHANGELOG.md and drop everything after it from the release.
+/^\[[^]]+\]:/ {
+  err(FNR, "a link reference definition would end the release in its published notes and on the What's new page; write the link inline as [text](url)")
+  next
+}
 /^#+([ \t]|$)/ {
   if (substr($0, 1, 4) == "### ") {
     name = substr($0, 5)
@@ -162,7 +177,7 @@ FNR == 1 { end_file(); file = FILENAME; headings = 0; text = 0 }
     text = 1
     next
   }
-  if (!has_entry && substr($0, 1, 2) != "- ") err(FNR, "an entry is a list item starting with \"- \"")
+  if (substr($0, 1, 2) != "- " && (!has_entry || $0 !~ /^[ \t]/)) err(FNR, "an entry is a list item starting with \"- \", and its continuation lines are indented")
   has_entry = 1
   for (; pending > 0; pending--) body[cur] = body[cur] "\n"
   body[cur] = body[cur] $0 "\n"
@@ -185,6 +200,13 @@ AWK
 # `## [Unreleased]` and the link definitions point at it.
 read -r -d '' CHANGELOG_AWK <<'AWK' || true
 BEGIN { tag = "v" version }
+# Orders two X.Y.Z versions numerically: negative when a is older.
+function cmp_core(a, b,   x, y, i) {
+  split(a, x, ".")
+  split(b, y, ".")
+  for (i = 1; i <= 3; i++) if (x[i] + 0 != y[i] + 0) return (x[i] + 0 < y[i] + 0) ? -1 : 1
+  return 0
+}
 function err(line, msg) {
   if (line) printf "CHANGELOG.md:%d: %s\n", line, msg > "/dev/stderr"
   else printf "CHANGELOG.md: %s\n", msg > "/dev/stderr"
@@ -213,7 +235,25 @@ function err(line, msg) {
       }
       next
     }
-    if (version != "" && index(line, "## [" version "]") == 1) err(FNR, "version " version " is already in the file")
+    if (line ~ /^## \[Unreleased\][ \t]+$/) {
+      unreleased_ws = 1
+      err(FNR, "\"## [Unreleased]\" has trailing whitespace")
+    }
+    if (version != "" && index(line, "## [" version "]") == 1) {
+      exists = 1
+      err(FNR, "version " version " is already in the file")
+    }
+    # The newest release; X.Y.Z ranks above an X.Y.Z-something.
+    if (match(line, /^## \[[0-9]+\.[0-9]+\.[0-9]+/)) {
+      v = substr(line, 5, RLENGTH - 4)
+      pre = (substr(line, RLENGTH + 1, 1) == "-")
+      c = (newest == "") ? 1 : cmp_core(v, newest)
+      if (c > 0 || (c == 0 && newest_pre && !pre)) {
+        newest = v
+        newest_pre = pre
+        newest_name = substr(line, 5, index(line, "]") - 5)
+      }
+    }
   } else if (line ~ /^\[[^]]+\]: /) {
     in_unreleased = 0
     if (index(line, "[Unreleased]: ") == 1) {
@@ -238,7 +278,11 @@ function err(line, msg) {
   print
 }
 END {
-  if (unreleased == 0) err(0, "no \"## [Unreleased]\" heading")
+  if (version != "" && newest != "" && !exists) {
+    c = cmp_core(version, newest)
+    if (c < 0 || (c == 0 && !newest_pre)) err(0, "version " version " is not newer than " newest_name ", the newest release in the file")
+  }
+  if (unreleased == 0 && !unreleased_ws) err(0, "no \"## [Unreleased]\" heading")
   if (unreleased > 1) err(0, "more than one \"## [Unreleased]\" heading")
   if (links == 0) err(0, "no [Unreleased] link definition at the foot of the file")
   if (links > 1) err(0, "more than one [Unreleased] link definition")

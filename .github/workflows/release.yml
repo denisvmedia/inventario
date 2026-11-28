@@ -121,7 +121,7 @@ jobs:
         #   2. The CHANGELOG.md section for the tag. This is the normal path:
         #      the entries were written in changelog.d/ as the changes
         #      landed, and the release pull request moved them into the file
-        #      with scripts/changelog-assemble.sh, so nobody writes a list at
+        #      with .github/scripts/changelog-assemble.sh, so nobody writes a list at
         #      tag time.
         #   3. Neither — goreleaser generates a changelog from the commits.
         if: startsWith(github.ref, 'refs/tags/v')

@@ -75,7 +75,7 @@ matters more than wall-time.
 | `e2e`              | `e2e/**` or `docker-compose.e2e.yaml`                                                                                                                    |
 | `image_inputs`     | Anything that makes a fresh Docker image necessary or that a lane testing the image (the e2e, kind and Helm kind lanes of `docker.yml`) needs an image for: `Dockerfile`, `.dockerignore`, `docker-compose*.yaml`, `go/**`, `frontend/**`, `scripts/**`, `init-scripts/**`, `Makefile`, `.goreleaser.yaml`, `e2e/**`, `k8s/dev/**` |
 | `helm_kind`        | `Dockerfile`, `go/**`, `helm/**`, `infra/argocd/**`, `infra/helm-overlays/**`, `.github/scripts/preview-manifests.py`: what the Helm kind lane of `docker.yml` installs into kind. Gates that lane on pull requests together with `ci`; the image itself is built whenever `image_inputs` or `ci` matches |
-| `markdown`         | Any `**/*.md`, plus the linter's own config (`.markdownlint.jsonc`, `.markdownlint-cli2.jsonc`) and `scripts/changelog-assemble.sh`. Gates `markdown-lint.yml`, which also runs the changelog fragment check |
+| `markdown`         | Any `**/*.md`, plus the linter's own config (`.markdownlint.jsonc`, `.markdownlint-cli2.jsonc`) and `.github/scripts/changelog-assemble.sh`. Gates `markdown-lint.yml`, which also runs the changelog fragment check |
 | `ci`               | Anything under `.github/workflows/`, `.github/actions/`, or `.github/filters.yml`                                                                        |
 
 Markdown-only diffs at the repository root (e.g. `README.md`) match only the
@@ -91,7 +91,7 @@ under `dorny/paths-filter`'s default semantics.
 | PR diff                              | Jobs that run                                                                                                                                                                              |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `CHANGELOG.md` only                  | `markdown-lint` and the `changelog` job of `frontend-test` (the CHANGELOG.md guard alone) |
-| A changelog fragment only (`changelog.d/*.md`) | `markdown-lint` only: markdownlint skips the fragment, and the step after it runs `scripts/changelog-assemble.sh --check` |
+| A changelog fragment only (`changelog.d/*.md`) | `markdown-lint` only: markdownlint skips the fragment, and the step after it runs `.github/scripts/changelog-assemble.sh --check` |
 | Root markdown only (`README.md`)     | `markdown-lint` only. The 13 ecosystem-gated workflows skip; the narrowly-filtered ones (helm-lint, cli-integration-test, smoke tests, release dry-run, renovate-config) also skip          |
 | Backend only (`go/**`)               | `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`, `frontend-codegen` (Go drives swagger.json), `frontend-embed-smoke-test`, `docker.yml` with `e2e-tests-linux[chromium]`, the kind smoke test and the Helm kind smoke test; Firefox + macOS-webkit + the other frontend-* workflows skip |
 | Model annotations or the migration chain (`go/models/**`, `go/schema/**`) | `migration-plan` on top of the backend set — it posts the schema delta against a base-state database and fails on a destructive one unless the PR carries the `allow-destructive` label |
@@ -149,7 +149,7 @@ choices are sized against is in
 `markdown-lint.yml` is the only PR-gated workflow that runs when the diff is
 documentation-only. It follows the same `changes` + `if:`-gate pattern as
 every other workflow and is short-circuited unless the `markdown` or `ci`
-filter matches. Its job also runs `scripts/changelog-assemble.sh --check`,
+filter matches. Its job also runs `.github/scripts/changelog-assemble.sh --check`,
 which validates the fragments in `changelog.d/` that markdownlint skips (the
 format is in [`changelog.d/README.md`](../../changelog.d/README.md)).
 
