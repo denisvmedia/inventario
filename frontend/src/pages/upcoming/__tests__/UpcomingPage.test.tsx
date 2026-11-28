@@ -79,6 +79,8 @@ describe("<UpcomingPage />", () => {
   it("lists every kind in server order with links to the right item tab", async () => {
     server.use(...groupHandlers.list(groupFixture), ...reminderHandlers.upcoming(SLUG, ITEMS))
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Upcoming · Inventario"))
     const list = await screen.findByTestId("upcoming-list")
     const rows = within(list).getAllByRole("link")
     expect(rows.map((r) => r.getAttribute("data-testid"))).toEqual([

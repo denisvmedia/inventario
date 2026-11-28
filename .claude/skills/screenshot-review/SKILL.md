@@ -60,8 +60,8 @@ Ask the user (don't try to set these up yourself unless asked):
 
 - Is the local binary already running?
   ```
-  ./bin/inventario run --db-dsn=memory:// \
-    --no-auth-rate-limit --no-global-rate-limit
+  INVENTARIO_RUN_MEMORY_TENANT_SLUG=test-org ./bin/inventario run --db-dsn=memory:// \
+    --no-auth-rate-limit --no-global-rate-limit --enable-seed-endpoint
   ```
   Header comment in `e2e/screenshots.mjs` is the source of truth.
 - Is the database seeded?

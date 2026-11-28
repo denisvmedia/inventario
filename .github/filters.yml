@@ -174,6 +174,23 @@ helm:
   - 'scripts/test-alert-routing.sh'
   - 'infra/argocd/**'
   - 'infra/helm-overlays/**'
+  - 'infra/vm/cluster-extras/preview-namespace-limits.yaml'
+  - 'infra/vm/cluster-extras/preview-namespace-pod-security.yaml'
+  - '.github/scripts/preview-manifests.py'
+
+# ---- Helm chart kind smoke test ------------------------------------------
+# The Helm Kind lane of docker.yml installs the chart into kind with the
+# image built for the commit, so the app's own sources count as well as the
+# chart; the argocd arrangement also renders the preview ApplicationSets'
+# values. Changes to the monitoring rules do not reach the cluster and are
+# left to helm-lint. The lane ORs in `ci` like every other filtered lane, and
+# runs on every master push regardless.
+helm_kind:
+  - 'Dockerfile'
+  - 'go/**'
+  - 'helm/**'
+  - 'infra/argocd/**'
+  - 'infra/helm-overlays/**'
   - '.github/scripts/preview-manifests.py'
 
 # ---- Renovate configuration ----------------------------------------------

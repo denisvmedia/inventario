@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Badge } from "@/components/ui/badge"
 import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent } from "@/components/ui/card"
@@ -45,6 +46,7 @@ export function ServicesListPage() {
 
   return (
     <Page width="wide" data-testid="page-in-service">
+      <RouteTitle title={t("services:list.title")} />
       <PageHeader title={t("services:list.title")} subtitle={t("services:list.subtitle")} />
 
       <div

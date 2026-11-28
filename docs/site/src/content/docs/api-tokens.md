@@ -9,6 +9,8 @@ security → API tokens**; [Settings & account](../settings-and-account/#api-tok
 walks through the form. The token is shown once and starts with `inv_pat_`,
 which makes a leaked one easy to search for.
 
+![The API tokens page with a read-only token for all groups and a read and write token limited to one group, each with its prefix, last use, expiry and a Revoke button](../../assets/screenshots/api-tokens.png)
+
 Send it in the `Authorization` header of every request:
 
 ```sh

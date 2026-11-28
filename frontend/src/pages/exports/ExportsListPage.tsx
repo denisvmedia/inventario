@@ -6,6 +6,7 @@ import { Link, useSearchParams } from "react-router-dom"
 import { ExportRow } from "@/components/exports/ExportRow"
 import { RestoreDialog } from "@/components/exports/RestoreDialog"
 import { RestoreLogDialog } from "@/components/exports/RestoreLogDialog"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Page, PageHeader } from "@/components/ui/page"
@@ -82,6 +83,7 @@ export function ExportsListPage() {
 
   return (
     <Page width="wide" className="gap-8" data-testid="page-exports">
+      <RouteTitle title={t("exports:list.title")} />
       <PageHeader
         title={
           <span className="inline-flex items-center gap-2" data-testid="exports-page-title">

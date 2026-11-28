@@ -415,6 +415,9 @@ docker-compose up -d --force-recreate
 
 ### Zero-Downtime Upgrades (Advanced)
 
+Not for an upgrade from v0.2.x: a v0.2.x container fails against the schema that
+v0.3.0 migrates, so stop it first, as "Upgrading to a New Version" does.
+
 For production environments:
 
 ```bash

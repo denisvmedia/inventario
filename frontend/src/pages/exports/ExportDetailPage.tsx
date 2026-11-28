@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 
 import { ExportStatusBadge } from "@/components/exports/ExportStatusBadge"
 import { RestoreHistoryList } from "@/components/exports/RestoreHistoryList"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -78,6 +79,7 @@ export function ExportDetailPage() {
   if (!groupReady || exportQuery.isLoading) {
     return (
       <Page width="narrow" className="gap-4" data-testid="page-export-detail-loading">
+        <RouteTitle title={t("exports:detail.title")} />
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-24 w-full" />
@@ -88,6 +90,7 @@ export function ExportDetailPage() {
   if (exportQuery.isError || !exp) {
     return (
       <Page width="narrow" className="gap-4" data-testid="page-export-detail-not-found">
+        <RouteTitle title={t("exports:detail.title")} />
         <Alert variant="destructive">
           <AlertTitle>{t("exports:detail.notFound")}</AlertTitle>
           {exportQuery.error instanceof Error && (
@@ -106,6 +109,7 @@ export function ExportDetailPage() {
 
   return (
     <Page width="narrow" data-testid="page-export-detail">
+      <RouteTitle title={t("exports:detail.title")} />
       <PageHeader
         size="detail"
         title={

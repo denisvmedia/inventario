@@ -660,6 +660,27 @@ func TestINBRoundTrip_FilePathAndSizePreserved(t *testing.T) {
 	c.Assert(restored.File.SizeBytes, qt.Equals, int64(size))
 }
 
+// A restore keeps the title and filename the backup carries as they are; it
+// does not derive them again from a name, so a title that ends in an upload
+// timestamp comes back unchanged.
+func TestINBRoundTrip_FileTitleNotRenamed(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+
+	const name = "invoice-121-1795863438"
+	fileUUID := f.attachCommodityFileFull(c, "documents", name, name, ".pdf", "application/pdf", 1024)
+
+	blobKey, _ := f.runExport(c, signer)
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+
+	restored := f.fileByUUID(c, fileUUID)
+	c.Assert(restored.Title, qt.Equals, name)
+	c.Assert(restored.File.Path, qt.Equals, name)
+}
+
 // restoreInb writes a RestoreOperation + export row pointing at blobKey and runs
 // the restore service against it, returning the restore operation's final state.
 func restoreInb(c *qt.C, f *inbFixture, signer *backupsign.Signer, blobKey string) (*models.RestoreOperation, error) {

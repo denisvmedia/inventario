@@ -3,6 +3,7 @@ import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -92,6 +93,7 @@ export function ExportImportPage() {
   if (!groupReady) {
     return (
       <Page width="narrow" className="gap-4" data-testid="page-export-import-loading">
+        <RouteTitle title={t("exports:importView.title")} />
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-64 w-full" />
       </Page>
@@ -100,6 +102,7 @@ export function ExportImportPage() {
 
   return (
     <Page width="narrow" data-testid="page-export-import">
+      <RouteTitle title={t("exports:importView.title")} />
       <PageHeader
         size="detail"
         title={t("exports:importView.title")}

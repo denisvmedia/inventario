@@ -29,7 +29,7 @@ An **item** is anything you want to keep track of — an appliance, a laptop, a 
    - **Files** — optionally attach photos, receipts, or manuals (you can also add these later).
 4. Click the create button to save. Your new item opens so you can review it.
 
-![The Add item dialog, showing the Fill with AI and Fill manually options](../../assets/screenshots/add-item-dialog.png)
+![The Add item dialog, showing the Fill with AI and Fill manually options](../../assets/screenshots/add-item-fill-with-ai.png)
 
 :::note
 Items don't have to be placed in a location to be saved. If you skip that, the item appears with a small banner offering to **Place in location** — you can do that whenever you like, or leave it unassigned.

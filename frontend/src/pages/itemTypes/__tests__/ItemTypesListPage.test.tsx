@@ -83,6 +83,8 @@ describe("<ItemTypesListPage />", () => {
   it("lists the built-in types by their translated names, then custom types", async () => {
     seed()
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Item types · Inventario"))
     expect(await screen.findByTestId("item-type-row-white_goods")).toHaveTextContent("Appliance")
     expect(screen.getByTestId("item-types-list-count")).toHaveTextContent("7 types")
     expect(screen.getByTestId("item-type-row-white_goods")).toHaveTextContent("Built-in")

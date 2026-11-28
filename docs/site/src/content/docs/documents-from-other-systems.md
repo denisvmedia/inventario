@@ -34,6 +34,10 @@ Paperless-ngx**, and links to the document there when its address was sent.
 The item you make from the draft keeps that link as its **Source** on the
 **Details** tab.
 
+![The Drafts tab of the inbox with a draft marked From Paperless-ngx](../../assets/screenshots/inbox-drafts.png)
+
+![An item made from a delivered draft, with Paperless-ngx as its Source on the Details tab](../../assets/screenshots/item-source.png)
+
 ## Set it up
 
 1. In Inventario, create a token under **Preferences → Privacy & security →

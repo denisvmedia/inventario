@@ -37,8 +37,7 @@ action's behavior and were not logged.
 | Consumer | Where | Trigger | Endpoint family | Requests per invocation | Per push |
 | --- | --- | --- | --- | --- | --- |
 | Changed-file detection (`dorny/paths-filter`) | `changes` job of 22 workflows (two of them behind a workflow-level `paths:` filter) | every pull request push | none: a `git fetch` of one commit and a local diff | 0 | 0 (through `GET /repos/{r}/pulls/{n}/files` it was 1 per 100 changed files: 21 for the measured diff) |
-| Image waiter (`_wait-for-docker-image.yml`) | `helm-kind-smoke-test.yml` | pull requests touching the chart, previews or CI; master | `GET .../actions/workflows/docker.yml/runs`, `GET .../actions/runs/{id}/jobs` | 1 per poll while the run is queued, 2 while it runs; one poll a minute | 2·D (measured: 6 polls, 12 requests) |
-| PR-close drain | `docker.yml` `cleanup` | pull request closed | `GET .../actions/runs?head_sha=` | 1 per minute until no run is left, at most 30 | 1–30 per close (measured: 1 on #3050, 16 on #3058) |
+| PR-close drain | `docker.yml` `cleanup` | pull request closed | `GET .../actions/runs?head_sha=` | 1 per minute until the pull request's cancelled `docker.yml` run has stopped, at most 30 | estimated 1–3 per close (measured when it also waited for every other workflow: 1 on #3050, 16 on #3058) |
 | PR-close reclaim | `docker.yml` `cleanup` | pull request closed | PR commits, owner lookup, package versions, deletes | 2 + 1 per 100 versions published since the PR was opened, plus one page + 1 per deleted version | 129 for the listing alone before it was bounded (12,845 versions, #3058); bounded: about 1 per hour the PR was open, logged on every close |
 | SARIF upload (`github/codeql-action/upload-sarif`) | `docker.yml` `scan-image` | every image build | code scanning upload and processing status | estimated 3–5 | 3–5 |
 | `actions/dependency-review-action` | `dependency-review.yml` | every pull request push | dependency graph compare | estimated 1–2 | 1–2 |
@@ -48,12 +47,13 @@ action's behavior and were not logged.
 | Migration plan comment | `migration-plan.yml` | schema-changing pull requests | issue comments | estimated 2 | schema PRs only |
 | GoReleaser, chart push | `release.yml` | `v*` tags | releases, assets | tens | tags only |
 
-Before #3058, two more consumers ran on every image-building push. Both
-are gone:
+The measured runs had three more consumers. #3058 and #3025 removed them
+by moving every lane that tests the image behind `needs: merge`:
 
 | Removed consumer | Requests per push |
 | --- | --- |
-| Image waiters of `e2e-tests.yml` and `kind-smoke-test.yml` | 2·D each (measured: 12 and 8) |
+| Image waiters of `e2e-tests.yml` and `kind-smoke-test.yml` | 2·D each, on every image-building push (measured: 12 and 8) |
+| Image waiter `_wait-for-docker-image.yml` of `helm-kind-smoke-test.yml` | 2·D, on chart, preview and CI pull requests and master (measured: 12) |
 | Cross-run download of the darwin binary in the webkit lane | estimated 2–3 |
 
 GraphQL has its own points budget and the measured workflows spend almost
@@ -70,6 +70,7 @@ manifest. It is about 6 on an idle fleet and has reached 20 on a busy one.
 | After #2985 (60 s polls, 1–2 requests, 3 waiters) | 3·D to 6·D | about 31 | about 65 (measured 32 + 23 + estimates) | 90–150 |
 | After #3058, chart pull request | 2·D | about 27 | about 39 | about 67 |
 | After #3058, any other pull request | 0 | about 27 | about 27 | about 27 |
+| Changed files through git, Helm kind lane in `docker.yml` (#3025), any pull request | 0 | about 6 | about 6 | about 6 |
 
 The row before #2985 is a model from the description in #2985 and the failed
 job in #3025: that waiter was refused on its first request at 16:25:43 UTC
@@ -91,10 +92,13 @@ touching the chart, and 6 closes an hour.
 | Lanes behind `needs: merge` (#3058), close listing every version | about 810 + 6 × about 150 = about 1,700 | 1.7 times over |
 | Close listing bounded to the pull request's lifetime | about 810 + 6 × 10–30 = 870–990 | 87–99 % |
 | Changed-file detection through git | about 310 + 6 × 10–30 = 370–490 | 37–49 % |
+| Helm kind lane behind `needs: merge` | about 150 + 6 × 10–30 = 210–330 | 21–33 % |
 
 The target is to stay under **700 requests an hour** at that load, which
 leaves 300 for reruns, bot pull requests, previews and the tag release.
-Readiness coordination costs nothing except for the Helm kind lane.
+Readiness coordination costs nothing: every lane that tests the image waits
+through `needs: merge`. The 160 requests an hour that the Helm kind lane's
+waiter spent at that load (4 chart pushes × 2·D) are gone.
 
 A close cost about 150 requests before its listing was bounded: 129 to page
 through all 12,845 versions of the `inventario` package (measured on the close
@@ -122,6 +126,7 @@ See [Conditional CI execution](conditional-execution.md#how-it-works).
 changes ─┬─ build (amd64, arm64) ── merge ─┬─ E2E Tests (chromium, firefox)
          │                                 ├─ E2E Tests (oauth)
          │                                 ├─ Kind / Kind smoke test
+         │                                 ├─ Helm Kind / Helm chart kind smoke (argocd, helm-in-pod)
          │                                 ├─ scan-image
          │                                 └─ pin-master-image (master)
          └─ darwin-binary ─────────────────┴─ E2E Tests (webkit)
@@ -145,10 +150,13 @@ changes ─┬─ build (amd64, arm64) ── merge ─┬─ E2E Tests (chromiu
 - The e2e lanes are jobs of `docker.yml` rather than a called workflow. A
   called workflow prefixes its check names with the caller's job name, and
   `E2E Tests (chromium)` is a required check that keeps its exact name. The
-  kind smoke test is not required, so it stays a called workflow and its check
-  reads `Kind / Kind smoke test`.
-- `helm-kind-smoke-test.yml` still waits through `_wait-for-docker-image.yml`.
-  It runs only for chart, preview and CI changes.
+  two kind smoke tests are not required, so they stay called workflows and
+  their checks read `Kind / Kind smoke test` and
+  `Helm Kind / Helm chart kind smoke (argocd)` (and `(helm-in-pod)`).
+- On a pull request the Helm kind lane runs only when the `helm_kind` filter
+  (the chart, the preview manifests, the app's sources) or the `ci` filter
+  matches; every master push runs it. The other lanes run whenever an image
+  is built.
 
 ### Cancellation and ordering
 
@@ -183,10 +191,11 @@ changes ─┬─ build (amd64, arm64) ── merge ─┬─ E2E Tests (chromiu
 1. **Changed-file detection through git.** Done: the `changes` jobs diff
    with git against the merge commit's first parent, as described in
    [Conditional CI execution](conditional-execution.md#how-it-works).
-2. **Move the Helm kind lane into `docker.yml`** the same way, which retires
-   `_wait-for-docker-image.yml` and its verdict test.
-3. **Narrow the close drain** to runs that can still pull the image. With the
-   lanes inside `docker.yml`, only the Helm kind lane is left outside it.
+2. **Move the Helm kind lane into `docker.yml`.** Done (#3025): it is a
+   called workflow behind `needs: merge`, and no workflow polls for the image.
+3. **Narrow the close drain** to runs that can still pull the image. Done
+   (#3025): every lane that pulls it is a job of `docker.yml`, so the drain
+   waits for that workflow's run alone.
 4. **Sweep old package versions.** Nothing deletes a version that a closed
    pull request left behind (commits that were force-pushed away, a close
    whose drain gave up), and the reclaim step deletes only tagged versions,
@@ -194,9 +203,8 @@ changes ─┬─ build (amd64, arm64) ── merge ─┬─ E2E Tests (chromiu
    stay. A scheduled job with its own budget would keep the package small;
    until then the bounded listing keeps a close cheap whatever the package
    size.
-5. **Honor the limit's reset.** The waiter retries a failed call every 60
-   seconds; reading `x-ratelimit-reset` and `Retry-After` would stop it
-   spending retries before the reset, and a 401 or 404 should fail at once.
+5. **Honor the limit's reset.** No longer needed: it was about the image
+   waiter's retries, and no waiter is left (follow-up 2).
 
 ## Troubleshooting
 

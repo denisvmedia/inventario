@@ -65,6 +65,8 @@ describe("<WarrantiesListPage />", () => {
     server.use(...groupHandlers.list(groupFixture), ...commodityHandlers.list(SLUG, []))
     renderPage()
     expect(await screen.findByTestId("warranties-empty")).toBeInTheDocument()
+    // The top bar and the browser tab name the page.
+    expect(document.title).toBe("Warranties · Inventario")
     expect(screen.queryByTestId("warranties-list")).toBeNull()
     expect(screen.getByTestId("warranties-tab-expiring")).toHaveAttribute("aria-selected", "true")
   })

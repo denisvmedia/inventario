@@ -322,7 +322,7 @@ version lives at its own sub-path:
   `N` is `MAX_DOC_TAG_VERSIONS` (default 10, set via a repo variable), and older
   tags are dropped.
 - The site root `…/inventario/` is a generated redirect to the **latest
-  release** (highest semver tag; currently `edge`, until the first tag exists).
+  release** (the highest semver tag, or `edge` while no tag exists).
 
 Because the Pages artifact replaces the whole site each deploy, the workflow
 rebuilds edge + the kept tags into one artifact per run; an in-page version
