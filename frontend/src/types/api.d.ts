@@ -5861,8 +5861,10 @@ export type paths = {
          * Mark an item as draft or as reviewed
          * @description Sets (`true`) or clears (`false`) the draft mark of an item
          *     and changes no other field but the last-modified date, which
-         *     becomes today. The item with the new mark must pass the
-         *     validation a full update runs.
+         *     becomes today, and the revision, which moves on: a later
+         *     checked save must send the revision this response returns. The
+         *     item with the new mark must pass the validation a full update
+         *     runs.
          */
         patch: {
             parameters: {

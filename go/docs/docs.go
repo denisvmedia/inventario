@@ -4739,7 +4739,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/{commodityID}/draft": {
             "patch": {
-                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field but the last-modified date, which\nbecomes today. The item with the new mark must pass the\nvalidation a full update runs.",
+                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field but the last-modified date, which\nbecomes today, and the revision, which moves on: a later\nchecked save must send the revision this response returns. The\nitem with the new mark must pass the validation a full update\nruns.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
