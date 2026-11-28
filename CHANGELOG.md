@@ -763,6 +763,9 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
 
 ### Fixed
 
+- The print view of an item shows its brand and model, its seller and the
+  custom fields it has a value for, as the item page does. Values the item
+  doesn't have are left out.
 - Signing out no longer signs you back in. A request that was still running
   when you signed out was refused, the app renewed the session to retry it,
   and a moment later you were signed in again. Signing out in one tab while
