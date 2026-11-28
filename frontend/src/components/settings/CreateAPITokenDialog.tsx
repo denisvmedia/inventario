@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { FieldError } from "@/components/FieldError"
 import {
   Select,
   SelectContent,
@@ -63,8 +64,9 @@ interface Props {
 
 // CreateAPITokenDialog collects the token settings, re-authenticates the
 // user, and then shows the new token exactly once. The secret lives only in
-// this component's state: closing the dialog unmounts it and the value is
-// gone. It is never written to the query cache.
+// CreateFlow's state, inside the dialog content: the content unmounts once
+// the close animation ends and the value is gone. It is never written to
+// the query cache.
 export function CreateAPITokenDialog({ open, onOpenChange }: Props) {
   // While the token is on screen a stray click outside the dialog must not
   // dismiss it: the value cannot be shown again. Escape and the buttons
@@ -77,18 +79,14 @@ export function CreateAPITokenDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         data-testid="api-token-create-dialog"
         className="sm:max-w-md"
         onInteractOutside={(e) => {
           if (revealing) e.preventDefault()
         }}
       >
-        {open ? (
-          <CreateFlow
-            onRevealed={() => setRevealing(true)}
-            onClose={() => handleOpenChange(false)}
-          />
-        ) : null}
+        <CreateFlow onRevealed={() => setRevealing(true)} onClose={() => handleOpenChange(false)} />
       </DialogContent>
     </Dialog>
   )
@@ -189,11 +187,14 @@ function CreateForm({
           disabled={pending}
           aria-invalid={errors.name ? true : undefined}
           data-testid="api-token-name"
+          aria-describedby={errors.name?.message ? `${formId}-name-error` : undefined}
           {...register("name")}
         />
-        {errors.name?.message ? (
-          <p className="text-xs text-destructive">{t(errors.name.message)}</p>
-        ) : null}
+        <FieldError
+          id={`${formId}-name-error`}
+          testId="api-token-name-error"
+          message={errors.name?.message}
+        />
       </div>
 
       <div className="space-y-1.5">
@@ -319,11 +320,17 @@ function CreateForm({
                 autoComplete="current-password"
                 disabled={pending}
                 data-testid="api-token-password"
+                aria-invalid={!!errors.currentPassword}
+                aria-describedby={
+                  errors.currentPassword?.message ? `${formId}-password-error` : undefined
+                }
                 {...register("currentPassword")}
               />
-              {errors.currentPassword?.message ? (
-                <p className="text-xs text-destructive">{t(errors.currentPassword.message)}</p>
-              ) : null}
+              <FieldError
+                id={`${formId}-password-error`}
+                testId="api-token-password-error"
+                message={errors.currentPassword?.message}
+              />
             </div>
           ) : null}
           {mfaActive ? (
@@ -339,11 +346,15 @@ function CreateForm({
                 autoComplete="one-time-code"
                 disabled={pending}
                 data-testid="api-token-code"
+                aria-invalid={!!errors.code}
+                aria-describedby={errors.code?.message ? `${formId}-code-error` : undefined}
                 {...register("code")}
               />
-              {errors.code?.message ? (
-                <p className="text-xs text-destructive">{t(errors.code.message)}</p>
-              ) : null}
+              <FieldError
+                id={`${formId}-code-error`}
+                testId="api-token-code-error"
+                message={errors.code?.message}
+              />
               <button
                 type="button"
                 onClick={() => {

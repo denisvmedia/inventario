@@ -41,6 +41,8 @@ func RunIntakeDocumentContract(t *testing.T, newEnv func(t *testing.T) IntakeDoc
 		{"documents list by draft and by item", intakeDocumentContractLists},
 		{"a promotion records the item", intakeDocumentContractPromotion},
 		{"recording a promoted draft records its item", intakeDocumentContractPromotedFirst},
+		{"a promotion finds the document that names no draft yet", intakeDocumentContractPromotionByKey},
+		{"a promotion leaves a document with no session alone", intakeDocumentContractPromotionSkipsNewRecord},
 		{"the service registry is refused", intakeDocumentContractNeedsGroup},
 		{"restored timestamps are kept", intakeDocumentContractTimestamps},
 	}
@@ -246,6 +248,94 @@ func intakeDocumentContractPromotion(t *testing.T, env IntakeDocumentEnv) {
 	untouched, err := env.Documents.Get(env.Ctx, other.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(untouched.CommodityID, qt.IsNil)
+}
+
+// intakeDocumentContractPromotionByKey: the delivery made the draft and did
+// not record it. Promoting the draft records the draft and the item on the
+// document whose identity gives the draft's key. A document of another
+// identity, and one recorded without a draft, are left alone.
+func intakeDocumentContractPromotionByKey(t *testing.T, env IntakeDocumentEnv) {
+	c := qt.New(t)
+	doc, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("7"))
+	c.Assert(err, qt.IsNil)
+	_, err = env.Documents.RecordProgress(env.Ctx, doc.ID, registry.IntakeDocumentProgress{SessionID: new("session-1")})
+	c.Assert(err, qt.IsNil)
+	other, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("8"))
+	c.Assert(err, qt.IsNil)
+	withoutDraft, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("9"))
+	c.Assert(err, qt.IsNil)
+	_, err = env.Documents.RecordProgress(env.Ctx, withoutDraft.ID, registry.IntakeDocumentProgress{DraftID: new("")})
+	c.Assert(err, qt.IsNil)
+
+	draft, _, err := env.Drafts.CreateOrGet(env.Ctx, models.CommodityDraft{
+		ClientKey: doc.DraftClientKey(),
+		Values:    models.CommodityDraftValues{"name": "Drill"},
+	})
+	c.Assert(err, qt.IsNil)
+	promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, draft.Revision, "promotion-1", models.Commodity{
+		Name:      "Drill",
+		ShortName: "Drill",
+		Type:      models.CommodityTypeOther,
+		AreaID:    new(env.AreaID),
+		Count:     1,
+		Status:    models.CommodityStatusInUse,
+		Tags:      models.ValuerSlice[string]{},
+	})
+	c.Assert(err, qt.IsNil)
+
+	got, err := env.Documents.Get(env.Ctx, doc.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.DraftID, qt.IsNotNil)
+	c.Assert(*got.DraftID, qt.Equals, draft.ID)
+	c.Assert(got.CommodityID, qt.IsNotNil)
+	c.Assert(*got.CommodityID, qt.Equals, promotion.Commodity.ID)
+	c.Assert(*got.SessionID, qt.Equals, "session-1")
+	docs, err := env.Documents.ListByCommodities(env.Ctx, promotion.Commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(docs, qt.HasLen, 1)
+
+	for _, id := range []string{other.ID, withoutDraft.ID} {
+		untouched, err := env.Documents.Get(env.Ctx, id)
+		c.Assert(err, qt.IsNil)
+		c.Assert(untouched.CommodityID, qt.IsNil)
+	}
+	untouched, err := env.Documents.Get(env.Ctx, other.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(untouched.DraftID, qt.IsNil)
+}
+
+// intakeDocumentContractPromotionSkipsNewRecord: the group lost the record
+// of the delivery that made the draft, and a later delivery of the document
+// made a new record that has no session yet (#3008). Promoting the old draft
+// leaves that record alone: what the draft was made from is not known, and a
+// delivery records its session before it makes a draft.
+func intakeDocumentContractPromotionSkipsNewRecord(t *testing.T, env IntakeDocumentEnv) {
+	c := qt.New(t)
+	doc, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("7"))
+	c.Assert(err, qt.IsNil)
+	draft, _, err := env.Drafts.CreateOrGet(env.Ctx, models.CommodityDraft{
+		ClientKey: doc.DraftClientKey(),
+		Values:    models.CommodityDraftValues{"name": "Drill"},
+	})
+	c.Assert(err, qt.IsNil)
+	promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, draft.Revision, "promotion-1", models.Commodity{
+		Name:      "Drill",
+		ShortName: "Drill",
+		Type:      models.CommodityTypeOther,
+		AreaID:    new(env.AreaID),
+		Count:     1,
+		Status:    models.CommodityStatusInUse,
+		Tags:      models.ValuerSlice[string]{},
+	})
+	c.Assert(err, qt.IsNil)
+
+	got, err := env.Documents.Get(env.Ctx, doc.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.DraftID, qt.IsNil)
+	c.Assert(got.CommodityID, qt.IsNil)
+	docs, err := env.Documents.ListByCommodities(env.Ctx, promotion.Commodity.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(docs, qt.HasLen, 0)
 }
 
 // intakeDocumentContractPromotedFirst: the draft became an item before the

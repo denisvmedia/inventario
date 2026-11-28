@@ -13,7 +13,15 @@ import { useImportBackup, useUploadRestoreFile } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { formatBytes } from "@/lib/intl"
-import { parseServerError } from "@/lib/server-error"
+import { getServerErrorCode, parseServerError } from "@/lib/server-error"
+import { capCodePoints } from "@/lib/text-length"
+
+// A personal data export (Settings → Account → Download my data, #2177) is a
+// copy of one person's data, not a group backup. Its download name is
+// `inventario-personal-data-<date>.tar.gz`; the server refuses one renamed
+// to `.inb` with this code.
+const PERSONAL_DATA_EXPORT_NAME = /^inventario-personal-data-.*\.tar\.gz$/i
+const PERSONAL_DATA_EXPORT_RESTORE_CODE = "restore.personal_data_export"
 
 export function ExportImportPage() {
   const { t } = useTranslation(["exports", "common"])
@@ -37,6 +45,11 @@ export function ExportImportPage() {
     // The `.inb` extension is the real gate: browsers rarely set the
     // custom `application/x-inventario-backup` MIME, so we validate the
     // filename suffix (case-insensitive) before staging the upload.
+    if (picked && PERSONAL_DATA_EXPORT_NAME.test(picked.name)) {
+      setFile(null)
+      setFileError(t("exports:errors.personalDataExport"))
+      return
+    }
     if (picked && !picked.name.toLowerCase().endsWith(".inb")) {
       setFile(null)
       setFileError(t("exports:errors.invalidFileType"))
@@ -61,6 +74,10 @@ export function ExportImportPage() {
       // — the only meaningful next step is to actually run the restore.
       navigate(`/g/${encodeURIComponent(slug)}/exports/${encodeURIComponent(created.id)}/restore`)
     } catch (err) {
+      if (getServerErrorCode(err) === PERSONAL_DATA_EXPORT_RESTORE_CODE) {
+        toast.error(t("exports:errors.personalDataExport"))
+        return
+      }
       // Same JSON:API extraction as ExportNewPage — let the user see the
       // BE's `errors[].detail` (e.g. "Description must be 500 chars or
       // fewer") instead of the bare HTTP wrapper.
@@ -102,19 +119,21 @@ export function ExportImportPage() {
       {(uploadMutation.isError || importMutation.isError) && (
         <Alert variant="destructive" data-testid="import-error">
           <AlertTitle>
-            {uploadMutation.isError
-              ? t("exports:errors.uploadFailed", {
-                  error:
-                    uploadMutation.error instanceof Error
-                      ? uploadMutation.error.message
-                      : "unknown",
-                })
-              : t("exports:errors.importFailed", {
-                  error:
-                    importMutation.error instanceof Error
-                      ? importMutation.error.message
-                      : "unknown",
-                })}
+            {getServerErrorCode(uploadMutation.error) === PERSONAL_DATA_EXPORT_RESTORE_CODE
+              ? t("exports:errors.personalDataExport")
+              : uploadMutation.isError
+                ? t("exports:errors.uploadFailed", {
+                    error:
+                      uploadMutation.error instanceof Error
+                        ? uploadMutation.error.message
+                        : "unknown",
+                  })
+                : t("exports:errors.importFailed", {
+                    error:
+                      importMutation.error instanceof Error
+                        ? importMutation.error.message
+                        : "unknown",
+                  })}
           </AlertTitle>
         </Alert>
       )}
@@ -168,9 +187,8 @@ export function ExportImportPage() {
           <Input
             id="import-description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => setDescription(capCodePoints(e.target.value, 500))}
             placeholder={t("exports:importView.descriptionPlaceholder")}
-            maxLength={500}
             data-testid="import-description"
           />
           <p className="text-xs text-muted-foreground">{t("exports:importView.descriptionHint")}</p>

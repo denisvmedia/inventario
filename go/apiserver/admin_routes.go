@@ -12,6 +12,7 @@ import (
 	"go.5x5.cz/inventario/debug"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	adminservice "go.5x5.cz/inventario/services/admin"
 )
 
 // defaultAdminImpersonationStore lets Admin() fall back to an in-memory
@@ -125,6 +126,21 @@ type AdminParams struct {
 	// plane, gated by RequireBackofficeAuth like every other admin route.
 	// May be nil; the handler then reports zero-valued debug info.
 	DebugInfo *debug.Info
+
+	// TenantBaseDomain is the domain under which <slug>.<base> names a
+	// tenant, or "" in single-tenant mode. The tenant writes refuse a custom
+	// domain at or under it.
+	TenantBaseDomain string
+
+	// UploadLocation is the file store a tenant deletion removes the
+	// tenant's files from before its rows (#1037), the same location the
+	// rest of the apiserver uploads to.
+	UploadLocation string
+
+	// AvatarSigner signs the avatar_url of the users and group members the
+	// admin responses carry (#2894), with the key /avatars checks them with.
+	// Nil leaves them without one, and the admin pages show initials.
+	AvatarSigner *services.FileSigningService
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -178,15 +194,23 @@ func Admin(params AdminParams) func(r chi.Router) {
 		panic("apiserver.Admin requires non-nil AdminParams.BackofficeUserRegistry")
 	}
 
+	tenantService := adminservice.NewServiceWithFactorySet(params.FactorySet)
+	// Deleting a tenant removes its stored files first, as the CLI does.
+	tenantService.SetFileService(services.NewFileService(params.FactorySet, params.UploadLocation))
+	// The stamp outlasts an access token, the same TTL the user block uses.
+	tenantService.SetTokenBlacklist(params.Blacklist, 2*accessTokenExpiration)
 	tenantsAPI := &adminTenantsAPI{
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,
+		service:      tenantService,
+		baseDomain:   normalizeHost(params.TenantBaseDomain),
 	}
 	usersAPI := &adminUsersAPI{
 		factorySet:   params.FactorySet,
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
 		apiTokens:    params.APITokenService,
+		avatarSigner: params.AvatarSigner,
 	}
 	groupsAPI := &adminGroupsAPI{
 		factorySet:   params.FactorySet,
@@ -196,6 +220,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		groupService: params.GroupService,
 		auditService: params.AuditService,
+		avatarSigner: params.AvatarSigner,
 	}
 	impersonationAPI := &adminImpersonationAPI{
 		factorySet:   params.FactorySet,
@@ -211,6 +236,13 @@ func Admin(params AdminParams) func(r chi.Router) {
 	// AuditService are guaranteed non-nil by the fail-fast block above.
 	workersAPI := &adminWorkersAPI{
 		factorySet:   params.FactorySet,
+		auditService: params.AuditService,
+	}
+	// #1307: failed background jobs across tenants, over each job type's
+	// own table.
+	failedJobsAPI := &adminFailedJobsAPI{
+		factorySet:   params.FactorySet,
+		service:      services.NewFailedJobService(params.FactorySet.FailedJobRegistry),
 		auditService: params.AuditService,
 	}
 	// #2113 L-4: GET /admin/debug — moved off the tenant surface onto the
@@ -283,6 +315,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(backofficeAuth)
 			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI, workersAPI, debugAPIInst)
+			adminFailedJobRoutes(r, failedJobsAPI)
 		})
 	}
 }
@@ -325,6 +358,18 @@ func adminBackofficeRoutes(
 	r.Get("/tenants", tenantsAPI.listTenants)
 	r.Get("/tenants/{tenantID}", tenantsAPI.getTenant)
 	r.Get("/tenants/{tenantID}/users", usersAPI.listTenantUsers)
+
+	// #1037: tenant writes. They change who can sign in to a whole tenant
+	// or delete it outright, so they are closed to support_agent, as
+	// impersonation is.
+	r.Group(func(r chi.Router) {
+		r.Use(RequirePlatformAdmin)
+		r.Post("/tenants", tenantsAPI.createTenant)
+		r.Patch("/tenants/{tenantID}", tenantsAPI.updateTenant)
+		r.Delete("/tenants/{tenantID}", tenantsAPI.deleteTenant)
+		r.Post("/tenants/{tenantID}/suspend", tenantsAPI.suspendTenant)
+		r.Post("/tenants/{tenantID}/reactivate", tenantsAPI.reactivateTenant)
+	})
 	r.Get("/users/{userID}", usersAPI.getUser)
 
 	// #1747: user block/unblock endpoints. Each transition cascades
@@ -373,6 +418,18 @@ func adminBackofficeRoutes(
 	// impersonation (tenant) tokens, so an active impersonation context
 	// at the handler would mean the gate was bypassed.
 	r.With(RequirePlatformAdmin).Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
+}
+
+// adminFailedJobRoutes registers the failed-jobs routes (#1307) in the
+// RequireBackofficeAuth group. Retry and discard are audited; so is the
+// list, which reads tenant data across tenants. A support_agent may list
+// and retry; a discard takes a failure off every list, so it needs
+// platform_admin, and so does a bulk discard (#2946), its dry run too.
+func adminFailedJobRoutes(r chi.Router, api *adminFailedJobsAPI) {
+	r.Get("/failed-jobs", api.listFailedJobs)
+	r.Post("/failed-jobs/{jobType}/{jobID}/retry", api.retryFailedJob)
+	r.With(RequirePlatformAdmin).Post("/failed-jobs/{jobType}/{jobID}/discard", api.discardFailedJob)
+	r.With(RequirePlatformAdmin).Post("/failed-jobs/bulk-discard", api.bulkDiscardFailedJobs)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

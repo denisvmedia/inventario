@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { Route, useLocation } from "react-router-dom"
-import { act, fireEvent, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
+import { Route, useLocation, useNavigate } from "react-router-dom"
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { http, HttpResponse } from "msw"
+import { delay, http, HttpResponse } from "msw"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
-import { GroupProvider } from "@/features/group/GroupContext"
+import type { CreateCommodityRequest } from "@/features/commodities/api"
+import { promoteDraft } from "@/features/drafts/api"
+import type { DraftRef } from "@/features/drafts/hooks"
+import { itemDraftOf } from "@/features/drafts/save"
+import { GroupProvider, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests, HttpError } from "@/lib/http"
@@ -17,7 +21,9 @@ import {
   groupHandlers,
   sellerHandlers,
 } from "@/test/handlers"
+import { pickRadixSelect } from "@/test/radix"
 import { renderWithProviders } from "@/test/render"
+import { toastSpies } from "@/test/global-mocks"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -76,6 +82,51 @@ function renderForm(
     ),
   })
   return { onSubmit, onOpenChange }
+}
+
+// renderClosableForm renders a new-item form whose host can close and open
+// it, as browser Back does on the Items page.
+function renderClosableForm(
+  onSubmit: (values: CreateCommodityRequest, draft?: DraftRef) => Promise<unknown>
+) {
+  setAccessToken("good-token")
+  const host = { setOpen: (_open: boolean) => {} }
+  function Host() {
+    const [open, setOpenState] = useState(true)
+    useEffect(() => {
+      host.setOpen = setOpenState
+    }, [])
+    return (
+      <CommodityFormDialog
+        open={open}
+        onOpenChange={setOpenState}
+        mode="create"
+        areas={areas}
+        locations={locations}
+        defaultCurrency="USD"
+        onSubmit={onSubmit as never}
+        draftKey={DRAFT_KEY}
+        serverDrafts
+      />
+    )
+  }
+  renderWithProviders({
+    initialPath: `/g/${SLUG}/commodities/new`,
+    routes: (
+      <Route
+        path="/g/:groupSlug/commodities/new"
+        element={
+          <GroupProvider>
+            <Host />
+          </GroupProvider>
+        }
+      />
+    ),
+  })
+  return {
+    close: () => act(() => host.setOpen(false)),
+    reopen: () => act(() => host.setOpen(true)),
+  }
 }
 
 async function fillManually(user: ReturnType<typeof userEvent.setup>) {
@@ -265,12 +316,16 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values).toMatchObject({ name: "Couch", type: "furniture", draft: false })
-    // The promotion names its key, kept for a retry until it succeeds.
+    // The promotion carries the values and the revision the form loaded;
+    // Add item leaves the saved draft as it was (#1626). It names its key,
+    // kept for a retry until it succeeds, and the draft's group (#2920).
     expect(draft).toEqual({
       id: "d1",
       revision: 3,
       promotionKey: expect.stringMatching(/^promote:/),
+      group: SLUG,
     })
+    expect(fake.drafts[0]).toMatchObject({ revision: 3, values: { draft: true } })
   })
 
   it("saves the custom field values typed in the form with the draft", async () => {
@@ -614,6 +669,7 @@ describe("<CommodityFormDialog /> server drafts", () => {
     ])
     fake.files.push({
       id: "file-photo",
+      title: "lamp",
       path: "lamp",
       ext: ".jpg",
       size_bytes: 10,
@@ -780,6 +836,7 @@ describe("<CommodityFormDialog /> files carried to a new draft", () => {
       ])
       fake.files.push({
         id: "file-photo",
+        title: "lamp",
         path: "lamp",
         ext: ".jpg",
         size_bytes: 10,
@@ -835,4 +892,916 @@ describe("<CommodityFormDialog /> files carried to a new draft", () => {
       expect(fake.files[0].links.map((l) => l.entity_id)).not.toContain(chair.id)
     }
   )
+})
+
+// Add item goes through the server draft (#1626): every staged file is
+// uploaded to the draft first, and the draft becomes the item only once it
+// holds them all. Until then the form stays open with each file's state.
+describe("<CommodityFormDialog /> Add item through the draft", () => {
+  // promoteThrough submits the way the Items page does: it promotes the draft
+  // the form hands over.
+  function promoteThrough() {
+    return vi.fn(async (values: CreateCommodityRequest, draft?: DraftRef) => {
+      if (!draft?.promotionKey) throw new Error("Add item must hand over the draft")
+      return promoteDraft(draft.id, draft.revision, draft.promotionKey, values)
+    })
+  }
+
+  const complete = {
+    id: "d1",
+    revision: 1,
+    values: { name: "Kettle", short_name: "Kettle", type: "furniture" },
+  }
+
+  async function stage(user: ReturnType<typeof userEvent.setup>, files: File[]) {
+    const input = screen
+      .getByTestId("commodity-files-dropzone")
+      .querySelector("input[type=file]") as HTMLInputElement
+    await user.upload(input, files)
+  }
+
+  const pendingRows = () => screen.queryAllByTestId("commodity-files-pending")
+
+  it("uploads every file to the draft before it becomes the item", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [
+      { name: "receipt.pdf", size: 3 },
+      { name: "kettle.png", size: 3 },
+    ]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const promote = promoteThrough()
+    let linkedWhenPromoted: string[] = []
+    const onSubmit = vi.fn(async (values: CreateCommodityRequest, draft?: DraftRef) => {
+      linkedWhenPromoted = fake.files.flatMap((f) => f.links.map((l) => l.entity_type))
+      return promote(values, draft)
+    })
+    renderForm({ onSubmit: onSubmit as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [
+      new File(["pdf"], "receipt.pdf", { type: "application/pdf" }),
+      new File(["png"], "kettle.png", { type: "image/png" }),
+    ])
+    const [receipt] = pendingRows()
+    const title = within(receipt).getByLabelText("Title of receipt.pdf")
+    expect(title).toHaveValue("receipt")
+    await user.clear(title)
+    await user.type(title, "Shop receipt")
+    await user.click(screen.getByTestId("commodity-form-submit"))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(linkedWhenPromoted).toEqual(["draft", "draft"])
+    const [, draft] = onSubmit.mock.calls[0]
+    expect(draft).toEqual({
+      id: fake.drafts[0].id,
+      revision: 1,
+      promotionKey: expect.stringMatching(/^promote:/),
+      group: SLUG,
+    })
+    await waitFor(() => expect(pendingRows()).toHaveLength(0))
+    const itemId = `item-from-${fake.drafts[0].id}`
+    expect(fake.drafts[0].status).toBe("promoted")
+    expect(fake.files.map((f) => [f.title, f.links.map((l) => l.entity_id)])).toEqual([
+      ["Shop receipt", [itemId]],
+      ["kettle", [itemId]],
+    ])
+    expect(fake.uploads).toBe(2)
+  })
+
+  it("adds nothing while a file fails, and Retry carries on without picking it again", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "label.png", size: 3 }]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    // The first upload, of receipt.png, fails; label.png goes through.
+    server.use(
+      http.post(
+        apiUrl(`/g/${SLUG}/uploads/file`),
+        () => HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 }),
+        { once: true }
+      )
+    )
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: onSubmit as never,
+    })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await stage(user, [
+      new File(["png"], "receipt.png", { type: "image/png" }),
+      new File(["png"], "label.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+
+    const alert = await screen.findByTestId("draft-save-error")
+    expect(alert).toHaveTextContent("Item not added")
+    expect(alert).toHaveTextContent("Not uploaded: receipt.png")
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    // The failed file stays staged, marked; the one that made it is listed
+    // with the draft's files.
+    const rows = pendingRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveAttribute("data-status", "failed")
+    expect(rows[0]).toHaveTextContent("receipt.png")
+    expect(rows[0]).toHaveTextContent("Upload failed")
+    expect(screen.getByTestId("draft-saved-files")).toHaveTextContent("label.png")
+    expect(screen.getByTestId("commodity-form-submit")).toBeEnabled()
+
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    await user.click(screen.getByTestId("draft-save-retry"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    // The links move with the promotion, which the call only starts.
+    await onSubmit.mock.results[0].value
+    expect(fake.uploads).toBe(2)
+    expect(fake.files.map((f) => f.links.map((l) => l.entity_id))).toEqual([
+      ["item-from-d1"],
+      ["item-from-d1"],
+    ])
+    expect(screen.queryByTestId("draft-save-error")).not.toBeInTheDocument()
+  })
+
+  it("keeps the files on the draft when the promotion fails, and Retry only promotes", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    fake.failPromote = 503
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    await openResumedOn("d1", "commodity-form-purchase-step", { onSubmit: onSubmit as never })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await stage(user, [new File(["png"], "receipt.png", { type: "image/png" })])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+
+    expect(await screen.findByTestId("commodity-form-error")).toBeInTheDocument()
+    expect(fake.drafts[0].status).toBe("open")
+    await waitFor(() => expect(pendingRows()).toHaveLength(0))
+    expect(screen.getByTestId("draft-saved-files")).toHaveTextContent("receipt.png")
+
+    fake.failPromote = null
+    await user.click(screen.getByTestId("commodity-form-error-retry"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fake.drafts[0].status).toBe("promoted"))
+    expect(fake.uploads).toBe(1)
+    expect(fake.files[0].links.map((l) => l.entity_id)).toEqual(["item-from-d1"])
+    const keys = onSubmit.mock.calls.map(([, draft]) => draft?.promotionKey)
+    expect(keys[1]).toBe(keys[0])
+  })
+
+  it("gets the item a lost promotion made when Add item is clicked again", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.loseResponse.promote = true
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    await openResumedOn("d1", "commodity-form-purchase-step", { onSubmit: onSubmit as never })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    expect(await screen.findByTestId("commodity-form-error")).toBeInTheDocument()
+    expect(fake.drafts[0].status).toBe("promoted")
+
+    await user.click(screen.getByTestId("commodity-form-error-retry"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2))
+    await expect(onSubmit.mock.results[1].value).resolves.toMatchObject({ id: "item-from-d1" })
+    expect(screen.queryByTestId("draft-save-promoted")).not.toBeInTheDocument()
+  })
+
+  it("shows each file's state and locks the form while the files upload", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    // The second upload waits until the test lets it go.
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/uploads/file`), async () => {
+        calls++
+        if (calls === 2) await held
+        return undefined
+      })
+    )
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: onSubmit as never,
+    })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await stage(user, [
+      new File(["png"], "a.png", { type: "image/png" }),
+      new File(["png"], "b.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+
+    await waitFor(() => expect(pendingRows()[1]).toHaveAttribute("data-status", "uploading"))
+    expect(pendingRows()[0]).toHaveAttribute("data-status", "uploaded")
+    expect(pendingRows()[0]).toHaveTextContent("a.png uploaded")
+    expect(screen.getByTestId("commodity-form-submit")).toBeDisabled()
+    expect(screen.getByTestId("commodity-form-submit")).toHaveTextContent("Uploading 1 of 2…")
+    expect(screen.getByTestId("commodity-form-progress")).toHaveTextContent("Uploading 1 of 2…")
+    expect(screen.getByTestId("commodity-form-cancel")).toBeDisabled()
+    expect(screen.getByLabelText("Title of a.png")).toBeDisabled()
+    expect(within(pendingRows()[0]).queryByRole("button", { name: "Delete" })).toBeNull()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
+
+    release()
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+  })
+
+  it("discards the draft Add item made and trashes its uploads when the form is discarded", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [{ name: "label.png", size: 3 }]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    // receipt.png fails to upload, so nothing is added.
+    server.use(
+      http.post(
+        apiUrl(`/g/${SLUG}/uploads/file`),
+        () => HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 }),
+        { once: true }
+      )
+    )
+    const user = userEvent.setup()
+    const { onOpenChange } = renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [
+      new File(["png"], "receipt.png", { type: "image/png" }),
+      new File(["png"], "label.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    expect(fake.drafts).toHaveLength(1)
+
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    // The draft went, and with it the link of label.png; the fake keeps the
+    // file as the server would move it to Trash.
+    expect(fake.drafts).toHaveLength(0)
+    expect(fake.files.flatMap((f) => f.links)).toEqual([])
+  })
+
+  it("moves a file a failed save uploaded but did not attach to Trash on Discard", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    fake.failAttach = 500
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: promoteThrough() as never,
+    })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await stage(user, [new File(["png"], "receipt.png", { type: "image/png" })])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    expect(await screen.findByTestId("draft-save-error")).toHaveTextContent("receipt.png")
+    const uploaded = fake.files[0].id
+
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.trashed).toEqual([uploaded])
+    // The resumed draft is the user's own: Discard leaves it as last saved.
+    expect(fake.drafts).toHaveLength(1)
+  })
+
+  it("moves an uploaded file to Trash when its row is removed", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    fake.failAttach = 500
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: promoteThrough() as never,
+    })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await stage(user, [new File(["png"], "receipt.png", { type: "image/png" })])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    const uploaded = fake.files[0].id
+
+    await user.click(within(pendingRows()[0]).getByRole("button", { name: "Delete" }))
+    await waitFor(() => expect(fake.trashed).toEqual([uploaded]))
+    expect(pendingRows()).toHaveLength(0)
+  })
+
+  it("leaves a file linked elsewhere where it is", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "receipt.png", size: 3 }]
+    fake.failAttach = 500
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: promoteThrough() as never,
+    })
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    await stage(user, [new File(["png"], "receipt.png", { type: "image/png" })])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    // Another tab attached the upload to an item meanwhile.
+    fake.files[0].links.push({
+      id: "link-elsewhere",
+      file_id: fake.files[0].id,
+      entity_type: "commodity",
+      entity_id: "item-9",
+    })
+
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.trashed).toEqual([])
+    expect(fake.files).toHaveLength(1)
+  })
+
+  // failNewItem runs Add item on a new form whose first file fails to
+  // upload: the draft Add item made holds label.png, and no item exists.
+  async function failNewItem(user: ReturnType<typeof userEvent.setup>) {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [{ name: "label.png", size: 3 }]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    server.use(
+      http.post(
+        apiUrl(`/g/${SLUG}/uploads/file`),
+        () => HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 }),
+        { once: true }
+      )
+    )
+    const rendered = renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [
+      new File(["png"], "receipt.png", { type: "image/png" }),
+      new File(["png"], "label.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    expect(fake.drafts).toHaveLength(1)
+    return { fake, ...rendered }
+  }
+
+  async function discard(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+  }
+
+  it("keeps the draft a failed Add item made once the user saved it elsewhere", async () => {
+    const user = userEvent.setup()
+    const { fake, onOpenChange } = await failNewItem(user)
+    // The user opened the draft from the Inbox and saved it there.
+    fake.drafts[0].revision = 2
+
+    await discard(user)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts).toHaveLength(1)
+    expect(fake.files[0].links).toEqual([
+      expect.objectContaining({ entity_type: "draft", entity_id: fake.drafts[0].id }),
+    ])
+    expect(toastSpies.error).not.toHaveBeenCalled()
+  })
+
+  it("says the item was added when the draft became one elsewhere before Discard", async () => {
+    const user = userEvent.setup()
+    const { fake, onOpenChange } = await failNewItem(user)
+    fake.drafts[0].status = "promoted"
+    fake.drafts[0].promoted_commodity_id = "item-9"
+
+    await discard(user)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts).toHaveLength(1)
+    expect(toastSpies.info.mock.calls.map(([message]) => message)).toEqual([
+      "The item was already added to your inventory.",
+    ])
+    expect(toastSpies.error).not.toHaveBeenCalled()
+  })
+
+  it("leaves a resumed draft as saved when Add item fails, with the uploaded file on it", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "label.png", size: 3 }]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    server.use(
+      http.post(
+        apiUrl(`/g/${SLUG}/uploads/file`),
+        () => HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 }),
+        { once: true }
+      )
+    )
+    const user = userEvent.setup()
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: promoteThrough() as never,
+    })
+    const name = await toBasics(user)
+    await user.clear(name)
+    await user.type(name, "Electric kettle")
+    await walkToFiles(user)
+    await stage(user, [
+      new File(["png"], "receipt.png", { type: "image/png" }),
+      new File(["png"], "label.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    // Add item does not save the values; the promotion would carry them.
+    expect(fake.drafts[0]).toMatchObject({ revision: 1, values: { name: "Kettle" } })
+    expect(screen.getByTestId("draft-saved-files")).toHaveTextContent("label.png")
+
+    await discard(user)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts[0]).toMatchObject({
+      status: "open",
+      revision: 1,
+      values: { name: "Kettle" },
+    })
+    expect(fake.files[0].links).toEqual([
+      expect.objectContaining({ entity_type: "draft", entity_id: "d1" }),
+    ])
+  })
+
+  it("adds no item when the dialog closes during the uploads, and the next opening goes on", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [
+      { name: "a.png", size: 3 },
+      { name: "b.png", size: 3 },
+    ]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // The first upload waits until the test lets it go.
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/uploads/file`), async () => {
+        calls++
+        if (calls === 1) await held
+        return undefined
+      })
+    )
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    const { close, reopen } = renderClosableForm(onSubmit)
+    const files = () => [
+      new File(["png"], "a.png", { type: "image/png" }),
+      new File(["png"], "b.png", { type: "image/png" }),
+    ]
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(pendingRows()[0]).toHaveAttribute("data-status", "uploading"))
+    // The form knows its draft before the first upload ends, so a Discard
+    // after a reload still finds it.
+    expect(itemDraftOf(DRAFT_KEY)).toBe(fake.drafts[0].id)
+
+    close()
+    release()
+    await waitFor(() => expect(fake.files[0]?.links).toHaveLength(1))
+
+    // The next opening has the input; Add item attaches the rest and adds
+    // the item, without uploading a.png again.
+    reopen()
+    const name = await fillManually(user)
+    expect(name).toHaveValue("Kettle")
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await onSubmit.mock.results[0].value
+    expect(fake.drafts[0].status).toBe("promoted")
+    expect(fake.uploads).toBe(2)
+    expect(fake.files.map((f) => f.links.map((l) => l.entity_id))).toEqual([
+      [`item-from-${fake.drafts[0].id}`],
+      [`item-from-${fake.drafts[0].id}`],
+    ])
+  })
+
+  it("stops an Add item the dialog was closed and opened again during", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [
+      { name: "a.png", size: 3 },
+      { name: "b.png", size: 3 },
+    ]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/uploads/file`), async () => {
+        calls++
+        if (calls === 1) await held
+        return undefined
+      })
+    )
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    const { close, reopen } = renderClosableForm(onSubmit)
+    const files = () => [
+      new File(["png"], "a.png", { type: "image/png" }),
+      new File(["png"], "b.png", { type: "image/png" }),
+    ]
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(pendingRows()[0]).toHaveAttribute("data-status", "uploading"))
+
+    // Closed and open again before the first upload answers. The form
+    // stays locked while the earlier Add item runs.
+    close()
+    reopen()
+    expect(await fillManually(user)).toHaveValue("Kettle")
+    const next = screen.getByTestId("commodity-form-next")
+    expect(next).toBeDisabled()
+    release()
+    // The earlier Add item ends after a.png, and nothing was promoted.
+    await waitFor(() => expect(next).toBeEnabled())
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(fake.promotions).toHaveLength(0)
+    expect(fake.drafts[0].status).toBe("open")
+    expect(calls).toBe(1)
+
+    // This opening's Add item finishes it, without uploading a.png again.
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await expect(onSubmit.mock.results[0].value).resolves.toMatchObject({
+      id: `item-from-${fake.drafts[0].id}`,
+    })
+    expect(fake.promotions).toHaveLength(1)
+    expect(fake.uploads).toBe(2)
+  })
+
+  it("gets the item a lost promotion made, also after a reload", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.loseResponse.promote = true
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    expect(await screen.findByTestId("commodity-form-error")).toBeInTheDocument()
+    expect(fake.drafts[0].status).toBe("promoted")
+
+    // A reload: the form comes back from this device with the same keys.
+    cleanup()
+    const onSubmit = promoteThrough()
+    renderForm({ onSubmit: onSubmit as never })
+    expect(await fillManually(user)).toHaveValue("Kettle")
+    await walkToFiles(user)
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await expect(onSubmit.mock.results[0].value).resolves.toMatchObject({
+      id: `item-from-${fake.drafts[0].id}`,
+    })
+    expect(screen.queryByTestId("draft-save-promoted")).not.toBeInTheDocument()
+  })
+
+  it("does not add the item when Enter is pressed in a file title", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    renderForm({ onSubmit: onSubmit as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [new File(["pdf"], "receipt.pdf", { type: "application/pdf" })])
+    const title = within(pendingRows()[0]).getByLabelText("Title of receipt.pdf")
+    const submitted = vi.fn((e: Event) => e.preventDefault())
+    title.closest("form")?.addEventListener("submit", submitted)
+    await user.clear(title)
+    await user.type(title, "Shop receipt{Enter}")
+    expect(title).toHaveValue("Shop receipt")
+    expect(submitted).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("cuts a long file title at 255 characters without splitting one", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [new File(["pdf"], "receipt.pdf", { type: "application/pdf" })])
+    const title = within(pendingRows()[0]).getByLabelText("Title of receipt.pdf")
+    fireEvent.change(title, { target: { value: "📦".repeat(300) } })
+    expect(title).toHaveValue("📦".repeat(255))
+  })
+
+  // savedLamp is a file batch intake saved with draft d1, titled and tagged
+  // by the scan (#1626).
+  function savedLamp(
+    fake: ReturnType<typeof draftHandlers.backend>,
+    extra: { description?: string; tags?: string[] } = {}
+  ) {
+    fake.files.push({
+      id: "file-lamp",
+      title: "Lamp invoice",
+      path: "IMG_0042",
+      ext: ".jpg",
+      size_bytes: 10,
+      category: "images",
+      tags: extra.tags ?? ["invoice"],
+      ...(extra.description !== undefined ? { description: extra.description } : {}),
+      links: [
+        {
+          id: "link-1",
+          file_id: "file-lamp",
+          entity_type: "draft",
+          entity_id: "d1",
+          meta: "images",
+        },
+      ],
+    })
+  }
+
+  it("shows the title and tags of a file saved with the draft and saves a change to them", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    expect(title).toHaveValue("Lamp invoice")
+    const tags = screen.getByTestId("draft-saved-file-tags-file-lamp")
+    expect(within(tags).getByTestId("draft-saved-file-tags-file-lamp-chip")).toHaveTextContent(
+      /invoice/i
+    )
+
+    await user.clear(title)
+    await user.type(title, "Desk lamp receipt")
+    await user.tab()
+    await waitFor(() => expect(fake.files[0].title).toBe("Desk lamp receipt"))
+    expect(fake.files[0].tags).toEqual(["invoice"])
+
+    await user.click(within(tags).getByRole("button", { name: /^remove invoice/i }))
+    await waitFor(() => expect(fake.files[0].tags).toEqual([]))
+    expect(fake.files[0].title).toBe("Desk lamp receipt")
+    await waitFor(() =>
+      expect(screen.getByTestId("draft-saved-file-title-file-lamp")).toHaveValue(
+        "Desk lamp receipt"
+      )
+    )
+  })
+
+  it("keeps a saved file's description when its title changes", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake, { description: "Bought at the fair" })
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    await user.clear(title)
+    await user.type(title, "Desk lamp receipt")
+    await user.tab()
+    await waitFor(() => expect(fake.files[0].title).toBe("Desk lamp receipt"))
+    expect(fake.files[0].description).toBe("Bought at the fair")
+
+    // The second save sends the description the first one returned.
+    await user.click(
+      within(screen.getByTestId("draft-saved-file-tags-file-lamp")).getByRole("button", {
+        name: /^remove invoice/i,
+      })
+    )
+    await waitFor(() => expect(fake.files[0].tags).toEqual([]))
+    expect(fake.files[0].description).toBe("Bought at the fair")
+  })
+
+  it("saves two quick changes to a saved file in the order they were made", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake, { tags: ["invoice", "warranty"] })
+    let puts = 0
+    let answered = 0
+    const onResponse = ({ request }: { request: Request }) => {
+      if (request.method === "PUT" && request.url.includes("/files/")) answered++
+    }
+    server.events.on("response:mocked", onResponse)
+    server.use(
+      ...groupHandlers.list(groups),
+      // The first save is slow: sent at once, the second would land first
+      // and the first, landing last, would undo it.
+      http.put(apiUrl(`/g/${SLUG}/files/:id`), async () => {
+        puts++
+        if (puts === 1) await delay(150)
+        return undefined
+      }),
+      ...fake.handlers
+    )
+    try {
+      const user = userEvent.setup()
+      await openResumedOn("d1", "commodity-form-purchase-step")
+      await walkToFiles(user, ["warranty", "tags", "files"])
+      const tags = await screen.findByTestId("draft-saved-file-tags-file-lamp")
+      await user.click(within(tags).getByRole("button", { name: /^remove invoice/i }))
+      await user.click(within(tags).getByRole("button", { name: /^remove warranty/i }))
+
+      await waitFor(() => expect(answered).toBe(2))
+      expect(fake.files[0].tags).toEqual([])
+      expect(within(tags).queryAllByTestId("draft-saved-file-tags-file-lamp-chip")).toHaveLength(0)
+    } finally {
+      server.events.removeListener("response:mocked", onResponse)
+    }
+  })
+
+  it("gives a saved file its name back when its title is cleared", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    await user.clear(title)
+    await user.tab()
+    await waitFor(() => expect(fake.files[0].title).toBe("IMG_0042"))
+  })
+
+  it("shows the file's title again when saving it fails", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake)
+    server.use(
+      ...groupHandlers.list(groups),
+      http.put(apiUrl(`/g/${SLUG}/files/:id`), () =>
+        HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+      ),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    await user.clear(title)
+    await user.type(title, "Mine")
+    await user.tab()
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
+    await waitFor(() => expect(title).toHaveValue("Lamp invoice"))
+    expect(fake.files[0].title).toBe("Lamp invoice")
+  })
+
+  describe("in the group the form opened in (#2920)", () => {
+    const OTHER = "garage"
+    const bothGroups: Schema<"models.LocationGroup">[] = [
+      ...groups,
+      { id: "g2", slug: OTHER, name: "Garage", group_currency: "USD" },
+    ]
+
+    // renderMovableForm opens draft d1 in a form whose host can close it,
+    // open it again and move the page to another group. On the Items page
+    // browser Back does that: the list's Add item button adds no history
+    // entry, so Back can land in another group with the form still open.
+    // The window's address moves too: in the browser the http client takes
+    // the group of a request without one from there, before GroupProvider
+    // has caught up with the move.
+    function renderMovableForm() {
+      setAccessToken("good-token")
+      const address = window.location.pathname + window.location.search
+      onTestFinished(() => window.history.replaceState(null, "", address))
+      window.history.replaceState(null, "", `/g/${SLUG}/commodities/new`)
+      const host = { setOpen: (_open: boolean) => {}, go: (_path: string) => {} }
+      function Host() {
+        const [open, setOpenState] = useState(true)
+        const navigate = useNavigate()
+        const slug = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+        useEffect(() => {
+          host.setOpen = setOpenState
+          host.go = (path) => void navigate(path)
+        }, [navigate])
+        return (
+          <>
+            <span data-testid="current-group">{slug}</span>
+            <CommodityFormDialog
+              open={open}
+              onOpenChange={setOpenState}
+              mode="create"
+              areas={areas}
+              locations={locations}
+              defaultCurrency="USD"
+              onSubmit={vi.fn() as never}
+              draftKey={DRAFT_KEY}
+              serverDrafts
+              resumeDraftId="d1"
+            />
+          </>
+        )
+      }
+      renderWithProviders({
+        initialPath: `/g/${SLUG}/commodities/new`,
+        routes: (
+          <Route
+            path="/g/:groupSlug/commodities/new"
+            element={
+              <GroupProvider>
+                <Host />
+              </GroupProvider>
+            }
+          />
+        ),
+      })
+      return {
+        close: () => act(() => host.setOpen(false)),
+        reopen: () => act(() => host.setOpen(true)),
+        moveTo: async (slug: string) => {
+          window.history.pushState(null, "", `/g/${slug}/commodities/new`)
+          act(() => host.go(`/g/${slug}/commodities/new`))
+          await waitFor(() => expect(screen.getByTestId("current-group")).toHaveTextContent(slug))
+        },
+      }
+    }
+
+    // otherGroup answers the draft and file requests sent to the other group
+    // with 404 and records them; reads is false to record only the writes.
+    function otherGroup(reads: boolean) {
+      const sent: string[] = []
+      server.use(
+        http.all(apiUrl(`/g/${OTHER}/*`), ({ request }) => {
+          const path = new URL(request.url).pathname
+          if (!/\/(drafts|files)\b/.test(path)) return undefined
+          if (reads || request.method !== "GET") sent.push(`${request.method} ${path}`)
+          return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+        })
+      )
+      return sent
+    }
+
+    it("keeps the draft and its files after the page moves to another group", async () => {
+      const fake = draftHandlers.backend(SLUG, [complete])
+      savedLamp(fake)
+      server.use(...groupHandlers.list(bothGroups), ...fake.handlers)
+      const sentToOther = otherGroup(true)
+      const user = userEvent.setup()
+      const form = renderMovableForm()
+      await screen.findByTestId("commodity-form-purchase-step")
+      await walkToFiles(user, ["warranty", "tags", "files"])
+      expect(await screen.findByTestId("draft-saved-file-title-file-lamp")).toHaveValue(
+        "Lamp invoice"
+      )
+
+      await form.moveTo(OTHER)
+
+      // The saved file is still listed, and a change to it is saved.
+      const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+      await user.clear(title)
+      await user.type(title, "Desk lamp receipt")
+      await user.tab()
+      await waitFor(() => expect(fake.files[0].title).toBe("Desk lamp receipt"))
+      expect(screen.getByTestId("draft-saved-file-title-file-lamp")).toHaveValue(
+        "Desk lamp receipt"
+      )
+      expect(sentToOther).toEqual([])
+    })
+
+    it("saves a queued change of a saved file where it was made after the form opens in another group", async () => {
+      const fake = draftHandlers.backend(SLUG, [complete])
+      savedLamp(fake, { tags: ["invoice", "warranty"] })
+      let release = () => {}
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let puts = 0
+      server.use(
+        ...groupHandlers.list(bothGroups),
+        // The first change waits, so the second is queued behind it.
+        http.put(apiUrl(`/g/${SLUG}/files/:id`), async () => {
+          puts++
+          if (puts === 1) await held
+          return undefined
+        }),
+        ...fake.handlers
+      )
+      const writesToOther = otherGroup(false)
+      const user = userEvent.setup()
+      const form = renderMovableForm()
+      await screen.findByTestId("commodity-form-purchase-step")
+      await walkToFiles(user, ["warranty", "tags", "files"])
+      const tags = await screen.findByTestId("draft-saved-file-tags-file-lamp")
+      await user.click(within(tags).getByRole("button", { name: /^remove invoice/i }))
+      await waitFor(() => expect(puts).toBe(1))
+      await user.click(within(tags).getByRole("button", { name: /^remove warranty/i }))
+
+      // The form closes and opens again in the other group before the
+      // second change gets its turn.
+      form.close()
+      await form.moveTo(OTHER)
+      form.reopen()
+      release()
+
+      await waitFor(() => expect(puts).toBe(2))
+      await waitFor(() => expect(fake.files[0].tags).toEqual([]))
+      expect(writesToOther).toEqual([])
+    })
+  })
 })

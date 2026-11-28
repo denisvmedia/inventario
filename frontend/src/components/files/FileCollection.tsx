@@ -82,15 +82,26 @@ export function FileCollection({
   return (
     <div className="overflow-hidden rounded-xl border bg-card" data-testid={`${idPrefix}-list`}>
       {showListHeader ? (
-        <div className="hidden grid-cols-[auto_auto_1fr_auto_auto_auto] gap-4 border-b bg-muted/50 px-4 py-2 sm:grid">
-          <div>
-            <Checkbox
-              checked={allSelectedOnPage}
-              onCheckedChange={onToggleAll}
-              aria-label={t("files:list.selectAll")}
-              data-testid="files-list-select-all"
-            />
-          </div>
+        // Without selection the rows drop their checkbox column
+        // (FileListRow), so the header drops it too.
+        <div
+          className={cn(
+            "hidden gap-4 border-b bg-muted/50 px-4 py-2 sm:grid",
+            onToggleAll
+              ? "grid-cols-[auto_auto_1fr_auto_auto_auto]"
+              : "grid-cols-[auto_1fr_auto_auto_auto]"
+          )}
+        >
+          {onToggleAll ? (
+            <div>
+              <Checkbox
+                checked={allSelectedOnPage}
+                onCheckedChange={onToggleAll}
+                aria-label={t("files:list.selectAll")}
+                data-testid="files-list-select-all"
+              />
+            </div>
+          ) : null}
           <span className="size-4" aria-hidden="true" />
           <span className="text-xs font-medium text-muted-foreground">
             {t("files:list.columnName", { defaultValue: "Name" })}

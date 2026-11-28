@@ -34,6 +34,10 @@ type AuthEvent struct {
 	// is one (e.g. "api_token" and the token id). Optional.
 	EntityType *string
 	EntityID   *string
+	// Extra carries what the action did, for actions that change more
+	// than the entity (e.g. the rows removing an item set deleted). It is
+	// written like AdminEvent.Extra; keep it small. Optional.
+	Extra map[string]any
 }
 
 // AdminEvent carries the fields LogAdmin persists into an audit row.
@@ -144,8 +148,14 @@ func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 		entry.RequestID = requestIDFromRequest(ev.Request)
 	}
 
+	// An auth event carries no reason and is never forced: only its Extra
+	// goes into the breadcrumb.
+	if breadcrumb := auditBreadcrumb(AdminEvent{Action: ev.Action, Extra: ev.Extra}, entry.UserAgent); breadcrumb != "" {
+		entry.UserAgent = breadcrumb
+	}
+
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
-		slog.Error("Failed to write audit log entry", "action", ev.Action, "error", err)
+		slog.ErrorContext(ctx, "Failed to write audit log entry", "action", ev.Action, "error", err)
 	}
 }
 
@@ -192,12 +202,12 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 	// JSON blob in user_agent and tuck the real UA under "ua" so the
 	// row carries the full context — see AdminEvent doc-comment for
 	// the rationale.
-	if breadcrumb := adminAuditBreadcrumb(ev, entry.UserAgent); breadcrumb != "" {
+	if breadcrumb := auditBreadcrumb(ev, entry.UserAgent); breadcrumb != "" {
 		entry.UserAgent = breadcrumb
 	}
 
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
-		slog.Error("Failed to write admin audit log entry", "action", ev.Action, "error", err)
+		slog.ErrorContext(ctx, "Failed to write admin audit log entry", "action", ev.Action, "error", err)
 	}
 }
 
@@ -214,12 +224,12 @@ const adminBreadcrumbReasonMaxLen = 500
 // rather than provided verbatim.
 const adminBreadcrumbTruncateMarker = "…"
 
-// adminAuditBreadcrumb returns a JSON-encoded breadcrumb if any of the
+// auditBreadcrumb returns a JSON-encoded breadcrumb if any of the
 // optional context fields are populated, or "" to signal that the
 // caller should keep the existing user_agent value (raw UA string).
 // Keeping the fall-through path explicit avoids retroactively rewriting
-// every existing admin.* audit row to a noisy {"ua":"..."} blob.
-func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
+// every existing audit row to a noisy {"ua":"..."} blob.
+func auditBreadcrumb(ev AdminEvent, rawUA string) string {
 	if ev.Reason == "" && !ev.Forced && len(ev.Extra) == 0 {
 		return ""
 	}
@@ -240,7 +250,7 @@ func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
 		// breadcrumb payload contains an unsupported type — the
 		// alternative would silently drop the audit row, which is
 		// strictly worse than losing the breadcrumb context.
-		slog.Error("Failed to marshal admin audit breadcrumb", "action", ev.Action, "error", err)
+		slog.Error("Failed to marshal audit breadcrumb", "action", ev.Action, "error", err)
 		return ""
 	}
 	return string(encoded)
@@ -337,35 +347,15 @@ func apiTokenIDFromContext(ctx context.Context) *string {
 	return new(token.ID)
 }
 
-// impersonatorFromContext returns the operator id stored in the
-// `impersonator_id` JWT claim when the `imp` claim is true, otherwise
-// nil. Nil is the common case: the vast majority of admin actions are
-// performed without an active impersonation session.
-//
-// The claim name was renamed from `impersonated_by` to
-// `impersonator_id` at #1785 Phase 5 (the audit-log column stays
-// `impersonated_by` because the column tracks "who was the
-// impersonator?" — the rename only applies to the wire-side claim).
-// The legacy claim is still read as a fallback so an in-flight
-// impersonation session minted before the upgrade is not orphaned on
-// rolling deploys; both names will never coexist in production after
-// the rollout window.
+// impersonatorFromContext returns the operator acting through an
+// impersonation session (appctx.ImpersonatorID), or nil. Nil is the common
+// case: the vast majority of actions are performed without one.
 func impersonatorFromContext(ctx context.Context) *string {
-	claims := appctx.JWTClaimsFromContext(ctx)
-	if claims == nil {
+	by := appctx.ImpersonatorID(ctx)
+	if by == "" {
 		return nil
 	}
-	imp, _ := claims["imp"].(bool)
-	if !imp {
-		return nil
-	}
-	if by, ok := claims["impersonator_id"].(string); ok && by != "" {
-		return &by
-	}
-	if by, ok := claims["impersonated_by"].(string); ok && by != "" {
-		return &by
-	}
-	return nil
+	return &by
 }
 
 // requestIDFromRequest returns the request's correlation id, or nil when there

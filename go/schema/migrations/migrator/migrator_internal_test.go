@@ -1,7 +1,6 @@
 package migrator
 
 import (
-	"io"
 	"log/slog"
 	"net/url"
 	"testing"
@@ -9,20 +8,22 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestNew_StripsPGXPoolParamsFromStoredDSN guards the integration between the
+// TestConnURL_StripsPGXPoolParams guards the integration between the
 // migrator and dsnutil: a DSN carrying pgxpool-only params (as compose hands
 // us in POSTGRES_TEST_DSN) must arrive sanitised at every sql.Open("postgres",
 // …) call inside this package, otherwise lib/pq forwards them to the server
 // and the migrator dies on `42704 unrecognized configuration parameter`. We
-// reach into the unexported field on purpose so this test still catches a
-// future refactor that "forgets" to strip.
-func TestNew_StripsPGXPoolParamsFromStoredDSN(t *testing.T) {
+// call the unexported connURL on purpose so this test still catches a future
+// refactor that "forgets" to strip.
+func TestConnURL_StripsPGXPoolParams(t *testing.T) {
 	c := qt.New(t)
 
 	dsn := "postgres://user:pass@localhost:5432/db?sslmode=disable&pool_max_conns=1&pool_min_conns=1"
 	m := New(dsn, nil)
 
-	parsed, err := url.Parse(m.dbURL)
+	connURL, err := m.connURL()
+	c.Assert(err, qt.IsNil)
+	parsed, err := url.Parse(connURL)
 	c.Assert(err, qt.IsNil)
 
 	q := parsed.Query()
@@ -35,7 +36,7 @@ func TestNew_StripsPGXPoolParamsFromStoredDSN(t *testing.T) {
 // after a successful MigrateUp the DB version should match the binary's
 // embedded max version. Behind → fatal (the bug). Equal → pass. Ahead → warn.
 func TestCompareSchemaVersion(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	tests := []struct {
 		name      string

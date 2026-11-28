@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -359,4 +360,111 @@ func TestCommodityCoverService_SkipsTrashedItems(t *testing.T) {
 	resolved := coverSvc.ResolveMany(ctx, counting, []*models.Commodity{trashed}, "user-1", "")
 	c.Assert(resolved, qt.HasLen, 0)
 	c.Assert(counting.reads, qt.HasLen, 0)
+}
+
+// coverReadFailure fails the batched cover reads it is given an error for.
+type coverReadFailure struct {
+	registry.FileRegistry
+	getMany, firstPhotos error
+}
+
+func (r *coverReadFailure) GetMany(ctx context.Context, ids []string) ([]*models.FileEntity, error) {
+	if r.getMany != nil {
+		return nil, r.getMany
+	}
+	return r.FileRegistry.GetMany(ctx, ids)
+}
+
+func (r *coverReadFailure) FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error) {
+	if r.firstPhotos != nil {
+		return nil, r.firstPhotos
+	}
+	return r.FileRegistry.FirstPhotos(ctx, commodityIDs)
+}
+
+// A failed cover read leaves the items it was for without that cover, and
+// the log says which read failed, for which group, and why (#2900).
+func TestCommodityCoverService_ResolveMany_LogsAFailedRead(t *testing.T) {
+	t1 := time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		failing func(registry.FileRegistry) registry.FileRegistry
+		read    string
+		// The covers that still resolve, by item.
+		want map[string]string
+	}{
+		{
+			name: "first photos",
+			failing: func(reg registry.FileRegistry) registry.FileRegistry {
+				return &coverReadFailure{FileRegistry: reg, firstPhotos: errors.New("connection reset")}
+			},
+			read: "first photos",
+			want: map[string]string{"commodity-A": "a-pinned"},
+		},
+		{
+			name: "named covers",
+			failing: func(reg registry.FileRegistry) registry.FileRegistry {
+				return &coverReadFailure{FileRegistry: reg, getMany: errors.New("connection reset")}
+			},
+			read: "named covers",
+			// The item that names a cover shows none rather than its first
+			// photo, which the user did not pick (#3049).
+			want: map[string]string{"commodity-B": "b-first"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx, fileReg := newCoverTestContext(c)
+			// The registry gives each file its own ID; the test names them.
+			names := map[string]string{}
+			for _, f := range []struct {
+				name, item string
+				at         time.Time
+			}{{"a-first", "commodity-A", t1}, {"a-pinned", "commodity-A", t2}, {"b-first", "commodity-B", t1}} {
+				created, err := fileReg.Create(ctx, makeImage(f.name, f.item, f.at))
+				c.Assert(err, qt.IsNil)
+				names[created.ID] = f.name
+			}
+			pinned := ""
+			for id, name := range names {
+				if name == "a-pinned" {
+					pinned = id
+				}
+			}
+			coverSvc := services.NewCommodityCoverService(services.NewFileSigningService(signingKey32, time.Hour))
+			items := []*models.Commodity{commodityRefWithCover("commodity-A", pinned), commodityRef("commodity-B")}
+
+			var resolved map[string]services.ResolvedCover
+			logs := captureLogs(c, func() {
+				resolved = coverSvc.ResolveMany(ctx, tt.failing(fileReg), items, "user-1", "")
+			})
+
+			got := make(map[string]string, len(resolved))
+			for id, cover := range resolved {
+				got[id] = names[cover.FileID]
+			}
+			c.Assert(got, qt.DeepEquals, tt.want)
+			c.Assert(logs, qt.Contains, `"msg":"cover lookup failed; the items are listed without these covers"`)
+			c.Assert(logs, qt.Contains, `"read":"`+tt.read+`"`)
+			c.Assert(logs, qt.Contains, `"group_id":"group-1"`)
+			c.Assert(logs, qt.Contains, `"error":"connection reset"`)
+		})
+	}
+}
+
+// A client that went away is not a failed cover read.
+func TestCommodityCoverService_ResolveMany_DoesNotLogACanceledRead(t *testing.T) {
+	c := qt.New(t)
+	ctx, fileReg := newCoverTestContext(c)
+	_, err := fileReg.Create(ctx, makeImage("b-first", "commodity-B", time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)))
+	c.Assert(err, qt.IsNil)
+	coverSvc := services.NewCommodityCoverService(services.NewFileSigningService(signingKey32, time.Hour))
+	failing := &coverReadFailure{FileRegistry: fileReg, firstPhotos: context.Canceled}
+
+	logs := captureLogs(c, func() {
+		c.Assert(coverSvc.ResolveMany(ctx, failing, []*models.Commodity{commodityRef("commodity-B")}, "user-1", ""), qt.HasLen, 0)
+	})
+	c.Assert(logs, qt.Equals, "")
 }

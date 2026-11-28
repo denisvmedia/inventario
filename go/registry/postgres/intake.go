@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -455,18 +457,24 @@ func (r *IntakeRegistry) ReviewCandidate(ctx context.Context, id string, review 
 		if review.AcceptedFields != nil {
 			candidate.AcceptedFields = models.ValuerSlice[string](append([]string{}, *review.AcceptedFields...))
 		}
+		if review.AcceptedCustomFields != nil {
+			candidate.AcceptedCustomFields = models.ValuerSlice[string](append([]string{}, *review.AcceptedCustomFields...))
+		}
 		if review.Quantity != nil {
 			candidate.Quantity = *review.Quantity
 		}
 		if candidate.AcceptedFields == nil {
 			candidate.AcceptedFields = models.ValuerSlice[string]{}
 		}
+		if candidate.AcceptedCustomFields == nil {
+			candidate.AcceptedCustomFields = models.ValuerSlice[string]{}
+		}
 		update := fmt.Sprintf(`
-			UPDATE %s SET selected = $1, accepted_fields = $2, quantity = $3, outcome = $4, updated_at = $5
-			WHERE id = $6
+			UPDATE %s SET selected = $1, accepted_fields = $2, accepted_custom_fields = $3, quantity = $4, outcome = $5, updated_at = $6
+			WHERE id = $7
 			RETURNING *`, r.tableNames.IntakeCandidates())
 		return tx.QueryRowxContext(ctx, update,
-			candidate.Selected, candidate.AcceptedFields, candidate.Quantity, string(candidate.Outcome), time.Now().UTC(), id,
+			candidate.Selected, candidate.AcceptedFields, candidate.AcceptedCustomFields, candidate.Quantity, string(candidate.Outcome), time.Now().UTC(), id,
 		).StructScan(&updated)
 	})
 	if err != nil {
@@ -543,9 +551,11 @@ func (r *IntakeRegistry) ResumeSession(ctx context.Context, sessionID string, no
 		if err != nil {
 			return err
 		}
+		// A requeued source is no longer a failure an operator discarded:
+		// if it fails again, the failed jobs show it again (#1307).
 		requeue := fmt.Sprintf(`
 			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
-				wait_reason = '', error_code = '', updated_at = $2
+				wait_reason = '', error_code = '', discarded_at = NULL, updated_at = $2
 			WHERE session_id = $3 AND (status = $4 OR (status = $5 AND claimed_at IS NULL))`, r.tableNames.IntakeSources())
 		res, err = tx.ExecContext(ctx, requeue, string(models.IntakeSourcePending), now, sessionID,
 			string(models.IntakeSourceFailed), string(models.IntakeSourceCanceled))
@@ -610,7 +620,7 @@ func (r *IntakeRegistry) RescanSource(ctx context.Context, id string, now time.T
 		}
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
-				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, updated_at = $2
+				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, discarded_at = NULL, updated_at = $2
 			WHERE id = $3
 			RETURNING *`, r.tableNames.IntakeSources())
 		return tx.QueryRowxContext(ctx, update, string(models.IntakeSourcePending), now.UTC(), id).StructScan(&updated)
@@ -633,25 +643,26 @@ func (r *IntakeRegistry) CountQueued(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error) {
+func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (registry.IntakeSweep, error) {
 	now, claimedBefore = now.UTC(), claimedBefore.UTC()
 	table := r.tableNames.IntakeSources()
-	var n int64
+	var n, failed int64
 	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		exec := func(query string, args ...any) error {
+		exec := func(query string, args ...any) (int64, error) {
 			res, err := tx.ExecContext(ctx, query, args...)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			changed, err := res.RowsAffected()
 			n += changed
-			return err
+			return changed, err
 		}
 		if maxAttempts > 0 {
 			fail := fmt.Sprintf(`
 				UPDATE %s SET status = $1, claimed_at = NULL, wait_reason = '', error_code = $2, updated_at = $3
 				WHERE status = $4 AND (claimed_at IS NULL OR claimed_at < $5) AND attempts - retry_base >= $6`, table)
-			if err := exec(fail, string(models.IntakeSourceFailed), errorCode, now,
+			var err error
+			if failed, err = exec(fail, string(models.IntakeSourceFailed), errorCode, now,
 				string(models.IntakeSourceScanning), claimedBefore, maxAttempts); err != nil {
 				return err
 			}
@@ -659,19 +670,20 @@ func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, n
 		requeue := fmt.Sprintf(`
 			UPDATE %s SET status = $1, next_attempt_at = $2, claimed_at = NULL, wait_reason = $3, updated_at = $2
 			WHERE status = $4 AND (claimed_at IS NULL OR claimed_at < $5)`, table)
-		if err := exec(requeue, string(models.IntakeSourcePending), now, models.IntakeWaitRetry,
+		if _, err := exec(requeue, string(models.IntakeSourcePending), now, models.IntakeWaitRetry,
 			string(models.IntakeSourceScanning), claimedBefore); err != nil {
 			return err
 		}
 		release := fmt.Sprintf(`
 			UPDATE %s SET claimed_at = NULL, updated_at = $1
 			WHERE status = $2 AND claimed_at < $3`, table)
-		return exec(release, now, string(models.IntakeSourceCanceled), claimedBefore)
+		_, err := exec(release, now, string(models.IntakeSourceCanceled), claimedBefore)
+		return err
 	})
 	if err != nil {
-		return 0, errxtrace.Wrap("failed to sweep stuck intake sources", err)
+		return registry.IntakeSweep{}, errxtrace.Wrap("failed to sweep stuck intake sources", err)
 	}
-	return int(n), nil
+	return registry.IntakeSweep{Changed: int(n), Failed: int(failed)}, nil
 }
 
 // ClaimNextSource takes the due source with SKIP LOCKED, so concurrent
@@ -777,11 +789,55 @@ func (r *IntakeRegistry) StoreScan(ctx context.Context, sourceID string, attempt
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, warnings = $2, scanned_at = $3, wait_reason = '', error_code = '', updated_at = $3
 			WHERE id = $4`, r.tableNames.IntakeSources())
-		_, err = tx.ExecContext(ctx, update, string(models.IntakeSourceScanned), warnings, now, sourceID)
-		return err
+		if _, err := tx.ExecContext(ctx, update, string(models.IntakeSourceScanned), warnings, now, sourceID); err != nil {
+			return errxtrace.Wrap("failed to mark intake source scanned", err)
+		}
+		return r.updateScannedFiles(ctx, tx, source, scan.Files)
 	})
 	if err != nil {
 		return errxtrace.Wrap("failed to store intake scan", err)
+	}
+	return nil
+}
+
+// updateScannedFiles writes a scan's file updates in the transaction that
+// stores the scan. The source row is already locked; the tags come next and
+// then the file rows in id order, the order every file write takes (see
+// ensureTagRowsInTx). The worker's role sees every group, so a file is only
+// read in the source's group.
+func (r *IntakeRegistry) updateScannedFiles(ctx context.Context, tx *sqlx.Tx, source *models.IntakeSource, updates []registry.IntakeFileUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	var tags []string
+	for _, u := range updates {
+		tags = append(tags, u.Tags...)
+	}
+	if err := ensureTagRowsInTx(ctx, tx, r.tableNames, source.TenantID, source.GroupID, source.CreatedByUserID, models.TagKindFile, tags); err != nil {
+		return err
+	}
+	updates = slices.SortedFunc(slices.Values(updates), func(a, b registry.IntakeFileUpdate) int {
+		return strings.Compare(a.FileID, b.FileID)
+	})
+	lock := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 AND tenant_id = $2 AND group_id = $3 AND %s FOR UPDATE`,
+		r.tableNames.Files(), liveRow)
+	write := fmt.Sprintf(`UPDATE %s SET title = $1, tags = $2, updated_at = $3 WHERE id = $4`, r.tableNames.Files())
+	for _, u := range updates {
+		var file models.FileEntity
+		err := tx.QueryRowxContext(ctx, lock, u.FileID, source.TenantID, source.GroupID).StructScan(&file)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to lock a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
+		next, changed := u.Apply(file)
+		if !changed {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, write, next.Title, next.Tags, next.UpdatedAt.UTC(), file.ID); err != nil {
+			return errxtrace.Wrap("failed to update a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
 	}
 	return nil
 }
@@ -841,6 +897,12 @@ func (r *IntakeRegistry) insertCandidates(ctx context.Context, tx *sqlx.Tx, sour
 		}
 		if candidate.AcceptedFields == nil {
 			candidate.AcceptedFields = models.ValuerSlice[string]{}
+		}
+		if candidate.CustomFields == nil {
+			candidate.CustomFields = models.IntakeFields{}
+		}
+		if candidate.AcceptedCustomFields == nil {
+			candidate.AcceptedCustomFields = models.ValuerSlice[string]{}
 		}
 		if candidate.Quantity < 1 {
 			candidate.Quantity = 1

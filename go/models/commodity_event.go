@@ -21,8 +21,9 @@ const (
 	// CommodityEventKindCreated is emitted on initial commodity creation.
 	// Before is null; After holds the initial fields.
 	CommodityEventKindCreated CommodityEventKind = "created"
-	// CommodityEventKindUpdated is emitted on edits that don't fall into one
-	// of the more specific kinds below. Carries the diff of changed fields.
+	// CommodityEventKindUpdated is emitted when a save changes a field none
+	// of the more specific kinds below cover, also when a specific kind is
+	// emitted for the same save. Carries the diff of those fields only.
 	CommodityEventKindUpdated CommodityEventKind = "updated"
 	// CommodityEventKindStatusChanged is emitted when status flips (e.g. in_use → sold).
 	CommodityEventKindStatusChanged CommodityEventKind = "status_changed"

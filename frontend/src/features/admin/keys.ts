@@ -35,6 +35,23 @@ export interface AdminGroupsParams {
   order?: "asc" | "desc"
 }
 
+// Cross-tenant failed-job listing params (GET /admin/failed-jobs, #1307).
+export interface AdminFailedJobsParams {
+  type?: string
+  tenantID?: string
+  page?: number
+  perPage?: number
+}
+
+// The filter of a bulk discard (POST /admin/failed-jobs/bulk-discard,
+// #2946): the jobs of the type and tenant that failed before the date.
+export interface AdminFailedJobsBulkParams {
+  type?: string
+  tenantID?: string
+  // A date (YYYY-MM-DD); the BE reads it as its midnight UTC.
+  failedBefore: string
+}
+
 export const adminKeys = {
   all: ["admin"] as const,
   tenants: () => [...adminKeys.all, "tenants"] as const,
@@ -55,6 +72,13 @@ export const adminKeys = {
   // so block/unblock mutations can invalidate exactly this entry.
   users: () => [...adminKeys.all, "users"] as const,
   userDetail: (id: string) => [...adminKeys.users(), "detail", id] as const,
+  // Failed background jobs across tenants (#1307).
+  failedJobs: () => [...adminKeys.all, "failed-jobs"] as const,
+  failedJobList: (params: AdminFailedJobsParams) =>
+    [...adminKeys.failedJobs(), "list", params] as const,
+  // The dry-run count of a bulk discard (#2946).
+  failedJobBulkCount: (params: AdminFailedJobsBulkParams) =>
+    [...adminKeys.failedJobs(), "bulk-count", params] as const,
   impersonation: () => [...adminKeys.all, "impersonation"] as const,
   impersonationCurrent: () => [...adminKeys.impersonation(), "current"] as const,
 }

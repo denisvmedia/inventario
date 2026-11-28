@@ -107,10 +107,11 @@ func doAdminJSONRequestWithHeaders(
 	return rr
 }
 
-// chi honors an incoming X-Request-Id verbatim, and the audit row now persists
-// it — so the client decides what goes in the column unless the middleware
-// bounds it. An unusable id is dropped rather than truncated: a truncated id
-// correlates with nothing, and the row is better off NULL than holding junk.
+// The audit row persists the client's X-Request-ID, so the client decides what
+// goes in the column unless the middleware bounds it. An unusable id is
+// replaced rather than truncated: a truncated id correlates with nothing, and
+// the replacement is the id the response returns, so the row still lines up
+// with the request's log lines.
 func TestAuditRow_RefusesAnUnusableClientRequestID(t *testing.T) {
 	c := qt.New(t)
 
@@ -122,11 +123,12 @@ func TestAuditRow_RefusesAnUnusableClientRequestID(t *testing.T) {
 		{"a plausible id is kept", "ticket-4417", true},
 		{"a UUID is kept", "3f8a1c62-9d4e-4b17-8c2a-0f5b6d7e8a91", true},
 		{"exactly at the cap is kept", strings.Repeat("a", 128), true},
-		{"one byte over the cap is dropped", strings.Repeat("a", 129), false},
-		{"a kilobyte is dropped", strings.Repeat("a", 1024), false},
-		{"a newline is dropped", "abc\ndef", false},
-		{"a NUL is dropped", "abc\x00def", false},
-		{"non-ASCII is dropped", "заявка-4417", false},
+		{"one byte over the cap is replaced", strings.Repeat("a", 129), false},
+		{"a kilobyte is replaced", strings.Repeat("a", 1024), false},
+		{"a newline is replaced", "abc\ndef", false},
+		{"a NUL is replaced", "abc\x00def", false},
+		{"a space is replaced", "abc def", false},
+		{"non-ASCII is replaced", "заявка-4417", false},
 	} {
 		c.Run(tc.name, func(c *qt.C) {
 			env := newAdminEnv(c)
@@ -140,14 +142,15 @@ func TestAuditRow_RefusesAnUnusableClientRequestID(t *testing.T) {
 
 			rows := auditRowsFor(c, env, "admin.user_sessions_revoke")
 			c.Assert(rows, qt.HasLen, 1)
+			c.Assert(rows[0].RequestID, qt.IsNotNil)
+			c.Assert(*rows[0].RequestID, qt.Equals, rr.Header().Get("X-Request-ID"))
 			if tc.stored {
-				c.Assert(rows[0].RequestID, qt.IsNotNil)
 				c.Assert(*rows[0].RequestID, qt.Equals, tc.supplied)
 				return
 			}
-			// Dropped, not truncated — so nothing in the column pretends to be
+			// Replaced, not truncated, so nothing in the column pretends to be
 			// the caller's id.
-			c.Assert(rows[0].RequestID, qt.IsNil,
+			c.Assert(*rows[0].RequestID, qt.Not(qt.Equals), tc.supplied,
 				qt.Commentf("an unusable client id reached the audit row"))
 		})
 	}

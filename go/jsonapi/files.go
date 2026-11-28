@@ -233,8 +233,9 @@ func (frd FileRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&frd.Title, validation.Length(0, 255)), // Title is now optional
-		validation.Field(&frd.Description, validation.Length(0, 1000)),
+		// Title is optional, at most 255 characters (not UTF-8 bytes).
+		validation.Field(&frd.Title, validation.RuneLength(0, 255)),
+		validation.Field(&frd.Description, validation.RuneLength(0, 1000)),
 		validation.Field(&frd.Tags, validation.Length(0, 100)), // Allow up to 100 tags
 	)
 
@@ -317,9 +318,11 @@ func (fur FileUpdateRequestFileData) Validate() error {
 // handler keeps the persisted path. Only its length is bounded.
 func (fur FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &fur,
-		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
-		validation.Field(&fur.Description, validation.Length(0, 1000)),
-		validation.Field(&fur.Path, validation.Length(0, 1024)),
+		// Title is optional. Its limit counts characters, not UTF-8 bytes: a
+		// Czech or Russian title takes two bytes for most letters.
+		validation.Field(&fur.Title, validation.RuneLength(0, 255)),
+		validation.Field(&fur.Description, validation.RuneLength(0, 1000)),
+		validation.Field(&fur.Path, validation.RuneLength(0, 1024)),
 		validation.Field(&fur.Tags, validation.Length(0, 100)), // Allow up to 100 tags
 	)
 }
@@ -396,7 +399,7 @@ func (fa FileLinkRequestAttributes) ValidateWithContext(ctx context.Context) err
 		validation.Field(&fa.EntityType, validation.Required, validation.In(
 			models.FileLinkCommodity, models.FileLinkLocation, models.FileLinkArea, models.FileLinkDraft,
 		)),
-		validation.Field(&fa.EntityID, validation.Required, validation.Length(1, 255)),
+		validation.Field(&fa.EntityID, validation.Required, validation.RuneLength(1, 255)),
 		validation.Field(&fa.Meta, validation.In(metas...)),
 	)
 }

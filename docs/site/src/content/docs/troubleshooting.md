@@ -15,6 +15,11 @@ docker compose logs inventario                       # Docker Compose
 kubectl -n <namespace> logs deploy/<release>-inventario   # Kubernetes
 ```
 
+To find the lines of one failed request, open the browser's developer tools,
+find the request in the Network tab and copy its `X-Request-ID` response
+header. The lines the server logged for that request carry the same value as
+`request_id`, so searching the log for it finds them.
+
 ## Sign-in and email
 
 ### The verification email never arrived
@@ -53,6 +58,26 @@ Usually the server is behind a proxy that is not forwarding
 declines to store them over what looks like plain HTTP, and the next request
 arrives unauthenticated. Operators: enable the header on your ingress
 controller or reverse proxy.
+
+### I was signed out and sign-in says my Inventario site is suspended
+
+The sign-in page says "The Inventario site this account belongs to is
+suspended". The server's operator has suspended the tenant your account belongs
+to. While it is suspended, everyone in it is signed out, and nobody can sign in,
+use an API token or download a personal data export. Inventario sends no
+reminder, storage, weekly digest or export emails while it is suspended. Your
+items and files are kept. Ask the server's administrator; once they reactivate
+the tenant, sign in again and create new API tokens, because the suspension
+revoked the old ones. Reminders that are still due are sent after the
+reactivation.
+
+An operator also suspends a tenant when they delete it: the tenant stays
+suspended until the deletion finishes, and then the accounts in it are gone.
+
+Operators: suspend, reactivate and delete tenants in the back office, on the
+tenant's page; the
+[admin runbook](https://github.com/denisvmedia/inventario/blob/master/devdocs/admin-runbook.md)
+describes the rules.
 
 ### Signing in with Google, GitHub or single sign-on brings me back to the sign-in page
 
@@ -160,6 +185,19 @@ The initial admin password goes through the same validation as any other: at
 least 8 characters, with an upper-case letter, a lower-case letter and a
 digit. A password that fails it stops the setup before the first user exists,
 which reads as a container that will not boot.
+
+### The server refuses the database URL: "has an @ after the host"
+
+A character that a URL reserves in the database password cuts the URL short.
+In `postgres://app:12/secret@db/inventario` the `/` ends the host part, and
+the rest of the password becomes the database name. The server and every
+`inventario db` command refuse such a URL before they connect.
+
+Percent-encode `/`, `?` and `#` in the password of `--db-dsn`
+(`INVENTARIO_DB_DSN`) as `%2F`, `%3F` and `%23`. The URL above becomes
+`postgres://app:12%2Fsecret@db/inventario`. Encoding only the `@` does not
+help: the host part still ends at the `/`. A literal `@` in the database
+name or in a query value is written as `%40`.
 
 ### Everything works, then every restart loses the data
 

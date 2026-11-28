@@ -316,3 +316,87 @@ func (r *LocationGroupRegistry) applyPendingDeletion(groupID string) (*models.Lo
 	post := updated
 	return &post, false, nil
 }
+
+// SetHiddenSections writes the hidden sections and updated_at of an active
+// group under the registry lock, keeping every other field as stored (see
+// registry.LocationGroupRegistry.SetHiddenSections).
+func (r *LocationGroupRegistry) SetHiddenSections(_ context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" {
+		return nil, false, registry.ErrFieldRequired
+	}
+
+	return r.updateActiveGroup(groupID, func(g *models.LocationGroup) {
+		g.HiddenSections = sections.Normalize()
+		g.UpdatedAt = updatedAt
+	})
+}
+
+// UpdateDetails writes the name, icon, description, the hidden sections when
+// given, and updated_at of an active group under the registry lock (see
+// registry.LocationGroupRegistry.UpdateDetails).
+func (r *LocationGroupRegistry) UpdateDetails(_ context.Context, groupID string, details registry.GroupDetails, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" || details.Name == "" {
+		return nil, false, registry.ErrFieldRequired
+	}
+
+	return r.updateActiveGroup(groupID, func(g *models.LocationGroup) {
+		g.Name = details.Name
+		g.Icon = details.Icon
+		g.Description = details.Description
+		if details.HiddenSections != nil {
+			g.HiddenSections = details.HiddenSections.Normalize()
+		}
+		g.UpdatedAt = updatedAt
+	})
+}
+
+// MarkPendingDeletion moves an active group to pending_deletion under the
+// registry lock (see registry.LocationGroupRegistry.MarkPendingDeletion).
+func (r *LocationGroupRegistry) MarkPendingDeletion(_ context.Context, groupID string, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" {
+		return nil, false, registry.ErrFieldRequired
+	}
+
+	return r.updateActiveGroup(groupID, func(g *models.LocationGroup) {
+		g.Status = models.LocationGroupStatusPendingDeletion
+		g.UpdatedAt = updatedAt
+	})
+}
+
+// SetCurrencyMigrationID writes the currency migration id of an active group
+// under the registry lock (see
+// registry.LocationGroupRegistry.SetCurrencyMigrationID). The memory backend
+// runs no migrations, so the migration's status is not checked.
+func (r *LocationGroupRegistry) SetCurrencyMigrationID(_ context.Context, groupID, migrationID string) (bool, error) {
+	if groupID == "" || migrationID == "" {
+		return false, registry.ErrFieldRequired
+	}
+
+	_, applied, err := r.updateActiveGroup(groupID, func(g *models.LocationGroup) {
+		g.CurrencyMigrationID = new(migrationID)
+	})
+	return applied, err
+}
+
+// updateActiveGroup applies change to a copy of an active group and stores
+// it, all under the registry's write lock, so a write cannot start from a
+// copy another write has replaced meanwhile. A group that is not active is
+// returned as it is with applied=false; a missing group gives ErrNotFound.
+func (r *LocationGroupRegistry) updateActiveGroup(groupID string, change func(*models.LocationGroup)) (*models.LocationGroup, bool, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	group, ok := r.items.Get(groupID)
+	if !ok {
+		return nil, false, registry.ErrNotFound
+	}
+	if group.Status != models.LocationGroupStatusActive {
+		current := *group
+		return &current, false, nil
+	}
+	updated := *group
+	change(&updated)
+	r.items.Set(groupID, &updated)
+	stored := updated
+	return &stored, true, nil
+}

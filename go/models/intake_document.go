@@ -172,11 +172,12 @@ func (d *IntakeDocument) ValidateWithContext(ctx context.Context) error {
 // registry fills in the tenant, the group and the author.
 func (d *IntakeDocument) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, d,
+		// Bytes: see IntakeExternalValueMaxLength.
 		validation.Field(&d.ExternalSystem, rules.NotEmpty, validation.Length(1, IntakeExternalValueMaxLength)),
-		validation.Field(&d.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),
-		validation.Field(&d.ExternalDocumentID, rules.NotEmpty, validation.Length(1, IntakeExternalValueMaxLength)),
+		validation.Field(&d.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),                   // Bytes: see IntakeExternalValueMaxLength.
+		validation.Field(&d.ExternalDocumentID, rules.NotEmpty, validation.Length(1, IntakeExternalValueMaxLength)), // Bytes: see IntakeExternalValueMaxLength.
 		validation.Field(&d.SourceName, validation.RuneLength(0, IntakeSourceNameMaxRunes)),
-		validation.Field(&d.SourceURL, validation.Length(0, IntakeSourceURLMaxLength), IntakeSourceURLRule),
+		validation.Field(&d.SourceURL, validation.RuneLength(0, IntakeSourceURLMaxLength), IntakeSourceURLRule),
 		validation.Field(&d.PayloadHash, rules.NotEmpty),
 	)
 }

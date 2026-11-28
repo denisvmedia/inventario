@@ -3,25 +3,57 @@
 // openapi codegen — see src/types/api.d.ts). Item types belong to each
 // group and live in features/itemTypes.
 
-export const COMMODITY_STATUSES = ["in_use", "sold", "lost", "disposed", "written_off"] as const
+export const COMMODITY_STATUSES = [
+  "in_use",
+  "sold",
+  "lost",
+  "disposed",
+  "written_off",
+  "donated",
+  "stolen",
+] as const
 
 export type CommodityStatusValue = (typeof COMMODITY_STATUSES)[number]
 
 // The statuses an item moves to from in_use. The status transition
 // dialog opens only for these; going back to in_use is a plain confirm.
-export const TERMINAL_COMMODITY_STATUSES = ["sold", "lost", "disposed", "written_off"] as const
+export const TERMINAL_COMMODITY_STATUSES = [
+  "sold",
+  "lost",
+  "disposed",
+  "written_off",
+  "donated",
+  "stolen",
+] as const
 
 export type TerminalCommodityStatusValue = (typeof TERMINAL_COMMODITY_STATUSES)[number]
 
-// Tailwind classes for each status pill. The status-* tokens live in
-// src/index.css; the dark-mode variants are already pre-shifted there
-// so a `text-status-active` reads correctly in both themes.
+// The color of each status, as text: the label of a Change Status
+// button. The item-status-* tokens live in src/index.css, with a
+// dark-mode value of their own.
+export const COMMODITY_STATUS_TEXT_TONES: Record<CommodityStatusValue, string> = {
+  in_use: "text-item-status-in-use",
+  sold: "text-item-status-sold",
+  lost: "text-item-status-lost",
+  disposed: "text-item-status-disposed",
+  written_off: "text-item-status-written-off",
+  donated: "text-item-status-donated",
+  stolen: "text-item-status-stolen",
+}
+
+// Tailwind classes for each status pill and the item page's status
+// card: the text color of COMMODITY_STATUS_TEXT_TONES on a /10 tint,
+// with the mock's `border-current/20` border.
+// src/__tests__/item-status-contrast.test.ts checks that each label
+// reaches 4.5:1 on its tint in both themes.
 export const COMMODITY_STATUS_TONES: Record<CommodityStatusValue, string> = {
-  in_use: "text-status-active border-status-active/30 bg-status-active/10",
-  sold: "text-status-expiring border-status-expiring/30 bg-status-expiring/10",
-  lost: "text-status-expired border-status-expired/30 bg-status-expired/10",
-  disposed: "text-muted-foreground border-border bg-muted",
-  written_off: "text-muted-foreground border-border bg-muted",
+  in_use: "text-item-status-in-use border-current/20 bg-item-status-in-use/10",
+  sold: "text-item-status-sold border-current/20 bg-item-status-sold/10",
+  lost: "text-item-status-lost border-current/20 bg-item-status-lost/10",
+  disposed: "text-item-status-disposed border-current/20 bg-item-status-disposed/10",
+  written_off: "text-item-status-written-off border-current/20 bg-item-status-written-off/10",
+  donated: "text-item-status-donated border-current/20 bg-item-status-donated/10",
+  stolen: "text-item-status-stolen border-current/20 bg-item-status-stolen/10",
 }
 
 export const COMMODITY_SORT_OPTIONS = [

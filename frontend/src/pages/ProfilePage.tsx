@@ -25,6 +25,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroups } from "@/features/group/hooks"
 import { useDashboardData } from "@/features/dashboard/hooks"
+import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { useAvatarPicker } from "@/hooks/useAvatarPicker"
 import type { LocationGroup } from "@/features/group/api"
 import type { GroupRole } from "@/features/group/api"
@@ -49,6 +50,9 @@ export function ProfilePage() {
   const { currentGroup } = useCurrentGroup()
   const dashboard = useDashboardData()
   const avatarPicker = useAvatarPicker()
+  // The plan badge and the Upgrade link show only when the deployment
+  // has plans turned on (#1389); the feature is frozen and off by default.
+  const plansEnabled = useFeatureFlag("plans")
 
   const derivedName = user?.name?.trim() || (user?.email?.split("@")[0] ?? "")
   const name = derivedName || "—"
@@ -90,8 +94,9 @@ export function ProfilePage() {
     <>
       <RouteTitle title={t("settings:profile.title")} />
       <Page width="narrow" className="gap-8" data-testid="profile-page">
-        {/* Identity card. Banner + avatar + name + plan badge. The cover
-            stripe pattern is taken from the design mock. */}
+        {/* Identity card. Banner + avatar + name, plus the plan badge when
+            plans are on. The cover stripe pattern is taken from the design
+            mock. */}
         <section className="overflow-hidden rounded-2xl border border-border">
           <div className="relative h-28 overflow-hidden bg-primary">
             <div
@@ -155,20 +160,31 @@ export function ProfilePage() {
                 </button>
                 <input {...avatarPicker.inputProps} data-testid="profile-avatar-input" />
               </div>
-              <div className="mb-1 flex items-center gap-2">
-                <Badge variant="outline" className="text-xs font-medium">
-                  {t("settings:profile.planFree")}
-                </Badge>
-                <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-xs">
-                  <Link
-                    to={withGroupQuery("/plans", currentGroup?.slug)}
-                    data-testid="profile-upgrade-link"
+              {plansEnabled ? (
+                <div className="mb-1 flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="text-xs font-medium"
+                    data-testid="profile-plan-badge"
                   >
-                    <Zap className="size-3" />
-                    {t("settings:profile.upgrade")}
-                  </Link>
-                </Button>
-              </div>
+                    {t("settings:profile.planFree")}
+                  </Badge>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2.5 text-xs"
+                  >
+                    <Link
+                      to={withGroupQuery("/plans", currentGroup?.slug)}
+                      data-testid="profile-upgrade-link"
+                    >
+                      <Zap className="size-3" />
+                      {t("settings:profile.upgrade")}
+                    </Link>
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <div className="mb-4 space-y-0.5">

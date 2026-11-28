@@ -12,8 +12,9 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { SellersListPage } from "@/pages/sellers/SellersListPage"
 import { capture } from "@/test/capture"
-import { groupHandlers, sellerHandlers } from "@/test/handlers"
+import { groupHandlers, memberHandlers, sellerHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -45,6 +46,7 @@ beforeEach(() => {
 
 function renderPage(path = `/g/${SLUG}/sellers`) {
   return renderWithProviders({
+    withAuth: true,
     initialPath: path,
     routes: (
       <Route
@@ -53,7 +55,9 @@ function renderPage(path = `/g/${SLUG}/sellers`) {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <SellersListPage />
+                <WhenRoleKnown>
+                  <SellersListPage />
+                </WhenRoleKnown>
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -62,6 +66,13 @@ function renderPage(path = `/g/${SLUG}/sellers`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 function seed(sellers = [market, hardware]) {
   server.use(...groupHandlers.list(groupFixture), ...sellerHandlers.list(SLUG, sellers))
@@ -214,5 +225,18 @@ describe("<SellersListPage />", () => {
     const { container } = renderPage()
     await screen.findByTestId("seller-row-s1")
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<SellersListPage /> as a viewer (#2886)", () => {
+  // The server takes seller writes from users, admins and owners only.
+  it("offers no create, edit or delete", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seed()
+    renderPage()
+    expect(await screen.findByTestId("seller-row-s1")).toBeVisible()
+    expect(screen.queryByTestId("sellers-create-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("seller-row-s1-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("seller-row-s1-delete")).not.toBeInTheDocument()
   })
 })

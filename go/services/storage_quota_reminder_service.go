@@ -134,8 +134,24 @@ func (s *StorageQuotaReminderService) RemindOnce(ctx context.Context, now time.T
 	}
 
 	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
+	tenants := newTenantGate(s.factorySet.TenantRegistry)
 	for _, g := range groups {
 		if g == nil {
+			continue
+		}
+		active, err := tenants.active(ctx, g.TenantID)
+		if err != nil {
+			stats.Failed++
+			slog.ErrorContext(ctx, "storage quota reminder: tenant lookup failed",
+				"group_id", g.ID,
+				"tenant_id", g.TenantID,
+				"error", err,
+			)
+			continue
+		}
+		if !active {
+			// Neither a warning nor a reset while the tenant is not
+			// active: the next sweep after it is active again does both.
 			continue
 		}
 		s.processGroup(ctx, fileReg, g, &stats, now)
@@ -156,7 +172,7 @@ func (s *StorageQuotaReminderService) processGroup(
 	usedBytes, breakdown, ratioErr := s.computeGroupUsage(ctx, fileReg, g)
 	if ratioErr != nil {
 		stats.Failed++
-		slog.Error("storage quota reminder: usage lookup failed",
+		slog.ErrorContext(ctx, "storage quota reminder: usage lookup failed",
 			"group_id", g.ID,
 			"tenant_id", g.TenantID,
 			"error", ratioErr,
@@ -195,7 +211,7 @@ func (s *StorageQuotaReminderService) processThresholdCrossed(
 	ok, processErr := s.processCrossed(ctx, g, threshold, usedBytes, quotaBytes, breakdown, now)
 	if processErr != nil {
 		stats.Failed++
-		slog.Error("storage quota reminder failed",
+		slog.ErrorContext(ctx, "storage quota reminder failed",
 			"group_id", g.ID,
 			"tenant_id", g.TenantID,
 			"threshold_percent", int(threshold),
@@ -219,7 +235,7 @@ func (s *StorageQuotaReminderService) processThresholdBelow(
 	reset, resetErr := s.factorySet.StorageQuotaReminderRegistry.DeleteByGroupThreshold(ctx, g.ID, int(threshold))
 	if resetErr != nil {
 		stats.Failed++
-		slog.Error("storage quota reminder: reset failed",
+		slog.ErrorContext(ctx, "storage quota reminder: reset failed",
 			"group_id", g.ID,
 			"threshold_percent", int(threshold),
 			"error", resetErr,
@@ -228,7 +244,7 @@ func (s *StorageQuotaReminderService) processThresholdBelow(
 	}
 	if reset {
 		stats.ResetByThreshold[threshold]++
-		slog.Info("storage quota reminder reset",
+		slog.InfoContext(ctx, "storage quota reminder reset",
 			"group_id", g.ID,
 			"threshold_percent", int(threshold),
 		)
@@ -245,7 +261,7 @@ func (s *StorageQuotaReminderService) resetEveryThreshold(ctx context.Context, s
 		reset, resetErr := s.factorySet.StorageQuotaReminderRegistry.DeleteByGroupThreshold(ctx, g.ID, int(threshold))
 		if resetErr != nil {
 			stats.Failed++
-			slog.Error("storage quota reminder: reset failed (no-quota path)",
+			slog.ErrorContext(ctx, "storage quota reminder: reset failed (no-quota path)",
 				"group_id", g.ID,
 				"threshold_percent", int(threshold),
 				"error", resetErr,
@@ -303,7 +319,7 @@ func (s *StorageQuotaReminderService) processCrossed(
 			return false, errxtrace.Wrap("storage quota reminder: insert idempotency row (no email service)", commitErr)
 		}
 		if ok {
-			slog.Info("storage quota reminder row inserted (no email service configured)",
+			slog.InfoContext(ctx, "storage quota reminder row inserted (no email service configured)",
 				"group_id", g.ID,
 				"threshold_percent", int(threshold),
 			)
@@ -326,7 +342,7 @@ func (s *StorageQuotaReminderService) processCrossed(
 		if commitErr != nil {
 			return false, errxtrace.Wrap("storage quota reminder: insert idempotency row (no recipients)", commitErr)
 		}
-		slog.Warn("storage quota reminder: no admin recipients found for group",
+		slog.WarnContext(ctx, "storage quota reminder: no admin recipients found for group",
 			"group_id", g.ID,
 			"tenant_id", g.TenantID,
 		)
@@ -357,9 +373,9 @@ func (s *StorageQuotaReminderService) processCrossed(
 			if firstEnqueueErr == nil {
 				firstEnqueueErr = sendErr
 			}
-			slog.Error("storage quota reminder: enqueue failed",
+			slog.ErrorContext(ctx, "storage quota reminder: enqueue failed",
 				"group_id", g.ID,
-				"to", r.email,
+				"user_id", r.userID,
 				"error", sendErr,
 			)
 		}
@@ -402,8 +418,9 @@ func (s *StorageQuotaReminderService) commitReminderRow(
 }
 
 type storageQuotaRecipient struct {
-	email string
-	name  string
+	userID string
+	email  string
+	name   string
 }
 
 // recipientsForGroup returns every admin user that should receive a
@@ -425,7 +442,7 @@ func (s *StorageQuotaReminderService) recipientsForGroup(ctx context.Context, g 
 			}
 			user, err := s.factorySet.UserRegistry.Get(ctx, m.MemberUserID)
 			if err != nil {
-				slog.Warn("storage quota reminder: skip member with missing user",
+				slog.WarnContext(ctx, "storage quota reminder: skip member with missing user",
 					"user_id", m.MemberUserID,
 					"group_id", g.ID,
 					"error", err,
@@ -439,14 +456,14 @@ func (s *StorageQuotaReminderService) recipientsForGroup(ctx context.Context, g 
 				continue
 			}
 			seen[user.Email] = struct{}{}
-			out = append(out, storageQuotaRecipient{email: user.Email, name: user.Name})
+			out = append(out, storageQuotaRecipient{userID: user.ID, email: user.Email, name: user.Name})
 		}
 	}
 
 	if len(out) == 0 && g.CreatedBy != "" {
 		user, err := s.factorySet.UserRegistry.Get(ctx, g.CreatedBy)
 		if err == nil && user != nil && strings.TrimSpace(user.Email) != "" {
-			out = append(out, storageQuotaRecipient{email: user.Email, name: user.Name})
+			out = append(out, storageQuotaRecipient{userID: user.ID, email: user.Email, name: user.Name})
 		}
 	}
 	return out, nil

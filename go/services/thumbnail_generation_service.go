@@ -10,6 +10,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -48,9 +49,10 @@ func NewThumbnailGenerationService(factorySet *registry.FactorySet, uploadLocati
 // RequestThumbnailGeneration requests thumbnail generation for a file with resource limiting.
 //
 // It is called when a thumbnail of the file is missing. A pending or
-// processing job already covers that and is returned as it is. A failed job,
-// or a completed one, gets a new job: a completed job with a missing thumbnail
-// rendered fewer sizes than there are now, or its blobs are gone.
+// processing job already covers that and is returned as it is, and so is a
+// failed job nobody has retried or discarded (#1307). A discarded failure,
+// or a completed job, gets a new job: a completed job with a missing
+// thumbnail rendered fewer sizes than there are now, or its blobs are gone.
 func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error) {
 	jobRegistry := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 
@@ -86,7 +88,14 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 	}
 
 	if existingJob != nil && existingJob.Status.InFlight() {
-		slog.Debug("Thumbnail generation job already exists", "file_id", fileID, "job_id", existingJob.ID, "status", existingJob.Status)
+		slog.DebugContext(ctx, "Thumbnail generation job already exists", "file_id", fileID, "job_id", existingJob.ID, "status", existingJob.Status)
+		return existingJob, nil
+	}
+	// A failure nobody has dealt with yet stays the file's job: another
+	// view does not start another one. Once it is discarded, the next view
+	// tries again (#1307).
+	if existingJob != nil && existingJob.AwaitsOperator() {
+		slog.DebugContext(ctx, "Thumbnail generation failed for good; not starting another job", "file_id", fileID, "job_id", existingJob.ID)
 		return existingJob, nil
 	}
 
@@ -110,7 +119,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		return nil, errxtrace.Wrap("failed to create thumbnail generation job", err)
 	}
 
-	slog.Info("Requested thumbnail generation",
+	slog.DebugContext(ctx, "Requested thumbnail generation",
 		"file_id", fileID,
 		"job_id", createdJob.ID,
 		"requesting_user_id", requestingUser.ID,
@@ -136,18 +145,20 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	// Get the job
 	job, err := jobRegistry.Get(ctx, jobID)
 	if err != nil {
+		slog.ErrorContext(ctx, "Failed to load thumbnail generation job", "job_id", jobID, "error", err)
 		return errxtrace.Wrap("failed to get thumbnail generation job", err)
 	}
 
 	// Skip if job is not pending
 	if job.Status != models.ThumbnailStatusPending {
-		slog.Debug("Skipping non-pending thumbnail job", "job_id", jobID, "status", job.Status)
+		slog.DebugContext(ctx, "Skipping non-pending thumbnail job", "job_id", jobID, "status", job.Status)
 		return nil
 	}
 
 	// Check user's current generation count and enforce limits
 	userSlots, err := s.concurrencyService.GetUserSlots(ctx, job.UserID)
 	if err != nil {
+		slog.ErrorContext(ctx, "Failed to load thumbnail concurrency slots", "job_id", jobID, "user_id", job.UserID, "error", err)
 		return errxtrace.Wrap("failed to get user concurrency slots", err)
 	}
 
@@ -157,7 +168,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	// Hard limit: deny if user has too many active generations
 	const maxActiveGenerations = 50
 	if activeGenerations >= maxActiveGenerations {
-		slog.Warn("User has too many active thumbnail generations, denying request",
+		slog.WarnContext(ctx, "User has too many active thumbnail generations, denying request",
 			"user_id", job.UserID, "active_count", activeGenerations, "max_allowed", maxActiveGenerations)
 		s.markJobFailed(ctx, jobRegistry, job, fmt.Sprintf("too many active generations (%d/%d)", activeGenerations, maxActiveGenerations))
 		return nil // Don't return error - this is expected behavior
@@ -166,7 +177,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	// Soft limit: wait for resources if user has many active generations
 	const maxConcurrentGenerations = 10
 	if activeGenerations >= maxConcurrentGenerations {
-		slog.Debug("User at concurrent generation limit, waiting for resources",
+		slog.DebugContext(ctx, "User at concurrent generation limit, waiting for resources",
 			"user_id", job.UserID, "active_count", activeGenerations, "max_concurrent", maxConcurrentGenerations)
 		return nil // Return without error - will be retried later
 	}
@@ -174,14 +185,14 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	// Try to acquire a concurrency slot
 	slot, err := s.concurrencyService.AcquireSlot(ctx, job.UserID, job.ID)
 	if err != nil {
-		slog.Debug("Could not acquire concurrency slot for thumbnail generation", "job_id", jobID, "user_id", job.UserID, "error", err)
+		slog.DebugContext(ctx, "Could not acquire concurrency slot for thumbnail generation", "job_id", jobID, "user_id", job.UserID, "error", err)
 		return nil // Don't treat this as an error - will be retried
 	}
 
 	// Ensure we release the slot when done
 	defer func() {
 		if releaseErr := s.concurrencyService.ReleaseSlot(ctx, job.UserID, job.ID); releaseErr != nil {
-			slog.Error("Failed to release concurrency slot", "job_id", jobID, "user_id", job.UserID, "error", releaseErr)
+			slog.ErrorContext(ctx, "Failed to release concurrency slot", "job_id", jobID, "user_id", job.UserID, "error", releaseErr)
 		}
 	}()
 
@@ -189,6 +200,7 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	now := time.Now()
 	err = jobRegistry.UpdateJobStatus(ctx, job.ID, models.ThumbnailStatusProcessing, "")
 	if err != nil {
+		slog.ErrorContext(ctx, "Failed to mark thumbnail generation job as processing", "job_id", jobID, "error", err)
 		return errxtrace.Wrap("failed to update job status to processing", err)
 	}
 
@@ -196,11 +208,11 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	job.ProcessingStartedAt = &now
 	_, err = jobRegistry.Update(ctx, *job)
 	if err != nil {
-		slog.Error("Failed to update job processing started time", "job_id", jobID, "error", err)
+		slog.ErrorContext(ctx, "Failed to update job processing started time", "job_id", jobID, "error", err)
 		// Continue anyway
 	}
 
-	slog.Info("Starting thumbnail generation", "job_id", jobID, "file_id", job.FileID, "user_id", job.UserID, "slot_id", slot.ID)
+	slog.DebugContext(ctx, "Starting thumbnail generation", "job_id", jobID, "file_id", job.FileID, "user_id", job.UserID, "slot_id", slot.ID)
 
 	// Get the file
 	fileRegistry := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
@@ -222,17 +234,17 @@ func (s *ThumbnailGenerationService) ProcessThumbnailGeneration(ctx context.Cont
 	job.ProcessingCompletedAt = &completedAt
 	_, err = jobRegistry.Update(ctx, *job)
 	if err != nil {
-		slog.Error("Failed to update job completion time", "job_id", jobID, "error", err)
+		slog.ErrorContext(ctx, "Failed to update job completion time", "job_id", jobID, "error", err)
 		// Continue anyway
 	}
 
 	err = jobRegistry.UpdateJobStatus(ctx, job.ID, models.ThumbnailStatusCompleted, "")
 	if err != nil {
-		slog.Error("Failed to mark job as completed", "job_id", jobID, "error", err)
+		slog.ErrorContext(ctx, "Failed to mark job as completed", "job_id", jobID, "error", err)
 		return errxtrace.Wrap("failed to mark job as completed", err)
 	}
 
-	slog.Info("Completed thumbnail generation", "job_id", jobID, "file_id", job.FileID, "user_id", job.UserID)
+	slog.InfoContext(ctx, "Completed thumbnail generation", "job_id", jobID, "file_id", job.FileID, "user_id", job.UserID)
 	return nil
 }
 
@@ -293,13 +305,21 @@ func (s *ThumbnailGenerationService) markJobFailed(ctx context.Context, jobRegis
 
 	_, updateErr := jobRegistry.Update(ctx, *job)
 	if updateErr != nil {
-		slog.Error("Failed to update job after failure", "job_id", job.ID, "error", updateErr)
+		slog.ErrorContext(ctx, "Failed to update job after failure", "job_id", job.ID, "error", updateErr)
 	}
 
 	statusErr := jobRegistry.UpdateJobStatus(ctx, job.ID, status, errorMessage)
 	if statusErr != nil {
-		slog.Error("Failed to update job status after failure", "job_id", job.ID, "error", statusErr)
+		slog.ErrorContext(ctx, "Failed to update job status after failure", "job_id", job.ID, "error", statusErr)
+	} else if status == models.ThumbnailStatusFailed {
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeThumbnail))
 	}
 
-	slog.Error("Thumbnail generation job failed", "job_id", job.ID, "file_id", job.FileID, "attempt", job.AttemptCount, "max_attempts", job.MaxAttempts, "error", errorMessage)
+	// A job that will run again is a retry, so a warning; one that has used
+	// its last attempt failed for good (devdocs/logging.md, Levels).
+	level := slog.LevelError
+	if status == models.ThumbnailStatusPending {
+		level = slog.LevelWarn
+	}
+	slog.Log(ctx, level, "Thumbnail generation job failed", "job_id", job.ID, "file_id", job.FileID, "attempt", job.AttemptCount, "max_attempts", job.MaxAttempts, "error", errorMessage)
 }

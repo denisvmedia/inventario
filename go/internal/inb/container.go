@@ -31,6 +31,7 @@ package inb
 
 import (
 	"archive/tar"
+	"bufio"
 	"io"
 
 	"github.com/go-extras/errx"
@@ -138,7 +139,13 @@ func WriteContainer(w io.Writer, sig []byte, payload io.Reader, payloadSize int6
 // they are inert because nothing reads them and the signature covers only the
 // payload.
 func ReadContainer(r io.Reader, limits Limits) (sig []byte, payload io.Reader, err error) {
-	tr := tar.NewReader(r)
+	// A personal data export is no container at all; say what it is rather
+	// than that its first member is wrong.
+	br := bufio.NewReaderSize(r, SniffHeadSize)
+	if head, _ := br.Peek(SniffHeadSize); IsPersonalDataExport(head) {
+		return nil, nil, ErrPersonalDataExport
+	}
+	tr := tar.NewReader(br)
 
 	// Member 1 must be the signature.
 	h1, err := tr.Next()

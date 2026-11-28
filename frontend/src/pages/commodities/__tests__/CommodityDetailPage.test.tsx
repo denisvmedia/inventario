@@ -12,6 +12,7 @@ import { ConfirmProvider } from "@/hooks/useConfirm"
 import { capture } from "@/test/capture"
 import { toastSpies } from "@/test/global-mocks"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -23,7 +24,13 @@ import {
   groupHandlers,
   inboxHandlers,
   intakeHandlers,
+  loanHandlers,
   locationHandlers,
+  maintenanceHandlers,
+  memberHandlers,
+  reminderHandlers,
+  serviceHandlers,
+  supplyHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -63,9 +70,16 @@ const commodityFixture = {
   },
 }
 
-function renderDetail(initialPath = `/g/${SLUG}/commodities/${ID}`) {
+// The page mounts once the caller's role is known (WhenRoleKnown), unless
+// `waitForRole` is false.
+function renderDetail(
+  initialPath = `/g/${SLUG}/commodities/${ID}`,
+  { waitForRole = true }: { waitForRole?: boolean } = {}
+) {
   setAccessToken("good-token")
+  const page = <CommodityDetailPage />
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -73,7 +87,7 @@ function renderDetail(initialPath = `/g/${SLUG}/commodities/${ID}`) {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommodityDetailPage />
+              {waitForRole ? <WhenRoleKnown>{page}</WhenRoleKnown> : page}
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -94,12 +108,15 @@ function renderItemRoutes(initialPath: string) {
   const element = (
     <GroupProvider>
       <ConfirmProvider>
-        <CommodityDetailPage />
+        <WhenRoleKnown>
+          <CommodityDetailPage />
+        </WhenRoleKnown>
         <LocationProbe />
       </ConfirmProvider>
     </GroupProvider>
   )
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <>
@@ -217,6 +234,12 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+})
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
 })
 
 describe("<CommodityDetailPage />", () => {
@@ -579,6 +602,76 @@ describe("<CommodityDetailPage />", () => {
     expect(within(dialog).getByTestId("commodity-form-submit")).toBeInTheDocument()
   })
 
+  it("keeps the status date, note and sale price when All fields saves (#2915)", async () => {
+    const user = userEvent.setup()
+    const row = itemRow(ID, "MacBook Pro 16")
+    row.attributes = {
+      ...row.attributes,
+      status: "sold",
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+    }
+    const puts = serveItems([row])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    await screen.findByLabelText(/^name/i)
+    await user.click(screen.getByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    const name = within(dialog).getByRole("textbox", { name: /^name/i })
+    await user.clear(name)
+    await user.type(name, "MacBook Air")
+    await user.click(within(dialog).getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes).toMatchObject({
+      name: "MacBook Air",
+      status: "sold",
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+    })
+  })
+
+  // The item changed after the edit form opened: a save from All fields is
+  // refused, and the form under the dialog offers the reload. A form opened
+  // again afterwards is fresh and says nothing about it (#2981).
+  it("refuses an All fields save on a changed item, and forgets it when the form closes", async () => {
+    const user = userEvent.setup()
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    server.use(
+      http.put(apiUrl(`/g/${SLUG}/commodities/:id`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Conflict",
+                code: "commodity.revision_conflict",
+                error: { msg: "the item changed since it was read" },
+              },
+            ],
+          },
+          { status: 409 }
+        )
+      )
+    )
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    await user.click(await screen.findByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(within(dialog).getByTestId("commodity-form-submit"))
+
+    expect(
+      await within(dialog).findByText(/This item changed since you opened it, so nothing was saved/)
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByTestId("commodity-form-cancel"))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(screen.getByTestId("commodity-edit-stale")).toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-edit-cancel"))
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    expect(await screen.findByTestId("commodity-edit-form")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-edit-stale")).toBeNull()
+  })
+
   it("deletes the commodity from the detail page", async () => {
     const user = userEvent.setup()
     server.use(
@@ -589,6 +682,12 @@ describe("<CommodityDetailPage />", () => {
     )
     renderDetail()
     await screen.findByTestId("commodity-detail-delete")
+    // The red outline trigger of a detail surface stays red on hover (#2914).
+    expect(screen.getByTestId("commodity-detail-delete")).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
     await user.click(screen.getByTestId("commodity-detail-delete"))
     // Wait for the confirm dialog body-lock, then click its Delete CTA.
     await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
@@ -600,6 +699,29 @@ describe("<CommodityDetailPage />", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("commodity-detail-delete")).not.toBeInTheDocument()
     )
+  })
+
+  it("shows the server's reason when the delete is refused", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      http.delete(apiUrl(`/g/${SLUG}/commodities/${ID}`), () =>
+        HttpResponse.json(
+          { errors: [{ status: "Conflict", detail: "the item is lent out" }] },
+          { status: 409 }
+        )
+      )
+    )
+    renderDetail()
+    await user.click(await screen.findByTestId("commodity-detail-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalledWith("the item is lent out"))
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("commodity-detail-delete")).toBeInTheDocument()
   })
 
   it("renders the audit timeline with kind-aware copy (#1450)", async () => {
@@ -858,7 +980,9 @@ describe("<CommodityDetailPage />", () => {
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.detail(SLUG, ID, { id: ID, type: "commodities", attributes: null })
     )
-    renderDetail()
+    // The card shows while no group is resolved for the page, which is
+    // before any role is known.
+    renderDetail(undefined, { waitForRole: false })
     expect(await screen.findByTestId("commodity-detail-not-found")).toBeInTheDocument()
   })
 
@@ -879,6 +1003,54 @@ describe("<CommodityDetailPage />", () => {
     // The forward CHANGE STATUS bar is mutually exclusive — the
     // mock surfaces only one of the two at a time.
     expect(screen.queryByTestId("commodity-detail-change-status")).toBeNull()
+  })
+
+  it("offers Donated and Stolen among the status changes of an item in use", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    const bar = await screen.findByTestId("commodity-detail-change-status")
+    expect(
+      within(bar)
+        .getAllByRole("button")
+        .map((b) => b.textContent)
+    ).toEqual(["Sold", "Lost", "Disposed", "Written Off", "Donated", "Stolen"])
+    expect(within(bar).getByTestId("commodity-detail-transition-donated")).toHaveClass(
+      "text-item-status-donated"
+    )
+    expect(within(bar).getByTestId("commodity-detail-transition-stolen")).toHaveClass(
+      "text-item-status-stolen"
+    )
+  })
+
+  it.each([
+    ["donated", "Donated", "text-item-status-donated"],
+    ["stolen", "Stolen", "text-item-status-stolen"],
+  ])("shows a %s item's status card in its own tone", async (status, label, tone) => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          status,
+          status_date: "2026-11-26",
+          status_note: "A note",
+        },
+      })
+    )
+    renderDetail()
+    const card = await screen.findByTestId("commodity-detail-terminal-status")
+    expect(within(card).getByTestId("commodity-detail-terminal-status-label")).toHaveTextContent(
+      label
+    )
+    expect(card).toHaveClass(tone)
+    expect(screen.queryByTestId("commodity-detail-terminal-status-sale-price")).toBeNull()
+    expect(screen.getByTestId("commodity-detail-revert-status")).toBeInTheDocument()
   })
 
   it("hides the terminal-status info card while the commodity is in_use", async () => {
@@ -1461,7 +1633,12 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
         "Item 50 of 52 to review"
       )
     )
-    await user.click(screen.getByTestId("commodity-review-mark"))
+    // The position comes from page 1, but the next item is on page 2, and
+    // both review actions stay disabled until that page has loaded. A click
+    // before then lands on a disabled button and does nothing.
+    const mark = screen.getByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    await user.click(mark)
     await waitFor(() =>
       expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c51?`)
     )
@@ -1581,6 +1758,55 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     expect(puts.filter((p) => p.id === "c2")).toHaveLength(0)
   })
 
+  // The tabs keep their dialogs in their own state; the reminder dialog on
+  // the Details tab stands for all of them (hooks/useItemHold).
+  it("stays on the item when its reminder dialog was opened while the next item was looked up", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    server.use(...reminderHandlers.listForCommodity(SLUG, "c1"))
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    const lookup = gate()
+    let reads = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async () => {
+        reads += 1
+        if (reads >= 2) await lookup.promise
+        return undefined
+      })
+    )
+    await user.click(mark)
+    await waitFor(() => expect(reads).toBe(2))
+    await user.click(await screen.findByTestId("reminder-add"))
+    await user.type(await screen.findByTestId("reminder-title-input"), "Check the tires")
+    lookup.release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+    expect(screen.getByTestId("reminder-title-input")).toHaveValue("Check the tires")
+  })
+
+  it("keeps the tab and the Files chip on the next item", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    server.use(...fileHandlers.list(SLUG), ...fileHandlers.countsFromFiles(SLUG, []))
+    renderReview(`/g/${SLUG}/commodities/c1?tab=files&files=images&${FROM_INBOX}`)
+    await screen.findByTestId("commodity-review-position")
+    await user.click(screen.getByTestId("commodity-review-skip"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 2 of 2 to review"
+      )
+    )
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      `/g/${SLUG}/commodities/c2?tab=files&files=images&${FROM_INBOX}`
+    )
+    expect(await screen.findByTestId("commodity-files-chip-images")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    )
+  })
+
   it("waits for a quick edit to save before a review", async () => {
     const user = userEvent.setup()
     const put = gate()
@@ -1696,5 +1922,167 @@ describe("CommodityDetailPage custom fields", () => {
     expect(screen.getByTestId("commodity-detail-custom-field-cf-keyboard")).toHaveTextContent("No")
     expect(screen.getByTestId("commodity-detail-custom-field-cf-grade")).toHaveTextContent("A")
     expect(screen.queryByTestId("commodity-detail-custom-field-cf-unused")).not.toBeInTheDocument()
+  })
+})
+
+describe("<CommodityDetailPage /> by role (#2886)", () => {
+  // Items and their files take writes from users, admins and owners; a
+  // viewer only reads.
+  function expectNoItemWrites() {
+    expect(screen.queryByTestId("commodity-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-delete")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-change-status")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-quick-edit-tags")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-quick-edit-notes")).not.toBeInTheDocument()
+  }
+
+  it("offers a viewer no edit, delete, status change or quick edit", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    expect(await screen.findByTestId("commodity-detail-insurance")).toBeInTheDocument()
+    expectNoItemWrites()
+  })
+
+  it("shows a viewer who follows an edit link the item, not the form", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    expect(await screen.findByTestId("commodity-detail-insurance")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-edit-form")).not.toBeInTheDocument()
+    expectNoItemWrites()
+  })
+
+  it("offers a viewer no upload on the Warranty and Files tabs", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, {})
+    )
+    renderDetail(`/g/${SLUG}/commodities/${ID}?tab=warranty`)
+    expect(await screen.findByTestId("commodity-detail-warranty-status")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-warranty-upload-receipt")).not.toBeInTheDocument()
+    await user.click(screen.getByTestId("commodity-detail-tab-files"))
+    expect(await screen.findByTestId("commodity-files-chip-bar")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-files-upload-zone")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-files-attach-existing")).not.toBeInTheDocument()
+  })
+
+  // #3038: the tabs that record loans, services, supplies and maintenance,
+  // and the reminders on the Details tab, are writes the server refuses a
+  // viewer too. Each has a record that would carry actions for a user.
+  it("offers a viewer no writes on the Lend, Service, Supplies and Maintenance tabs or reminders", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, []),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, {}),
+      ...reminderHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "r1",
+          commodity_id: ID,
+          title: "Insurance renewal",
+          due_on: "2027-01-31",
+          remind_days_before: [7],
+          repeat_unit: "none",
+          repeat_interval: 1,
+        },
+      ]),
+      ...loanHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "loan-1",
+          commodity_id: ID,
+          borrower_name: "Bob",
+          lent_at: "2026-03-01",
+          returned_at: "2026-03-10",
+        },
+      ]),
+      ...serviceHandlers.listForCommodity(SLUG, ID, []),
+      ...supplyHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "supply-1",
+          commodity_id: ID,
+          label: "Charger",
+          url: "https://example.com/charger",
+          notes: "",
+          sort_order: 0,
+        },
+      ]),
+      ...maintenanceHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "ms-1",
+          commodity_id: ID,
+          title: "Clean the fans",
+          interval_days: 90,
+          next_due_at: "2027-01-01",
+          enabled: true,
+        },
+      ])
+    )
+    renderDetail()
+
+    expect(await screen.findByTestId("reminder-row-r1")).toHaveTextContent("Insurance renewal")
+    expect(screen.queryByTestId("reminder-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-row-r1-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-row-r1-delete")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-lend"))
+    expect(await screen.findByTestId("lend-history-row-loan-1")).toHaveTextContent("Bob")
+    expect(screen.queryByTestId("commodity-detail-lend-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("lend-history-row-loan-1-edit")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-service"))
+    expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-supplies"))
+    expect(await screen.findByTestId("supplies-row-open")).toBeInTheDocument()
+    expect(screen.queryByTestId("supplies-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("supplies-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("supplies-delete")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-maintenance"))
+    expect(await screen.findByTestId("schedule-ms-1-next-due")).toBeInTheDocument()
+    expect(screen.queryByTestId("maintenance-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("schedule-ms-1-done")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("schedule-ms-1-delete")).not.toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "Enabled" })).not.toBeInTheDocument()
+  })
+
+  it("offers a viewer neither Revert to In Use nor the prompt to assign a location", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ]),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, status: "sold", area_id: null },
+      })
+    )
+    renderDetail()
+    expect(await screen.findByTestId("commodity-detail-terminal-status")).toHaveTextContent(/Sold/i)
+    expect(screen.queryByTestId("commodity-detail-revert-status")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("assign-location-banner")).not.toBeInTheDocument()
+  })
+
+  it("offers a user edit, delete, status change and quick edit", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    expect(await screen.findByTestId("commodity-detail-edit")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-delete")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-change-status")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-quick-edit-notes")).toBeInTheDocument()
   })
 })

@@ -109,11 +109,13 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	return r.attachLinks(files), nil
 }
 
-// Create stores the file and the links it carries.
+// Create stores the file and the links it carries. It drops the legacy link
+// fields, as the postgres INSERT leaves their columns out.
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	links := file.Links
 	file.Links = nil
 	file.ClearTrashState()
+	file.LegacyFileLink = models.LegacyFileLink{}
 	created, err := r.Registry.Create(ctx, file)
 	if err != nil {
 		return nil, err
@@ -130,7 +132,8 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 }
 
 // Update writes the file's own fields. Links and the legacy link fields are
-// kept as stored, and so is the checksum when file carries none.
+// kept as stored (the postgres UPDATE leaves the legacy columns out), and so is
+// the checksum when file carries none and the thumbnail orientation mark.
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	r.lock.RLock()
 	existing, ok := r.items.Get(file.ID)
@@ -139,6 +142,11 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 		if file.File != nil && file.SHA256 == "" && existing.File != nil {
 			f := *file.File
 			f.SHA256 = existing.SHA256
+			file.File = &f
+		}
+		if file.File != nil && existing.File != nil && existing.ThumbnailsOriented {
+			f := *file.File
+			f.ThumbnailsOriented = true
 			file.File = &f
 		}
 	}
@@ -169,13 +177,25 @@ func (r *FileRegistry) Delete(ctx context.Context, id string) error {
 
 // AddLink mirrors the postgres method.
 func (r *FileRegistry) AddLink(_ context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(link, isLiveFile)
+}
+
+// AddLinkIncludingTrashed mirrors the postgres method.
+func (r *FileRegistry) AddLinkIncludingTrashed(_ context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(link, func(*models.FileEntity) bool { return true })
+}
+
+// addLink writes the link when inState holds for the file. The state is read
+// under the write lock that Trash takes, as the postgres method reads it under
+// the row lock.
+func (r *FileRegistry) addLink(link models.FileLink, inState func(*models.FileEntity) bool) (*models.FileLink, bool, error) {
 	if link.FileID == "" {
 		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "FileID"))
 	}
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	file, ok := r.items.Get(link.FileID)
-	if !ok || !r.isItemVisible(file) {
+	if !ok || !r.isItemVisible(file) || !inState(file) {
 		return nil, false, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", link.FileID))
 	}
 	stored, created := r.addLinkLocked(file, link)
@@ -332,6 +352,45 @@ func (r *FileRegistry) SetChecksum(_ context.Context, id, sha256 string) error {
 	}
 	nf := *f.File
 	nf.SHA256 = sha256
+	next := *f
+	next.File = &nf
+	r.items.Set(id, &next)
+	return nil
+}
+
+// ListPendingThumbnailOrientation mirrors the postgres method.
+func (r *FileRegistry) ListPendingThumbnailOrientation(_ context.Context, afterID string, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	r.lock.RLock()
+	var pending []*models.FileEntity
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		f := pair.Value
+		if f == nil || f.File == nil || f.ThumbnailsOriented || f.MIMEType != "image/jpeg" || f.OriginalPath == "" || f.ID <= afterID {
+			continue
+		}
+		v := *f
+		pending = append(pending, &v)
+	}
+	r.lock.RUnlock()
+	slices.SortFunc(pending, func(a, b *models.FileEntity) int { return strings.Compare(a.ID, b.ID) })
+	if len(pending) > limit {
+		pending = pending[:limit]
+	}
+	return pending, nil
+}
+
+// SetThumbnailsOriented mirrors the postgres method.
+func (r *FileRegistry) SetThumbnailsOriented(_ context.Context, id string) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	f, ok := r.items.Get(id)
+	if !ok || f.File == nil || f.ThumbnailsOriented {
+		return nil
+	}
+	nf := *f.File
+	nf.ThumbnailsOriented = true
 	next := *f
 	next.File = &nf
 	r.items.Set(id, &next)

@@ -1,22 +1,27 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { http as msw, HttpResponse } from "msw"
-import { Route, Routes, useLocation, type Location } from "react-router-dom"
-import { screen, waitFor, within } from "@testing-library/react"
+import { Route, Routes, useLocation, useNavigate, type Location } from "react-router-dom"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { CommoditiesListPage } from "@/pages/commodities/CommoditiesListPage"
+import { useAuth } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
   areaHandlers,
+  authHandlers,
   commodityHandlers,
+  draftHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
   savedViewHandlers,
   sellerHandlers,
   tagHandlers,
@@ -26,6 +31,7 @@ import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { formatDate } from "@/lib/intl"
+import { toastSpies } from "@/test/global-mocks"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -46,9 +52,17 @@ function commodityRes(id: string, attrs: Record<string, unknown>) {
   }
 }
 
+// SignedIn renders the page once the user is known, as the app's route
+// guard does: Add item keeps its input per user (#2920).
+function SignedIn({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  return user ? children : null
+}
+
 function renderList(initialPath = `/g/${SLUG}/commodities`) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -56,7 +70,9 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommoditiesListPage />
+              <WhenRoleKnown>
+                <CommoditiesListPage />
+              </WhenRoleKnown>
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -64,6 +80,13 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 // settingsStub returns a GET /g/{slug}/settings handler with the given
 // body. The CommoditiesListPage always mounts `useUserSettings()` once
@@ -463,6 +486,7 @@ describe("<CommoditiesListPage />", () => {
     await user.click(await screen.findByTestId("commodities-bulk-move"))
     // The dialog renders a <select> populated from the areas fixture.
     const select = await screen.findByTestId("bulk-move-area")
+    expect(select).toHaveAttribute("data-slot", "native-select")
     expect(within(select as HTMLSelectElement).getByText(/Garage/i)).toBeInTheDocument()
     expect(within(select as HTMLSelectElement).getByText(/Kitchen/i)).toBeInTheDocument()
   })
@@ -484,6 +508,42 @@ describe("<CommoditiesListPage />", () => {
     await waitFor(() => {
       expect(screen.getByTestId("commodities-filter-type")).toHaveTextContent("1")
     })
+  })
+
+  it("filters by Donated and Stolen and shows their status pills", async () => {
+    const user = userEvent.setup()
+    const seen: string[][] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(`${window.location.origin}/api/v1/g/${SLUG}/commodities`, ({ request }) => {
+        seen.push(new URL(request.url).searchParams.getAll("status"))
+        return HttpResponse.json({
+          data: [
+            commodityRes("c1", { name: "Bike", status: "donated" }),
+            commodityRes("c2", { name: "Laptop", status: "stolen" }),
+          ],
+        })
+      })
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    expect(within(cards[0]).getByText("Donated")).toHaveClass("text-item-status-donated")
+    expect(within(cards[1]).getByText("Stolen")).toHaveClass("text-item-status-stolen")
+
+    await user.click(screen.getByTestId("commodities-filter-status"))
+    const options = await screen.findAllByRole("menuitemcheckbox")
+    expect(options.map((o) => o.textContent)).toEqual([
+      "In Use",
+      "Sold",
+      "Lost",
+      "Disposed",
+      "Written Off",
+      "Donated",
+      "Stolen",
+    ])
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Stolen" }))
+    await waitFor(() => expect(seen.at(-1)).toEqual(["stolen"]))
   })
 
   it("flips the sort field via the sort dropdown", async () => {
@@ -574,6 +634,47 @@ describe("<CommoditiesListPage />", () => {
       const tail = queries[queries.length - 1] ?? ""
       expect(/[?&]unassigned=/.test(tail)).toBe(false)
     })
+  })
+
+  it("filters by location from the Location menu and narrows the area menu (#2897)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, [
+        ...areaFixture,
+        { id: "a3", type: "areas", attributes: { id: "a3", name: "Boathouse", location_id: "l2" } },
+      ]),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+        { id: "l2", type: "locations", attributes: { id: "l2", name: "Cottage" } },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?unassigned=1`)
+    await screen.findByTestId("commodity-card")
+
+    await user.click(screen.getByTestId("commodities-filter-location"))
+    await user.click(await screen.findByTestId("commodities-filter-location-l2"))
+    await waitFor(() => {
+      expect(queries.some((q) => /[?&]location_id=l2\b/.test(q))).toBe(true)
+    })
+    // An item without an area is in no location, so the location ends
+    // "No location", which the server refuses alongside it.
+    expect(screen.getByTestId("commodities-filter-unassigned")).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    )
+    expect(/[?&]unassigned=/.test(queries[queries.length - 1] ?? "")).toBe(false)
+
+    // The area menu offers the areas of that location only.
+    await user.click(screen.getByTestId("commodities-filter-area"))
+    const menu = await screen.findByRole("menu")
+    expect(within(menu).getByRole("menuitemradio", { name: "Boathouse" })).toBeInTheDocument()
+    expect(within(menu).queryByRole("menuitemradio", { name: "Garage" })).not.toBeInTheDocument()
   })
 
   it("filters by missing details from the Missing menu and keeps them in the URL (#2794)", async () => {
@@ -667,19 +768,22 @@ describe("<CommoditiesListPage />", () => {
     // Replays the regression that motivated #1629: walk past the
     // initial AI placeholder step, fill Basics (Name and Type; the
     // short name follows the name), walk Purchase → Warranty →
-    // Extras → Files, then submit. After 201 the dialog closes and
-    // the page navigates to /commodities/:newId.
+    // Extras → Files, then submit. Add item saves the form as a server
+    // draft and promotes it (#1626); then the dialog closes and the page
+    // navigates to /commodities/:newId.
     const user = userEvent.setup()
     const requests: Record<string, unknown>[] = []
+    const drafts = draftHandlers.backend(SLUG)
     server.use(
+      ...authHandlers.signedIn(),
+      ...drafts.handlers,
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...locationHandlers.list(SLUG, [
         { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
       ]),
       ...commodityHandlers.list(SLUG, []),
-      // Intercept the POST manually so the test can assert the
-      // mapped-value payload Radix Select drives through the form.
+      // An item made without the draft would land here.
       msw.post(apiUrl(`/g/${SLUG}/commodities`), async ({ request }) => {
         requests.push((await request.json()) as Record<string, unknown>)
         return HttpResponse.json(
@@ -709,17 +813,20 @@ describe("<CommoditiesListPage />", () => {
     }
     setAccessToken("good-token")
     renderWithProviders({
+      withAuth: true,
       initialPath: `/g/${SLUG}/commodities`,
       routes: (
         <>
           <Route
             path="/g/:groupSlug/commodities"
             element={
-              <GroupProvider>
-                <ConfirmProvider>
-                  <CommoditiesListPage />
-                </ConfirmProvider>
-              </GroupProvider>
+              <SignedIn>
+                <GroupProvider>
+                  <ConfirmProvider>
+                    <CommoditiesListPage />
+                  </ConfirmProvider>
+                </GroupProvider>
+              </SignedIn>
             }
           />
           <Route path="/g/:groupSlug/commodities/:id" element={<NavSentinel />} />
@@ -727,7 +834,8 @@ describe("<CommoditiesListPage />", () => {
       ),
     })
     await screen.findByTestId("commodities-empty")
-    await user.click(screen.getByTestId("commodities-add-button"))
+    // Add item shows once the member list has the user's role.
+    await user.click(await screen.findByTestId("commodities-add-button"))
     // Past the AI placeholder step → Basics. Post-#1720 the AI step
     // owns its own primary actions inline; `commodity-form-ai-fill-manually`
     // is the canonical "skip the scanner" affordance.
@@ -747,13 +855,14 @@ describe("<CommoditiesListPage />", () => {
     // Page navigates to the new item's detail route — the sentinel
     // resolves once react-router has replaced the URL.
     expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
-      `/g/${SLUG}/commodities/new-1`
+      `/g/${SLUG}/commodities/item-from-${drafts.drafts[0]?.id}`
     )
     // The mapped payload landed on the BE — anchor on the schema
     // fields the dialog test pins (#1629 success criterion). The
     // hook wraps the payload in a JSON:API envelope.
-    expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({
+    expect(requests).toHaveLength(0)
+    expect(drafts.promotions).toHaveLength(1)
+    expect(drafts.promotions[0]?.body).toMatchObject({
       data: {
         type: "commodities",
         attributes: {
@@ -765,6 +874,92 @@ describe("<CommoditiesListPage />", () => {
         },
       },
     })
+  })
+
+  it("stays where the user went when the item is made after Back closed the dialog", async () => {
+    const user = userEvent.setup()
+    const drafts = draftHandlers.backend(SLUG)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      ...authHandlers.signedIn(),
+      ...drafts.handlers,
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ]),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    // The promotion answers only once the dialog is gone.
+    let promoting = false
+    server.use(
+      msw.post(apiUrl(`/g/${SLUG}/drafts/:id/promote`), async () => {
+        promoting = true
+        await held
+        return undefined
+      })
+    )
+    function Shell() {
+      const location = useLocation()
+      const navigate = useNavigate()
+      return (
+        <>
+          <span data-testid="nav-sentinel-path">{location.pathname}</span>
+          <button data-testid="back" type="button" onClick={() => navigate(-1)}>
+            Back
+          </button>
+          <SignedIn>
+            <GroupProvider>
+              <ConfirmProvider>
+                <CommoditiesListPage />
+              </ConfirmProvider>
+            </GroupProvider>
+          </SignedIn>
+        </>
+      )
+    }
+    setAccessToken("good-token")
+    renderWithProviders({
+      withAuth: true,
+      initialEntries: [
+        { pathname: `/g/${SLUG}/commodities` },
+        { pathname: `/g/${SLUG}/commodities/new` },
+      ],
+      routes: (
+        <>
+          <Route path="/g/:groupSlug/commodities" element={<Shell />} />
+          <Route path="/g/:groupSlug/commodities/new" element={<Shell />} />
+          <Route path="/g/:groupSlug/commodities/:id" element={<span data-testid="item-page" />} />
+        </>
+      ),
+    })
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
+    await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-tags-input")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await user.click(await screen.findByTestId("commodity-form-submit"))
+    await waitFor(() => expect(promoting).toBe(true))
+
+    // Browser Back; the open dialog blocks pointer events on the page.
+    fireEvent.click(screen.getByTestId("back"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("commodity-form-submit")).not.toBeInTheDocument()
+    )
+    release()
+    await waitFor(() => expect(drafts.drafts[0]?.status).toBe("promoted"))
+    await waitFor(() => expect(toastSpies.success).toHaveBeenCalled())
+    expect(screen.queryByTestId("item-page")).not.toBeInTheDocument()
+    expect(screen.getByTestId("nav-sentinel-path")).toHaveTextContent(`/g/${SLUG}/commodities`)
+    expect(screen.getByTestId("nav-sentinel-path")).not.toHaveTextContent("/new")
   })
 
   // #2128: the filter is applied by the server, not over the fetched page.
@@ -1476,5 +1671,74 @@ describe("<CommoditiesListPage />", () => {
     const { container } = renderList()
     await screen.findByTestId("commodities-empty")
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<CommoditiesListPage /> as a viewer (#2886)", () => {
+  // The server takes item writes from users, admins and owners only.
+  beforeEach(() => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+  })
+
+  it("offers no Add item, and only Print labels for a selection", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "First" }),
+        commodityRes("c2", { name: "Second" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    expect(screen.queryByTestId("commodities-add-button")).not.toBeInTheDocument()
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+    expect(await screen.findByTestId("commodities-bulk-bar")).toBeInTheDocument()
+    expect(screen.getByTestId("commodities-bulk-print-labels")).toBeVisible()
+    expect(screen.queryByTestId("commodities-bulk-move")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-bulk-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-bulk-delete")).not.toBeInTheDocument()
+  })
+
+  it("shows the empty state without Add item", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList()
+    const empty = await screen.findByTestId("commodities-empty")
+    expect(within(empty).queryByRole("button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-add-button")).not.toBeInTheDocument()
+  })
+
+  it("opens no Add item dialog from a /commodities/new link", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "First" })])
+    )
+    setAccessToken("good-token")
+    renderWithProviders({
+      withAuth: true,
+      initialPath: `/g/${SLUG}/commodities/new`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/commodities/new"
+          element={
+            <GroupProvider>
+              <ConfirmProvider>
+                <WhenRoleKnown>
+                  <CommoditiesListPage />
+                </WhenRoleKnown>
+              </ConfirmProvider>
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 })

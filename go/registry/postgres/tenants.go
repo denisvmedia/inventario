@@ -19,6 +19,12 @@ import (
 
 var _ registry.TenantRegistry = (*TenantRegistry)(nil)
 
+// tenantDomainIndex is the unique index on tenants.domain. A unique violation
+// on it is a domain another tenant already has, reported as
+// registry.ErrDomainAlreadyExists. The callers check the domain before they
+// write, so this is what a write that raced past that check gets.
+const tenantDomainIndex = "tenants_domain_unique_idx"
+
 type TenantRegistry struct {
 	dbx        *sqlx.DB
 	tableNames store.TableNames
@@ -119,6 +125,9 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 		return nil
 	})
 	if err != nil {
+		if isUniqueViolationOn(err, tenantDomainIndex) {
+			return nil, errxtrace.Classify(registry.ErrDomainAlreadyExists, errx.Attrs("domain", tenantDomain(tenant)))
+		}
 		return nil, errxtrace.Wrap("failed to create tenant", err)
 	}
 
@@ -144,15 +153,41 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Update(ctx, tenant, nil)
+	err := reg.Update(ctx, tenant, func(ctx context.Context, tx *sqlx.Tx) error {
+		// The unique index on slug would refuse a taken slug too, with an
+		// error that names the index; this gives the same sentinel Create
+		// returns.
+		var existingTenant models.Tenant
+		txReg := store.NewTxRegistry[models.Tenant](tx, r.tableNames.Tenants())
+		err := txReg.ScanOneByField(ctx, store.Pair("slug", tenant.Slug), &existingTenant)
+		switch {
+		case err == nil && existingTenant.ID != tenant.GetID():
+			return errxtrace.Classify(registry.ErrSlugAlreadyExists, errx.Attrs("slug", tenant.Slug))
+		case err != nil && !errors.Is(err, store.ErrNotFound):
+			return errxtrace.Wrap("failed to check for existing tenant", err)
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant", "entity_id", tenant.GetID()))
+		}
+		if isUniqueViolationOn(err, tenantDomainIndex) {
+			return nil, errxtrace.Classify(registry.ErrDomainAlreadyExists, errx.Attrs("domain", tenantDomain(tenant)))
 		}
 		return nil, errxtrace.Wrap("failed to update tenant", err)
 	}
 
 	return &tenant, nil
+}
+
+// tenantDomain is the tenant's domain for an error attribute, empty when it
+// has none.
+func tenantDomain(tenant models.Tenant) string {
+	if tenant.Domain == nil {
+		return ""
+	}
+	return *tenant.Domain
 }
 
 func (r *TenantRegistry) Delete(ctx context.Context, id string) error {

@@ -2,6 +2,7 @@ package registrytest
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -47,6 +48,7 @@ func RunIntakeContract(t *testing.T, newEnv func(t *testing.T) IntakeEnv) {
 		{"external identity is unique in the group", intakeContractExternalIdentity},
 		{"a delivered source is stored scanned and skips the queue", intakeContractDelivered},
 		{"the worker claims, stores and finishes scans", intakeContractWorkerLifecycle},
+		{"a stored scan changes its files with it", intakeContractScanFiles},
 		{"two workers never claim the same source", intakeContractConcurrentClaim},
 		{"the sweep requeues a stuck scan and drops its late result", intakeContractStuckSweep},
 		{"the sweep fails a source that keeps getting stuck", intakeContractStuckSweepLimit},
@@ -265,7 +267,14 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 
 	err = env.Service.StoreScan(env.Ctx, first.ID, first.Attempts, registry.IntakeScan{
 		Candidates: []models.IntakeCandidate{
-			{Fields: models.IntakeFields{"name": {Value: "Kettle", Confidence: 0.9}, "original_price": {Value: 39.9, Confidence: 0.8}}, Selected: true, AcceptedFields: []string{"name", "original_price"}, Quantity: 1},
+			{
+				Fields:               models.IntakeFields{"name": {Value: "Kettle", Confidence: 0.9}, "original_price": {Value: 39.9, Confidence: 0.8}},
+				CustomFields:         models.IntakeFields{"field-card": {Value: "WC-1", Confidence: 0.8}, "field-gift": {Value: true, Confidence: 0.2}},
+				Selected:             true,
+				AcceptedFields:       []string{"name", "original_price"},
+				AcceptedCustomFields: []string{"field-card"},
+				Quantity:             1,
+			},
 			{Fields: models.IntakeFields{"name": {Value: "Toaster", Confidence: 0.7}}, Selected: true, AcceptedFields: []string{"name"}, Quantity: 2},
 		},
 		Warnings: []models.IntakeWarning{{Code: "low_confidence", Field: "serial_number"}},
@@ -285,6 +294,12 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 	c.Assert(candidates, qt.HasLen, 2)
 	c.Assert(candidates[0].Fields["name"].Value, qt.Equals, "Kettle")
 	c.Assert(candidates[0].Fields["original_price"].Value, qt.Equals, 39.9)
+	c.Assert(candidates[0].CustomFields, qt.DeepEquals, models.IntakeFields{
+		"field-card": {Value: "WC-1", Confidence: 0.8},
+		"field-gift": {Value: true, Confidence: 0.2},
+	})
+	c.Assert([]string(candidates[0].AcceptedCustomFields), qt.DeepEquals, []string{"field-card"})
+	c.Assert(candidates[1].CustomFields, qt.HasLen, 0, qt.Commentf("a product without custom field guesses has none"))
 	c.Assert(candidates[0].Outcome, qt.Equals, models.IntakeCandidatePending)
 	c.Assert(candidates[1].Quantity, qt.Equals, 2)
 	c.Assert(candidates[1].SessionID, qt.Equals, session.ID)
@@ -323,6 +338,65 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 	c.Assert(later.CountedAttempts(), qt.Equals, 1)
 	err = env.Service.StoreScan(env.Ctx, second.ID, second.Attempts, registry.IntakeScan{}, now)
 	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceChanged, qt.Commentf("the earlier claim's result is dropped"))
+}
+
+// intakeContractScanFiles: StoreScan writes the scan's file updates with the
+// scan (#2940). A scan that is not stored changes no file, and a file in the
+// trash or gone is left out.
+func intakeContractScanFiles(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	receipt := intakeFile(c, env, "receipt", models.FileCategoryDocuments)
+	kept := intakeFile(c, env, "kept", models.FileCategoryDocuments)
+	trashed := intakeFile(c, env, "trashed", models.FileCategoryDocuments)
+	_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "files"},
+		[]registry.IntakeSourceInput{{FileIDs: []string{receipt.ID, kept.ID, trashed.ID}}}, 0)
+	c.Assert(err, qt.IsNil)
+	now := time.Now()
+	src, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(env.Files.Trash(env.Ctx, trashed.ID, trashed.CreatedByUserID, "", now), qt.IsNil)
+
+	changedAt := now.Add(time.Minute)
+	var seen []string
+	retitle := func(title string) func(models.FileEntity) (models.FileEntity, bool) {
+		return func(file models.FileEntity) (models.FileEntity, bool) {
+			seen = append(seen, file.ID)
+			file.Title = title
+			file.Tags = append(slices.Clone(file.Tags), "invoice")
+			file.UpdatedAt = changedAt
+			return file, true
+		}
+	}
+	files := []registry.IntakeFileUpdate{
+		{FileID: receipt.ID, Tags: []string{"invoice"}, Apply: retitle("Coffee receipt")},
+		{FileID: kept.ID, Apply: func(file models.FileEntity) (models.FileEntity, bool) {
+			seen = append(seen, file.ID)
+			return file, false
+		}},
+		{FileID: trashed.ID, Tags: []string{"invoice"}, Apply: retitle("Trashed receipt")},
+		{FileID: "no-such-file", Apply: retitle("Missing")},
+	}
+
+	err = env.Service.StoreScan(env.Ctx, src.ID, src.Attempts+1, registry.IntakeScan{Files: files}, now)
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceChanged)
+	c.Assert(seen, qt.HasLen, 0, qt.Commentf("a scan that is not stored changes no file"))
+
+	c.Assert(env.Service.StoreScan(env.Ctx, src.ID, src.Attempts, registry.IntakeScan{Files: files}, now), qt.IsNil)
+	c.Check(seen, qt.ContentEquals, []string{receipt.ID, kept.ID}, qt.Commentf("only the live files are offered"))
+
+	got, err := env.Files.Get(env.Ctx, receipt.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(got.Title, qt.Equals, "Coffee receipt")
+	c.Check([]string(got.Tags), qt.DeepEquals, []string{"invoice"})
+	c.Check(got.Path, qt.Equals, "receipt")
+	c.Check(got.UpdatedAt.Sub(changedAt).Abs() < time.Second, qt.IsTrue, qt.Commentf("updated at %s", got.UpdatedAt))
+	c.Check(got.Links, qt.HasLen, 1, qt.Commentf("the link to the source stays"))
+	unchanged, err := env.Files.Get(env.Ctx, kept.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(unchanged.Title, qt.Equals, "kept")
+	inTrash, err := env.Files.GetTrashed(env.Ctx, trashed.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(inTrash.Title, qt.Equals, "trashed")
 }
 
 func intakeContractConcurrentClaim(t *testing.T, env IntakeEnv) {
@@ -364,10 +438,10 @@ func intakeContractStuckSweep(t *testing.T, env IntakeEnv) {
 
 	swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(-time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 	c.Assert(err, qt.IsNil)
-	c.Assert(swept, qt.Equals, 0, qt.Commentf("a recent claim is not stuck"))
+	c.Assert(swept, qt.Equals, registry.IntakeSweep{}, qt.Commentf("a recent claim is not stuck"))
 	swept, err = env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 	c.Assert(err, qt.IsNil)
-	c.Assert(swept, qt.Equals, 1)
+	c.Assert(swept, qt.Equals, registry.IntakeSweep{Changed: 1})
 	requeued, err := env.Intake.GetSource(env.Ctx, stuck.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(requeued.Status, qt.Equals, models.IntakeSourcePending)
@@ -398,7 +472,12 @@ func intakeContractStuckSweepLimit(t *testing.T, env IntakeEnv) {
 		c.Assert(claimed.Attempts, qt.Equals, attempt)
 		swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 		c.Assert(err, qt.IsNil)
-		c.Assert(swept, qt.Equals, 1)
+		c.Assert(swept.Changed, qt.Equals, 1)
+		wantFailed := 0
+		if attempt == intakeTestMaxAttempts {
+			wantFailed = 1
+		}
+		c.Assert(swept.Failed, qt.Equals, wantFailed, qt.Commentf("attempt %d", attempt))
 	}
 	failed, err := env.Intake.ListSources(env.Ctx, session.ID)
 	c.Assert(err, qt.IsNil)
@@ -521,6 +600,18 @@ func intakeContractReviewOutcomes(t *testing.T, env IntakeEnv) {
 	c.Assert(reviewed.Selected, qt.IsFalse)
 	c.Assert([]string(reviewed.AcceptedFields), qt.DeepEquals, []string{"name"})
 	c.Assert(reviewed.Quantity, qt.Equals, 3)
+
+	// The custom fields are reviewed on their own; the other choices stay.
+	reviewed, err = env.Intake.ReviewCandidate(env.Ctx, candidates[1].ID, registry.IntakeCandidateReview{
+		AcceptedCustomFields: &[]string{"field-card"},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert([]string(reviewed.AcceptedCustomFields), qt.DeepEquals, []string{"field-card"})
+	c.Assert([]string(reviewed.AcceptedFields), qt.DeepEquals, []string{"name"})
+	c.Assert(reviewed.Quantity, qt.Equals, 3)
+	reviewed, err = env.Intake.ReviewCandidate(env.Ctx, candidates[1].ID, registry.IntakeCandidateReview{AcceptedCustomFields: &[]string{}})
+	c.Assert(err, qt.IsNil)
+	c.Assert(reviewed.AcceptedCustomFields, qt.HasLen, 0)
 
 	skipped, err := env.Intake.SetCandidateOutcome(env.Ctx, candidates[1].ID, models.IntakeCandidateSkipped, nil, "")
 	c.Assert(err, qt.IsNil)

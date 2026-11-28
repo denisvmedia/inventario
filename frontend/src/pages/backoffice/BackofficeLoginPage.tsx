@@ -18,6 +18,7 @@ import { loginSchema, type LoginInput } from "@/features/auth/schemas"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
 const SESSION_REASON_KEY: Record<string, string> = {
   session_expired: "backoffice:session.expired",
@@ -171,14 +172,17 @@ export function BackofficeLoginPage() {
                 disabled={isPending}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="backoffice-email"
+                aria-describedby={
+                  form.formState.errors.email?.message ? "backoffice-login-email-error" : undefined
+                }
                 {...form.register("email")}
               />
             </div>
-            {form.formState.errors.email ? (
-              <p className="text-xs text-destructive" data-testid="backoffice-email-error">
-                {t(form.formState.errors.email.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="backoffice-login-email-error"
+              testId="backoffice-email-error"
+              message={form.formState.errors.email?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -190,13 +194,18 @@ export function BackofficeLoginPage() {
               disabled={isPending}
               aria-invalid={!!form.formState.errors.password}
               data-testid="backoffice-password"
+              aria-describedby={
+                form.formState.errors.password?.message
+                  ? "backoffice-login-password-error"
+                  : undefined
+              }
               {...form.register("password")}
             />
-            {form.formState.errors.password ? (
-              <p className="text-xs text-destructive" data-testid="backoffice-password-error">
-                {t(form.formState.errors.password.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="backoffice-login-password-error"
+              testId="backoffice-password-error"
+              message={form.formState.errors.password?.message}
+            />
           </div>
 
           {serverError ? (

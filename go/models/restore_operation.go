@@ -124,6 +124,15 @@ type RestoreOperation struct {
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 	//ptah:schema:field name="error_count" type="INTEGER" default="0"
 	ErrorCount int `json:"error_count" db:"error_count" userinput:"false"`
+	// DiscardedAt is when an operator discarded the failed restore (#1307).
+	// The row stays, with its error, until its export is deleted.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt PTimestamp `json:"-" db:"discarded_at" userinput:"false"`
+	// HeartbeatAt is the last time the worker running the restore said it is
+	// alive. The claim sets it and the worker renews it while the
+	// restore runs; a restore whose heartbeat stops is taken for dead.
+	//ptah:schema:field name="heartbeat_at" type="TIMESTAMP"
+	HeartbeatAt PTimestamp `json:"-" db:"heartbeat_at" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`
@@ -174,10 +183,10 @@ func (r *RestoreOperation) ValidateWithContext(ctx context.Context) error {
 
 	fields = append(fields,
 		validation.Field(&r.ExportID, validation.Required),
-		validation.Field(&r.Description, validation.Required, validation.Length(1, 500)),
+		validation.Field(&r.Description, validation.Required, validation.RuneLength(1, 500)),
 		validation.Field(&r.Status, validation.Required),
 		validation.Field(&r.Options),
-		validation.Field(&r.ErrorMessage, validation.Length(0, 2000)),
+		validation.Field(&r.ErrorMessage, validation.RuneLength(0, 2000)),
 	)
 
 	return validation.ValidateStructWithContext(ctx, r, fields...)

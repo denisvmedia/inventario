@@ -17,6 +17,7 @@ import (
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/internal/validationctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -30,7 +31,11 @@ import (
 // signer is accepted by the constructor but ignored — the constructor signature
 // is identical across builds so the worker/bootstrap wiring never branches.
 type RestoreOperationProcessor struct {
-	restoreOperationID    string
+	restoreOperationID string
+	// stepOwner is the tenant, group and author of the restore operation.
+	// Every step is written with it: steps go through the service registry,
+	// which fills none of them in, and a step row requires all three.
+	stepOwner             models.TenantGroupAwareEntityID
 	factorySet            *registry.FactorySet
 	entityService         *services.EntityService
 	tagService            *services.TagService
@@ -90,6 +95,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	if err != nil {
 		return l.markRestoreFailed(ctx, err, "failed to get restore operation")
 	}
+	l.setStepOwner(restoreOperation)
 
 	exportReg := l.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	export, err := exportReg.Get(ctx, restoreOperation.ExportID)
@@ -606,14 +612,16 @@ func (l *RestoreOperationProcessor) clearSurvivingCommodities(ctx context.Contex
 	return nil
 }
 
-// validateCommodityOwnershipInDB validates that a commodity in the database
-// belongs to the current user. Identical behaviour to the original.
+// validateCommodityOwnershipInDB checks that no other user created a
+// commodity with the archived UUID. It returns an error wrapping
+// security.ErrOwnershipViolation when one did, and records nothing in the
+// restore stats: the caller counts the returned error, once, like any other
+// failed item.
 func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	ctx context.Context,
 	originalXMLID string,
 	currentUser *models.User,
 	existing *types.ExistingEntities,
-	stats *types.RestoreStats,
 ) error {
 	existingCommodity := existing.Commodities[originalXMLID]
 	if existingCommodity != nil {
@@ -624,15 +632,12 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
 		allCommodities, err := listCommoditiesWithTrash(ctx, serviceAccountRegistry)
 		if err != nil {
-			stats.ErrorCount++
-			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
-			stats.Errors = append(stats.Errors, msg)
-			slog.Error("commodity ownership validation list failed",
+			slog.ErrorContext(ctx, "commodity ownership validation list failed",
 				"restore_operation_id", l.restoreOperationID,
 				"original_xml_id", originalXMLID,
 				"error", err,
 			)
-			return err
+			return errxtrace.Wrap("failed to list commodities for ownership validation of "+originalXMLID, err)
 		}
 		l.commodityUUIDMap = make(map[string]*models.Commodity, len(allCommodities))
 		for _, c := range allCommodities {
@@ -654,9 +659,8 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 			AttemptType:    "cross_user_access",
 			Timestamp:      time.Now(),
 		})
-		stats.ErrorCount++
-		stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: commodity belongs to a different user", originalXMLID))
-		return errxtrace.Classify(security.ErrOwnershipViolation, errx.Attrs("xml_id", originalXMLID, "commodity_id", existingDBCommodity.ID))
+		return errxtrace.Wrap("security validation failed for commodity "+originalXMLID, security.ErrOwnershipViolation,
+			errx.Attrs("xml_id", originalXMLID, "commodity_id", existingDBCommodity.ID))
 	}
 
 	return nil
@@ -691,6 +695,16 @@ func (l *RestoreOperationProcessor) trackCreatedEntity(entityID string) {
 	l.importSessionEntities[entityID] = true
 }
 
+// setStepOwner takes the tenant, group and author for the steps from the
+// restore operation they belong to.
+func (l *RestoreOperationProcessor) setStepOwner(op *models.RestoreOperation) {
+	l.stepOwner = models.TenantGroupAwareEntityID{
+		TenantID:        op.TenantID,
+		GroupID:         op.GroupID,
+		CreatedByUserID: op.CreatedByUserID,
+	}
+}
+
 func (l *RestoreOperationProcessor) createRestoreStep(
 	ctx context.Context,
 	name string,
@@ -698,16 +712,17 @@ func (l *RestoreOperationProcessor) createRestoreStep(
 	reason string,
 ) {
 	step := models.RestoreStep{
-		RestoreOperationID: l.restoreOperationID,
-		Name:               name,
-		Result:             result,
-		Reason:             reason,
-		CreatedDate:        models.PNow(),
+		TenantGroupAwareEntityID: l.stepOwner,
+		RestoreOperationID:       l.restoreOperationID,
+		Name:                     name,
+		Result:                   result,
+		Reason:                   reason,
+		CreatedDate:              models.PNow(),
 	}
 
 	stepReg := l.factorySet.RestoreStepRegistryFactory.CreateServiceRegistry()
 	if _, err := stepReg.Create(ctx, step); err != nil {
-		slog.Error("Failed to create restore step", "error", err)
+		slog.ErrorContext(ctx, "Failed to create restore step", "error", err, "restore_operation_id", l.restoreOperationID)
 	}
 }
 
@@ -724,7 +739,7 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 			step.Result = result
 			step.Reason = reason
 			if _, uerr := stepReg.Update(ctx, *step); uerr != nil {
-				slog.Error("Failed to update restore step", "error", uerr)
+				slog.ErrorContext(ctx, "Failed to update restore step", "error", uerr, "restore_operation_id", l.restoreOperationID)
 			}
 			return
 		}
@@ -746,6 +761,7 @@ func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, cause
 	if err != nil {
 		return err
 	}
+	l.setStepOwner(restoreOperation)
 
 	restoreOperation.Status = models.RestoreStatusFailed
 	restoreOperation.CompletedDate = models.PNow()
@@ -754,6 +770,7 @@ func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, cause
 	if _, err = restoreOperationRegistry.Update(ctx, *restoreOperation); err != nil {
 		return err
 	}
+	metrics.RecordJobDeadLettered(string(models.WorkerTypeRestore))
 
 	l.createRestoreStep(ctx, "Restore failed", models.RestoreStepResultError, failure.Error())
 	return failure
@@ -978,11 +995,8 @@ func (l *RestoreOperationProcessor) createCommodity(
 	if currentUser == nil {
 		return security.ErrNoUserContext
 	}
-	if err := l.validateCommodityOwnershipInDB(ctx, originalID, currentUser, existing, stats); err != nil {
-		if errors.Is(err, security.ErrOwnershipViolation) {
-			return nil
-		}
-		return errxtrace.Wrap("failed to validate commodity ownership in DB", err, errx.Attrs("xml_id", originalID))
+	if err := l.validateCommodityOwnershipInDB(ctx, originalID, currentUser, existing); err != nil {
+		return err
 	}
 
 	if !options.DryRun {

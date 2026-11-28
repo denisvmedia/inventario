@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowDown, ArrowUp, Building2, ChevronsUpDown, Search, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Building2, ChevronsUpDown, Plus, Search, X } from "lucide-react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
@@ -14,13 +14,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { RouteTitle } from "@/components/routing/RouteTitle"
-import { useAdminTenants } from "@/features/admin/hooks"
+import { useAdminTenants, useIsPlatformAdmin } from "@/features/admin/hooks"
 import type { AdminTenant } from "@/features/admin/api"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/intl"
 
 import { TenantStatusBadge } from "./admin-shared"
+import { TenantFormDialog } from "./AdminTenantDialogs"
 import { AdminPagination } from "./AdminPagination"
 
 // As-you-type search debounce — the typed value drives a server-side
@@ -61,10 +62,15 @@ function parsePage(raw: string | null): number {
 // Search is server-side: the debounced input feeds `?q` (which the BE
 // matches against name/slug/domain). Sort + pagination are likewise
 // server-side via the AdminTenantsParams the query hook forwards.
+//
+// A platform admin also gets a "New tenant" button; a created tenant opens
+// on its detail page.
 export function AdminTenantsPage() {
   const { t } = useTranslation("admin")
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const canManage = useIsPlatformAdmin()
+  const [createOpen, setCreateOpen] = useState(false)
 
   const urlQ = searchParams.get("q") ?? ""
   const sort = parseSort(searchParams.get("sort"))
@@ -161,11 +167,24 @@ export function AdminTenantsPage() {
     <>
       <RouteTitle title={t("tenants.title")} />
       <div className="flex flex-col gap-6" data-testid="admin-tenants-page">
-        <div>
-          <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-            {t("tenants.title")}
-          </h1>
-          <p className="mt-1 text-muted-foreground">{t("tenants.subtitle")}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
+              {t("tenants.title")}
+            </h1>
+            <p className="mt-1 text-muted-foreground">{t("tenants.subtitle")}</p>
+          </div>
+          {canManage ? (
+            <Button
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => setCreateOpen(true)}
+              data-testid="admin-tenant-create"
+            >
+              <Plus className="size-4" />
+              {t("tenantActions.create.action")}
+            </Button>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-3">
@@ -286,6 +305,16 @@ export function AdminTenantsPage() {
           </>
         )}
       </div>
+      {canManage ? (
+        <TenantFormDialog
+          mode="create"
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onSaved={(created) => {
+            if (created.id) navigate(`/admin/tenants/${encodeURIComponent(created.id)}`)
+          }}
+        />
+      ) : null}
     </>
   )
 }

@@ -5,6 +5,7 @@ package backup_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -91,7 +92,6 @@ func TestINBExport_IntakeDocuments(t *testing.T) {
 	var manifest types.INBManifest
 	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
 	c.Check(manifest.Version, qt.Equals, export.INBFormatVersion)
-	c.Check(manifest.Version, qt.Equals, "3.7")
 	c.Check(manifest.IntakeDocumentsFile, qt.Equals, types.INBIntakeDocumentsMember)
 
 	// After the drafts, before the files document.
@@ -451,11 +451,14 @@ func TestINBRoundTrip_DraftNotRecordedAtTheExport(t *testing.T) {
 }
 
 // promoteBeforeInsert runs hook once, in the first CreateOrGet of a
-// delivered document, before the document is stored.
+// delivered document, before the document is stored. With loseLink, the
+// item a document is to record is lost, as a write lost to the database
+// would be.
 type promoteBeforeInsert struct {
 	registry.IntakeDocumentRegistryFactory
-	once sync.Once
-	hook func()
+	once     sync.Once
+	hook     func()
+	loseLink bool
 }
 
 type promoteBeforeInsertRegistry struct {
@@ -471,6 +474,15 @@ func (p *promoteBeforeInsert) CreateUserRegistry(ctx context.Context) (registry.
 func (r *promoteBeforeInsertRegistry) CreateOrGet(ctx context.Context, doc models.IntakeDocument) (*models.IntakeDocument, bool, error) {
 	r.f.once.Do(r.f.hook)
 	return r.IntakeDocumentRegistry.CreateOrGet(ctx, doc)
+}
+
+var errItemLinkLost = errors.New("the item link was lost")
+
+func (r *promoteBeforeInsertRegistry) RecordProgress(ctx context.Context, id string, progress registry.IntakeDocumentProgress) (*models.IntakeDocument, error) {
+	if r.f.loseLink && progress.CommodityID != nil {
+		return nil, errItemLinkLost
+	}
+	return r.IntakeDocumentRegistry.RecordProgress(ctx, id, progress)
 }
 
 // A merge keeps the group's open draft, which becomes an item after the
@@ -504,6 +516,49 @@ func TestINBRestore_MergeKeptDraftPromotedDuringTheRestore(t *testing.T) {
 	doc := f.documents(c)["1"]
 	c.Assert(doc.DraftID, qt.IsNotNil)
 	c.Assert(*doc.DraftID, qt.Equals, *f.open.DraftID)
+	c.Assert(doc.CommodityID, qt.IsNotNil)
+	c.Assert(*doc.CommodityID, qt.Equals, item.ID)
+	c.Assert(must.Must(f.intake.ListDocuments(f.ctx, nil, []string{item.ID})), qt.HasLen, 1)
+}
+
+// TestINBRestore_RepeatedMergeRecordsTheItem: a merge stored the record of a
+// document whose kept draft became an item during the restore and could not
+// record the item on it. A second merge of the archive keeps that record and
+// records the item.
+func TestINBRestore_RepeatedMergeRecordsTheItem(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDeliveredFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+	reg := must.Must(f.fs.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(reg.Delete(f.ctx, f.open.ID), qt.IsNil)
+
+	orig := f.fs.IntakeDocumentRegistryFactory
+	var item *models.Commodity
+	f.fs.IntakeDocumentRegistryFactory = &promoteBeforeInsert{IntakeDocumentRegistryFactory: orig, loseLink: true, hook: func() {
+		draft := must.Must(must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx)).Get(f.ctx, *f.open.DraftID))
+		var err error
+		item, _, err = services.NewCommodityDraftService(f.fs).Promote(f.ctx, draft.ID, draft.Revision, "promotion-during", models.Commodity{
+			Name: "Invoice 1", ShortName: "invoice", Type: models.CommodityTypeOther, Count: 1,
+			Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD", AreaID: new(f.areaID),
+		})
+		c.Assert(err, qt.IsNil)
+	}}
+	merge := models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)}
+	first, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, merge)
+	f.fs.IntakeDocumentRegistryFactory = orig
+	c.Assert(err, qt.IsNil)
+	c.Assert(first.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", first.ErrorMessage))
+	c.Assert(first.ErrorCount, qt.Equals, 1)
+	c.Assert(item, qt.IsNotNil)
+	c.Assert(f.documents(c)["1"].CommodityID, qt.IsNil, qt.Commentf("the first merge lost the item link"))
+
+	second, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, merge)
+	c.Assert(err, qt.IsNil)
+	c.Assert(second.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", second.ErrorMessage))
+	c.Assert(second.ErrorCount, qt.Equals, 0)
+	doc := f.documents(c)["1"]
+	c.Assert(doc.ID, qt.Not(qt.Equals), f.open.ID)
 	c.Assert(doc.CommodityID, qt.IsNotNil)
 	c.Assert(*doc.CommodityID, qt.Equals, item.ID)
 	c.Assert(must.Must(f.intake.ListDocuments(f.ctx, nil, []string{item.ID})), qt.HasLen, 1)

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react"
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { draftKeys } from "@/features/drafts/keys"
@@ -23,6 +24,7 @@ import {
   type IntakeLimits,
   type IntakeListOptions,
   type IntakeSessionDetail,
+  type IntakeSessionState,
   type IntakeSessionsPage,
 } from "./api"
 import { listIntakeDocuments, type DocumentSource } from "./documents"
@@ -54,7 +56,7 @@ export function useIntakeLimits(enabled = true) {
 // the progress moves without a reload.
 export function useIntakeSessions(opts: IntakeListOptions = {}) {
   const slug = useSlug()
-  return useQuery<IntakeSessionsPage>({
+  const query = useQuery<IntakeSessionsPage>({
     queryKey: intakeKeys.list(slug, opts),
     queryFn: ({ signal }) => listIntakeSessions(opts, signal),
     enabled: !!slug,
@@ -62,17 +64,59 @@ export function useIntakeSessions(opts: IntakeListOptions = {}) {
     refetchInterval: (query) =>
       query.state.data?.sessions.some((s) => s.state === "processing") ? INTAKE_POLL_MS : false,
   })
+  useRefreshWhenScanned(query.data?.sessions)
+  return query
 }
 
 export function useIntakeSession(id: string | null | undefined) {
   const slug = useSlug()
-  return useQuery<IntakeSessionDetail>({
+  const query = useQuery<IntakeSessionDetail>({
     queryKey: intakeKeys.detail(slug, id ?? ""),
     queryFn: ({ signal }) => getIntakeSession(id ?? "", signal),
     enabled: !!slug && !!id,
     retry: false,
     refetchInterval: (query) => (query.state.data?.state === "processing" ? INTAKE_POLL_MS : false),
   })
+  const session = query.data
+  const scanned = useMemo(
+    () => (session ? [{ id: session.id, state: session.state }] : undefined),
+    [session]
+  )
+  // This read is the batch as it is now; only the file lists are stale.
+  useRefreshWhenScanned(scanned, { detail: false })
+  return query
+}
+
+// useRefreshWhenScanned marks what the cache holds about a batch stale once
+// the batch stops scanning (#1626): the group's file lists, which show the
+// tag and the title a scan gives each file, and, unless detail is false, the
+// batch itself. The server writes a file's tag and title with the stored
+// scan, so the read that finds the batch out of "processing" already has
+// them, and the lists on screen are read again right away. A batch done
+// from the start marks nothing.
+export function useRefreshWhenScanned(
+  sessions: readonly { id: string; state: IntakeSessionState }[] | undefined,
+  { detail = true }: { detail?: boolean } = {}
+) {
+  const qc = useQueryClient()
+  const slug = useSlug()
+  const lastState = useRef(new Map<string, IntakeSessionState>())
+  useEffect(() => {
+    const settled: string[] = []
+    for (const s of sessions ?? []) {
+      if (lastState.current.get(s.id) === "processing" && s.state !== "processing") {
+        settled.push(s.id)
+      }
+      lastState.current.set(s.id, s.state)
+    }
+    if (settled.length === 0 || !slug) return
+    if (detail) {
+      for (const id of settled) {
+        void qc.invalidateQueries({ queryKey: intakeKeys.detail(slug, id) })
+      }
+    }
+    void qc.invalidateQueries({ queryKey: fileKeys.group(slug) })
+  }, [sessions, qc, slug, detail])
 }
 
 // useItemSource returns the other system an item's document came from

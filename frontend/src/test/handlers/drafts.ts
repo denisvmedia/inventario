@@ -29,6 +29,8 @@ export interface FakeDraft {
 
 export interface FakeFile {
   id: string
+  title: string
+  description?: string
   path: string
   ext: string
   size_bytes: number
@@ -54,6 +56,11 @@ export interface FakeDraftsBackend {
   nextUploads: { name: string; size: number; sha256?: string }[]
   // When set, the next attaches fail with this status.
   failAttach: number | null
+  // When set, the next promotions fail with this status, before the draft
+  // is touched.
+  failPromote: number | null
+  // Ids of the files DELETE /files/{id} moved to Trash, in order.
+  trashed: string[]
   // When set, the server applies the next request of that kind and the
   // client never gets the answer (a network error), as on a dropped
   // connection. Each flag is cleared once used.
@@ -109,6 +116,8 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
     failUploads: null,
     nextUploads: [],
     failAttach: null,
+    failPromote: null,
+    trashed: [],
     loseResponse: {},
     creates: 0,
     handlers: [],
@@ -198,6 +207,9 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       const key = body.meta.promotion_key
       if (!key) return HttpResponse.json({ errors: [{ status: "422" }] }, { status: 422 })
       if (d.status === "discarding") return coded(409, "draft.discarded")
+      if (state.failPromote) {
+        return HttpResponse.json({ errors: [{ status: "500" }] }, { status: state.failPromote })
+      }
       if (d.status === "promoted") {
         // Only the promotion that finished the draft gets the item back.
         if (key !== d.promotion_key) return promoted(d)
@@ -247,6 +259,8 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       const dot = next.name.lastIndexOf(".")
       const f: FakeFile = {
         id: `file-${++seq}`,
+        // The server names an upload after the file and the time it came.
+        title: `${dot > 0 ? next.name.slice(0, dot) : next.name}-1767225600`,
         path: dot > 0 ? next.name.slice(0, dot) : next.name,
         ext: dot > 0 ? next.name.slice(dot) : "",
         size_bytes: next.size,
@@ -261,8 +275,20 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
     http.put(apiUrl(`${base}/files/:id`), async ({ params, request }) => {
       const f = state.files.find((x) => x.id === String(params.id))
       if (!f) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
-      const body = (await request.json()) as { data?: { attributes?: { tags?: string[] } } }
-      f.tags = body.data?.attributes?.tags ?? f.tags
+      const body = (await request.json()) as {
+        data?: { attributes?: { title?: string; description?: string; tags?: string[] } }
+      }
+      // The PUT replaces the metadata, as the server does: a title, a
+      // description or tags left out are cleared. The path stays.
+      const attrs = body.data?.attributes ?? {}
+      f.title = attrs.title ?? ""
+      f.description = attrs.description ?? ""
+      f.tags = attrs.tags ?? []
+      return HttpResponse.json({ id: f.id, type: "files", attributes: f })
+    }),
+    http.get(apiUrl(`${base}/files/:id`), ({ params }) => {
+      const f = state.files.find((x) => x.id === String(params.id))
+      if (!f) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
       return HttpResponse.json({ id: f.id, type: "files", attributes: f })
     }),
     http.post(apiUrl(`${base}/files/:id/links`), async ({ params, request }) => {
@@ -294,8 +320,17 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       f.links = f.links.filter((l) => l.id !== String(params.linkId))
       return HttpResponse.json({ id: f.id, type: "files", attributes: f })
     }),
-    http.delete(apiUrl(`${base}/files/:id`), ({ params }) => {
-      state.files = state.files.filter((x) => x.id !== String(params.id))
+    http.delete(apiUrl(`${base}/files/:id`), ({ params, request }) => {
+      const id = String(params.id)
+      const f = state.files.find((x) => x.id === id)
+      if (!f) {
+        return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+      }
+      // With unless_linked=true the server keeps a file a link holds (#2930).
+      const unlessLinked = new URL(request.url).searchParams.get("unless_linked") === "true"
+      if (unlessLinked && f.links.length > 0) return coded(409, "file.linked")
+      state.files = state.files.filter((x) => x.id !== id)
+      state.trashed.push(id)
       return new HttpResponse(null, { status: 204 })
     }),
     http.get(apiUrl(`${base}/files`), ({ request }) => {

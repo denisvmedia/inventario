@@ -14,7 +14,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FieldError } from "@/components/FieldError"
 import type { MaintenanceScheduleEntity } from "@/features/maintenance/api"
+import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 import {
   maintenanceFormSchema,
@@ -47,11 +49,13 @@ interface MaintenanceScheduleDialogProps {
 // MaintenanceScheduleDialog is the create/edit form for a maintenance
 // schedule (#1368). Backed by react-hook-form + zodResolver per the
 // project standard (mirrors LendDialog / SendForServiceDialog /
-// TagFormDialog). The form lives in a child keyed on (open,
-// initial?.id) so each open cycle / create→edit switch gets a fresh
+// TagFormDialog). The form lives in the dialog content, which mounts on
+// open and unmounts once the close animation ends, and is keyed on
+// initial?.id, so each open cycle / create→edit switch gets a fresh
 // useForm pass with the right defaultValues — that avoids the
 // cascading-setState-in-useEffect anti-pattern flagged by the
-// react-hooks/set-state-in-effect lint rule.
+// react-hooks/set-state-in-effect lint rule. While the dialog closes it
+// keeps the schedule it showed: the parent clears `initial` on close.
 export function MaintenanceScheduleDialog({
   open,
   onOpenChange,
@@ -59,18 +63,17 @@ export function MaintenanceScheduleDialog({
   onSubmit,
   submitting,
 }: MaintenanceScheduleDialogProps) {
+  const shown = useValueWhileOpen(open, initial)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        {open ? (
-          <MaintenanceScheduleForm
-            key={initial?.id ?? "create"}
-            initial={initial}
-            onOpenChange={onOpenChange}
-            onSubmit={onSubmit}
-            submitting={submitting}
-          />
-        ) : null}
+      <DialogContent variant="fullscreen-mobile">
+        <MaintenanceScheduleForm
+          key={shown?.id ?? "create"}
+          initial={shown}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -159,14 +162,16 @@ function MaintenanceScheduleForm({
           placeholder={t("maintenance:dialog.titlePlaceholder", {
             defaultValue: "Replace water filter",
           })}
-          maxLength={200}
           data-testid="maintenance-title-input"
           aria-invalid={!!errors.title}
+          aria-describedby={errors.title?.message ? "maintenance-title-error" : undefined}
           {...register("title")}
         />
-        {errors.title?.message ? (
-          <p className="text-xs text-destructive">{t(errors.title.message)}</p>
-        ) : null}
+        <FieldError
+          id="maintenance-title-error"
+          testId="maintenance-title-error"
+          message={errors.title?.message}
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -181,11 +186,16 @@ function MaintenanceScheduleForm({
             inputMode="numeric"
             data-testid="maintenance-interval-input"
             aria-invalid={!!errors.interval_days}
+            aria-describedby={
+              errors.interval_days?.message ? "maintenance-interval-error" : undefined
+            }
             {...register("interval_days")}
           />
-          {errors.interval_days?.message ? (
-            <p className="text-xs text-destructive">{t(errors.interval_days.message)}</p>
-          ) : null}
+          <FieldError
+            id="maintenance-interval-error"
+            testId="maintenance-interval-error"
+            message={errors.interval_days?.message}
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="maintenance-next-due">
@@ -196,11 +206,16 @@ function MaintenanceScheduleForm({
             type="date"
             data-testid="maintenance-next-due-input"
             aria-invalid={!!errors.next_due_at}
+            aria-describedby={
+              errors.next_due_at?.message ? "maintenance-next-due-error" : undefined
+            }
             {...register("next_due_at")}
           />
-          {errors.next_due_at?.message ? (
-            <p className="text-xs text-destructive">{t(errors.next_due_at.message)}</p>
-          ) : null}
+          <FieldError
+            id="maintenance-next-due-error"
+            testId="maintenance-next-due-error"
+            message={errors.next_due_at?.message}
+          />
         </div>
       </div>
       <div className="space-y-2">
@@ -210,16 +225,18 @@ function MaintenanceScheduleForm({
         <Textarea
           id="maintenance-notes"
           rows={3}
-          maxLength={1000}
           placeholder={t("maintenance:dialog.notesPlaceholder", {
             defaultValue: "Use NSF-53 filter, comes in 2-packs",
           })}
           aria-invalid={!!errors.notes}
+          aria-describedby={errors.notes?.message ? "maintenance-notes-error" : undefined}
           {...register("notes")}
         />
-        {errors.notes?.message ? (
-          <p className="text-xs text-destructive">{t(errors.notes.message)}</p>
-        ) : null}
+        <FieldError
+          id="maintenance-notes-error"
+          testId="maintenance-notes-error"
+          message={errors.notes?.message}
+        />
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

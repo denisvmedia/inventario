@@ -45,9 +45,10 @@ type commoditiesAPI struct {
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Param type query []string false "Filter by commodity type; repeat to OR" collectionFormat(multi)
-// @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
+// @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
+// @Param location_id query string false "Only commodities in an area of this location; cannot be combined with unassigned"
 // @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param q query string false "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms"
 // @Param tags query []string false "Only items with these tag slugs (comma-separated or repeated); see tag_mode" collectionFormat(multi)
@@ -105,7 +106,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 	// the list.
 	linked, err := linkedItemSummaries(r.Context(), regSet, result.Commodities...)
 	if err != nil {
-		slog.WarnContext(r.Context(), "items list: linked item lookup failed; rendering without it", "err", err)
+		slog.WarnContext(r.Context(), "items list: linked item lookup failed; rendering without it", "error", err)
 		linked = nil
 	}
 
@@ -138,7 +139,7 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 	}
 	digest, ok, err := commodityquery.SelectionDigest(ctx, regSet, query, result.Total)
 	if err != nil {
-		slog.WarnContext(ctx, "items list: selection digest lookup failed; rendering without it", "err", err)
+		slog.WarnContext(ctx, "items list: selection digest lookup failed; rendering without it", "error", err)
 		return ""
 	}
 	if !ok {
@@ -162,6 +163,7 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 // @Param status query []string false "Filter by status, as for GET /commodities" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area"
+// @Param location_id query string false "Only commodities in an area of this location; cannot be combined with unassigned"
 // @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true)"
 // @Param warranty_status query []string false "Filter by computed warranty status" collectionFormat(multi)
@@ -463,7 +465,12 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 
 // updateCommodity updates a commodity.
 // @Summary Update a commodity
-// @Description Update a commodity
+// @Description Replace the item with the values sent. attributes.revision is the revision
+// @Description the values were based on, as the client read it: when the item has been written
+// @Description since (an edit, a bulk change, a tag rename), the save is refused with 409
+// @Description commodity.revision_conflict and nothing is written, so it cannot undo that
+// @Description write. Without it, or with 0, the save is not checked. The response carries
+// @Description the item's new revision.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -472,6 +479,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Param commodity body jsonapi.CommodityRequest true "Commodity object"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item was written after the revision sent"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/commodities/{commodityID} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
@@ -562,8 +570,12 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Use UpdateWithUser to ensure proper user context and validation
 	ctx := r.Context()
+	// A client that names the revision its edit started from gets the save
+	// refused when the item was written since, instead of undoing that write.
+	if updateData.Revision > 0 {
+		ctx = registry.WithExpectedRevision(ctx, updateData.Revision)
+	}
 	commodityReg := registrySet.CommodityRegistry
 	updatedCommodity, err := commodityReg.Update(ctx, updateData)
 	if err != nil {
@@ -611,6 +623,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Param body body jsonapi.CommodityCoverRequest true "Cover photo file id (null to clear)"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or file not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item was written meanwhile and kept changing on every retry"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/commodities/{commodityID}/cover [patch].
 func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Request) {
@@ -667,18 +680,21 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	updateData := *commodity
-	// Only the cover changes; the custom field values read with the item
-	// would overwrite one written since.
-	updateData.CustomFields = nil
-	if desired == "" {
-		updateData.CoverFileID = nil
-	} else {
-		v := desired
-		updateData.CoverFileID = &v
-	}
-
-	updated, err := registrySet.CommodityRegistry.Update(r.Context(), updateData)
+	// The item is written whole with the revision it was read at, so a change
+	// saved since the middleware read it (a bulk change, a tag rename) is not
+	// undone: RewriteCommodity reads it again and retries, and answers 409
+	// after the last attempt.
+	before, updated, err := services.RewriteCommodity(r.Context(), registrySet.CommodityRegistry, commodity.ID, commodity, func(next *models.Commodity) bool {
+		// Only the cover changes; the custom field values read with the item
+		// would overwrite one written since.
+		next.CustomFields = nil
+		if desired == "" {
+			next.CoverFileID = nil
+		} else {
+			next.CoverFileID = new(desired)
+		}
+		return true
+	})
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -687,7 +703,7 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	// #1450: cover override change is a distinct event kind so the timeline
 	// can render "set / cleared cover photo" without aliasing it to the
 	// generic "updated" row.
-	api.eventService.EmitUpdated(r.Context(), commodity, updated)
+	api.eventService.EmitUpdated(r.Context(), before, updated)
 
 	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
 	if cover := api.resolveCoverForOne(r, updated); cover != nil {

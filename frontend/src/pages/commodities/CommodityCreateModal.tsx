@@ -6,7 +6,10 @@ import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { useAreas } from "@/features/areas/hooks"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
+import { addItemSlot } from "@/features/commodities/draft"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useLocations } from "@/features/locations/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 
@@ -40,6 +43,11 @@ export function CommodityCreateModalRoute() {
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
+  const userId = useOptionalAuth()?.user?.id
+  // The entry points (sidebar, Dashboard) are offered only to a role that
+  // adds items; a viewer who still lands here, through history, gets no
+  // form, as on the list page's /commodities/new.
+  const canWrite = useGroupPermissions().canEditContent
   const areas = useAreas()
   const locationsQuery = useLocations()
   const create = useSubmitNewItem()
@@ -59,6 +67,9 @@ export function CommodityCreateModalRoute() {
   // late `navigate(-1)` could fire after the user has already moved
   // somewhere else.
   const navigateTimerRef = useRef<number | null>(null)
+  // A request that ends after the modal unmounted (browser Back while Add
+  // item runs) must not move the user from wherever they went.
+  const mountedRef = useRef(false)
   function clearNavigateTimer() {
     if (navigateTimerRef.current !== null) {
       window.clearTimeout(navigateTimerRef.current)
@@ -67,12 +78,19 @@ export function CommodityCreateModalRoute() {
   }
   function scheduleNavigate(fn: () => void) {
     clearNavigateTimer()
+    if (!mountedRef.current) return
     navigateTimerRef.current = window.setTimeout(() => {
       navigateTimerRef.current = null
       fn()
     }, DIALOG_CLOSE_ANIMATION_MS)
   }
-  useEffect(() => clearNavigateTimer, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearNavigateTimer()
+    }
+  }, [])
 
   function close() {
     setOpen(false)
@@ -87,11 +105,8 @@ export function CommodityCreateModalRoute() {
   async function handleSubmit(values: CreateCommodityRequest, draft?: DraftRef) {
     const created = await create.submit(values, draft)
     toast.success(t("commodities:toast.created"))
-    // Return the created commodity to the dialog so it can run
-    // post-create work (uploading + linking pending files from
-    // the Files step). The dialog fires those uploads as fire-and-
-    // forget so the close + navigate sequence below doesn't have
-    // to wait on them.
+    // The dialog uploaded the Files step's attachments to the draft
+    // before handing it over (#1626), so the item has them already.
     if (slug && created?.id) {
       // Animate the dialog out before the route changes — matches the
       // close-without-submit path. `replace: true` so the back button
@@ -116,7 +131,7 @@ export function CommodityCreateModalRoute() {
   return (
     <CommodityFormDialog
       key={resumeDraftId ?? "new"}
-      open={open}
+      open={canWrite && open}
       onOpenChange={(o) => {
         if (!o) close()
       }}
@@ -126,7 +141,7 @@ export function CommodityCreateModalRoute() {
       defaultCurrency={currentGroup?.group_currency ?? "USD"}
       onSubmit={handleSubmit}
       isPending={create.isPending}
-      draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
+      draftKey={slug && userId ? addItemSlot(userId, slug) : undefined}
       serverDrafts
       resumeDraftId={resumeDraftId}
     />

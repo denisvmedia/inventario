@@ -52,6 +52,18 @@ func TestInit_NoDSNReturnsNoopFlush(t *testing.T) {
 	c.Assert(flush(time.Second), qt.IsTrue)
 }
 
+// A DSN can carry a secret key, and startup logs the error Init returns, so a
+// DSN that does not parse fails with an error that quotes none of it.
+func TestInit_MalformedDSNErrorLeavesTheDSNOut(t *testing.T) {
+	c := qt.New(t)
+
+	// The "#" ends the authority early, so the parser reads "s3cret" as a port.
+	_, err := sentry.Init(sentry.Config{DSN: "https://public:s3cret#key@o1.ingest.sentry.io/1"})
+	c.Assert(err, qt.ErrorMatches, `invalid SENTRY_DSN: invalid port after host \(.*\)`)
+	c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret")
+	c.Assert(err.Error(), qt.Not(qt.Contains), "public")
+}
+
 func TestCaptureError_NilAndDisabledAreNoop(t *testing.T) {
 	c := qt.New(t)
 

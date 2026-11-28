@@ -95,15 +95,30 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 
 	prefsCache := s.prefsForSweep()
 	sweep := newMaintenanceSweep()
+	gate := newReminderGate(s.factorySet)
 
 	for _, m := range schedules {
 		if m == nil || !m.Enabled {
 			continue
 		}
+		skipped, skipErr := gate.skips(ctx, m.TenantID, m.GroupID, models.GroupSectionMaintenance)
+		if skipErr != nil {
+			stats.Failed++
+			slog.ErrorContext(ctx, "maintenance reminder failed",
+				"schedule_id", m.ID,
+				"error", skipErr,
+			)
+			continue
+		}
+		if skipped {
+			// The tenant is not active or the group hides the section:
+			// no row, so the reminder goes out once that changes.
+			continue
+		}
 		target, planErr := s.planSchedule(ctx, m, now, prefsCache, sweep)
 		if planErr != nil {
 			stats.Failed++
-			slog.Error("maintenance reminder failed",
+			slog.ErrorContext(ctx, "maintenance reminder failed",
 				"schedule_id", m.ID,
 				"error", planErr,
 			)
@@ -113,7 +128,7 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 			ok, processErr := s.processOne(ctx, m, threshold, target, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
-				slog.Error("maintenance reminder failed",
+				slog.ErrorContext(ctx, "maintenance reminder failed",
 					"schedule_id", m.ID,
 					"threshold", threshold,
 					"error", processErr,
@@ -190,6 +205,11 @@ func (s *MaintenanceReminderService) planSchedule(
 		if err := s.resolveTarget(ctx, m, prefsCache, sweep, &target); err != nil {
 			return target, err
 		}
+		if target.commodity != nil && !ReminderTargetActive(target.commodity) {
+			// The group no longer has the item. No threshold, so no row:
+			// the reminders still due go out once it is back in use.
+			return maintenanceTarget{}, nil
+		}
 		var union []int
 		for _, r := range target.recipients {
 			union = append(union, r.leadTimes...)
@@ -219,7 +239,8 @@ func (s *MaintenanceReminderService) planSchedule(
 }
 
 // resolveTarget fills target's commodity and recipients, each recipient
-// with their maintenance lead times. A missing commodity leaves both empty.
+// with their maintenance lead times. A missing commodity leaves both empty,
+// and an item that is not active (ReminderTargetActive) gets no recipients.
 func (s *MaintenanceReminderService) resolveTarget(
 	ctx context.Context,
 	m *models.MaintenanceSchedule,
@@ -232,7 +253,7 @@ func (s *MaintenanceReminderService) resolveTarget(
 		return errxtrace.Wrap("maintenance reminder: lookup commodity", err)
 	}
 	target.commodity = commodity
-	if commodity == nil {
+	if !ReminderTargetActive(commodity) {
 		return nil
 	}
 	recipients, err := s.cachedRecipients(ctx, commodity, sweep.recipientsByGroup)
@@ -416,8 +437,7 @@ func (s *MaintenanceReminderService) commitWithoutSend(ctx context.Context, m *m
 		if commodity != nil {
 			attrs = append(attrs, "commodity_id", commodity.ID, "group_id", commodity.GroupID)
 		}
-		//nolint:sloglint // structured fields are constructed dynamically.
-		slog.Info("maintenance reminder row inserted without sending email", attrs...)
+		slog.InfoContext(ctx, "maintenance reminder row inserted without sending email", attrs...)
 	}
 	return false, nil
 }
@@ -447,10 +467,10 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			continue
 		}
 		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, commodity.TenantID, commodity.GroupID, notifications.CategoryMaintenanceReminder, notifications.ChannelEmail) {
-			slog.Debug("maintenance reminder: recipient opted out",
+			slog.DebugContext(ctx, "maintenance reminder: recipient opted out",
 				"schedule_id", m.ID,
 				"group_id", commodity.GroupID,
-				"to", r.email,
+				"user_id", r.user.ID,
 			)
 			continue
 		}
@@ -461,9 +481,10 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			if firstEnqueueErr == nil {
 				firstEnqueueErr = sendErr
 			}
-			slog.Error("maintenance reminder: enqueue failed",
+			slog.ErrorContext(ctx, "maintenance reminder: enqueue failed",
 				"schedule_id", m.ID,
-				"to", r.email,
+				"group_id", commodity.GroupID,
+				"user_id", r.user.ID,
 				"error", sendErr,
 			)
 		}

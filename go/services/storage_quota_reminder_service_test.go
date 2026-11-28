@@ -85,6 +85,10 @@ func (*recordingStorageQuotaEmailService) SendItemReminderEmail(_ context.Contex
 	return nil
 }
 
+func (*recordingStorageQuotaEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (r *recordingStorageQuotaEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }
@@ -134,15 +138,15 @@ type storageQuotaFixture struct {
 func newStorageQuotaFixture(c *qt.C) *storageQuotaFixture {
 	c.Helper()
 	factorySet := memory.NewFactorySet()
-	const tenantID = "sq-tenant"
 	const testQuotaBytes int64 = 100
 
-	_, err := factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
-		EntityID: models.EntityID{ID: tenantID},
-		Name:     "SQ Tenant",
-		Slug:     "sq-tenant",
+	tenant, err := factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name:   "SQ Tenant",
+		Slug:   "sq-tenant",
+		Status: models.TenantStatusActive,
 	})
 	c.Assert(err, qt.IsNil)
+	tenantID := tenant.ID
 
 	user, err := factorySet.UserRegistry.Create(context.Background(), models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},

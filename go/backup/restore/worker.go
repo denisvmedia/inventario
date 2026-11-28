@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -43,6 +44,9 @@ type RestoreWorker struct {
 	// replays an archive over live data, which is the worst of the three
 	// (#2131, #2472).
 	inFlight sync.Map
+
+	// lastStallSweep is when recoverStalledRestores last swept.
+	lastStallSweep time.Time
 }
 
 // WorkerOption customizes a RestoreWorker constructed via NewRestoreWorker.
@@ -125,7 +129,7 @@ func (w *RestoreWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	})
 
-	slog.Info("Restore worker started")
+	slog.InfoContext(ctx, "Restore worker started")
 }
 
 // Stop stops the restore worker
@@ -166,8 +170,27 @@ func (w *RestoreWorker) run(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
+			w.recoverStalledRestores(ctx, time.Now())
 			w.processPendingRestores(ctx)
 		}
+	}
+}
+
+// recoverStalledRestores fails, every stall.SweepInterval, the restores whose
+// worker stopped in the middle of the run. It runs while the worker is paused
+// too: a pause stops new runs, and the sweep only moves the dead ones on.
+func (w *RestoreWorker) recoverStalledRestores(ctx context.Context, now time.Time) {
+	if now.Sub(w.lastStallSweep) < stall.SweepInterval {
+		return
+	}
+	w.lastStallSweep = now
+	failed, err := w.restoreService.RecoverStalled(ctx, now)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to recover stalled restores", "error", err)
+		return
+	}
+	if failed > 0 {
+		slog.WarnContext(ctx, "Failed restores whose worker stopped", "failed", failed)
 	}
 }
 
@@ -182,7 +205,7 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 	restoreOperations, err := w.registrySet.RestoreOperationRegistry.List(ctx)
 	if err != nil {
-		slog.Error("Failed to get restore operations", "error", err)
+		slog.ErrorContext(ctx, "Failed to get restore operations", "error", err)
 		return
 	}
 
@@ -200,17 +223,18 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 		// only looks at pending rows.
 		if !w.semaphore.TryAcquire(1) {
 			w.inFlight.Delete(restoreOp.ID)
-			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
+			slog.DebugContext(ctx, "Failed to acquire semaphore for restore, another restore is in progress, skipping...",
+				"restore_operation_id", restoreOp.ID)
 			return
 		}
 
 		// Claim the row before dispatching: the condition is in the write, so
 		// exactly one caller wins it however many replicas are polling (#2472).
-		claimed, claimErr := w.registrySet.RestoreOperationRegistry.ClaimPending(ctx, restoreOp.ID)
+		claimed, claimErr := w.registrySet.RestoreOperationRegistry.ClaimPending(ctx, restoreOp.ID, time.Now())
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(restoreOp.ID)
-			slog.Error("Failed to claim restore operation", "restore_operation_id", restoreOp.ID, "error", claimErr)
+			slog.ErrorContext(ctx, "Failed to claim restore operation", "restore_operation_id", restoreOp.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
@@ -223,6 +247,10 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 		go func(restoreOperationID string) {
 			defer w.semaphore.Release(1)
 			defer w.inFlight.Delete(restoreOperationID)
+			stopBeat := stall.Beat(ctx, stall.HeartbeatInterval, func(ctx context.Context, now time.Time) error {
+				return w.registrySet.RestoreOperationRegistry.Heartbeat(ctx, restoreOperationID, now)
+			})
+			defer stopBeat()
 			w.processRestore(ctx, restoreOperationID)
 		}(restoreOp.ID)
 	}
@@ -230,13 +258,13 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 // processRestore processes a single restore request
 func (w *RestoreWorker) processRestore(ctx context.Context, restoreOperationID string) {
-	slog.Info("Processing restore operation", "restore_operation_id", restoreOperationID)
+	slog.InfoContext(ctx, "Processing restore operation", "restore_operation_id", restoreOperationID)
 
 	if err := w.restoreService.ProcessRestoreOperation(ctx, restoreOperationID, w.uploadLocation); err != nil {
-		slog.Error("Failed to process restore operation", "restore_operation_id", restoreOperationID, "error", err)
+		slog.ErrorContext(ctx, "Failed to process restore operation", "restore_operation_id", restoreOperationID, "error", err)
 		return
 	}
-	slog.Info("Successfully processed restore operation", "restore_operation_id", restoreOperationID)
+	slog.InfoContext(ctx, "Successfully processed restore operation", "restore_operation_id", restoreOperationID)
 }
 
 // HasRunningRestores checks if there are any restore operations currently

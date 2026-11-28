@@ -22,6 +22,7 @@ import { useAPITokensList, useRevokeAPIToken } from "@/features/api-tokens/hooks
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroups } from "@/features/group/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { formatDate, formatDateTime, formatRelative } from "@/lib/intl"
 
@@ -59,9 +60,7 @@ export function ApiTokensPage() {
         toast.success(t("settings:apiTokens.toasts.revoked"))
         setPendingRevoke(null)
       },
-      onError: () => {
-        toast.error(t("settings:apiTokens.toasts.revokeFailed"))
-      },
+      onError: (err) => toastMutationError(err, t("settings:apiTokens.toasts.revokeFailed")),
     })
   }
 

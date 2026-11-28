@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import {
   File as FileIcon,
   FileText,
@@ -24,6 +24,7 @@ import { useFileCategoryCounts, useFiles } from "@/features/files/hooks"
 import { fileReviewHref } from "@/features/files/listContext"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useHoldItem } from "@/hooks/useItemHold"
 import { listContextFromLocation } from "@/lib/list-context"
 import { cn } from "@/lib/utils"
 import { Pagination, pageWithin } from "@/components/common/Pagination"
@@ -53,6 +54,12 @@ import { Pagination, pageWithin } from "@/components/common/Pagination"
 // is still load-bearing — the chip now filters by the `invoice` tag
 // instead of the dropped category value).
 type FilesTabCategory = "all" | "images" | "invoices" | "documents" | "other"
+
+/**
+ * The chip in the item page's URL, beside `?tab=`, so it stays as chosen
+ * while the page walks a list. Absent for All.
+ */
+export const FILES_CHIP_PARAM = "files"
 
 interface ChipDef {
   id: FilesTabCategory
@@ -106,6 +113,10 @@ const CHIPS: ChipDef[] = [
   },
 ]
 
+function parseChip(raw: string | null): FilesTabCategory {
+  return CHIPS.find((chip) => chip.id === raw)?.id ?? "all"
+}
+
 // Per-page cap for the underlying `useFiles({ linkedEntity… })` query. The
 // pager reaches everything past it (#2467); a page this size keeps the common
 // commodity to a single round trip.
@@ -118,8 +129,12 @@ export interface CommodityFilesTabProps {
   // Opens the page-level UploadFilesDialog with the commodity
   // preselected. The page also exposes a drag-drop overlay that opens the
   // same dialog with files preloaded — see `CommodityDetailPage`'s
-  // `useFileDropZone` wiring.
-  onAttachClick: () => void
+  // `useFileDropZone` wiring. Without it the tab is read-only: no upload
+  // zone and no "Attach an existing file".
+  onAttachClick?: () => void
+  // May the caller change and delete files (features/group/roles.ts)? The
+  // file detail sheet offers Edit and Delete only when true.
+  canEdit: boolean
   // Cover-photo wiring (issue #1451 option B) — forwarded to FileCard's
   // per-photo star button (grid view, image cards only). When omitted,
   // the star is hidden.
@@ -134,6 +149,7 @@ export function CommodityFilesTab({
   commodityId,
   commodityName,
   onAttachClick,
+  canEdit,
   coverState,
   onSetCover,
   coverBusy = false,
@@ -144,9 +160,18 @@ export function CommodityFilesTab({
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
 
-  const [activeChip, setActiveChipState] = useState<FilesTabCategory>("all")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeChip = parseChip(searchParams.get(FILES_CHIP_PARAM))
   const setActiveChip = (next: FilesTabCategory) => {
-    setActiveChipState(next)
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === "all") params.delete(FILES_CHIP_PARAM)
+        else params.set(FILES_CHIP_PARAM, next)
+        return params
+      },
+      { replace: true }
+    )
     // A new chip starts at the top: page 3 of the old bucket is not a
     // meaningful position in the new one.
     setPage(1)
@@ -158,6 +183,9 @@ export function CommodityFilesTab({
   // leaves the commodity detail page (mirrors EntityFilesPanel, #1963).
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [attachExistingOpen, setAttachExistingOpen] = useState(false)
+  // The attach dialog renders only with onAttachClick, which the page drops
+  // for a role that may not write; the hold follows the dialog.
+  useHoldItem((onAttachClick !== undefined && attachExistingOpen) || selectedId !== null)
 
   // The list is one page of the active chip's filter, resolved server-side;
   // the chip counts come from the category-counts endpoint, so a commodity
@@ -276,36 +304,38 @@ export function CommodityFilesTab({
           wired in CommodityDetailPage so a second drop catcher here would
           just fight that one. Beside it, "Attach an existing file" links a
           file the group already holds (#2806). */}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={onAttachClick}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg border-2 border-dashed border-border bg-transparent px-4 py-3 text-left transition-colors",
-              "hover:border-primary/40 hover:bg-muted/30",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            )}
-            data-testid="commodity-files-upload-zone"
-          >
-            <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="flex-1 text-sm text-muted-foreground">
-              {t(`commodities:detail.filesTab.${activeChipDef.dropKey}`)}{" "}
-              <span className="font-medium text-foreground">
-                {t("commodities:detail.filesTab.browse")}
+        {onAttachClick ? (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={onAttachClick}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg border-2 border-dashed border-border bg-transparent px-4 py-3 text-left transition-colors",
+                "hover:border-primary/40 hover:bg-muted/30",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              )}
+              data-testid="commodity-files-upload-zone"
+            >
+              <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="flex-1 text-sm text-muted-foreground">
+                {t(`commodities:detail.filesTab.${activeChipDef.dropKey}`)}{" "}
+                <span className="font-medium text-foreground">
+                  {t("commodities:detail.filesTab.browse")}
+                </span>
               </span>
-            </span>
-          </button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setAttachExistingOpen(true)}
-            className="h-auto gap-1.5 py-3"
-            data-testid="commodity-files-attach-existing"
-          >
-            <Link2 className="size-4" aria-hidden="true" />
-            {t("files:attachExisting.title", { defaultValue: "Attach an existing file" })}
-          </Button>
-        </div>
+            </button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAttachExistingOpen(true)}
+              className="h-auto gap-1.5 py-3"
+              data-testid="commodity-files-attach-existing"
+            >
+              <Link2 className="size-4" aria-hidden="true" />
+              {t("files:attachExisting.title", { defaultValue: "Attach an existing file" })}
+            </Button>
+          </div>
+        ) : null}
 
         {filesQuery.isError ? (
           <Alert variant="destructive" data-testid="commodity-files-error">
@@ -352,7 +382,7 @@ export function CommodityFilesTab({
               items={files}
               viewMode={viewMode}
               onOpen={(id) => setSelectedId(id)}
-              coverState={coverState}
+              coverState={coverState && { ...coverState, itemId: commodityId }}
               onSetCover={onSetCover}
               coverBusy={coverBusy}
               idPrefix="commodity-files"
@@ -376,14 +406,17 @@ export function CommodityFilesTab({
         }}
         // The review page returns here when the user is done.
         onEdit={(id) => navigate(fileReviewHref(slug, id, listContextFromLocation(location)))}
+        canEdit={canEdit}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => setSelectedId(id)}
       />
-      <AttachExistingFileDialog
-        open={attachExistingOpen}
-        onOpenChange={setAttachExistingOpen}
-        entity={{ type: "commodity", id: commodityId, name: commodityName }}
-      />
+      {onAttachClick ? (
+        <AttachExistingFileDialog
+          open={attachExistingOpen}
+          onOpenChange={setAttachExistingOpen}
+          entity={{ type: "commodity", id: commodityId, name: commodityName }}
+        />
+      ) : null}
     </>
   )
 }

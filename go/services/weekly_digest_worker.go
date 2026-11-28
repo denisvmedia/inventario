@@ -39,7 +39,7 @@ var (
 	})
 	weeklyDigestFailuresTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "inventario_weekly_digest_failures_total",
-		Help: "Number of per-user weekly digest failures (logged; retried on the next tick).",
+		Help: "Number of weekly digest failures: groups that could not be read and users whose digest was held back or not sent (logged; retried on the next tick).",
 	})
 )
 
@@ -128,13 +128,13 @@ func NewWeeklyDigestWorker(service *WeeklyDigestService, opts ...WeeklyDigestOpt
 // Start launches the goroutine. No-op if no service is configured.
 func (w *WeeklyDigestWorker) Start(ctx context.Context) {
 	if w.service == nil {
-		slog.Warn("WeeklyDigestWorker: no service configured, skipping startup")
+		slog.WarnContext(ctx, "WeeklyDigestWorker: no service configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Weekly digest worker started", "interval", w.interval, "send_hour_utc", w.sendHour)
+	slog.InfoContext(ctx, "Weekly digest worker started", "interval", w.interval, "send_hour_utc", w.sendHour)
 }
 
 // Stop signals the worker and waits for the goroutine to exit.
@@ -186,7 +186,7 @@ func (w *WeeklyDigestWorker) tick(ctx context.Context) {
 
 	stats, err := w.service.SendOnce(ctx, now)
 	if err != nil {
-		slog.Error("Weekly digest sweep failed", "error", err)
+		slog.ErrorContext(ctx, "Weekly digest sweep failed", "error", err)
 		weeklyDigestFailuresTotal.Inc()
 		return
 	}
@@ -196,7 +196,7 @@ func (w *WeeklyDigestWorker) tick(ctx context.Context) {
 	if stats.Failed > 0 {
 		weeklyDigestFailuresTotal.Add(float64(stats.Failed))
 	}
-	slog.Info("Weekly digest sweep completed",
+	slog.InfoContext(ctx, "Weekly digest sweep completed",
 		"sent", stats.Sent,
 		"nothing_to_say", stats.Nothing,
 		"already_sent", stats.AlreadySent,
@@ -215,10 +215,10 @@ func (w *WeeklyDigestWorker) sweepOldClaims(ctx context.Context, now time.Time) 
 	cutoff := WeekStartUTC(now.Add(-weeklyDigestClaimRetention))
 	deleted, err := w.service.factorySet.WeeklyDigestSendRegistry.DeleteSentBefore(ctx, cutoff)
 	if err != nil {
-		slog.Error("Weekly digest: failed to sweep old claims", "error", err)
+		slog.ErrorContext(ctx, "Weekly digest: failed to sweep old claims", "error", err)
 		return
 	}
 	if deleted > 0 {
-		slog.Info("Weekly digest: swept old claims", "deleted", deleted, "before", cutoff.Format(time.DateOnly))
+		slog.InfoContext(ctx, "Weekly digest: swept old claims", "deleted", deleted, "before", cutoff.Format(time.DateOnly))
 	}
 }

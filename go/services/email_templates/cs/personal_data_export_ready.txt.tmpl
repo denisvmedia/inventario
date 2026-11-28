@@ -1,0 +1,8 @@
+Dobrý den {{.Name}},
+
+Kopie vašich dat, o kterou jste požádali, je připravena. Stáhnete ji v nastavení účtu:
+{{.URL}}
+{{if .ExpiresAt}}
+Soubor bude smazán {{.ExpiresAt}}. O novou kopii můžete požádat jednou denně.
+{{end}}
+Pokud jste o kopii svých dat nežádali, změňte si heslo a v nastavení účtu odhlaste ostatní relace.

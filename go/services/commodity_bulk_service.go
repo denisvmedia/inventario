@@ -62,8 +62,9 @@ func (e *BulkSelectionChangedError) Error() string {
 
 // BulkTarget is one item of a bulk action. Row is the item as the selection
 // read it, nil when the selection named it by id only. It names the item in
-// a failure; an action reads the item again right before it writes it, so an
-// edit saved after the selection was resolved is not overwritten.
+// a failure; an action reads the item again under its row lock when it
+// writes it, so an edit saved after the selection was resolved is not
+// overwritten.
 type BulkTarget struct {
 	ID  string
 	Row *models.Commodity
@@ -470,82 +471,69 @@ func (s *CommodityBulkService) EnsureTags(ctx context.Context, patch *CommodityP
 	return nil
 }
 
-// Update applies patch to every target, reading each item right before it
-// writes it. An item the patch does not change is skipped. The context must
-// carry the group currency, which the item validation reads.
+// Update applies patch to every target. An item the patch does not change
+// is skipped. The context must carry the group currency, which the item
+// validation reads.
 func (s *CommodityBulkService) Update(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, patch CommodityPatch) BulkOutcome {
-	var out BulkOutcome
-	for i, t := range targets {
-		if err := ctx.Err(); err != nil {
-			failRest(&out, targets[i:], err)
-			break
-		}
-		before, err := items.Get(ctx, t.ID)
-		if err != nil {
-			out.fail(t.ID, t.name(), err)
-			continue
-		}
-		after, changed := patch.Apply(*before)
+	return s.patchEach(ctx, items, targets, patch.AddTags, func(before models.Commodity) (models.Commodity, bool, error) {
+		after, changed := patch.Apply(before)
 		if !changed {
-			out.Skipped = append(out.Skipped, BulkSkip{ID: t.ID, Name: before.Name})
-			continue
+			return after, false, nil
 		}
-		// The patch edits no custom field; values read with the item
-		// would overwrite one written since.
-		after.CustomFields = nil
 		if err := ValidateCommodityStatusTransition(before.Status, after.Status, after.StatusDate, after.SalePrice); err != nil {
-			out.fail(t.ID, before.Name, err)
-			continue
+			return after, false, err
 		}
-		if err := after.ValidateWithContext(ctx); err != nil {
-			out.fail(t.ID, before.Name, err)
-			continue
-		}
-		updated, err := items.Update(ctx, after)
-		if err != nil {
-			out.fail(t.ID, before.Name, err)
-			continue
-		}
-		s.events.EmitUpdated(ctx, before, updated)
-		out.Succeeded = append(out.Succeeded, t.ID)
-	}
-	return out
+		return after, true, after.ValidateWithContext(ctx)
+	})
 }
 
 // Move puts every target into the area areaID, which the caller has checked
-// exists, reading each item right before it writes it. An item already
-// there is skipped. Each moved item is validated as a single edit validates
-// it, so the context must carry the group currency.
+// exists. An item already there is skipped. Each moved item is validated as
+// a single edit validates it, so the context must carry the group currency.
 func (s *CommodityBulkService) Move(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, areaID string) BulkOutcome {
+	return s.patchEach(ctx, items, targets, nil, func(before models.Commodity) (models.Commodity, bool, error) {
+		if before.AreaID != nil && *before.AreaID == areaID {
+			return before, false, nil
+		}
+		after := before
+		after.AreaID = new(areaID)
+		return after, true, after.ValidateWithContext(ctx)
+	})
+}
+
+// patchEach changes every target with change through CommodityRegistry.Patch,
+// which hands change the item as stored under its row lock and writes only
+// the columns a bulk action edits. An edit another member saves while the
+// action runs is therefore kept, whichever of the two writes first. addTags
+// are the tags change may add. Each changed item gets the history event of
+// a single edit.
+func (s *CommodityBulkService) patchEach(
+	ctx context.Context,
+	items registry.CommodityRegistry,
+	targets []BulkTarget,
+	addTags []string,
+	change func(models.Commodity) (models.Commodity, bool, error),
+) BulkOutcome {
 	var out BulkOutcome
 	for i, t := range targets {
 		if err := ctx.Err(); err != nil {
 			failRest(&out, targets[i:], err)
 			break
 		}
-		before, err := items.Get(ctx, t.ID)
-		if err != nil {
-			out.fail(t.ID, t.name(), err)
-			continue
-		}
-		if before.AreaID != nil && *before.AreaID == areaID {
+		name := t.name()
+		before, after, err := items.Patch(ctx, t.ID, addTags, func(c models.Commodity) (models.Commodity, bool, error) {
+			name = c.Name
+			return change(c)
+		})
+		switch {
+		case err != nil:
+			out.fail(t.ID, name, err)
+		case after == nil:
 			out.Skipped = append(out.Skipped, BulkSkip{ID: t.ID, Name: before.Name})
-			continue
+		default:
+			s.events.EmitUpdated(ctx, before, after)
+			out.Succeeded = append(out.Succeeded, t.ID)
 		}
-		after := *before
-		after.AreaID = new(areaID)
-		after.CustomFields = nil // the move edits no custom field
-		if err := after.ValidateWithContext(ctx); err != nil {
-			out.fail(t.ID, before.Name, err)
-			continue
-		}
-		updated, err := items.Update(ctx, after)
-		if err != nil {
-			out.fail(t.ID, before.Name, err)
-			continue
-		}
-		s.events.EmitUpdated(ctx, before, updated)
-		out.Succeeded = append(out.Succeeded, t.ID)
 	}
 	return out
 }
@@ -567,7 +555,7 @@ func (s *CommodityBulkService) Delete(ctx context.Context, targets []BulkTarget)
 		case err == nil:
 			out.Succeeded = append(out.Succeeded, t.ID)
 		case trashed != nil:
-			slog.WarnContext(ctx, "bulk delete: item went to Trash, its files did not", "commodity_id", t.ID, "err", err)
+			slog.WarnContext(ctx, "bulk delete: item went to Trash, its files did not", "commodity_id", t.ID, "error", err)
 			out.Succeeded = append(out.Succeeded, t.ID)
 			out.Notes = append(out.Notes, BulkNote{ID: t.ID, Name: trashed.Name, Code: BulkNoteFilesKept})
 		default:

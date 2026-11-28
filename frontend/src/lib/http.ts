@@ -140,6 +140,11 @@ export interface HttpRequestInit {
   // Skip the /g/{slug}/ rewrite even if a group is active (for explicit
   // cross-group lookups; rare).
   skipGroupRewrite?: boolean
+  // The group a group-scoped path goes to. Unset, it is the group active
+  // when the request is sent. A form that sends several requests for one
+  // action names the group it opened in, so a group switch in between does
+  // not send the later ones to another group.
+  group?: string
   // Skip the 401 → refresh → retry dance. The wrapper sets this on its own
   // refresh request; callers normally never set it.
   skipAuthRefresh?: boolean
@@ -147,6 +152,10 @@ export interface HttpRequestInit {
   // "user-initiated" follows the normal flow. Default is "user-initiated".
   authCheck?: "background" | "user-initiated"
 }
+
+// InGroup is the option of an API function that can send its request to a
+// named group instead of the current one.
+export type InGroup = Pick<HttpRequestInit, "group">
 
 export interface HttpResponse<T> {
   data: T
@@ -216,6 +225,14 @@ let backofficeRefreshInFlight: Promise<string> | null = null
 // closed by the hard-redirect tearing the page down, not by this guard.
 let impersonationEndInFlight: Promise<void> | null = null
 
+// Sign-outs in progress, per plane (#3026). Both logout handlers put the
+// access token on the blacklist before they revoke the refresh token, so a
+// request that carried the old token can get a 401 while the refresh cookie
+// still works. Answering that 401 with a refresh started a new session right
+// after the sign-out. While a plane's count is above zero, a 401 on that
+// plane ends in the error (see handle401).
+const signOutsInFlight: Record<AuthPlane, number> = { tenant: 0, backoffice: 0 }
+
 // The /admin/impersonation/end path — kept as a constant so handle401 can
 // recognise (and skip recovery for) the `end` call itself.
 const IMPERSONATION_END_PATH = "/admin/impersonation/end"
@@ -252,8 +269,17 @@ function usesImpersonationCredential(path: string): boolean {
   )
 }
 
-function applyGroupRewrite(path: string): string {
-  const slug = getCurrentGroupSlug()
+export type AuthPlane = "tenant" | "backoffice"
+
+// credentialPlane is the plane whose access token and CSRF token a request
+// carries: the path's own plane, except for the impersonation self-service
+// endpoints during a session (see usesImpersonationCredential).
+function credentialPlane(path: string): AuthPlane {
+  return isBackofficePath(path) && !usesImpersonationCredential(path) ? "backoffice" : "tenant"
+}
+
+function applyGroupRewrite(path: string, group?: string): string {
+  const slug = group || getCurrentGroupSlug()
   if (!slug) {
     if (import.meta.env.DEV) {
       for (const prefix of GROUP_SCOPED_PREFIXES) {
@@ -276,13 +302,13 @@ function applyGroupRewrite(path: string): string {
   return path
 }
 
-function buildUrl(path: string, skipGroupRewrite: boolean | undefined): string {
+function buildUrl(path: string, skipGroupRewrite: boolean | undefined, group?: string): string {
   // Accept either a path ("/commodities") or a full /api/v1-prefixed URL
   // (rare, used by tests and by the refresh helper). Strip the prefix so we
   // operate on the canonical short form throughout the rewrite logic.
   let normalized = path.startsWith(BASE_URL) ? path.slice(BASE_URL.length) : path
   if (!normalized.startsWith("/")) normalized = `/${normalized}`
-  const rewritten = skipGroupRewrite ? normalized : applyGroupRewrite(normalized)
+  const rewritten = skipGroupRewrite ? normalized : applyGroupRewrite(normalized, group)
   return `${BASE_URL}${rewritten}`
 }
 
@@ -311,7 +337,7 @@ function buildHeaders(method: HttpMethod, path: string, init: HttpRequestInit): 
   // token), not the back-office plane — see usesImpersonationCredential. This
   // flips both the Authorization bearer and the CSRF token below to the
   // tenant pair for those requests.
-  const backoffice = isBackofficePath(path) && !usesImpersonationCredential(path)
+  const backoffice = credentialPlane(path) === "backoffice"
   const accessToken = backoffice ? getBackofficeAccessToken() : getAccessToken()
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`)
@@ -374,24 +400,45 @@ function hasTypedProductError(body: unknown): boolean {
   })
 }
 
-// Name of the cross-tab lock. Tabs share one access token in localStorage, so
-// on a simultaneous expiry two of them present the same refresh cookie. The
-// first rotates and revokes that row; the second is then replaying a revoked
-// row, which reuse detection treats as theft and answers by revoking every
-// session the user has — both tabs land on /login (#2166, #967 H4).
-const AUTH_REFRESH_LOCK = "inventario-auth-refresh"
+// Names of the cross-tab locks, one per plane. Tabs share one access token in
+// localStorage, so on a simultaneous expiry two of them present the same
+// refresh cookie. The first rotates and revokes that row; the second is then
+// replaying a revoked row, which reuse detection treats as theft and answers
+// by revoking every session the user has — both tabs land on /login (#2166,
+// #967 H4). The planes have separate cookies, so they have separate locks.
+const AUTH_REFRESH_LOCKS: Record<AuthPlane, string> = {
+  tenant: "inventario-auth-refresh",
+  backoffice: "inventario-backoffice-auth-refresh",
+}
 
-// withAuthRefreshLock serializes refresh across tabs.
+// withAuthRefreshLock serializes a plane's refresh and sign-out across tabs.
 //
 // Web Locks is the primitive that actually serializes. BroadcastChannel can
 // only announce a result, which does not help: by the time the first tab has
 // something to announce, the second has already sent its request. Where the
 // API is missing the behavior is what it was before — per-tab single-flight,
 // and the race stays possible.
-async function withAuthRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+async function withAuthRefreshLock<T>(plane: AuthPlane, fn: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks
   if (!locks) return fn()
-  return locks.request(AUTH_REFRESH_LOCK, fn) as Promise<T>
+  return locks.request(AUTH_REFRESH_LOCKS[plane], fn) as Promise<T>
+}
+
+// What a refresh does after it waited for the lock, given the access token it
+// saw before queueing and the one stored now.
+//   - "signed-out": a peer tab signed out (or its refresh failed) meanwhile.
+//     The refresh cookie may still be valid if the logout request did not get
+//     through, and sending it would bring the session back, so this tab stops.
+//   - "adopt": a peer rotated meanwhile. Our cookie is the one it revoked, so
+//     sending it is the replay that would end every session. Adopt instead.
+//   - "refresh": nothing changed; refresh as usual.
+function afterRefreshLock(
+  tokenBeforeLock: string | null,
+  current: string | null
+): "signed-out" | "adopt" | "refresh" {
+  if (tokenBeforeLock && !current) return "signed-out"
+  if (current && current !== tokenBeforeLock) return "adopt"
+  return "refresh"
 }
 
 async function refreshAccessToken(): Promise<string> {
@@ -399,15 +446,18 @@ async function refreshAccessToken(): Promise<string> {
   // Read before queueing for the lock: if it has changed by the time we hold
   // the lock, a peer tab rotated while we waited.
   const tokenBeforeLock = getAccessToken()
-  refreshInFlight = withAuthRefreshLock(async () => {
+  refreshInFlight = withAuthRefreshLock("tenant", async () => {
+    const url = `${BASE_URL}/auth/refresh`
     const current = getAccessToken()
-    if (current && current !== tokenBeforeLock) {
-      // A peer already rotated. Our cookie is the one it revoked, so sending
-      // it is the replay that would end every session. Adopt instead.
-      return current
+    switch (afterRefreshLock(tokenBeforeLock, current)) {
+      case "signed-out":
+        throw new HttpError("Signed out in another tab", 401, url, null)
+      case "adopt":
+        return current as string
+      case "refresh":
+        break
     }
 
-    const url = `${BASE_URL}/auth/refresh`
     const response = await fetch(url, {
       method: "POST",
       credentials: "include",
@@ -450,8 +500,19 @@ async function refreshAccessToken(): Promise<string> {
 // /auth/refresh. The dispatcher in `handle401` picks the right one.
 async function refreshBackofficeAccessToken(): Promise<string> {
   if (backofficeRefreshInFlight) return backofficeRefreshInFlight
-  backofficeRefreshInFlight = (async () => {
+  // The same cross-tab lock and checks as refreshAccessToken (#3034).
+  const tokenBeforeLock = getBackofficeAccessToken()
+  backofficeRefreshInFlight = withAuthRefreshLock("backoffice", async () => {
     const url = `${BASE_URL}/backoffice/auth/refresh`
+    const current = getBackofficeAccessToken()
+    switch (afterRefreshLock(tokenBeforeLock, current)) {
+      case "signed-out":
+        throw new HttpError("Signed out in another tab", 401, url, null)
+      case "adopt":
+        return current as string
+      case "refresh":
+        break
+    }
     const response = await fetch(url, {
       method: "POST",
       credentials: "include",
@@ -484,11 +545,35 @@ async function refreshBackofficeAccessToken(): Promise<string> {
     const csrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
     if (csrf) setBackofficeCsrfToken(csrf)
     return payload.access_token
-  })()
+  })
   try {
     return await backofficeRefreshInFlight
   } finally {
     backofficeRefreshInFlight = null
+  }
+}
+
+// withSignOut runs signOut, the call that ends the plane's session, and keeps
+// the plane from refreshing until it settles (#3026). A refresh that is
+// already running finishes first, so the logout carries the newest access
+// token and refresh cookie, and those are what the server revokes.
+//
+// signOut then runs under the plane's cross-tab refresh lock (#3034). The
+// server blacklists the access token before it revokes the refresh token, so
+// a peer tab can get a 401 in between; its refresh queues behind the
+// sign-out and runs after the logout response has deleted the cookie and
+// signOut has cleared the stored token, so it sends nothing that could bring
+// the session back or trip reuse detection. Waiting for this tab's own
+// refresh first is what keeps the lock from deadlocking: that refresh holds
+// it, and no new one starts here while the sign-out runs (see handle401).
+export async function withSignOut<T>(plane: AuthPlane, signOut: () => Promise<T>): Promise<T> {
+  signOutsInFlight[plane]++
+  try {
+    const refresh = plane === "backoffice" ? backofficeRefreshInFlight : refreshInFlight
+    if (refresh) await refresh.catch(() => undefined)
+    return await withAuthRefreshLock(plane, signOut)
+  } finally {
+    signOutsInFlight[plane]--
   }
 }
 
@@ -638,6 +723,14 @@ async function handle401(
     const data = await parseBody(response).catch(() => null)
     throw new HttpError("Unauthorized", 401, url, data)
   }
+  // The plane this request was credentialed from is signing out (#3026), so
+  // the 401 is the logout taking effect. A refresh here would start a new
+  // session, and the impersonation recovery below would restore the
+  // operator's. The sign-out clears the credentials itself.
+  if (signOutsInFlight[credentialPlane(originalPath)] > 0) {
+    const data = await parseBody(response).catch(() => null)
+    throw new HttpError("Unauthorized", 401, url, data)
+  }
   // Impersonation auto-expiry (#1757): if a return-slot is recorded the
   // browser is inside an impersonation session. When its short-lived
   // access token expires a normal /auth/refresh cannot help — the marker
@@ -702,7 +795,7 @@ async function performRequest<T = unknown>(
   init: HttpRequestInit
 ): Promise<HttpResponse<T>> {
   const method = (init.method ?? "GET") as HttpMethod
-  const url = buildUrl(path, init.skipGroupRewrite)
+  const url = buildUrl(path, init.skipGroupRewrite, init.group)
   const headers = buildHeaders(method, path, init)
   const body =
     init.body === undefined || method === "GET"
@@ -734,11 +827,11 @@ async function performRequest<T = unknown>(
   // mutation to fail CSRF verification).
   const newCsrf = response.headers.get("X-CSRF-Token") ?? response.headers.get("x-csrf-token")
   if (newCsrf) {
-    // Recomputed with the same condition buildHeaders used. A bare
-    // isBackofficePath here sent the rotated token to back-office storage for
-    // impersonation self-service calls, which go out on the tenant pair, so
-    // the rotation landed in the plane that did not make the request (#2127).
-    if (isBackofficePath(path) && !usesImpersonationCredential(path)) {
+    // The same plane buildHeaders used. A bare isBackofficePath here sent
+    // the rotated token to back-office storage for impersonation
+    // self-service calls, which go out on the tenant pair, so the rotation
+    // landed in the plane that did not make the request (#2127).
+    if (credentialPlane(path) === "backoffice") {
       setBackofficeCsrfToken(newCsrf)
     } else {
       setCsrfToken(newCsrf)
@@ -822,4 +915,6 @@ export function __resetHttpForTests(): void {
   refreshInFlight = null
   backofficeRefreshInFlight = null
   impersonationEndInFlight = null
+  signOutsInFlight.tenant = 0
+  signOutsInFlight.backoffice = 0
 }

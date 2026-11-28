@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,9 +13,23 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// RollbackOrCommit ends tx: it rolls back when err is set and commits
+// otherwise, returning the error of whichever it ran.
+//
+// A transaction begun with a context is rolled back by database/sql as soon
+// as that context is done, so the rollback on the error path may find the
+// transaction already over. That is reported as sql.ErrTxDone and is not an
+// error here. On the commit path it is: the work did not persist, and the
+// caller has to hear about it.
+//
+// Callers that defer it must assign the result to a named error result, or
+// the commit error is lost after the function has returned success.
 func RollbackOrCommit(tx *sqlx.Tx, err error) error {
 	if err != nil {
-		return tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			return rbErr
+		}
+		return nil
 	}
 	return tx.Commit()
 }
@@ -68,7 +84,7 @@ func beginTxWithTenantAndUser(ctx context.Context, dbx *sqlx.DB, userID, tenantI
 		return nil, ErrUserIDRequired
 	}
 
-	tx, err := dbx.Beginx()
+	tx, err := dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -95,7 +111,7 @@ func beginTxWithTenantAndUser(ctx context.Context, dbx *sqlx.DB, userID, tenantI
 }
 
 func beginServiceTx(ctx context.Context, dbx *sqlx.DB) (*sqlx.Tx, error) {
-	tx, err := dbx.Beginx()
+	tx, err := dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -121,7 +137,7 @@ func beginServiceTx(ctx context.Context, dbx *sqlx.DB) (*sqlx.Tx, error) {
 // override is scoped to the transaction by SET LOCAL ROLE and is
 // reset automatically on commit or rollback.
 func beginAdminTx(ctx context.Context, dbx *sqlx.DB) (*sqlx.Tx, error) {
-	tx, err := dbx.Beginx()
+	tx, err := dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -154,7 +170,7 @@ func beginTxWithTenantAndGroup(ctx context.Context, dbx *sqlx.DB, tenantID, grou
 		return nil, ErrGroupIDRequired
 	}
 
-	tx, err := dbx.Beginx()
+	tx, err := dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -240,6 +256,30 @@ func DoAsAdmin(ctx context.Context, dbx *sqlx.DB, fn func(context.Context, *sqlx
 
 	if err = fn(ctx, tx); err != nil {
 		return errxtrace.Wrap("admin operation failed", err)
+	}
+	return nil
+}
+
+// DoAsGroup runs fn inside a transaction under the application role with the
+// tenant and group of the session set, so the tables' row-level security
+// policies limit fn to that group, committing on nil return and rolling back
+// otherwise. It serves cross-table reads of one group's rows that no single
+// registry owns, such as the group's failed jobs (#1307). Callers still
+// filter by group in their queries: a role that owns the tables, as in the
+// test databases, is not bound by the policies.
+func DoAsGroup(ctx context.Context, dbx *sqlx.DB, tenantID, groupID string, fn func(context.Context, *sqlx.Tx) error) (err error) {
+	tx, err := beginTxWithTenantAndGroup(ctx, dbx, tenantID, groupID)
+	if err != nil {
+		return errxtrace.Wrap("failed to begin group transaction", err)
+	}
+	defer func() {
+		if rbErr := RollbackOrCommit(tx, err); rbErr != nil && err == nil {
+			err = errxtrace.Wrap("failed to finish group transaction", rbErr)
+		}
+	}()
+
+	if err = fn(ctx, tx); err != nil {
+		return errxtrace.Wrap("group operation failed", err)
 	}
 	return nil
 }

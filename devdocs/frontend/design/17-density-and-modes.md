@@ -99,7 +99,7 @@ token swap.
 | --- | --- |
 | `prefers-color-scheme: dark` | Mode `system` resolves to dark |
 | `prefers-color-scheme: light` | Mode `system` resolves to light |
-| `prefers-reduced-motion: reduce` | `tw-animate-css` and `motion-reduce:` honor it (per [05-motion.md](05-motion.md)) |
+| `prefers-reduced-motion: reduce` | Enter and exit animations fade without zooming or sliding (a rule in `src/index.css`); other transitions honor it through `motion-reduce:` (per [05-motion.md](05-motion.md#reduced-motion)) |
 | `prefers-contrast: more` | Not yet honored — TBD. Tokens have headroom for an "AAA-only" variant when we wire it. |
 | Touch vs. pointer | `useIsMobile()` (`src/hooks/use-mobile.ts`) detects the mobile breakpoint; surfaces use it for adjusted hover/layout state. |
 

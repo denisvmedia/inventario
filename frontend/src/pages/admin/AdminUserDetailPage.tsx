@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { UserAvatar } from "@/components/UserAvatar"
+import { RoleBadge } from "@/components/RoleBadge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -31,7 +32,7 @@ import { formatDateTime, formatRelative } from "@/lib/intl"
 import { getServerErrorCode } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
-import { AccountStateBadge, RoleBadge, TenantChip } from "./admin-shared"
+import { AccountStateBadge, TenantChip } from "./admin-shared"
 
 // The BE caps the block / unblock `reason` at 500 Unicode code points
 // (`utf8.RuneCountInString(reason) > 500` → 422 `admin.block.reason_too_long`).
@@ -60,6 +61,8 @@ const ACTION_ERROR_KEY: Record<string, string> = {
   "admin.impersonate.target_blocked": "targetBlocked",
   "admin.impersonate.nested": "nested",
   "admin.impersonate.rate_limited": "rateLimited",
+  // The user's tenant is suspended or inactive (#1037).
+  "tenant.not_active": "tenantNotActive",
 }
 
 // AdminUserDetailPage is /admin/users/:userId — a per-user admin surface
@@ -274,6 +277,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
           <UserAvatar
             name={user.name}
             email={user.email}
+            src={user.avatar_url}
             className="size-14 rounded-full"
             fallbackClassName="bg-primary text-lg text-primary-foreground"
           />
@@ -417,7 +421,7 @@ function UserDetailContent({ user }: { user: AdminUserDetail }) {
                         : "—"}
                     </p>
                   </div>
-                  <RoleBadge role={m.role} />
+                  <RoleBadge role={m.role} className="text-xs" />
                 </>
               )
               const rowClass =

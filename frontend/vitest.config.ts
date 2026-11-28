@@ -2,6 +2,8 @@ import path from "node:path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
+import { whatsNewPlugin } from "./vite-plugins/whats-new.ts"
+
 // Test files that cannot share a module registry with the rest of the suite.
 //
 // The two pdf.js viewers mock `@/lib/pdfjs` differently from each other. The
@@ -11,16 +13,26 @@ import { defineConfig } from "vitest/config"
 // occasional failure under `--sequence.shuffle`. The commit badge test mocks
 // `@/features/system/hooks`, but the Shell test renders the real CommitBadge;
 // when the Shell test runs first in a worker, CommitBadge is already bound to
-// the real hook and the mock never reaches it.
+// the real hook and the mock never reaches it. The cross-tab sign-out test
+// opens each tab as a fresh module graph with `vi.resetModules()`; in a shared
+// registry the next file would import the last tab's http and navigation
+// modules, with the tab's navigators installed.
 const OWN_REGISTRY = [
   "src/components/files/__tests__/PdfViewer.test.tsx",
   "src/components/files/__tests__/PdfFullViewer.test.tsx",
   "src/components/auth/__tests__/PasswordStrengthMeter.test.tsx",
   "src/components/__tests__/CommitBadge.test.tsx",
+  "src/lib/__tests__/http.crossTabSignOut.test.ts",
 ]
 
 export default defineConfig({
-  plugins: [react()],
+  // The What's new data comes from the real CHANGELOG.md. Tests run as a
+  // "dev" build, which keeps every released version, whatever
+  // INVENTARIO_VERSION the shell has.
+  plugins: [
+    react(),
+    whatsNewPlugin({ changelogPath: path.resolve(__dirname, "../CHANGELOG.md"), version: "dev" }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

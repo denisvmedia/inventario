@@ -2,8 +2,12 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
+
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -50,6 +54,12 @@ func (r *TenantRegistry) Create(ctx context.Context, tenant models.Tenant) (*mod
 	if tenant.PlanID == "" {
 		tenant.PlanID = models.PlanUnlimited.ID
 	}
+	if err := r.checkSlugFree(ctx, tenant); err != nil {
+		return nil, err
+	}
+	if err := r.checkDomainFree(ctx, tenant); err != nil {
+		return nil, err
+	}
 	return r.baseTenantRegistry.Create(ctx, tenant)
 }
 
@@ -63,7 +73,53 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 	if tenant.PlanID == "" {
 		tenant.PlanID = models.PlanUnlimited.ID
 	}
+	if err := r.checkSlugFree(ctx, tenant); err != nil {
+		return nil, err
+	}
+	if err := r.checkDomainFree(ctx, tenant); err != nil {
+		return nil, err
+	}
 	return r.baseTenantRegistry.Update(ctx, tenant)
+}
+
+// checkSlugFree refuses a slug another tenant already has, as the unique
+// index on tenants.slug does in postgres. An empty slug is let through:
+// the model validation that refuses it runs before a registry write, and
+// test fixtures that skip it seed tenants with no slug at all.
+func (r *TenantRegistry) checkSlugFree(ctx context.Context, tenant models.Tenant) error {
+	if tenant.Slug == "" {
+		return nil
+	}
+	other, err := r.GetBySlug(ctx, tenant.Slug)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return nil
+	case err != nil:
+		return err
+	case other.ID != tenant.ID:
+		return errxtrace.Classify(registry.ErrSlugAlreadyExists, errx.Attrs("slug", tenant.Slug))
+	default:
+		return nil
+	}
+}
+
+// checkDomainFree refuses a domain another tenant already has, as the unique
+// index on tenants.domain does in postgres. A tenant without a domain is let
+// through, as the index lets NULL through.
+func (r *TenantRegistry) checkDomainFree(ctx context.Context, tenant models.Tenant) error {
+	if tenant.Domain == nil {
+		return nil
+	}
+	tenants, err := r.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, other := range tenants {
+		if other.ID != tenant.ID && other.Domain != nil && *other.Domain == *tenant.Domain {
+			return errxtrace.Classify(registry.ErrDomainAlreadyExists, errx.Attrs("domain", *tenant.Domain))
+		}
+	}
+	return nil
 }
 
 // GetDefault returns the tenant marked as default (IsDefault == true).

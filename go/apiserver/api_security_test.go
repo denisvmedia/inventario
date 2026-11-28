@@ -33,11 +33,24 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	factorySet := memory.NewFactorySet()
 	jwtSecret := []byte("test-secret-32-bytes-minimum-length")
 
+	// Both tenants exist and are active, so the request reaches the export
+	// lookup: a user whose tenant is missing or not active is refused before.
+	tenantIDs := map[string]string{}
+	for _, slug := range []string{"tenant-1", "tenant-2"} {
+		tenant, err := factorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+			Name:   slug,
+			Slug:   slug,
+			Status: models.TenantStatusActive,
+		})
+		c.Assert(err, qt.IsNil)
+		tenantIDs[slug] = tenant.ID
+	}
+
 	// Create users in different tenants
 	userTenant1 := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "user-tenant1"},
-			TenantID: "tenant-1",
+			TenantID: tenantIDs["tenant-1"],
 		},
 		Email:    "user@tenant1.com",
 		Name:     "Tenant 1 User",
@@ -48,7 +61,7 @@ func TestAPISecurity_CrossTenantExportAttempt(t *testing.T) {
 	userTenant2 := &models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			EntityID: models.EntityID{ID: "user-tenant2"},
-			TenantID: "tenant-2",
+			TenantID: tenantIDs["tenant-2"],
 		},
 		Email:    "user@tenant2.com",
 		Name:     "Tenant 2 User",

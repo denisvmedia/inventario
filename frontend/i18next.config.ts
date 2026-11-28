@@ -108,6 +108,9 @@ export default defineConfig({
       //   the name-taken message SellerFormDialog sets on a 409, surfaced
       //   through <FieldError>. Same pattern as auth:validation.*. (#2804)
       "sellers:validation.*",
+      // supplies:validation.* — zod messages in features/supplies/schemas.ts,
+      //   surfaced through <FieldError>. Same pattern as auth:validation.*.
+      "supplies:validation.*",
       // settings:notifications.{groups,rows,errors}.* — NotificationsSection
       //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
       //   reminders/updates/channels; row ids: warrantyExpiry,
@@ -126,6 +129,11 @@ export default defineConfig({
       //   via `t(\`settings:storage.breakdown.${key}\`)`. The extractor only
       //   sees the template literal.
       "settings:storage.breakdown.*",
+      // settings:account.dataExport.status.* — PersonalDataExportCard labels
+      //   each row with `t(\`settings:account.dataExport.status.${status}\`)`
+      //   over the export status union. The extractor only sees the
+      //   template literal.
+      "settings:account.dataExport.status.*",
       // settings:apiTokens.{scopes,scopeDescriptions,expiry,errors,validation}.*
       //   — the API tokens page and its create dialog look these up from
       //   the scope / expiry-preset unions, map server error codes via
@@ -234,8 +242,7 @@ export default defineConfig({
       // commodities:detail.statusTransitionDialog.{description,errors,
       //   notePlaceholder}.* — StatusTransitionDialog (#1611) builds copy
       //   via `t(`commodities:detail.statusTransitionDialog.description.${targetStatus}`)`
-      //   over the closed forward-transition set
-      //   (sold/lost/disposed/written_off), plus dynamic error-message
+      //   over TERMINAL_COMMODITY_STATUSES (every status but in_use), plus dynamic error-message
       //   keys flowing through RHF errors[name].message (zod schemas).
       "commodities:detail.statusTransitionDialog.*",
       // warranties:list.tab.* — WarrantiesListPage builds tab labels
@@ -457,6 +464,16 @@ export default defineConfig({
       //   `generic` catch-all. Dynamic key; the extractor sees only the
       //   template literal.
       "admin:groupDetail.members.errors.*",
+      // admin:tenantActions.errors.* — AdminTenantDialogs.tsx resolves the
+      //   inline error of the tenant create / edit / suspend / reactivate /
+      //   delete dialogs via `t(\`tenantActions.errors.${key}\`)`, where
+      //   `key` is a flat segment mapped from the BE's dotted codes
+      //   (TENANT_ERROR_KEY) plus a `generic` catch-all.
+      // admin:tenantForm.validation.* — zod messages in
+      //   features/admin/schemas.ts, resolved with t() at render time. Same
+      //   pattern as auth:validation.*.
+      "admin:tenantActions.errors.*",
+      "admin:tenantForm.validation.*",
     ],
   },
 })

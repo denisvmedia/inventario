@@ -63,14 +63,14 @@ func (api *BackofficeAuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := api.parseBackofficeMFAToken(req.MFAToken)
 	if err != nil {
-		slog.Warn("Backoffice login_mfa: invalid mfa_token", "error", err)
+		slog.WarnContext(r.Context(), "Backoffice login_mfa: invalid mfa_token", "error", err)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
 
 	user, err := api.backofficeUserRegistry.Get(r.Context(), claims.AdminID)
 	if err != nil || !user.IsActive {
-		slog.Warn("Backoffice login_mfa: user lookup failed", "admin_id", claims.AdminID, "error", err)
+		slog.WarnContext(r.Context(), "Backoffice login_mfa: user lookup failed", "admin_id", claims.AdminID, "error", err)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
@@ -80,7 +80,7 @@ func (api *BackofficeAuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 	if api.rateLimiter != nil {
 		locked, resetAt, lockErr := api.rateLimiter.IsAccountLocked(r.Context(), user.Email)
 		if lockErr != nil {
-			slog.Error("Backoffice login_mfa: rate-limiter lookup failed", "error", lockErr)
+			slog.ErrorContext(r.Context(), "Backoffice login_mfa: rate-limiter lookup failed", "error", lockErr)
 		} else if locked {
 			retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
@@ -142,7 +142,7 @@ func (api *BackofficeAuthAPI) consumeBackofficeMFACode(r *http.Request, user *mo
 		if matcher != nil {
 			ok, err := api.mfaRegistry.ConsumeBackupCodeAtomic(ctx, user.ID, time.Now(), matcher)
 			if err != nil {
-				slog.Error("Backoffice login_mfa: atomic backup-code consume failed", "user_id", user.ID, "error", err)
+				slog.ErrorContext(r.Context(), "Backoffice login_mfa: atomic backup-code consume failed", "admin_id", user.ID, "error", err)
 				return false
 			}
 			if ok {
@@ -166,7 +166,7 @@ func (api *BackofficeAuthAPI) consumeBackofficeTOTPCode(ctx context.Context, use
 	shim := models.UserMFASecret{SecretEncrypted: row.SecretEncrypted}
 	matchedStep, ok, err := api.mfaService.VerifyTOTPStep(shim, totpCode)
 	if err != nil {
-		slog.Error("Backoffice login_mfa: TOTP verify failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(ctx, "Backoffice login_mfa: TOTP verify failed", "admin_id", user.ID, "error", err)
 		return false, true
 	}
 	if !ok {
@@ -174,7 +174,7 @@ func (api *BackofficeAuthAPI) consumeBackofficeTOTPCode(ctx context.Context, use
 	}
 	won, casErr := api.mfaRegistry.MarkTOTPStepUsedAtomic(ctx, user.ID, matchedStep, time.Now())
 	if casErr != nil {
-		slog.Error("Backoffice login_mfa: TOTP step CAS failed", "user_id", user.ID, "error", casErr)
+		slog.ErrorContext(ctx, "Backoffice login_mfa: TOTP step CAS failed", "admin_id", user.ID, "error", casErr)
 		return false, true
 	}
 	return won, false
@@ -186,14 +186,14 @@ func (api *BackofficeAuthAPI) consumeBackofficeTOTPCode(ctx context.Context, use
 func (api *BackofficeAuthAPI) afterBackofficeMFASuccess(ctx context.Context, email string, claims *backofficeMFATokenClaims) {
 	if api.rateLimiter != nil {
 		if err := api.rateLimiter.ClearFailedLogins(ctx, email); err != nil {
-			slog.Error("Backoffice login_mfa: clear failed-login counter", "error", err)
+			slog.ErrorContext(ctx, "Backoffice login_mfa: clear failed-login counter", "error", err)
 		}
 	}
 	if api.blacklistService != nil && claims.JTI != "" && !claims.ExpiresAt.IsZero() {
 		if err := api.blacklistService.BlacklistToken(ctx, claims.JTI, claims.ExpiresAt); err != nil {
 			// Not fatal — session still issues. Replay risk is scoped
 			// to <5 min, single-use code already consumed.
-			slog.Error("Backoffice login_mfa: failed to blacklist mfa_token jti", "error", err)
+			slog.ErrorContext(ctx, "Backoffice login_mfa: failed to blacklist mfa_token jti", "error", err)
 		}
 	}
 }

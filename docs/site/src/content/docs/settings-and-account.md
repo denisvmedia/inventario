@@ -1,6 +1,6 @@
 ---
 title: Settings & account
-description: Manage your Inventario profile, preferences, password, two-factor authentication, sessions, API tokens, and connected sign-in methods.
+description: Manage your Inventario profile, preferences, password, two-factor authentication, sessions, API tokens, and connected sign-in methods, and download a copy of your data.
 ---
 
 Everything about your account, your preferences, and keeping it secure lives in
@@ -12,7 +12,10 @@ account security, sign-in methods, and where to get help.
 
 The **Preferences** page has a left-hand menu with five sections — **Account**,
 **Appearance**, **Notifications**, **Privacy & security**, and **Help &
-support** — plus a **Sign out** shortcut at the bottom of that menu.
+support** — plus a **Sign out** shortcut at the bottom of that menu. Signing out
+also removes the unsaved **Add item** input this browser kept for you (see
+[Saved on this device](../items/#saved-on-this-device)) and the list of search
+results you opened recently.
 
 ![The Preferences page with its left-hand menu of sections](../../assets/screenshots/settings.png)
 
@@ -29,8 +32,9 @@ and the **Account** section of Preferences). On the **Edit profile** page you
 can:
 
 1. Update your **Name**.
-2. Choose your **Default group** — the group you land in after signing in. You
-   can switch groups any time from the group selector.
+2. Choose your **Default group** — the group you land in after signing in.
+   Switching groups with a group selector also makes that group your default,
+   so you come back to the group you used last.
 3. Click **Save changes**.
 
 ### Profile photo
@@ -46,13 +50,14 @@ your Profile page to pick one.
   512 × 512 pixels. A photo taken sideways on a phone is turned upright first.
 - Everything stored in the file besides the picture itself, such as the camera
   model and the location where the photo was taken, is removed.
-- The photo is visible to you and to the members of the groups you belong to.
-  Nobody else can see it.
+- The photo is visible to you, to the members of the groups you belong to,
+  and to the administrators of the server on its admin pages. Nobody else can
+  see it.
 - A profile photo does not count toward any group's storage use.
 
 To go back to your initials, click **Remove photo** under the picture and
 confirm. Uploading a new photo replaces the old one. Deleting your account also
-deletes your photo.
+deletes your photo, and so does an administrator deleting it.
 
 A couple of things to know:
 
@@ -63,17 +68,30 @@ A couple of things to know:
   you type your email address to confirm and — for password accounts — re-enter
   your password. (Accounts that sign in only with Google or another social
   provider don't need to enter a password.) Deletion is **permanent and can't be
-  undone**: it erases your account together with the inventory you own, so
-  export or back up anything you want to keep first. A couple of cases are
+  undone**: it erases your account together with the inventory you own. The
+  dialog links to [Download my data](#download-my-data), so you can take a
+  copy first; a copy you requested is deleted with the account. A couple of
+  cases are
   blocked with an explanation instead of deleting: if you're the **only owner**
   of a group that still has other members, hand ownership to someone else first;
-  and if you created anything inside a group someone else owns (items, files,
-  places, exports, tags or sellers), it needs to be removed first. This
-  includes a tag or a seller you added there, even when other members use it on
-  their own items. [Item types](../item-types/) you added to a shared group
-  stay with the group and pass to its owner, so they don't block deletion. So
+  and if you created items, files, places or exports inside a group someone
+  else owns, they need to be removed first. Both checks run before anything is
+  deleted, so a blocked deletion leaves your account, your groups and your
+  sessions as they were.
+  A shared group you created doesn't block deletion once someone else owns
+  it: the group stays with its members and passes to its owner.
+  [Tags](../tags/), [sellers](../sellers/) and [item types](../item-types/)
+  you added to a shared group stay with the group and pass to its owner, so
+  they don't block deletion and other members keep using them. So
   does the record of the [documents other systems sent](../documents-from-other-systems/)
   with one of your API tokens, together with the drafts those documents made.
+  What you recorded on the items of a shared group stays there too and passes
+  to its owner: the [history entries](../items/#the-item-detail-page) of your changes, loans,
+  service records, supply links and maintenance schedules, and the restores
+  and currency changes you ran. The item history then names the owner for the
+  changes you made. The audit log of the server records, for each group, what
+  passed to whom; the people who run the server can read it. Invites you
+  created for a shared group stop working.
   Item reminders you set in a shared group are deleted with your account,
   since they only ever emailed you. So are the other
   [drafts of new items](../items/#drafts-of-a-new-item) you started there. A
@@ -84,6 +102,71 @@ A couple of things to know:
 
 For more on groups, roles, and inviting people, see
 [Groups & sharing](../groups-and-sharing/).
+
+## Download my data
+
+The **Download my data** card in the **Account** section of Preferences gives
+you a copy of your own data, in a form you can read or take to another
+service. Click **Request a copy**. Inventario prepares it in the background and
+sends you an email when it is ready; the email links back to this card, not to
+the file. While it is being prepared the copy shows as **Waiting** or
+**Preparing**, and the list updates on its own; if the server restarts while
+your copy is being prepared, it is prepared again, up to three times in all.
+A copy still not ready two
+hours after the request is no longer checked on its own; come back to the page
+later to see it. When it is **Ready**, the
+row shows its size and the day it is deleted, and **Download** saves it as
+`inventario-personal-data-<date>.tar.gz`. A copy deleted since you opened the
+page disappears from the list when you click **Download**, with a message
+saying so.
+
+The copy has:
+
+- your profile: name, email address, when you joined, your default group and
+  your profile photo;
+- your preferences and your notification choices for each group;
+- the groups you belong to, with the group name, your role and the day you
+  joined;
+- in each group, what you created there: items (including the ones in the
+  [Trash](../trash/)) with their custom fields, the files you uploaded with
+  their contents, loans, maintenance schedules, service records, reminders,
+  supply links, open [drafts of new items](../items/#drafts-of-a-new-item),
+  saved views, and the history entries you made.
+
+A file in the Trash is included, also one that went there together with its
+item, and so are the loans, maintenance schedules and service records of an
+item in the Trash.
+
+Locations, areas, sellers, item types and tags appear by name on your items.
+A history entry holds only the fields you changed, with the values you set,
+not the values they replaced. Other members appear only as ids, and text you
+typed is kept as you typed it. A file whose contents are no longer in storage
+is listed without them and marked as missing. The files are
+JSON, packed into a `.tar.gz` archive that any archive tool can open; a
+`manifest.json` at the top says whose data it is and when it was made.
+
+A few rules apply:
+
+- You can request **one copy a day**. Until the next request is allowed, the
+  button is disabled and the card says when you can request again; at that
+  time the button is enabled again. This counts a request that failed, too.
+- Each copy is **deleted 7 days** after it is ready, whether you downloaded it
+  or not. A copy that could not be prepared shows as **Failed** and is removed
+  from the list 7 days after the request; request a new one when the daily
+  limit allows.
+- The administrator of your Inventario server sees a copy that failed and can
+  prepare it again for you. It then shows as **Waiting** again, you get the
+  email when it is ready, and it is deleted 7 days after that. This is not a
+  new request: the daily limit still counts from the request you made.
+- Only you can see and download your copies. The download works only in the
+  browser where you are signed in and clicked **Download**.
+- A copy is **not a backup**. It holds only your part of each group, so it
+  cannot be restored, and the
+  [restore upload](../backup-and-restore/#import-a-backup-file) refuses it.
+  To keep a copy of a whole group, make a [group backup](../backup-and-restore/)
+  instead.
+- An administrator who is signed in as you to help with a problem cannot
+  request or download your copy.
 
 ## Appearance and preferences
 
@@ -96,7 +179,8 @@ change applies immediately.
   lists. Stored on this device.
 - **Language** — switch the app's language between **English**, **Čeština**, and
   **Русский**. This also sets the language Inventario uses for emails it sends
-  you.
+  you. A new account starts with the language the app showed when you signed
+  up, so the verification and welcome emails are already in it.
 - **Default view** — whether the Items list opens as **Photo cards**,
   **Compact cards**, or a **List**. A layout you pick from the Items list
   toolbar wins on that device until you change this setting there.
@@ -113,6 +197,11 @@ change applies immediately.
 or computer can have its own look. Your other preferences travel with your
 account.
 :::
+
+Inventario also follows your device's accessibility setting to reduce motion
+(for example **Reduce motion** on macOS and iOS). With it on, dialogs, menus
+and list rows fade in place instead of zooming or sliding. There is no separate
+switch for it in the app.
 
 The **Notifications** section lets you turn individual email/push reminders on
 or off — warranty expiry, maintenance, loans, the reminders you set on items,
@@ -135,7 +224,8 @@ on for:
 - how many items were added, how many were changed, and how many files were
   attached;
 - warranties expiring in the next 30 days and maintenance due in the next 14,
-  nearest first.
+  nearest first, for items that are In Use, unless the group
+  [hides that section](../groups-and-sharing/#hide-sections-the-group-doesnt-use).
 
 A few things worth knowing:
 
@@ -277,7 +367,8 @@ create a new one.
 
 A token acts as you, with your current role in each group it can reach: if you
 are a viewer in a group, a **Read and write** token cannot change anything there
-either, and if you leave a group, the token loses it too. It works only on the
+either, and if you leave a group, the token loses it too; a token limited to
+that group is revoked. It works only on the
 data inside groups (items, locations, areas, files, tags, loans, services,
 maintenance, exports and the like), and it can read the list of your groups,
 each group's details, and its members and their photos.
@@ -351,11 +442,36 @@ The **Help & support** section gives you five quick links:
   what is missing.
 - **Keyboard shortcuts** — opens the full list of shortcuts (you can also press
   `?` anywhere in the app).
-- **What's new** — opens the releases page in a new tab. The badge next to it
-  shows the version you run, such as `v0.2`.
+- **What's new** — opens the [What's new](#whats-new) page. The badge next to
+  it shows the version you run, such as `v0.2`.
 - **Contact support / share feedback** — opens a form to ask a question, report
   a bug, or suggest a feature. The same form is your channel for reaching the
   team directly.
+
+### What's new
+
+The **What's new** page lists the releases of Inventario up to the one your
+server runs, newest first. Each release shows its date and its changes, grouped
+under headings such as **Added**, **Changed** and **Fixed**. The release notes
+are in English. Links in them open on GitHub in a new tab. You can also open the
+page directly at `/whats-new`.
+
+When your server has a release you haven't read about, a dot appears next to
+**What's new**, on the **Help & support** tab, and on **Help** in the sidebar.
+Opening the page clears it. Inventario remembers the newest release you have
+seen on your account, so the dot stays away on your other devices too. If you
+have never opened the page, the dot shows once. The dot needs a group: until
+you create or join one, it doesn't appear, though the page itself opens.
+
+If your server runs a development build rather than a release, the page says so
+and lists the releases the build contains.
+
+System administrators also see an **Operators** section at the end of a
+release: changes to the Helm chart, command-line flags, environment variables
+and other things that matter to whoever runs the server. Other users don't see
+it, and a release that changed only those things brings them no dot. If they
+open the page anyway, such a release tells them it changed only how the server
+is installed and run.
 
 ---
 

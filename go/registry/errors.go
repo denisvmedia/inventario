@@ -19,6 +19,10 @@ var (
 	ErrBadDataStructure   = errx.NewSentinel("bad data structure")
 	ErrDeleted            = errx.NewSentinel("deleted", ErrNotFound)
 
+	// ErrDomainAlreadyExists is returned when a tenant write would give a
+	// domain to a second tenant. tenants.domain is unique.
+	ErrDomainAlreadyExists = errx.NewSentinel("domain already exists")
+
 	ErrGroupCurrencyNotSet      = errx.NewSentinel("group currency not set")
 	ErrInvalidSettingName       = errx.NewSentinel("invalid setting name")
 	ErrUserContextRequired      = errx.NewSentinel("user context required")
@@ -135,6 +139,12 @@ var (
 	// invariant still blocks the leave. #1652.
 	ErrLastMember = errx.NewSentinel("cannot remove the last member from a group")
 
+	// ErrNotAGroupMember signals that APITokenRegistry.Create refused a
+	// token limited to a group its user is not a member of. The check
+	// runs under the group's membership lock, so a removal that commits
+	// after the service's own membership check still stops the insert.
+	ErrNotAGroupMember = errx.NewSentinel("user is not a member of the group")
+
 	// ErrLastSystemAdmin signals that
 	// SystemAdminGrantRegistry.RevokeAtomic refused to drop the
 	// platform's system-admin count to zero. Defined at the registry
@@ -190,6 +200,12 @@ var (
 	// newer input (#2812).
 	ErrDraftRevisionConflict = errx.NewSentinel("the draft was changed by another save")
 
+	// ErrRevisionConflict is returned by CommodityRegistry.Update when the
+	// context names an expected revision (WithExpectedRevision) and the item
+	// has been written since: the caller's edit started from an older state
+	// and would undo the change made in between (#2981).
+	ErrRevisionConflict = errx.NewSentinel("the item changed since it was read")
+
 	// ErrDraftPromoted is returned when a save, a discard, an attachment or
 	// a promotion with another promotion key reaches a draft that has
 	// already become an item (#2812).
@@ -205,6 +221,15 @@ var (
 	// it was put back in the queue by the stuck sweep and claimed again, or
 	// its session was deleted. The outcome is dropped (#2810).
 	ErrIntakeSourceChanged = errx.NewSentinel("the intake source changed while it was scanned")
+
+	// ErrFailedJobNotRetryable is returned when a retry reaches a job type
+	// that cannot be run again safely, such as a restore that may have
+	// written part of its backup (#1307). Such a job can only be discarded.
+	ErrFailedJobNotRetryable = errx.NewSentinel("this kind of job cannot be retried")
+
+	// ErrUnknownFailedJobType is returned for a worker type that has no
+	// failed-jobs adapter (#1307).
+	ErrUnknownFailedJobType = errx.NewSentinel("unknown failed job type")
 
 	// ErrIntakeSourceBusy is returned when a rescan reaches a source that is
 	// still waiting for or in a scan, also one canceled while its scan runs

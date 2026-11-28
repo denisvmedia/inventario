@@ -133,10 +133,10 @@ func TenantMiddleware(resolver TenantResolver, tenantRegistry registry.TenantReg
 			// SECURITY: Validate that the authenticated user belongs to this tenant
 			if user.TenantID != "" && user.TenantID != tenantID {
 				// Log security violation
-				slog.Error("Security violation: user attempted to access different tenant",
+				slog.WarnContext(r.Context(), "Security violation: user attempted to access different tenant",
 					"user_id", user.ID,
-					"user_tenant", user.TenantID,
-					"requested_tenant", tenantID,
+					"user_tenant_id", user.TenantID,
+					"requested_tenant_id", tenantID,
 					"user_agent", r.UserAgent(),
 					"remote_addr", r.RemoteAddr,
 					"method", r.Method,
@@ -172,6 +172,7 @@ func RequireTenant() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenant := TenantFromContext(r.Context())
 			if tenant == nil {
+				slog.ErrorContext(r.Context(), "Tenant context required but missing", "path", r.URL.Path)
 				http.Error(w, "Tenant context required", http.StatusInternalServerError)
 				return
 			}
@@ -248,6 +249,22 @@ func normalizeHost(host string) string {
 	return strings.ToLower(strings.TrimSuffix(host, "."))
 }
 
+// tenantBaseDomain returns the base domain under which the resolver maps
+// <slug>.<base> to a tenant, or "" when it maps no host to a slug. A test
+// header resolver reports the base domain of the resolver it wraps.
+func tenantBaseDomain(resolver TenantResolver) string {
+	switch res := resolver.(type) {
+	case *HostTenantResolver:
+		return normalizeHost(res.BaseDomain)
+	case *SubdomainTenantResolver:
+		return normalizeHost(res.BaseDomain)
+	case *TestHeaderTenantResolver:
+		return tenantBaseDomain(res.Inner)
+	default:
+		return ""
+	}
+}
+
 // PublicTenantMiddleware resolves the tenant from the request and stores it in
 // the context so that both public and authenticated handlers can call TenantIDFromContext.
 // It does not require a JWT and is safe to place before auth middleware.
@@ -295,12 +312,12 @@ func tenantByRequestSlug(w http.ResponseWriter, r *http.Request, resolver Tenant
 	slug, err := resolver.ResolveTenant(r)
 	if err != nil {
 		if catchAllSlug == "" {
-			slog.Error("Tenant resolution failed", "error", err, "host", r.Host)
+			slog.ErrorContext(r.Context(), "Tenant resolution failed", "error", err, "host", r.Host)
 			http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
 			return nil
 		}
-		slog.Debug("Host did not resolve; using the catch-all tenant",
-			"host", r.Host, "catch_all", catchAllSlug, "error", err)
+		slog.DebugContext(r.Context(), "Host did not resolve; using the catch-all tenant",
+			"host", r.Host, "catch_all_tenant_slug", catchAllSlug, "error", err)
 		slug = catchAllSlug
 	}
 
@@ -308,7 +325,7 @@ func tenantByRequestSlug(w http.ResponseWriter, r *http.Request, resolver Tenant
 		// Single-tenant mode: use the tenant marked as default in the database.
 		tenant, err := tenantRegistry.GetDefault(r.Context())
 		if err != nil {
-			slog.Error("Failed to get default tenant", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to get default tenant", "error", err)
 			http.Error(w, "No default tenant configured", http.StatusServiceUnavailable)
 			return nil
 		}
@@ -320,8 +337,8 @@ func tenantByRequestSlug(w http.ResponseWriter, r *http.Request, resolver Tenant
 	// has to stay an error: answering it with somebody else's tenant would
 	// turn an outage into a silent mis-route.
 	if errors.Is(err, registry.ErrNotFound) && catchAllSlug != "" && slug != catchAllSlug {
-		slog.Debug("No tenant for host; using the catch-all tenant",
-			"host", r.Host, "slug", slug, "catch_all", catchAllSlug)
+		slog.DebugContext(r.Context(), "No tenant for host; using the catch-all tenant",
+			"host", r.Host, "tenant_slug", slug, "catch_all_tenant_slug", catchAllSlug)
 		tenant, err = tenantRegistry.GetBySlug(r.Context(), catchAllSlug)
 	}
 	if err != nil {
@@ -354,7 +371,7 @@ func tenantByRequestDomain(w http.ResponseWriter, r *http.Request, tenantRegistr
 	case errors.Is(err, registry.ErrNotFound), errors.Is(err, registry.ErrFieldRequired):
 		return nil, false
 	default:
-		slog.Error("Custom-domain tenant lookup failed", "error", err, "host", host)
+		slog.ErrorContext(r.Context(), "Custom-domain tenant lookup failed", "error", err, "host", host)
 		http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
 		return nil, true
 	}
@@ -432,7 +449,7 @@ func canonicalRedirectTarget(r *http.Request, resolver TenantResolver, tenantReg
 	// a slash, a userinfo marker or a query would put a different origin in the
 	// Location header, so a row that is not a hostname redirects nowhere.
 	if !models.IsValidTenantDomain(canonical) {
-		slog.Error("Tenant domain is not a hostname; not redirecting",
+		slog.ErrorContext(r.Context(), "Tenant domain is not a hostname; not redirecting",
 			"tenant_slug", tenant.Slug, "domain", *tenant.Domain)
 		return "", false
 	}

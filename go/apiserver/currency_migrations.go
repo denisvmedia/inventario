@@ -349,7 +349,7 @@ func (api *currencyMigrationsAPI) start(w http.ResponseWriter, r *http.Request) 
 	//     best-effort UPDATE — if it fails (RLS, FK timing) the
 	//     middleware/lock UX still reads InFlightForGroup as the source
 	//     of truth, so the row's status alone is what matters.
-	if err := setLocationGroupCurrencyMigrationID(r.Context(), rs, group.ID, &created.ID); err != nil {
+	if err := setLocationGroupCurrencyMigrationID(r.Context(), rs, group.ID, created.ID); err != nil {
 		// Don't fail the request — the migration row is the canonical
 		// state. Surface as a warning via the audit logger and continue.
 		api.logAuditCurrencyMigration(r, user, group, "currency_migration.start", false, fmt.Sprintf("group lock update failed: %v", err))
@@ -482,37 +482,48 @@ func requireGroupNotMigrating(opts GroupMigrationLockOptions) func(http.Handler)
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			rs := RegistrySetFromContext(r.Context())
-			group := groupFromContext(r.Context())
-			// With the feature flag on, a missing registry set, group
-			// context, or currency-migration registry is a misconfiguration
-			// — fail closed so a wiring bug never lets a write through
-			// while a migration is supposed to be holding the lock.
-			if rs == nil || group == nil || rs.CurrencyMigrationRegistry == nil {
-				_ = internalServerError(w, r, errors.New("currency migration lock check unavailable: missing registry set, group, or currency migration registry"))
-				return
-			}
-
-			inFlight, err := rs.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID)
-			if err != nil {
-				_ = internalServerError(w, r, err)
-				return
-			}
-			if inFlight != nil {
-				_ = lockedError(w, r,
-					errors.New("group is locked while a currency migration is in progress"),
-					codeCurrencyMigrationLocked,
-					map[string]any{
-						"migration_id": inFlight.ID,
-						"status":       string(inFlight.Status),
-					},
-				)
+			if refuseWhileGroupMigrates(w, r) {
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// refuseWhileGroupMigrates answers 423 Locked with code
+// currency_migration.locked, and reports true, when a currency migration of
+// the request's group is pending or running. A handler that knows only
+// after reading its body whether the write holds up a migration calls it
+// directly; the caller checks the feature flag first.
+func refuseWhileGroupMigrates(w http.ResponseWriter, r *http.Request) bool {
+	rs := RegistrySetFromContext(r.Context())
+	group := groupFromContext(r.Context())
+	// With the feature flag on, a missing registry set, group context, or
+	// currency-migration registry is a misconfiguration — fail closed so a
+	// wiring bug never lets a write through while a migration is supposed
+	// to be holding the lock.
+	if rs == nil || group == nil || rs.CurrencyMigrationRegistry == nil {
+		_ = internalServerError(w, r, errors.New("currency migration lock check unavailable: missing registry set, group, or currency migration registry"))
+		return true
+	}
+
+	inFlight, err := rs.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID)
+	if err != nil {
+		_ = internalServerError(w, r, err)
+		return true
+	}
+	if inFlight != nil {
+		_ = lockedError(w, r,
+			errors.New("group is locked while a currency migration is in progress"),
+			codeCurrencyMigrationLocked,
+			map[string]any{
+				"migration_id": inFlight.ID,
+				"status":       string(inFlight.Status),
+			},
+		)
+		return true
+	}
+	return false
 }
 
 // validateStartAttributes runs the from-mismatch / same-currency / rate
@@ -763,27 +774,22 @@ func groupHasInFlightRestore(ctx context.Context, rs *registry.Set) (bool, error
 // id on the group row so the FE's lock UX can drive off
 // LocationGroup.currency_migration_id without re-querying the
 // migration registry. The recovery sweep clears the column when it
-// flips a stuck running row to failed; PR 3's worker clears it on
+// flips a stuck running row to failed; the worker clears it on
 // successful TX2 commit.
 //
-// Done via the LocationGroupRegistry update flow so the row's RLS
-// context is consistent. Not transactional with the migration row —
-// see start handler comments — but the migration row itself is the
-// source of truth (the lock middleware reads InFlightForGroup, not
-// this column).
-func setLocationGroupCurrencyMigrationID(ctx context.Context, rs *registry.Set, groupID string, migrationID *string) error {
+// The registry writes that column alone, so a rename or a deletion
+// that commits meanwhile is kept. Not transactional with the migration
+// row — see start handler comments — but the migration row itself is
+// the source of truth (the lock middleware reads InFlightForGroup, not
+// this column). Nothing is written when the group is no longer active
+// or the worker has already finished the migration: there is no lock
+// left to show, so that is not an error.
+func setLocationGroupCurrencyMigrationID(ctx context.Context, rs *registry.Set, groupID, migrationID string) error {
 	if rs.LocationGroupRegistry == nil {
 		return errors.New("location group registry unavailable")
 	}
-	group, err := rs.LocationGroupRegistry.Get(ctx, groupID)
-	if err != nil {
-		return err
-	}
-	group.CurrencyMigrationID = migrationID
-	if _, err := rs.LocationGroupRegistry.Update(ctx, *group); err != nil {
-		return err
-	}
-	return nil
+	_, err := rs.LocationGroupRegistry.SetCurrencyMigrationID(ctx, groupID, migrationID)
+	return err
 }
 
 // logAuditCurrencyMigration writes one row to audit_logs marking the

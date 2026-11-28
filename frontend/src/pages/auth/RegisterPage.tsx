@@ -26,6 +26,7 @@ import {
 import { registerSchema, type RegisterInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
 // RegisterPage — sign-up form with the optional invite-to-handoff path.
 // The server returns the same generic message whether the email is taken or
@@ -203,14 +204,18 @@ export function RegisterPage() {
                 disabled={isPending}
                 aria-invalid={!!form.formState.errors.name}
                 data-testid="name"
+                aria-describedby={
+                  form.formState.errors.name?.message ? "register-name-error" : undefined
+                }
                 {...form.register("name")}
               />
             </div>
-            {form.formState.errors.name ? (
-              <p className="error-message text-xs text-destructive" data-testid="name-error">
-                {t(form.formState.errors.name.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="register-name-error"
+              testId="name-error"
+              className="error-message"
+              message={form.formState.errors.name?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -229,14 +234,18 @@ export function RegisterPage() {
                 disabled={isPending}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
+                aria-describedby={
+                  form.formState.errors.email?.message ? "register-email-error" : undefined
+                }
                 {...form.register("email")}
               />
             </div>
-            {form.formState.errors.email ? (
-              <p className="error-message text-xs text-destructive" data-testid="email-error">
-                {t(form.formState.errors.email.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="register-email-error"
+              testId="email-error"
+              className="error-message"
+              message={form.formState.errors.email?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -248,6 +257,9 @@ export function RegisterPage() {
               disabled={isPending}
               aria-invalid={!!form.formState.errors.password}
               data-testid="password"
+              aria-describedby={
+                form.formState.errors.password?.message ? "register-password-error" : undefined
+              }
               {...form.register("password")}
             />
             <PasswordStrengthMeter
@@ -255,11 +267,12 @@ export function RegisterPage() {
               userInputs={strengthInputs}
               testId="register-password-strength"
             />
-            {form.formState.errors.password ? (
-              <p className="error-message text-xs text-destructive" data-testid="password-error">
-                {t(form.formState.errors.password.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="register-password-error"
+              testId="password-error"
+              className="error-message"
+              message={form.formState.errors.password?.message}
+            />
           </div>
 
           <div className="flex items-start gap-2 pt-1">
@@ -272,6 +285,9 @@ export function RegisterPage() {
                 })
               }
               aria-invalid={!!form.formState.errors.acceptTerms}
+              aria-describedby={
+                form.formState.errors.acceptTerms?.message ? "register-terms-error" : undefined
+              }
               data-testid="terms"
             />
             <Label
@@ -304,11 +320,12 @@ export function RegisterPage() {
               />
             </Label>
           </div>
-          {form.formState.errors.acceptTerms ? (
-            <p className="error-message text-xs text-destructive" data-testid="terms-error">
-              {t(form.formState.errors.acceptTerms.message ?? "")}
-            </p>
-          ) : null}
+          <FieldError
+            id="register-terms-error"
+            testId="terms-error"
+            className="error-message"
+            message={form.formState.errors.acceptTerms?.message}
+          />
 
           {serverError ? (
             <Alert variant="destructive" className="error-message" data-testid="server-error">

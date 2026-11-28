@@ -1,5 +1,6 @@
 // Package logguard holds a source-level guard against logging a database DSN
-// with its password still in it.
+// with its password still in it, and against the log keys devdocs/logging.md
+// rules out (`err`, a hand-passed `request_id`).
 //
 // A Postgres DSN carries the password in its userinfo, so a log line that
 // takes one verbatim writes the database credential to stdout — and in the

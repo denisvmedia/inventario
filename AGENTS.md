@@ -75,13 +75,13 @@ The system implements enterprise-grade multi-tenancy with:
 - `./inventario tenants create` - Create tenants for initial setup
 - `./inventario tenants list` - List all tenants with filtering
 - `./inventario tenants get <id-or-slug>` - Get detailed tenant information
-- `./inventario tenants update <id-or-slug>` - Update tenant properties
-- `./inventario tenants delete <id-or-slug>` - Delete tenants with confirmation
+- `./inventario tenants update <id-or-slug>` - Update tenant properties; a status change away from active ends the sessions of the tenant's users
+- `./inventario tenants delete <id-or-slug>` - Delete tenants with confirmation (the operator types the slug); the back office's `DELETE /api/v1/admin/tenants/{id}` follows the same rules through `go/services/admin`
 - `./inventario users create` - Create users for initial setup
 - `./inventario users list` - List all users with filtering
 - `./inventario users get <id-or-email>` - Get detailed user information
-- `./inventario users update <id-or-email>` - Update user-row fields (email, name, active status, tenant, password); only the flags you pass are changed
-- `./inventario users delete <id-or-email>` - Delete users with confirmation
+- `./inventario users update <id-or-email>` - Update user-row fields (email, name, active status, tenant, password); only the flags you pass are changed. `--tenant` moves only a user who belongs to no group and owns or authored nothing; it signs them out everywhere and copies the profile photo (`--upload-location`)
+- `./inventario users delete <id-or-email>` - Delete users with confirmation; deletes the profile photo too (`--upload-location`). Refused before anything changes for a user who still owns items, files, places or exports, who created a group nobody else is in, or who is the only owner of a group that has other members (the error names the group; make another member an owner first)
 - For PostgreSQL: Set POSTGRES_TEST_DSN environment variable for testing
 
 ## Project Structure

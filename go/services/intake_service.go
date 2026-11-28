@@ -195,7 +195,7 @@ func (s *IntakeService) CreateSession(ctx context.Context, clientKey string, sou
 		return nil, false, err
 	}
 	session := models.IntakeSession{ClientKey: clientKey, Origin: models.IntakeOriginUpload}
-	if err := validation.Validate(clientKey, validation.Required, validation.Length(1, models.IntakeClientKeyMaxLength),
+	if err := validation.Validate(clientKey, validation.Required, validation.RuneLength(1, models.IntakeClientKeyMaxLength),
 		models.MemberSessionClientKeyRule); err != nil {
 		return nil, false, validation.Errors{"client_key": err}
 	}
@@ -400,17 +400,9 @@ func (s *IntakeService) ReviewCandidate(ctx context.Context, sessionID, candidat
 			SetParams(map[string]any{"max": models.IntakeCandidateQuantityMax})
 	}
 	if review.AcceptedFields != nil {
-		cleaned := []string{}
-		seen := map[string]bool{}
-		for _, f := range *review.AcceptedFields {
-			if !isIntakeReviewField(f) {
-				errs["accepted_fields"] = validation.NewError("validation_intake_unknown_field", "unknown field")
-				break
-			}
-			if !seen[f] {
-				seen[f] = true
-				cleaned = append(cleaned, f)
-			}
+		cleaned, ok := acceptedNames(*review.AcceptedFields, isIntakeReviewField)
+		if !ok {
+			errs["accepted_fields"] = validation.NewError("validation_intake_unknown_field", "unknown field")
 		}
 		review.AcceptedFields = &cleaned
 	}
@@ -421,10 +413,41 @@ func (s *IntakeService) ReviewCandidate(ctx context.Context, sessionID, candidat
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.sessionCandidate(ctx, reg, sessionID, candidateID); err != nil {
+	cand, err := s.sessionCandidate(ctx, reg, sessionID, candidateID)
+	if err != nil {
 		return nil, err
 	}
+	if review.AcceptedCustomFields != nil {
+		// Only a field the scan read a value for can be accepted.
+		cleaned, ok := acceptedNames(*review.AcceptedCustomFields, func(id string) bool {
+			_, read := cand.CustomFields[id]
+			return read
+		})
+		if !ok {
+			return nil, validation.Errors{
+				"accepted_custom_fields": validation.NewError("validation_intake_unknown_field", "unknown field"),
+			}
+		}
+		review.AcceptedCustomFields = &cleaned
+	}
 	return reg.ReviewCandidate(ctx, candidateID, review)
+}
+
+// acceptedNames drops the repeats of names, keeping the first. It reports
+// false when known refuses one of them.
+func acceptedNames(names []string, known func(string) bool) ([]string, bool) {
+	cleaned := []string{}
+	seen := map[string]bool{}
+	for _, name := range names {
+		if !known(name) {
+			return cleaned, false
+		}
+		if !seen[name] {
+			seen[name] = true
+			cleaned = append(cleaned, name)
+		}
+	}
+	return cleaned, true
 }
 
 // CreateDrafts makes one draft for every kept product of the session that
@@ -472,7 +495,14 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 			return nil, err
 		}
 	}
-	input := intakeDraftInput{sellers: set.SellerRegistry, types: set.ItemTypeRegistry}
+	defs, err := set.CustomFieldRegistry.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	input := intakeDraftInput{sellers: set.SellerRegistry, types: set.ItemTypeRegistry, customFields: make(map[string]*models.CustomFieldDefinition, len(defs))}
+	for _, d := range defs {
+		input.customFields[d.ID] = d
+	}
 
 	result := &IntakeDraftsResult{}
 	for _, cand := range candidates {

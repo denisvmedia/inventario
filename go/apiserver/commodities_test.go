@@ -17,6 +17,8 @@ import (
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/registrytest"
 )
 
 // priceJSON is how a price reads in a JSON:API response: null when it is
@@ -147,6 +149,53 @@ func TestCommoditiesList_UnassignedFilter(t *testing.T) {
 	body := rr.Body.Bytes()
 	c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].id"), loose.ID)
+}
+
+func TestCommoditiesList_LocationFilter(t *testing.T) {
+	// Issue #2897: ?location_id= returns the commodities in every area of
+	// that location, and is refused together with ?unassigned=true.
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	ctx := context.Background()
+	home := must.Must(registrySet.AreaRegistry.List(ctx))[0].LocationID
+
+	cottage := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Cottage"}))
+	boathouse := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Boathouse", LocationID: cottage.ID}))
+	paddle := must.Must(registrySet.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:                  "Paddle",
+		ShortName:             "PD",
+		AreaID:                new(boathouse.ID),
+		Type:                  models.CommodityTypeEquipment,
+		Count:                 1,
+		OriginalPrice:         new(must.Must(decimal.NewFromString("10.00"))),
+		OriginalPriceCurrency: models.Currency("USD"),
+		Status:                models.CommodityStatusInUse,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
+	}))
+
+	get := func(query string) *httptest.ResponseRecorder {
+		req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities?"+query, nil)
+		c.Assert(err, qt.IsNil)
+		addTestUserAuthHeader(req, testUser.ID)
+		rr := httptest.NewRecorder()
+		apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr := get("location_id=" + cottage.ID)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data[0].id"), paddle.ID)
+
+	rr = get("location_id=" + home)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.Bytes(), checkers.JSONPathMatches("$.data", qt.HasLen), 2)
+
+	rr = get("location_id=" + cottage.ID + "&unassigned=true")
+	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "query.invalid_parameter")
 }
 
 func TestCommodityCreate(t *testing.T) {
@@ -526,6 +575,47 @@ func TestCommodityCoverPatch_SetThenClear(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.meta.cover.source"), "first_photo")
 }
 
+// A change saved on the item between the read the cover handler starts
+// from and its write is kept: the write names the revision it read and is
+// tried again on the item as it is now.
+func TestCommodityCoverPatch_KeepsAChangeSavedMeanwhile(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+	files := must.Must(registrySet.FileRegistry.ListByLinkedEntityAndMeta(context.Background(), "commodity", commodity.ID, "images"))
+	c.Assert(files, qt.Not(qt.HasLen), 0)
+	target := files[len(files)-1]
+	params.FactorySet.CommodityRegistryFactory = registrytest.InterleaveCommodityWrite(
+		params.FactorySet.CommodityRegistryFactory, commodity.ID,
+		func(ctx context.Context, reg registry.CommodityRegistry, read models.Commodity) error {
+			read.Comments = "saved meanwhile"
+			_, err := reg.Update(ctx, read)
+			return err
+		})
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"` + target.ID + `"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	got := must.Must(registrySet.CommodityRegistry.Get(context.Background(), commodity.ID))
+	c.Assert(got.CoverFileID, qt.IsNotNil)
+	c.Check(*got.CoverFileID, qt.Equals, target.ID)
+	c.Check(got.Comments, qt.Equals, "saved meanwhile")
+
+	// The history records the cover change only: the comment written
+	// meanwhile is not this request's change.
+	events, _ := must.Must2(registrySet.CommodityEventRegistry.ListByCommodity(context.Background(), commodity.ID, 0, 50, registry.CommodityEventListOptions{}))
+	c.Assert(events, qt.HasLen, 1)
+	c.Check(events[0].Kind, qt.Equals, models.CommodityEventKindCoverChanged)
+	c.Check(events[0].After["cover_file_id"], qt.Equals, target.ID)
+}
+
 func TestCommodityCoverPatch_RejectsForeignFile(t *testing.T) {
 	c := qt.New(t)
 
@@ -784,6 +874,59 @@ func TestCommodityUpdate_StatusTransition_LostKeepsSalePriceNil(t *testing.T) {
 	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_date"), "2026-05-17")
 	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_note"), "Last seen at the office")
 	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), nil)
+}
+
+// TestCommodityUpdate_StatusTransition_DonatedAndStolen marks an item donated
+// or stolen: the change needs a status date, keeps the note, and refuses a
+// sale price, which only a sold item has.
+func TestCommodityUpdate_StatusTransition_DonatedAndStolen(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   models.CommodityStatus
+		override func(*models.Commodity)
+		code     int
+	}{
+		{"donated", models.CommodityStatusDonated, func(m *models.Commodity) {
+			m.StatusDate = models.ToPDate("2026-11-26")
+			m.StatusNote = "Given to the school"
+		}, http.StatusOK},
+		{"stolen", models.CommodityStatusStolen, func(m *models.Commodity) {
+			m.StatusDate = models.ToPDate("2026-11-26")
+			m.StatusNote = "Taken from the car"
+		}, http.StatusOK},
+		{"donated without a date", models.CommodityStatusDonated, func(*models.Commodity) {}, http.StatusUnprocessableEntity},
+		{"stolen without a date", models.CommodityStatusStolen, func(*models.Commodity) {}, http.StatusUnprocessableEntity},
+		{"donated with a sale price", models.CommodityStatusDonated, func(m *models.Commodity) {
+			m.StatusDate = models.ToPDate("2026-11-26")
+			m.SalePrice = new(decimal.NewFromFloat(10))
+		}, http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			params, testUser, testGroup := newParams()
+			registrySet := getRegistrySetFromParams(params, testUser)
+			commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+			c.Assert(commodity.Status, qt.Equals, models.CommodityStatusInUse)
+
+			body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+				m.Status = tt.status
+				tt.override(m)
+			})
+			req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+			addTestUserAuthHeader(req, testUser.ID)
+			rr := httptest.NewRecorder()
+			apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+			c.Assert(rr.Code, qt.Equals, tt.code, qt.Commentf("body=%s", rr.Body.String()))
+			if tt.code != http.StatusOK {
+				return
+			}
+			resp := rr.Body.Bytes()
+			c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status"), string(tt.status))
+			c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_date"), "2026-11-26")
+			c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), nil)
+		})
+	}
 }
 
 // TestCommodityUpdate_StatusTransition_RevertClearsMetadata reverts a

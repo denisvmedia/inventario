@@ -57,6 +57,24 @@ Three credentials, three homes:
 goes through it (it also degrades gracefully when storage is unavailable, e.g.
 SSR or a locked-down browser).
 
+### Changing the signed-in user clears the query cache
+
+`onAuthIdentityChange` (`src/lib/auth-storage.ts`) reports every change of the
+signed-in tenant user: a sign-in, a sign-out, a forced sign-out after a failed
+refresh, and the same events in another tab, which reach this one as `storage`
+events on the access-token key. The identity is the access token's `user_id`
+claim, so a refresh for the same user is not a change. `AuthProvider` answers
+each change with `queryClient.clear()`, which drops every query and mutation
+before the next user's first render. Starting and ending an impersonation
+session reload the page, which rebuilds the cache as well.
+
+A mutation that is still running at the change finishes into nothing: the
+mutation cache drops its callbacks and never settles its promise (see
+"Signed-in user changes" in [data.md](data.md)). The mutations that make the
+change themselves (`useLogin`, `useCompleteLoginMFA`, `useMagicLinkVerify`,
+`useLogout`, `useStartImpersonation`, `useEndImpersonation`) carry
+`meta: { changesIdentity: true }` and run their callbacks as usual.
+
 ### Boot sequence
 
 On startup `AuthProvider` resolves who is signed in:
@@ -99,7 +117,12 @@ request it:
   promise, so the backend sees one `/auth/refresh`, not N), then retries the
   original request with the new token. If the refresh fails, it clears auth and
   redirects to the login surface via `navigateToLogin` (an SPA navigation
-  installed by `AuthProvider`, not a full-page reload).
+  installed by `AuthProvider`, not a full-page reload). Across tabs, each
+  plane's refresh runs under its own Web Lock (`navigator.locks`), because
+  tabs share the stored access token and the refresh cookie: a tab that
+  waited for the lock adopts the token a peer stored meanwhile, and stops
+  without a request when a peer signed out meanwhile. Without Web Locks the
+  refresh is single-flight per tab only.
 - **Surfaces non-2xx as `HttpError`** (`status`, `url`, `data`) so React Query
   and pages can react. See "Surfacing auth errors" below.
 
@@ -111,6 +134,27 @@ an invalid refresh token — not session expiry. The wrapper lists these in
 `NON_REFRESHABLE_AUTH_PATHS` and surfaces the real error body instead of firing
 a doomed refresh loop. This is why a wrong-password login shows an inline error
 rather than silently retrying.
+
+### Sign-out
+
+`logout()` and `backofficeLogout()` send their request inside
+`withSignOut(plane, …)`. Both logout handlers put the access token on the
+blacklist before they revoke the refresh token, so a request that carried the
+old token can get a 401 while the refresh cookie still works. A refresh at that
+moment signed the user back in (#3026). While a sign-out runs:
+
+- a 401 on that plane ends in the error, with no refresh, no impersonation
+  recovery and no redirect. The sign-out clears the credentials itself;
+- a refresh that was already running finishes first, so the logout carries the
+  newest tokens, and those are what the server revokes;
+- the sign-out then holds the plane's refresh lock until it has cleared the
+  credentials. Another tab that gets a 401 in that window queues its refresh
+  behind it, finds the stored token gone, and stops, so it neither renews the
+  session nor replays a revoked refresh token, which the server would take
+  for theft (#3034).
+
+The other plane is not affected. Any new call that ends a session should run
+inside `withSignOut` too.
 
 ### Plane awareness (tenant vs back-office)
 

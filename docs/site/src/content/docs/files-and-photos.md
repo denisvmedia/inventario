@@ -18,7 +18,11 @@ You can attach files — photos, receipts, manuals, warranty certificates,
 anything — and there are a few places to do it.
 
 **While adding an item**, use the **Files** step in the Add item dialog. Drop
-files onto the dropzone or click **Choose files** to browse.
+files onto the dropzone or click it to browse. Each file gets a title, which
+starts as the file name without its extension, and optional tags. **Add item**
+uploads the files before it creates the item and shows how each upload goes;
+if one fails, the item is not created until **Retry** uploads it. See
+[Files](../items/#files) on the Items page.
 
 ![The Add item dialog with a Files step for attaching photos and documents](../../assets/screenshots/add-item-dialog.png)
 
@@ -50,7 +54,9 @@ files in a row; click **Done** when you are finished.
 
 Attaching does not copy anything. It stays one file wherever it is attached:
 edit its title or tags once and every place shows the change, and it counts
-toward your group's storage once.
+toward your group's storage once, at the size it was uploaded. The thumbnails
+Inventario makes of a photo are not counted; the storage card in
+**Group settings → Data & storage** says so under the usage.
 
 The upload dialog itself runs in three quick steps:
 
@@ -102,9 +108,13 @@ change their **Tags…**, or **Delete selected**.
 
 **Tags…** opens two tag lists: under **Add tags**, pick tags or type a new one
 to put on every selected file; under **Remove tags**, pick tags to take off.
-Tags you pick in neither list stay on each file as they are. Files whose tags
-could not be changed stay selected, so you can open **Tags…** again to retry
-just those. When no file changed, a message says why: the files already had the
+Tags you pick in neither list stay on each file as they are, and so does a
+tag or title someone saves to one of the files while the change runs. The
+other way round is not covered: a file's edit page opened before the change
+saves the tags it shows (see [Edit a file's details](#edit-a-files-details)).
+Files
+whose tags could not be changed stay selected, so you can open **Tags…** again
+to retry just those. When no file changed, a message says why: the files already had the
 tags you added, or none of them had the tags you removed.
 
 Files are sent in batches of 100. If a batch gets no answer, or fails on the
@@ -247,6 +257,12 @@ narrow screen the preview and the details are two tabs, **Preview** and
 **Save changes** saves and takes you back to where you opened the file from.
 **Cancel** goes back without saving.
 
+**Save changes** writes every detail the page shows, as you left it. If the
+file's tags or title changed after you opened the page, for example through
+a bulk **Tags…** change on the Files page, saving puts back what the page
+showed. Open the edit page again after such a change, so that it shows the
+file as it is now.
+
 When you open the edit page from the Files page, it keeps the list you came
 from, with its search, category, tag filter, and page. This makes it quick to
 go through a batch of uploads one after another:
@@ -288,6 +304,8 @@ item dialog.
 4. On **Review extracted details**, each field (name, brand, model, type,
    price, serial number, purchase date, seller, warranty expiry, tags, and more) shows
    what AI found, with a confidence label. Untick anything that looks wrong.
+   A field you already filled in shows your value next to the scan's and
+   starts unticked, so the scan replaces it only if you tick it.
 5. Click **Use these values** to pre-fill the form, then finish and save the
    item as usual.
 
@@ -299,6 +317,14 @@ A few things to know:
   it asks you to **Choose which item to add** and pre-fills that one — you can
   add the others separately afterwards. To get a draft for every product on a
   receipt at once, use [Add items from files](../items/#add-items-from-files).
+- Each scanned file also gets the tag of its kind (**Invoice**, **Manual**,
+  **Warranty** or **Photo**) and a readable title from the scan. A file you
+  renamed keeps its title, and a file you gave one of those four tags gets no
+  other; any other tag you set does not stop the suggestion. In the Add item
+  dialog they show on the
+  **Files** step with a sparkle, and you can remove or change them there (see
+  [Fill with AI](../items/#fill-with-ai)). A file you add with
+  **Add items from files** gets them once it is scanned.
 - When a receipt or invoice names the seller, the item names your group's
   seller with that name. If your group has no such seller, the **Purchase**
   step offers to create it; nothing is created until you agree (see

@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/shopspring/decimal"
 
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -36,6 +37,25 @@ import (
 const (
 	defaultCurrencyMigrationActiveInterval = 5 * time.Second
 	defaultCurrencyMigrationIdleInterval   = 1 * time.Minute
+)
+
+// DefaultCurrencyMigrationRetention is how long a completed or failed
+// currency migration stays, with its audit rows, before the worker deletes
+// it. MinCurrencyMigrationRetention is the shortest period the worker
+// accepts: the daily cap counts the group's completed migrations since UTC
+// midnight, so a shorter period would delete migrations the cap still
+// counts.
+const (
+	DefaultCurrencyMigrationRetention = 90 * 24 * time.Hour
+	MinCurrencyMigrationRetention     = 24 * time.Hour
+)
+
+// The cleanup of old migrations runs at most once an hour, and deletes them
+// in batches so that one transaction never holds the audit rows of more
+// than a hundred migrations.
+const (
+	currencyMigrationCleanupInterval = time.Hour
+	currencyMigrationCleanupBatch    = 100
 )
 
 // CurrencyMigrationProcessSummary is the per-run aggregate the
@@ -138,6 +158,18 @@ type currencyMigrationWorkerOptions struct {
 	idleInterval   time.Duration
 	clock          func() time.Time
 	pause          PauseChecker
+	retention      time.Duration
+}
+
+// WithCurrencyMigrationRetention sets how long a completed or failed
+// migration stays before the worker deletes it. A value below
+// MinCurrencyMigrationRetention is raised to it; non-positive is ignored.
+func WithCurrencyMigrationRetention(d time.Duration) CurrencyMigrationWorkerOption {
+	return func(o *currencyMigrationWorkerOptions) {
+		if d > 0 {
+			o.retention = max(d, MinCurrencyMigrationRetention)
+		}
+	}
 }
 
 // WithCurrencyMigrationActiveInterval overrides the cadence used after
@@ -201,6 +233,10 @@ func WithCurrencyMigrationPauseController(pc PauseChecker) CurrencyMigrationWork
 //     registry) to `failed`, clearing the group lock signal in the same
 //     statement.
 //
+//   - Cleanup: once an hour, after the sweep, deletes the completed and
+//     failed migrations that finished more than the retention period ago,
+//     with their audit rows.
+//
 //   - Claim TX1: registry.ClaimNextPending atomically picks one
 //     pending row via SELECT FOR UPDATE SKIP LOCKED + UPDATE → running.
 //     After commit, FE polls observe the row as running.
@@ -220,6 +256,10 @@ type CurrencyMigrationWorker struct {
 	idleInterval   time.Duration
 	clock          func() time.Time
 	pause          PauseChecker
+	retention      time.Duration
+
+	// lastCleanup is read and written by the run goroutine only.
+	lastCleanup time.Time
 
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -237,6 +277,7 @@ func NewCurrencyMigrationWorker(reg registry.CurrencyMigrationRegistry, processo
 		activeInterval: defaultCurrencyMigrationActiveInterval,
 		idleInterval:   defaultCurrencyMigrationIdleInterval,
 		clock:          time.Now,
+		retention:      DefaultCurrencyMigrationRetention,
 	}
 	for _, opt := range opts {
 		opt(&options)
@@ -248,6 +289,7 @@ func NewCurrencyMigrationWorker(reg registry.CurrencyMigrationRegistry, processo
 		idleInterval:   options.idleInterval,
 		clock:          options.clock,
 		pause:          options.pause,
+		retention:      options.retention,
 		stopCh:         make(chan struct{}),
 	}
 }
@@ -260,7 +302,7 @@ func (w *CurrencyMigrationWorker) Start(ctx context.Context) {
 		return
 	}
 	if w.registry == nil || w.processor == nil {
-		slog.Warn("CurrencyMigrationWorker: missing registry or processor, skipping startup")
+		slog.WarnContext(ctx, "CurrencyMigrationWorker: missing registry or processor, skipping startup")
 		return
 	}
 	w.mu.Lock()
@@ -279,9 +321,10 @@ func (w *CurrencyMigrationWorker) Start(ctx context.Context) {
 		}()
 		w.run(ctx)
 	})
-	slog.Info("Currency migration worker started",
+	slog.InfoContext(ctx, "Currency migration worker started",
 		"active_interval", w.activeInterval,
 		"idle_interval", w.idleInterval,
+		"retention", w.retention,
 	)
 }
 
@@ -350,6 +393,7 @@ func (w *CurrencyMigrationWorker) run(ctx context.Context) {
 // run loop uses this signal to switch to active cadence.
 func (w *CurrencyMigrationWorker) tick(ctx context.Context) bool {
 	w.runSweep(ctx)
+	w.runCleanup(ctx)
 
 	// Soft-pause (#1308): the recovery sweep above MUST still run while
 	// paused (it recovers crashed-worker stuck rows), but claiming a new
@@ -391,6 +435,7 @@ func (w *CurrencyMigrationWorker) runSweep(ctx context.Context) {
 		}
 		currencyMigrationTotal.WithLabelValues("failed").Inc()
 		currencyMigrationRecoverySweepsTotal.Inc()
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeCurrencyMigration))
 		// Observe the stall window — the time the row spent in `running`
 		// before the sweep flipped it. This is deliberately a separate
 		// histogram from currencyMigrationDuration (TX2 commit timings)
@@ -400,7 +445,7 @@ func (w *CurrencyMigrationWorker) runSweep(ctx context.Context) {
 		}
 
 		if err := w.processor.WriteSweepFailureAuditLog(ctx, op); err != nil {
-			slog.WarnContext(ctx, "Currency migration: failed to write recovery audit log",
+			slog.ErrorContext(ctx, "Currency migration: failed to write recovery audit log",
 				"migration_id", op.ID, "group_id", op.GroupID, "error", err,
 			)
 		}
@@ -411,6 +456,48 @@ func (w *CurrencyMigrationWorker) runSweep(ctx context.Context) {
 			"to", string(op.ToCurrency),
 			"started_at", op.StartedAt,
 		)
+	}
+}
+
+// runCleanup deletes the migrations that finished more than the retention
+// period ago, with their audit rows, at most once per
+// currencyMigrationCleanupInterval. It runs while the worker is paused as
+// well: it removes only finished rows, and a pause stops new migrations.
+func (w *CurrencyMigrationWorker) runCleanup(ctx context.Context) {
+	now := w.clock()
+	if !w.lastCleanup.IsZero() && now.Sub(w.lastCleanup) < currencyMigrationCleanupInterval {
+		return
+	}
+	w.lastCleanup = now
+	before := now.Add(-w.retention)
+
+	deleted := 0
+	for !w.stopping(ctx) {
+		n, err := w.registry.DeleteFinishedBefore(ctx, before, currencyMigrationCleanupBatch)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to delete old currency migrations", "error", err)
+			break
+		}
+		deleted += n
+		if n < currencyMigrationCleanupBatch {
+			break
+		}
+	}
+	if deleted > 0 {
+		slog.InfoContext(ctx, "Deleted old currency migrations",
+			"count", deleted,
+			"finished_before", before,
+		)
+	}
+}
+
+// stopping reports whether the worker was stopped or its context ended.
+func (w *CurrencyMigrationWorker) stopping(ctx context.Context) bool {
+	select {
+	case <-w.stopCh:
+		return true
+	default:
+		return ctx.Err() != nil
 	}
 }
 
@@ -461,7 +548,7 @@ func (w *CurrencyMigrationWorker) runWork(ctx context.Context, op *models.Curren
 		"total_before", summary.TotalBefore.String(),
 		"total_after", summary.TotalAfter.String(),
 		"acquisition_fills", summary.AcquisitionFillsCount,
-		"duration", summary.Duration.String(),
+		"duration_ms", summary.Duration.Milliseconds(),
 	)
 }
 

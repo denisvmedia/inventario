@@ -12,6 +12,7 @@ import (
 	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/inventario/db/setup"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/urlerr"
 	"go.5x5.cz/inventario/models"
 )
 
@@ -115,6 +116,10 @@ func (c *Command) setupData(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 	}
 	fmt.Println()
 
+	if err := urlerr.CheckDatabaseURL(dsn); err != nil {
+		return err
+	}
+
 	// Connect to database
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -124,7 +129,9 @@ func (c *Command) setupData(cfg *Config, dbConfig *shared.DatabaseConfig) error 
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %w", err)
+		// lib/pq parses the DSN here and returns url.Parse's error, which
+		// quotes the DSN, password included.
+		return fmt.Errorf("failed to ping database: %w", urlerr.WithoutURL(err))
 	}
 
 	// Create setup manager with os.Stdout as writer

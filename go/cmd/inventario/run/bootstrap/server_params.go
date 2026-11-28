@@ -11,6 +11,7 @@ import (
 	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/debug"
 	"go.5x5.cz/inventario/internal/aivision"
 	_ "go.5x5.cz/inventario/internal/aivision/anthropic" // register the anthropic provider via init()
@@ -182,6 +183,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 
 	params.PublicURL = strings.TrimSpace(cfg.PublicURL)
 	if err = ValidateEmailPublicURLConfig(cfg.EmailProvider, params.PublicURL, cfg.AllowStubEmail); err != nil {
+		slog.Error("Invalid email or public URL configuration", "error", err)
 		return serverSetup{}, err
 	}
 
@@ -192,6 +194,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	// off in production and is opted into only on dev / e2e / the init-data
 	// seed server.
 	params.SeedEndpointEnabled = cfg.SeedEndpointEnabled
+	// Plan surfaces (#1389). Off by default: the feature is frozen.
+	params.PlansEnabled = cfg.PlansEnabled
 	// /metrics bearer-token gate (#2102). Empty leaves /metrics open and the
 	// apiserver logs a one-time startup warning; a non-empty token requires
 	// "Authorization: Bearer <token>" on every scrape.
@@ -207,6 +211,10 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	}
 	params.EmailService = emailLifecycle.Service
 	params.SupportEmail = strings.TrimSpace(cfg.SupportEmail)
+	// One service for the API and the export worker, so the worker sends
+	// the ready email through the same email service (#2177).
+	params.PersonalDataExports = export.NewPersonalDataExportService(factorySet, params.UploadLocation,
+		export.WithPersonalDataExportNotifier(services.NewPersonalDataExportNotifier(params.EmailService, factorySet.SettingsRegistryFactory, factorySet.TenantRegistry, params.PublicURL)))
 
 	if err = wireCommodityScan(cfg, &params); err != nil {
 		slog.Error("Failed to wire commodity scan service", "error", err)

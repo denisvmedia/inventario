@@ -90,6 +90,38 @@ func TestAuditService_LogAuth_FieldPopulation(t *testing.T) {
 	c.Assert(entry.Timestamp.IsZero(), qt.IsFalse) // Timestamp set by the registry
 }
 
+// Extra goes into the row as a JSON breadcrumb with the real User-Agent
+// under "ua", as for an admin event; without it the row keeps the plain UA.
+func TestAuditService_LogAuth_Extra(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	reg := memory.NewAuditLogRegistry()
+	svc := services.NewAuditService(reg)
+	req := httptest.NewRequest("DELETE", "/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	svc.LogAuth(ctx, services.AuthEvent{
+		Action:  "group_collection_set_remove",
+		Success: true,
+		Request: req,
+		Extra:   map[string]any{"deleted_item_types": []string{"Art"}},
+	})
+	svc.LogAuth(ctx, services.AuthEvent{Action: "login", Success: true, Request: req})
+
+	entries, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 2)
+	byAction := map[string]string{}
+	for _, e := range entries {
+		byAction[e.Action] = e.UserAgent
+	}
+	c.Check(byAction["group_collection_set_remove"], qt.JSONEquals, map[string]any{
+		"deleted_item_types": []string{"Art"},
+		"ua":                 "Mozilla/5.0",
+	})
+	c.Check(byAction["login"], qt.Equals, "Mozilla/5.0")
+}
+
 func TestAuditService_LogAuth_NilRequest(t *testing.T) {
 	// When r is nil, no IP address or User-Agent should be stored in the entry.
 	c := qt.New(t)

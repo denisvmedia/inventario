@@ -132,17 +132,20 @@ func normalizeIntakeDelivery(in IntakeDelivery, file *IntakeDeliveredFile) (norm
 	if err := validation.Validate(n.Title, validation.Required, validation.RuneLength(1, intakeDocumentTitleMaxRunes)); err != nil {
 		errs["title"] = err
 	}
+	// Bytes: see models.IntakeExternalValueMaxLength.
 	if err := validation.Validate(n.SourceSystem, validation.Required, validation.Length(1, models.IntakeExternalValueMaxLength),
 		validation.Match(intakeSourceSystemPattern).Error("must be letters, digits, dots, dashes or underscores")); err != nil {
 		errs["source_system"] = err
 	}
+	// Bytes: see models.IntakeExternalValueMaxLength.
 	if err := validation.Validate(n.SourceInstance, validation.Length(0, models.IntakeExternalValueMaxLength)); err != nil {
 		errs["source_instance"] = err
 	}
+	// Bytes: see models.IntakeExternalValueMaxLength.
 	if err := validation.Validate(n.DocumentID, validation.Required, validation.Length(1, models.IntakeExternalValueMaxLength)); err != nil {
 		errs["document_id"] = err
 	}
-	if err := validation.Validate(n.SourceURL, validation.Length(0, models.IntakeSourceURLMaxLength), models.IntakeSourceURLRule); err != nil {
+	if err := validation.Validate(n.SourceURL, validation.RuneLength(0, models.IntakeSourceURLMaxLength), models.IntakeSourceURLRule); err != nil {
 		errs["source_url"] = err
 	}
 	if err := validation.Validate(n.SourceName, validation.RuneLength(0, models.IntakeSourceNameMaxRunes)); err != nil {
@@ -332,8 +335,11 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 	}
 	if result.Document.DraftID == nil {
 		if err := s.finishDelivery(ctx, set, n, file, result); err != nil {
-			return result, dropRefusedRecord(ctx, docs, result, err)
+			return result, dropRefusedRecord(ctx, set, result, err)
 		}
+	}
+	if err := s.dropExtraSession(ctx, set, result.Document); err != nil {
+		return result, err
 	}
 	if err := recordPromotion(ctx, set, result); err != nil {
 		return result, err
@@ -351,26 +357,62 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 }
 
 // dropRefusedRecord deletes the record that a delivery refused as a conflict
-// made, so its values reserve nothing. A record another delivery of the same
-// values has used since is kept. It returns err.
-func dropRefusedRecord(ctx context.Context, docs registry.IntakeDocumentRegistry, result *IntakeDeliveryResult, err error) error {
-	if !errors.Is(err, ErrIntakeDocumentConflict) || !result.Created || result.Document == nil || result.Document.FileID != nil {
+// made, so its values reserve nothing, and the file the delivery stored for
+// it, so a refused delivery adds no file to the group. A record another
+// delivery of the same values has used since is kept, and so is a file this
+// call did not store. It returns err.
+func dropRefusedRecord(ctx context.Context, set *registry.Set, result *IntakeDeliveryResult, err error) error {
+	if !errors.Is(err, ErrIntakeDocumentConflict) || !result.Created || result.Document == nil {
 		return err
 	}
 	ctx = context.WithoutCancel(ctx)
+	docs := set.IntakeDocumentRegistry
 	current, getErr := docs.Get(ctx, result.Document.ID)
 	switch {
 	case errors.Is(getErr, registry.ErrNotFound):
 		return err
 	case getErr != nil:
 		return errors.Join(err, getErr)
-	case current.FileID != nil || current.SessionID != nil || current.DraftID != nil || current.CommodityID != nil:
+	case current.SessionID != nil || current.DraftID != nil || current.CommodityID != nil:
+		return err
+	case current.FileID != nil && (result.File == nil || *current.FileID != result.File.ID):
 		return err
 	}
 	if delErr := docs.Delete(ctx, result.Document.ID); delErr != nil {
 		return errors.Join(err, delErr)
 	}
+	if current.FileID == nil {
+		return err
+	}
+	stored := result.File
+	result.File = nil
+	if dropErr := dropDeliveredFile(ctx, set, stored, result); dropErr != nil {
+		return errors.Join(err, dropErr)
+	}
 	return err
+}
+
+// dropExtraSession deletes the session a delivery of the document made and
+// could not record, since a concurrent delivery recorded its own first. That
+// delivery deletes it; when the delete fails, a later delivery of the
+// document does. The session the document names is kept.
+func (s *IntakeService) dropExtraSession(ctx context.Context, set *registry.Set, doc *models.IntakeDocument) error {
+	if doc.SessionID == nil {
+		return nil
+	}
+	session, err := set.IntakeRegistry.GetSessionByClientKey(ctx, models.IntakeDeliverySessionKeyPrefix+doc.ID)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return nil
+	case err != nil:
+		return err
+	case session.ID == *doc.SessionID:
+		return nil
+	}
+	if err := s.Delete(ctx, session.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to delete the session the delivery made again", err)
+	}
+	return nil
 }
 
 // recordDeliveredFile stores the delivered file as a file of the group and
@@ -430,10 +472,8 @@ func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n
 		// A concurrent delivery recorded its session first, and the member
 		// deleted it since: the key of a session is unique, so this one
 		// could not be made while that one was there. Making the draft
-		// would bring back what the member deleted.
-		if err := s.Delete(ctx, session.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return errxtrace.Wrap("failed to delete the session the delivery made again", err)
-		}
+		// would bring back what the member deleted. Deliver deletes this
+		// session (dropExtraSession).
 		return finishWithoutSession(ctx, set, result)
 	}
 

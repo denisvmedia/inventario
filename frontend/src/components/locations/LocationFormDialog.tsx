@@ -125,6 +125,7 @@ export function LocationFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         className="sm:max-w-lg"
         onCloseAutoFocus={onCloseAutoFocus}
         data-testid="location-form-dialog"
@@ -158,10 +159,14 @@ export function LocationFormDialog({
                   label={t("locations:dialog.iconLabel")}
                   testIdPrefix="location-icon-picker"
                   disabled={isPending}
+                  describedBy={
+                    form.formState.errors.icon?.message ? "location-icon-error" : undefined
+                  }
                 />
               )}
             />
             <FieldError
+              id="location-icon-error"
               testId="location-icon-error"
               message={form.formState.errors.icon?.message}
             />
@@ -176,10 +181,11 @@ export function LocationFormDialog({
               id="location-name"
               placeholder={t("locations:dialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={200}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
-              aria-describedby={form.formState.errors.name ? "location-name-error" : undefined}
+              aria-describedby={
+                form.formState.errors.name?.message ? "location-name-error" : undefined
+              }
               data-testid="location-name-input"
               {...form.register("name")}
             />
@@ -196,12 +202,13 @@ export function LocationFormDialog({
               id="location-description"
               placeholder={t("locations:dialog.descriptionPlaceholder")}
               autoComplete="off"
-              maxLength={200}
               rows={2}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.description}
               aria-describedby={
-                form.formState.errors.description ? "location-description-error" : undefined
+                form.formState.errors.description?.message
+                  ? "location-description-error"
+                  : undefined
               }
               data-testid="location-description-input"
               className="resize-none"
@@ -223,11 +230,10 @@ export function LocationFormDialog({
               id="location-address"
               placeholder={t("locations:dialog.addressPlaceholder")}
               autoComplete="off"
-              maxLength={2000}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.address}
               aria-describedby={
-                form.formState.errors.address ? "location-address-error" : undefined
+                form.formState.errors.address?.message ? "location-address-error" : undefined
               }
               data-testid="location-address-input"
               {...form.register("address")}

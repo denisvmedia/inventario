@@ -11,9 +11,18 @@ import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { createQueryClient } from "@/lib/query-client"
 import { TagsListPage } from "@/pages/tags/TagsListPage"
-import { commodityHandlers, groupHandlers, tagHandlers } from "@/test/handlers"
+import { toastSpies } from "@/test/global-mocks"
+import {
+  apiUrl,
+  commodityHandlers,
+  groupHandlers,
+  memberHandlers,
+  tagHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -33,8 +42,10 @@ beforeEach(() => {
   setAccessToken("good-token")
 })
 
-function renderPage() {
+function renderPage(opts: { queryClient?: ReturnType<typeof createQueryClient> } = {}) {
   return renderWithProviders({
+    withAuth: true,
+    queryClient: opts.queryClient,
     initialPath: `/g/${SLUG}/tags`,
     routes: (
       <Route
@@ -43,7 +54,9 @@ function renderPage() {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <TagsListPage />
+                <WhenRoleKnown>
+                  <TagsListPage />
+                </WhenRoleKnown>
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -52,6 +65,13 @@ function renderPage() {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 // One commodity tagged with "kitchen" so the row's preview-chip path
 // renders. The Tags page client-side aggregates commodities into a
@@ -208,6 +228,7 @@ describe("<TagsListPage />", () => {
     renderPage()
     await screen.findByTestId("tag-row-kitchen")
     const select = screen.getByTestId("tags-sort") as HTMLSelectElement
+    expect(select).toHaveAttribute("data-slot", "native-select")
     expect(select.value).toBe("label.asc")
     await user.selectOptions(select, "usage.desc")
     // The select's value tracks `${urlSort}.${urlOrder}`; after
@@ -241,6 +262,58 @@ describe("<TagsListPage />", () => {
     })
   })
 
+  // The app's global toast reports a 423, so the page adds no second toast
+  // with the request URL in it (#3011).
+  it("shows one toast when a delete is refused during a currency migration", async () => {
+    seed()
+    server.use(
+      http.delete(apiUrl(`/g/${SLUG}/tags/t2`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Locked",
+                code: "currency_migration.migration_in_progress",
+                error: { msg: "a currency migration is running" },
+              },
+            ],
+          },
+          { status: 423 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderPage({ queryClient: createQueryClient() })
+    await user.click(await screen.findByTestId("tag-row-garden-delete"))
+    await user.click(await screen.findByTestId("confirm-accept"))
+
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("Locked while a currency migration is running.")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the server's reason when a delete is refused", async () => {
+    seed()
+    server.use(
+      http.delete(apiUrl(`/g/${SLUG}/tags/t2`), () =>
+        HttpResponse.json(
+          { errors: [{ status: "409", detail: "the tag is used by a saved view" }] },
+          { status: 409 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderPage({ queryClient: createQueryClient() })
+    await user.click(await screen.findByTestId("tag-row-garden-delete"))
+    await user.click(await screen.findByTestId("confirm-accept"))
+
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("the tag is used by a saved view")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+  })
+
   it("renders the error block when /tags returns 500", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -268,5 +341,19 @@ describe("<TagsListPage />", () => {
     await screen.findByTestId("tag-row-kitchen")
     const results = await axe(baseElement)
     expect(results).toHaveNoViolations()
+  })
+})
+
+describe("<TagsListPage /> as a viewer (#2886)", () => {
+  // The server takes tag writes from users, admins and owners only.
+  it("offers no create, rename or delete", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seed()
+    renderPage()
+    expect(await screen.findByTestId("tag-row-kitchen")).toBeVisible()
+    expect(screen.queryByTestId("tags-create-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("tags-inline-create-toggle")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("tag-row-kitchen-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("tag-row-kitchen-delete")).not.toBeInTheDocument()
   })
 })

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"math"
 	"slices"
@@ -153,8 +154,11 @@ func copyIntakeSource(s *models.IntakeSource) *models.IntakeSource {
 func copyIntakeCandidate(cand *models.IntakeCandidate) *models.IntakeCandidate {
 	c := *cand
 	c.AcceptedFields = slices.Clone(cand.AcceptedFields)
+	c.AcceptedCustomFields = slices.Clone(cand.AcceptedCustomFields)
 	c.Fields = make(models.IntakeFields, len(cand.Fields))
 	maps.Copy(c.Fields, cand.Fields)
+	c.CustomFields = make(models.IntakeFields, len(cand.CustomFields))
+	maps.Copy(c.CustomFields, cand.CustomFields)
 	if cand.DraftID != nil {
 		c.DraftID = new(*cand.DraftID)
 	}
@@ -477,6 +481,9 @@ func (r *IntakeRegistry) ReviewCandidate(_ context.Context, id string, review re
 	if review.AcceptedFields != nil {
 		cand.AcceptedFields = slices.Clone(*review.AcceptedFields)
 	}
+	if review.AcceptedCustomFields != nil {
+		cand.AcceptedCustomFields = slices.Clone(*review.AcceptedCustomFields)
+	}
 	if review.Quantity != nil {
 		cand.Quantity = *review.Quantity
 	}
@@ -557,9 +564,11 @@ func (r *IntakeRegistry) ResumeSession(_ context.Context, sessionID string, now 
 }
 
 // requeueIntakeSource puts a source back in the queue with a fresh allowance
-// of attempts.
+// of attempts. A requeued source is no longer a failure an operator
+// discarded: if it fails again, the failed jobs show it again (#1307).
 func requeueIntakeSource(src *models.IntakeSource, now time.Time) {
 	src.Status = models.IntakeSourcePending
+	src.DiscardedAt = nil
 	src.RetryBase = src.Attempts
 	src.NextAttemptAt = now
 	src.ClaimedAt = nil
@@ -616,11 +625,11 @@ func (r *IntakeRegistry) countQueued() int {
 	return n
 }
 
-func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error) {
+func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (registry.IntakeSweep, error) {
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	n := 0
+	var sweep registry.IntakeSweep
 	for _, src := range st.sources {
 		if !r.visible(src.GroupID) {
 			continue
@@ -633,6 +642,7 @@ func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now
 				src.Status = models.IntakeSourceFailed
 				src.WaitReason = ""
 				src.ErrorCode = errorCode
+				sweep.Failed++
 			} else {
 				src.Status = models.IntakeSourcePending
 				src.NextAttemptAt = now
@@ -644,9 +654,9 @@ func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now
 			continue
 		}
 		src.UpdatedAt = now
-		n++
+		sweep.Changed++
 	}
-	return n, nil
+	return sweep, nil
 }
 
 func (r *IntakeRegistry) ClaimNextSource(_ context.Context, now time.Time) (*models.IntakeSource, error) {
@@ -699,12 +709,19 @@ func (r *IntakeRegistry) scanning(sourceID string, attempt int) (*models.IntakeS
 	return src, nil
 }
 
-func (r *IntakeRegistry) StoreScan(_ context.Context, sourceID string, attempt int, scan registry.IntakeScan, now time.Time) error {
+func (r *IntakeRegistry) StoreScan(ctx context.Context, sourceID string, attempt int, scan registry.IntakeScan, now time.Time) error {
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	src, err := r.inScan(sourceID, attempt)
 	if err != nil {
+		return err
+	}
+	// The files change first, under st.mu, so a reader that sees the source
+	// scanned sees its files changed. The memory backend has no rollback: a
+	// failure leaves the source in its scan, and the files changed so far
+	// keep the change, which a scan makes only once.
+	if err := r.updateScannedFiles(ctx, src, scan.Files); err != nil {
 		return err
 	}
 	for cid, cand := range st.candidates {
@@ -724,6 +741,43 @@ func (r *IntakeRegistry) StoreScan(_ context.Context, sourceID string, attempt i
 	return nil
 }
 
+// updateScannedFiles writes a scan's file updates. The memory file registry
+// does not check tags, so Tags need no work here. The caller holds st.mu.
+func (r *IntakeRegistry) updateScannedFiles(ctx context.Context, src *models.IntakeSource, updates []registry.IntakeFileUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	files := r.factory.fileFactory.CreateServiceRegistry()
+	for _, u := range updates {
+		file, err := files.Get(ctx, u.FileID)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to read a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
+		if file.TenantID != src.TenantID || file.GroupID != src.GroupID || file.IsTrashed() {
+			continue
+		}
+		next, changed := u.Apply(*file)
+		if !changed {
+			continue
+		}
+		stored := *file
+		stored.Title = next.Title
+		stored.Tags = next.Tags
+		stored.UpdatedAt = next.UpdatedAt
+		_, err = files.Update(ctx, stored)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to update a scanned file", err, errx.Attrs("file_id", u.FileID))
+		}
+	}
+	return nil
+}
+
 // storeCandidates stores the products found in src, pending and in the given
 // order. The caller holds st.mu.
 func (st *intakeState) storeCandidates(src *models.IntakeSource, candidates []models.IntakeCandidate, now time.Time) error {
@@ -731,6 +785,10 @@ func (st *intakeState) storeCandidates(src *models.IntakeSource, candidates []mo
 		fields, err := cloneIntakeFields(cand.Fields)
 		if err != nil {
 			return errxtrace.Wrap("failed to copy candidate fields", err)
+		}
+		custom, err := cloneIntakeFields(cand.CustomFields)
+		if err != nil {
+			return errxtrace.Wrap("failed to copy candidate custom fields", err)
 		}
 		cand.TenantGroupAwareEntityID = models.TenantGroupAwareEntityID{
 			EntityID:        models.EntityID{ID: uuid.NewString(), UUID: uuid.NewString()},
@@ -742,7 +800,9 @@ func (st *intakeState) storeCandidates(src *models.IntakeSource, candidates []mo
 		cand.SourceID = src.ID
 		cand.SortOrder = i
 		cand.Fields = fields
+		cand.CustomFields = custom
 		cand.AcceptedFields = slices.Clone(cand.AcceptedFields)
+		cand.AcceptedCustomFields = slices.Clone(cand.AcceptedCustomFields)
 		if cand.Quantity < 1 {
 			cand.Quantity = 1
 		}

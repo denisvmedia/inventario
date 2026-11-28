@@ -2,6 +2,7 @@
 // (templating, queueing, retries, handler wiring) without external email
 // dependencies.
 //
-// It logs metadata and always reports success, making it suitable for local
-// development and unit tests where delivery side effects are undesirable.
+// It logs that a message was sent and always reports success, making it
+// suitable for local development and unit tests where delivery side effects
+// are undesirable.
 package stub

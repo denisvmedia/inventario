@@ -97,7 +97,10 @@ const (
 	// IntakeClientKeyMaxLength caps the idempotency key of a session.
 	IntakeClientKeyMaxLength = 128
 	// IntakeExternalValueMaxLength caps each part of a source's external
-	// identity.
+	// identity, in bytes. The unique indexes on intake_sources and
+	// intake_documents hold the system, the instance and the document id
+	// together, and a PostgreSQL btree entry is limited to about 2.7 kB, which
+	// three values of 255 characters could pass.
 	IntakeExternalValueMaxLength = 255
 	// IntakeCandidateQuantityMax caps the reviewed quantity of a product.
 	IntakeCandidateQuantityMax = 100000
@@ -220,7 +223,7 @@ func (*IntakeSession) Validate() error {
 func (s *IntakeSession) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, s,
 		validation.Field(&s.TenantGroupAwareEntityID),
-		validation.Field(&s.ClientKey, rules.NotEmpty, validation.Length(1, IntakeClientKeyMaxLength), clientKeyRule),
+		validation.Field(&s.ClientKey, rules.NotEmpty, validation.RuneLength(1, IntakeClientKeyMaxLength), clientKeyRule),
 		validation.Field(&s.Origin, validation.Required, validation.In(IntakeOriginUpload, IntakeOriginExternal)),
 	)
 }
@@ -315,6 +318,11 @@ type IntakeSource struct {
 
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
+
+	// DiscardedAt is when an operator discarded the failed scan (#1307). The
+	// source stays failed in its session; it only leaves the failed jobs.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt *time.Time `json:"-" db:"discarded_at" userinput:"false"`
 }
 
 // IntakeSourceIndexes defines the postgres indexes for intake_sources.
@@ -338,6 +346,11 @@ type IntakeSourceIndexes struct {
 
 	// Composite index for tenant+group RLS-filtered queries and the purges.
 	//ptah:schema:index name="idx_intake_sources_tenant_group" fields="tenant_id,group_id" table="intake_sources"
+	_ int
+
+	// The failed-jobs list and its depth gauge read the failed scans that
+	// nobody retried or discarded (#1307).
+	//ptah:schema:index name="idx_intake_sources_failed" fields="group_id,updated_at" table="intake_sources" condition="status = 'failed' AND discarded_at IS NULL"
 	_ int
 }
 
@@ -372,10 +385,11 @@ func (s *IntakeSource) ValidateWithContext(ctx context.Context) error {
 		)),
 		validation.Field(&s.Attempts, validation.Min(0)),
 		validation.Field(&s.RetryBase, validation.Min(0), validation.Max(s.Attempts)),
+		// Bytes: see IntakeExternalValueMaxLength.
 		validation.Field(&s.ExternalSystem, validation.Length(0, IntakeExternalValueMaxLength),
 			validation.When(s.ExternalDocumentID != "", validation.Required)),
-		validation.Field(&s.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),
-		validation.Field(&s.ExternalDocumentID, validation.Length(0, IntakeExternalValueMaxLength)),
+		validation.Field(&s.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),   // Bytes: see IntakeExternalValueMaxLength.
+		validation.Field(&s.ExternalDocumentID, validation.Length(0, IntakeExternalValueMaxLength)), // Bytes: see IntakeExternalValueMaxLength.
 	)
 }
 
@@ -384,10 +398,10 @@ func (s *IntakeSource) ValidateWithContext(ctx context.Context) error {
 // client key "intake:<candidate id>", so a retry, a second device or a lost
 // response finds the draft instead of making another one.
 //
-// Fields is what the scan read, with the confidence of each value. Selected,
-// AcceptedFields and Quantity are the member's review: whether to keep the
-// product, which of the read values go into the draft, and how many identical
-// units it covers. A quantity above one stays one item with that count, as an
+// Fields and CustomFields are what the scan read, with the confidence of each
+// value. Selected, AcceptedFields, AcceptedCustomFields and Quantity are the
+// member's review: whether to keep the product, which of the read values go
+// into the draft, and how many identical units it covers. A quantity above one stays one item with that count, as an
 // item's count always means a bundle of identical units.
 //
 //ptah:schema:rls:enable table="intake_candidates" comment="Enable RLS for multi-tenant intake candidate isolation"
@@ -417,6 +431,16 @@ type IntakeCandidate struct {
 
 	//ptah:schema:field name="accepted_fields" type="JSONB"
 	AcceptedFields ValuerSlice[string] `json:"accepted_fields" db:"accepted_fields"`
+
+	// CustomFields is what the scan read for the group's custom fields, by
+	// field ID, a select field's value as its option ID.
+	//ptah:schema:field name="custom_fields" type="JSONB" not_null="true" default_expr="'{}'"
+	CustomFields IntakeFields `json:"custom_fields" db:"custom_fields" userinput:"false"`
+
+	// AcceptedCustomFields are the IDs of the custom fields whose scanned
+	// value goes into the draft.
+	//ptah:schema:field name="accepted_custom_fields" type="JSONB"
+	AcceptedCustomFields ValuerSlice[string] `json:"accepted_custom_fields" db:"accepted_custom_fields"`
 
 	//ptah:schema:field name="quantity" type="INTEGER" not_null="true" default="1"
 	Quantity int `json:"quantity" db:"quantity"`
@@ -510,7 +534,9 @@ func IntakeDraftClientKey(candidateID string) string {
 // document another system delivered (#2809), from the document's identity.
 // The product of a delivery is the only one of its source, and the key does
 // not change when the session is deleted and made again, so a repeat of the
-// delivery finds the draft without the session.
+// delivery finds the draft without the session. The postgres promotion of a
+// draft computes the same digest in SQL to find the document of a delivered
+// draft that the document does not name yet.
 func IntakeDeliveredDraftClientKey(system, instance, documentID string) string {
 	sum := sha256.Sum256([]byte(system + "\x00" + instance + "\x00" + documentID))
 	return IntakeDeliveredDraftKeyPrefix + hex.EncodeToString(sum[:])
@@ -534,6 +560,12 @@ func (c *IntakeCandidate) IsUnfinished() bool {
 // Accepts reports whether the member accepts the scanned value of field.
 func (c *IntakeCandidate) Accepts(field string) bool {
 	return slices.Contains(c.AcceptedFields, field)
+}
+
+// AcceptsCustomField reports whether the member accepts the scanned value of
+// the custom field with the given ID.
+func (c *IntakeCandidate) AcceptsCustomField(id string) bool {
+	return slices.Contains(c.AcceptedCustomFields, id)
 }
 
 func (*IntakeCandidate) Validate() error {

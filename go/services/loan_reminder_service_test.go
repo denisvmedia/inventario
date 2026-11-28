@@ -83,6 +83,10 @@ func (*recordingLoanEmailService) SendItemReminderEmail(_ context.Context, _, _,
 	return nil
 }
 
+func (*recordingLoanEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (r *recordingLoanEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -151,6 +155,10 @@ func (failingLoanEmailService) SendMaintenanceReminderEmail(_ context.Context, _
 }
 
 func (failingLoanEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
+func (failingLoanEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
 	return nil
 }
 func (failingLoanEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
@@ -501,4 +509,48 @@ func newLoanReminderServiceFixture(c *qt.C) (context.Context, *registry.Set, str
 	})
 	c.Assert(err, qt.IsNil)
 	return ctx, regSet, commodity.ID, factorySet
+}
+
+// loanReminderEventPayload runs one sweep over a loan due today and returns
+// the payload of the loan_reminder_sent event it wrote.
+func loanReminderEventPayload(c *qt.C, emailSvc services.EmailService) (models.CommodityEventPayload, string) {
+	c.Helper()
+	ctx, regSet, commodityID, factorySet := newLoanReminderServiceFixture(c)
+	dueDate := models.Date("2026-05-17")
+	loan, err := regSet.CommodityLoanRegistry.Create(ctx, models.CommodityLoan{
+		CommodityID:  commodityID,
+		BorrowerName: "Pavel",
+		LentAt:       "2026-05-10",
+		DueBackAt:    models.PDate(&dueDate),
+	})
+	c.Assert(err, qt.IsNil)
+
+	svc := services.NewLoanReminderService(factorySet, emailSvc, nil)
+	_, err = svc.RemindOnce(ctx, time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC))
+	c.Assert(err, qt.IsNil)
+
+	events, _, err := regSet.CommodityEventRegistry.ListByCommodity(ctx, commodityID, 0, 10, registry.CommodityEventListOptions{
+		Kinds: []models.CommodityEventKind{models.CommodityEventKindLoanReminderSent},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	return events[0].After, loan.ID
+}
+
+// The event names the loan, and the loan's creator is the recipient; it
+// does not copy the recipient's address.
+func TestLoanReminderService_EventRecordsTheSendWithoutTheAddress(t *testing.T) {
+	c := qt.New(t)
+
+	payload, loanID := loanReminderEventPayload(c, &recordingLoanEmailService{})
+
+	c.Assert(payload, qt.DeepEquals, models.CommodityEventPayload{"kind": "due_soon", "loan_id": loanID, "emailed": true})
+}
+
+func TestLoanReminderService_EventWithoutAnEmailServiceRecordsNoSend(t *testing.T) {
+	c := qt.New(t)
+
+	payload, loanID := loanReminderEventPayload(c, nil)
+
+	c.Assert(payload, qt.DeepEquals, models.CommodityEventPayload{"kind": "due_soon", "loan_id": loanID, "emailed": false})
 }

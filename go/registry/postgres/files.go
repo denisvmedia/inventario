@@ -128,26 +128,27 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 	return createdFile, nil
 }
 
-// Update writes the file's own columns. It leaves the links alone, keeps the
-// stored checksum when file carries none, and never writes the legacy link
-// columns: those belong to MoveLegacyLinks, and the row is locked before they
-// are read so a concurrent move cannot be undone.
+// Update writes the file's own columns. It leaves the links alone and keeps
+// the stored checksum when file carries none. It neither reads nor writes the
+// legacy link columns (see models.LegacyFileLink), so an edit cannot undo a
+// concurrent MoveLegacyLinks and keeps working once the columns are dropped.
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	reg := r.newSQLRegistry()
 
 	err := reg.UpdateWithPrepare(ctx, file, func(ctx context.Context, tx *sqlx.Tx, stored models.FileEntity, next *models.FileEntity) error {
+		// The tag locks come before the file's row lock, the order a tag
+		// rename or delete takes them in (see ensureTagRowsInTx).
+		if err := ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(next.Tags)); err != nil {
+			return err
+		}
 		var current struct {
-			LegacyType string `db:"linked_entity_type"`
-			LegacyID   string `db:"linked_entity_id"`
-			LegacyMeta string `db:"linked_entity_meta"`
-			SHA256     string `db:"sha256"`
-			Trashed    bool   `db:"trashed"`
+			SHA256   string `db:"sha256"`
+			Oriented bool   `db:"thumbnails_oriented"`
+			Trashed  bool   `db:"trashed"`
 		}
 		lock := fmt.Sprintf(`
-			SELECT COALESCE(linked_entity_type, '') AS linked_entity_type,
-				COALESCE(linked_entity_id, '') AS linked_entity_id,
-				COALESCE(linked_entity_meta, '') AS linked_entity_meta,
-				sha256,
+			SELECT sha256,
+				thumbnails_oriented,
 				deleted_at IS NOT NULL AS trashed
 			FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Files())
 		if err := tx.QueryRowxContext(ctx, lock, next.ID).StructScan(&current); err != nil {
@@ -160,15 +161,14 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", stored.ID))
 		}
 		next.ClearTrashState()
-		next.LegacyFileLink = models.LegacyFileLink{
-			LegacyLinkedEntityType: current.LegacyType,
-			LegacyLinkedEntityID:   current.LegacyID,
-			LegacyLinkedEntityMeta: current.LegacyMeta,
-		}
 		if next.File != nil && next.SHA256 == "" {
 			next.SHA256 = current.SHA256
 		}
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindFile, []string(next.Tags))
+		// Only writing the thumbnails sets the mark, and an edit carries none.
+		if next.File != nil && current.Oriented {
+			next.ThumbnailsOriented = true
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update file", err)
@@ -469,7 +469,8 @@ func (r *FileRegistry) FirstPhotos(ctx context.Context, commodityIDs []string) (
 			return nil
 		}
 
-		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1)`, r.tableNames.Files()), fileIDs)
+		// A file moved to Trash after the pick above is not a cover any more.
+		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1) AND %s`, r.tableNames.Files(), liveRow), fileIDs)
 		if err != nil {
 			return err
 		}

@@ -139,6 +139,7 @@ export function AreaFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         className="sm:max-w-md"
         onCloseAutoFocus={onCloseAutoFocus}
         data-testid="area-form-dialog"
@@ -172,10 +173,15 @@ export function AreaFormDialog({
                   label={t("locations:areaDialog.iconLabel")}
                   testIdPrefix="area-icon-picker"
                   disabled={isPending}
+                  describedBy={form.formState.errors.icon?.message ? "area-icon-error" : undefined}
                 />
               )}
             />
-            <FieldError testId="area-icon-error" message={form.formState.errors.icon?.message} />
+            <FieldError
+              id="area-icon-error"
+              testId="area-icon-error"
+              message={form.formState.errors.icon?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -187,10 +193,9 @@ export function AreaFormDialog({
               id="area-name"
               placeholder={t("locations:areaDialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={200}
               disabled={isPending}
               aria-invalid={!!form.formState.errors.name}
-              aria-describedby={form.formState.errors.name ? "area-name-error" : undefined}
+              aria-describedby={form.formState.errors.name?.message ? "area-name-error" : undefined}
               data-testid="area-name-input"
               {...form.register("name")}
             />
@@ -222,7 +227,9 @@ export function AreaFormDialog({
                       className="w-full"
                       aria-invalid={!!form.formState.errors.location_id}
                       aria-describedby={
-                        form.formState.errors.location_id ? "area-location-error" : undefined
+                        form.formState.errors.location_id?.message
+                          ? "area-location-error"
+                          : undefined
                       }
                       data-testid="area-location-select"
                     >

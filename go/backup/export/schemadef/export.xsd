@@ -115,6 +115,8 @@
             <xs:enumeration value="lost"/>
             <xs:enumeration value="disposed"/>
             <xs:enumeration value="written_off"/>
+            <xs:enumeration value="donated"/>
+            <xs:enumeration value="stolen"/>
         </xs:restriction>
     </xs:simpleType>
 

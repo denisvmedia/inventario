@@ -13,6 +13,7 @@ import (
 	"gocloud.dev/gcerrors"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -66,7 +67,9 @@ const intakeOneItemHint = "All attached files show the SAME single item from dif
 // scan service as the session's author, so the author's hourly scan limit
 // and the audit trail apply exactly as for a scan in the item form. The
 // outcome is stored once; a source is never scanned again unless a member
-// asks for a rescan or resumes a failed one.
+// asks for a rescan or resumes a failed one. Once the outcome is stored, the
+// scan's suggestion for each file, a document tag and a title, is applied to
+// the file where it takes nothing the member set (see intakeFileSuggestion).
 type IntakeWorker struct {
 	factorySet     *registry.FactorySet
 	scan           *CommodityScanService
@@ -154,13 +157,13 @@ func NewIntakeWorker(factorySet *registry.FactorySet, scan *CommodityScanService
 // then either.
 func (w *IntakeWorker) Start(ctx context.Context) {
 	if !w.scan.Enabled() {
-		slog.Info("Intake worker not started: no AI scan provider is configured")
+		slog.InfoContext(ctx, "Intake worker not started: no AI scan provider is configured")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Intake worker started", "interval", w.interval)
+	slog.InfoContext(ctx, "Intake worker started", "interval", w.interval)
 }
 
 // Stop signals the worker to stop and waits for the scan in progress.
@@ -202,10 +205,13 @@ func (w *IntakeWorker) Tick(ctx context.Context) int {
 	}
 	reg := w.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
 	now := w.clock()
-	if n, err := reg.SweepStuckSources(ctx, now.Add(-w.stuckAfter), now, intakeMaxAttempts, IntakeErrorProviderError); err != nil {
-		slog.Error("Intake worker: failed to sweep stuck sources", "error", err)
-	} else if n > 0 {
-		slog.Warn("Intake worker: requeued stuck sources", "count", n)
+	if sweep, err := reg.SweepStuckSources(ctx, now.Add(-w.stuckAfter), now, intakeMaxAttempts, IntakeErrorProviderError); err != nil {
+		slog.ErrorContext(ctx, "Intake worker: failed to sweep stuck sources", "error", err)
+	} else if sweep.Changed > 0 {
+		slog.WarnContext(ctx, "Intake worker: requeued stuck sources", "count", sweep.Changed, "failed", sweep.Failed)
+		for range sweep.Failed {
+			metrics.RecordJobDeadLettered(string(models.WorkerTypeIntake))
+		}
 	}
 	processed := 0
 	for processed < w.perTick && !w.stopped(ctx) {
@@ -214,7 +220,7 @@ func (w *IntakeWorker) Tick(ctx context.Context) int {
 			break
 		}
 		if err != nil {
-			slog.Error("Intake worker: failed to claim a source", "error", err)
+			slog.ErrorContext(ctx, "Intake worker: failed to claim a source", "error", err)
 			break
 		}
 		processed++
@@ -235,7 +241,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 
 	author, err := w.authorContext(ctx, src)
 	if err != nil {
-		log.Warn("Intake worker: the session's author cannot scan in the group", "error", err)
+		log.WarnContext(ctx, "Intake worker: the session's author cannot scan in the group", "error", err)
 		w.fail(ctx, reg, src, IntakeErrorAuthorUnavailable, log)
 		return
 	}
@@ -245,9 +251,9 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 	workCtx, cancel := context.WithTimeout(author.ctx, w.stuckAfter-intakeStuckMargin/2)
 	defer cancel()
 
-	photos, code, err := w.readFiles(workCtx, src)
+	files, code, err := w.readFiles(workCtx, src)
 	if err != nil {
-		log.Error("Intake worker: failed to read the source files", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to read the source files", "error", err)
 		w.retryOrFail(ctx, reg, src, IntakeErrorFileUnreadable, log)
 		return
 	}
@@ -256,10 +262,12 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		return
 	}
 
+	scanFields, fieldDefs := w.customFields(author.ctx, log)
 	input := ScanInput{
-		Photos:                photos,
+		Photos:                files.photos,
 		PreferredCurrencyCode: string(author.group.GroupCurrency),
 		ItemTypes:             w.itemTypes(author.ctx, log),
+		CustomFields:          scanFields,
 	}
 	if src.OneItem {
 		input.HintFromUser = intakeOneItemHint
@@ -270,7 +278,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		return
 	}
 
-	candidates := intakeCandidatesFromScan(result)
+	candidates := intakeCandidatesFromScan(result, fieldDefs)
 	if src.OneItem && len(candidates) > 1 {
 		// The files show one item: keep the most prominent product.
 		candidates = candidates[:1]
@@ -283,14 +291,24 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 	for _, warn := range result.Warnings {
 		warnings = append(warnings, models.IntakeWarning{Code: warn.Code, Field: warn.Field, Detail: warn.Detail})
 	}
-	err = reg.StoreScan(ctx, src.ID, src.Attempts, registry.IntakeScan{Candidates: candidates, Warnings: warnings}, w.clock())
+	scan := registry.IntakeScan{Candidates: candidates, Warnings: warnings}
+	// The file suggestions are stored with the scan, so a result dropped
+	// below leaves the files as they are. A file delivered from another
+	// system keeps the title it came with.
+	fileUpdates := &intakeFileUpdates{}
+	if !src.HasExternalIdentity() {
+		fileUpdates = w.fileUpdates(author.ctx, files.ids, result.Files, log)
+		scan.Files = fileUpdates.updates
+	}
+	err = reg.StoreScan(ctx, src.ID, src.Attempts, scan, w.clock())
 	switch {
 	case errors.Is(err, registry.ErrIntakeSourceChanged):
-		log.Info("Intake worker: the source changed during the scan; result dropped")
+		log.InfoContext(ctx, "Intake worker: the source changed during the scan; result dropped")
 	case err != nil:
-		log.Error("Intake worker: failed to store the scan", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to store the scan", "error", err)
 	default:
-		log.Info("Intake worker: source scanned", "candidates", len(candidates))
+		log.InfoContext(ctx, "Intake worker: source scanned", "candidates", len(candidates))
+		fileUpdates.logStored(ctx, log)
 	}
 }
 
@@ -340,54 +358,83 @@ func (w *IntakeWorker) itemTypes(ctx context.Context, log *slog.Logger) []ScanIt
 			return ScanItemTypes(types)
 		}
 	}
-	log.Warn("Intake worker: item types unavailable, offering the built-in ones", "error", err)
+	log.WarnContext(ctx, "Intake worker: item types unavailable, offering the built-in ones", "error", err)
 	return nil
+}
+
+// customFields lists the group's custom fields for the scan to fill, as the
+// single-item scan offers them, with the definitions by ID that check the
+// values it reads. When the list cannot be read the scan goes on without
+// them.
+func (w *IntakeWorker) customFields(ctx context.Context, log *slog.Logger) ([]ScanCustomField, map[string]*models.CustomFieldDefinition) {
+	reg, err := w.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(ctx)
+	if err == nil {
+		var defs []*models.CustomFieldDefinition
+		if defs, err = reg.List(ctx); err == nil {
+			byID := make(map[string]*models.CustomFieldDefinition, len(defs))
+			for _, d := range defs {
+				byID[d.ID] = d
+			}
+			return ScanCustomFields(defs), byID
+		}
+	}
+	log.WarnContext(ctx, "Intake worker: custom fields unavailable, scanning without them", "error", err)
+	return nil, nil
+}
+
+// intakeFiles are the files of a source as the scan gets them.
+type intakeFiles struct {
+	photos []ScanPhotoInput
+	// ids are the IDs of the files in the order of photos, which is the
+	// order the scan numbers them in.
+	ids []string
 }
 
 // readFiles reads the live files of the source. A code reports a problem
 // with the files themselves, which a retry cannot fix; an error one that
 // may pass.
-func (w *IntakeWorker) readFiles(ctx context.Context, src *models.IntakeSource) ([]ScanPhotoInput, string, error) {
+func (w *IntakeWorker) readFiles(ctx context.Context, src *models.IntakeSource) (intakeFiles, string, error) {
 	files, err := w.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, "", err
+		return intakeFiles{}, "", err
 	}
 	linked, err := files.ListByLinkedEntity(ctx, models.FileLinkIntake, src.ID)
 	if err != nil {
-		return nil, "", err
+		return intakeFiles{}, "", err
 	}
 	if len(linked) == 0 {
-		return nil, IntakeErrorNoFiles, nil
+		return intakeFiles{}, IntakeErrorNoFiles, nil
 	}
 	cfg := w.scan.Config()
 	if cfg.MaxPhotos > 0 && len(linked) > cfg.MaxPhotos {
-		return nil, IntakeErrorTooManyFiles, nil
+		return intakeFiles{}, IntakeErrorTooManyFiles, nil
 	}
 	b, err := blob.OpenBucket(ctx, w.uploadLocation)
 	if err != nil {
-		return nil, "", err
+		return intakeFiles{}, "", err
 	}
 	defer b.Close()
 
-	photos := make([]ScanPhotoInput, 0, len(linked))
+	out := intakeFiles{photos: make([]ScanPhotoInput, 0, len(linked)), ids: make([]string, 0, len(linked))}
 	for _, file := range linked {
 		if file.File == nil || !AllowedMIMETypes[file.MIMEType] {
-			return nil, IntakeErrorUnsupportedFile, nil
+			return intakeFiles{}, IntakeErrorUnsupportedFile, nil
 		}
 		if cfg.MaxPhotoBytes > 0 && file.SizeBytes > int64(cfg.MaxPhotoBytes) {
-			return nil, IntakeErrorFileTooLarge, nil
+			return intakeFiles{}, IntakeErrorFileTooLarge, nil
 		}
 		data, code, err := readIntakeBlob(ctx, b, file.OriginalPath, cfg.MaxPhotoBytes)
 		if err != nil || code != "" {
-			return nil, code, err
+			return intakeFiles{}, code, err
 		}
-		photos = append(photos, ScanPhotoInput{
+		out.photos = append(out.photos, ScanPhotoInput{
 			Filename:    file.Path + file.Ext,
 			ContentType: file.MIMEType,
 			Data:        data,
 		})
+		out.ids = append(out.ids, file.ID)
 	}
-	return photos, "", nil
+	return out, "", nil
 }
 
 func readIntakeBlob(ctx context.Context, b *blob.Bucket, key string, maxBytes int) ([]byte, string, error) {
@@ -440,7 +487,7 @@ func (w *IntakeWorker) handleScanError(ctx context.Context, reg registry.IntakeR
 	case errors.Is(err, ErrScanNoPhotos):
 		w.fail(ctx, reg, src, IntakeErrorNoFiles, log)
 	default:
-		log.Error("Intake worker: scan failed", "error", err)
+		log.ErrorContext(ctx, "Intake worker: scan failed", "error", err)
 		w.retryOrFail(ctx, reg, src, IntakeErrorProviderError, log)
 	}
 }
@@ -458,13 +505,17 @@ func (w *IntakeWorker) retryOrFail(ctx context.Context, reg registry.IntakeRegis
 
 func (w *IntakeWorker) requeue(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, next time.Time, reason string, log *slog.Logger) {
 	if err := reg.RequeueSource(ctx, src.ID, src.Attempts, next, reason); err != nil && !errors.Is(err, registry.ErrIntakeSourceChanged) {
-		log.Error("Intake worker: failed to requeue the source", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to requeue the source", "error", err)
 	}
 }
 
 func (w *IntakeWorker) fail(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, code string, log *slog.Logger) {
-	log.Info("Intake worker: source failed", "code", code)
-	if err := reg.FailSource(ctx, src.ID, src.Attempts, code); err != nil && !errors.Is(err, registry.ErrIntakeSourceChanged) {
-		log.Error("Intake worker: failed to mark the source failed", "error", err)
+	log.InfoContext(ctx, "Intake worker: source failed", "code", code)
+	err := reg.FailSource(ctx, src.ID, src.Attempts, code)
+	switch {
+	case err == nil:
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeIntake))
+	case !errors.Is(err, registry.ErrIntakeSourceChanged):
+		log.ErrorContext(ctx, "Intake worker: failed to mark the source failed", "error", err)
 	}
 }

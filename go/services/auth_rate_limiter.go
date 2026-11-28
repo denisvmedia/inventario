@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"go.5x5.cz/inventario/internal/redisurl"
 )
 
 const (
@@ -198,7 +200,7 @@ func NewRedisAuthRateLimiter(client *redis.Client) *RedisAuthRateLimiter {
 // Startup connectivity is checked with PING; failures are logged as warnings,
 // but the limiter is still returned to keep startup consistent with fail-open design.
 func NewRedisAuthRateLimiterFromURL(redisURL string) (*RedisAuthRateLimiter, error) {
-	opts, err := redis.ParseURL(redisURL)
+	opts, err := redisurl.Parse(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
 	}

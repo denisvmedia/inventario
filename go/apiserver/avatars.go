@@ -257,7 +257,24 @@ func signedAvatarURL(r *http.Request, signer *services.FileSigningService, subje
 	}
 	signed, err := signer.GenerateAvatarURL(subject.ID, *subject.AvatarPath, viewerID, groupID, services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.Warn("Failed to sign an avatar URL", "subject_id", subject.ID, "viewer_id", viewerID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "user_id", subject.ID, "viewer_user_id", viewerID, "error", err)
+		return ""
+	}
+	return signed
+}
+
+// operatorAvatarURL returns a URL the back-office operator in r's context can
+// load the subject's photo from, for the admin pages, or "" as for
+// signedAvatarURL. An operator may see every user's photo: the admin pages list
+// the users and group members of every tenant.
+func operatorAvatarURL(r *http.Request, signer *services.FileSigningService, subject *models.User) string {
+	operator := appctx.BackofficeUserFromContext(r.Context())
+	if signer == nil || operator == nil || subject == nil || subject.AvatarPath == nil || *subject.AvatarPath == "" {
+		return ""
+	}
+	signed, err := signer.GenerateOperatorAvatarURL(subject.ID, *subject.AvatarPath, operator.ID, services.ExtractSessionBinding(r))
+	if err != nil {
+		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "user_id", subject.ID, "admin_id", operator.ID, "error", err)
 		return ""
 	}
 	return signed
@@ -279,11 +296,14 @@ func stampOwnAvatarURL(r *http.Request, signer *services.FileSigningService, use
 //
 // The URL proves that the server decided, when it minted it, that the viewer
 // may see the subject's photo. That decision is checked again here, because a
-// membership can end, or an account be disabled, before the URL expires.
+// membership can end, or an account be disabled, before the URL expires. A URL
+// minted for a back-office operator (operatorAvatarURL) is checked against the
+// operator instead: they must still exist and be active.
 type signedAvatarsAPI struct {
 	signer        *services.FileSigningService
 	users         registry.UserRegistry
 	memberships   registry.GroupMembershipRegistry
+	operators     registry.BackofficeUserRegistry
 	avatarService *services.AvatarService
 }
 
@@ -295,6 +315,7 @@ func SignedAvatars(params Params) func(r chi.Router) {
 		signer:        services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 		users:         params.FactorySet.UserRegistry,
 		memberships:   params.FactorySet.GroupMembershipRegistry,
+		operators:     params.FactorySet.BackofficeUserRegistry,
 		avatarService: services.NewAvatarService(params.FactorySet, params.UploadLocation),
 	}
 	return func(r chi.Router) {
@@ -305,13 +326,15 @@ func SignedAvatars(params Params) func(r chi.Router) {
 // handleGetSignedAvatar streams a profile photo from a signed URL.
 //
 // @Summary Get a profile photo from a signed URL
-// @Description Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+// @Description Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
 // @Description they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+// @Description A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
 // @Tags auth
 // @Produce image/jpeg
 // @Param userID path string true "The user whose photo it is"
 // @Param v query string true "Photo version"
-// @Param uid query string true "The user the URL was issued to"
+// @Param uid query string false "The user the URL was issued to"
+// @Param op query string false "The back-office operator the URL was issued to"
 // @Param gid query string false "The group the two users share"
 // @Param exp query int true "Expiry, Unix seconds"
 // @Param sig query string true "Signature"
@@ -322,22 +345,32 @@ func SignedAvatars(params Params) func(r chi.Router) {
 func (api *signedAvatarsAPI) handleGetSignedAvatar(w http.ResponseWriter, r *http.Request) {
 	claims, err := api.signer.ValidateAvatarURL(r.URL.Path, r.URL.Query(), services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.Warn("Invalid signed avatar URL",
+		slog.WarnContext(r.Context(), "Invalid signed avatar URL",
 			"path", r.URL.Path, "error", err.Error(), "remote_addr", r.RemoteAddr)
 		http.Error(w, "Invalid or expired avatar URL", http.StatusUnauthorized)
 		return
 	}
 
-	viewer, err := api.users.Get(r.Context(), claims.ViewerID)
-	if err != nil || !viewer.IsActive {
-		http.Error(w, "Invalid or expired avatar URL", http.StatusUnauthorized)
-		return
+	var subject *models.User
+	if claims.OperatorID != "" {
+		var authorized bool
+		subject, authorized = api.operatorSubject(r, claims)
+		if !authorized {
+			http.Error(w, "Invalid or expired avatar URL", http.StatusUnauthorized)
+			return
+		}
+	} else {
+		viewer, err := api.users.Get(r.Context(), claims.ViewerID)
+		if err != nil || !viewer.IsActive {
+			http.Error(w, "Invalid or expired avatar URL", http.StatusUnauthorized)
+			return
+		}
+		subject, _ = api.visibleSubject(r, viewer, claims)
 	}
 
-	subject, ok := api.visibleSubject(r, viewer, claims)
 	// 404 for every reason the photo is not visible: whether a user exists, or
 	// has a photo, is not something to confirm to somebody who may not see it.
-	if !ok || subject.AvatarPath == nil || services.AvatarVersion(*subject.AvatarPath) != claims.Version {
+	if subject == nil || subject.AvatarPath == nil || services.AvatarVersion(*subject.AvatarPath) != claims.Version {
 		http.Error(w, "No avatar", http.StatusNotFound)
 		return
 	}
@@ -346,9 +379,28 @@ func (api *signedAvatarsAPI) handleGetSignedAvatar(w http.ResponseWriter, r *htt
 	writeAvatarImage(w, r, reader, contentType, err)
 }
 
+// operatorSubject checks that the operator an operator URL names is still an
+// active back-office user, and loads the URL's subject. authorized is false
+// when the operator is not; subject is nil when there is no such user.
+func (api *signedAvatarsAPI) operatorSubject(r *http.Request, claims *services.AvatarURLClaims) (subject *models.User, authorized bool) {
+	if api.operators == nil {
+		return nil, false
+	}
+	operator, err := api.operators.Get(r.Context(), claims.OperatorID)
+	if err != nil || !operator.IsActive {
+		return nil, false
+	}
+	subject, err = api.users.Get(r.Context(), claims.SubjectID)
+	if err != nil {
+		return nil, true
+	}
+	return subject, true
+}
+
 // visibleSubject loads the URL's subject and checks the viewer may still see
 // them: the viewer themselves, or a user in the same tenant who is, like the
-// viewer, a member of the group the URL was signed for.
+// viewer, a member of the group the URL was signed for. The subject is nil
+// whenever the result is false.
 func (api *signedAvatarsAPI) visibleSubject(r *http.Request, viewer *models.User, claims *services.AvatarURLClaims) (*models.User, bool) {
 	if claims.SubjectID == viewer.ID {
 		return viewer, true

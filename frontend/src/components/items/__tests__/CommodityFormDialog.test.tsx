@@ -1,10 +1,12 @@
 import { useState } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, onTestFinished, vi } from "vitest"
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { addItemSlot } from "@/features/commodities/draft"
+import { HttpError } from "@/lib/http"
 import { renderWithProviders } from "@/test/render"
 import { pickRadixSelect } from "@/test/radix"
 
@@ -218,7 +220,7 @@ describe("<CommodityFormDialog />", () => {
     expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("X")
   })
 
-  it("renders the status field in edit mode and prefills from initial values", async () => {
+  it("prefills edit mode from initial values", async () => {
     renderWithProviders({
       children: (
         <CommodityFormDialog
@@ -242,11 +244,105 @@ describe("<CommodityFormDialog />", () => {
     })
     expect(await screen.findByLabelText(/^Name$/i)).toHaveValue("Existing")
     expect(screen.getByLabelText(/^Quantity$/i)).toHaveValue(2)
-    // Status select only renders in edit mode — the create flow defaults
-    // every new commodity to in_use.
     // Radix Select trigger reflects the current value as its accessible
     // text content rather than a `value` attribute.
     expect(screen.getByLabelText(/^Status$/i)).toHaveTextContent(/Sold/i)
+  })
+
+  describe("status in edit mode (#2915)", () => {
+    // A sold item: its status date, note and sale price are not on the form.
+    const sold = {
+      id: "c1",
+      name: "Bike",
+      short_name: "Bike",
+      type: "other" as const,
+      status: "sold" as const,
+      status_date: "2026-05-17",
+      status_note: "Sold to Bob",
+      sale_price: 99.5,
+      count: 1,
+      draft: false,
+      purchase_date: "2024-03-01",
+      original_price: 400,
+      original_price_currency: "USD",
+    }
+
+    function renderSold(onSubmit = vi.fn().mockResolvedValue(undefined)) {
+      renderWithProviders({
+        children: (
+          <CommodityFormDialog
+            open
+            onOpenChange={() => {}}
+            mode="edit"
+            initialValues={sold}
+            areas={areas}
+            locations={locations}
+            defaultCurrency="USD"
+            onSubmit={onSubmit}
+          />
+        ),
+      })
+      return onSubmit
+    }
+
+    it("shows the status without offering a change, and names Change Status", async () => {
+      renderSold()
+      const status = await screen.findByLabelText(/^Status$/i)
+      expect(status).toHaveTextContent(/Sold/i)
+      expect(status).toBeDisabled()
+      expect(status).toHaveAccessibleDescription(/Change Status on the item page/i)
+    })
+
+    it("sends back the status date, note and sale price the item has", async () => {
+      const user = userEvent.setup()
+      const onSubmit = renderSold()
+      const name = await screen.findByLabelText(/^Name$/i)
+      await user.clear(name)
+      await user.type(name, "Road bike")
+      await user.click(screen.getByTestId("commodity-form-submit"))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        name: "Road bike",
+        status: "sold",
+        status_date: "2026-05-17",
+        status_note: "Sold to Bob",
+        sale_price: 99.5,
+      })
+    })
+
+    it("explains a refused status in its own words, not the server's", async () => {
+      const user = userEvent.setup()
+      // The item went back to In Use meanwhile; the form still sends Sold,
+      // and the server asks for a date the item never had.
+      const refused = new HttpError("invalid", 422, "/commodities/c1", {
+        errors: [
+          {
+            status: "Unprocessable Entity",
+            detail: "status_date: status date is required when leaving in_use.",
+            error: {
+              type: "validation.Errors",
+              error: {
+                data: {
+                  attributes: { status_date: "status date is required when leaving in_use" },
+                },
+              },
+              errorCodes: {
+                data: {
+                  attributes: { status_date: { code: "status_date_required_on_transition" } },
+                },
+              },
+            },
+          },
+        ],
+      })
+      renderSold(vi.fn().mockRejectedValue(refused))
+      await screen.findByLabelText(/^Name$/i)
+      await user.click(screen.getByTestId("commodity-form-submit"))
+      expect(
+        await screen.findByText(/status changed after you opened this form/i)
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/leaving in_use/i)).toBeNull()
+    })
   })
 
   describe("edit mode (#2795)", () => {
@@ -541,6 +637,45 @@ describe("<CommodityFormDialog />", () => {
     expect(window.localStorage.getItem(draftKey)).toBeNull()
   })
 
+  // #3023: the pages name the slot after the group in the address. With the
+  // form open across a move to another group, the input stays in the slot of
+  // the group the form opened in.
+  it("keeps the values in the slot of the group it opened in", async () => {
+    const user = userEvent.setup()
+    const opening = addItemSlot("u1", "household")
+    const other = addItemSlot("u1", "garage")
+    onTestFinished(() => {
+      window.localStorage.removeItem(opening)
+      window.localStorage.removeItem(other)
+    })
+    let moveTo: (slug: string) => void = () => {}
+    function Harness() {
+      const [slug, setSlug] = useState("household")
+      moveTo = setSlug
+      return (
+        <CommodityFormDialog
+          open
+          onOpenChange={() => {}}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey={addItemSlot("u1", slug)}
+        />
+      )
+    }
+    renderWithProviders({ children: <Harness /> })
+    await walkPastAi(user)
+    act(() => moveTo("garage"))
+    await user.type(await screen.findByLabelText(/^Name$/i), "Lamp")
+
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem(opening) ?? "{}").name).toBe("Lamp")
+    )
+    expect(window.localStorage.getItem(other)).toBeNull()
+  })
+
   // Issue #1554: bundle commodities (count > 1) cannot carry warranty
   // / loan / service. The dialog surfaces a banner the moment the
   // user enters a count > 1, and the Warranty step disables its
@@ -662,6 +797,48 @@ describe("<CommodityFormDialog />", () => {
     await user.click(screen.getByTestId("commodity-form-cancel"))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
     expect(screen.queryByTestId("commodity-form-close-confirm")).not.toBeInTheDocument()
+  })
+
+  // #1627: below `sm` the wizard fills the screen; the save-as-draft
+  // confirm stays a centered card and shows above it. Escape on the
+  // wizard still asks first.
+  it("fills the screen on a phone and keeps the save-as-draft confirm above it", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={onOpenChange}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey="commodity-draft:test:create"
+        />
+      ),
+    })
+    const wizard = await screen.findByTestId("commodity-form-dialog")
+    expect(wizard).toHaveAttribute("data-variant", "fullscreen-mobile")
+    expect(wizard.className).toContain("max-sm:h-dvh")
+    expect(wizard.className).toContain("sm:max-h-[90vh]")
+    await walkPastAi(user)
+    await user.type(await screen.findByLabelText(/^Name$/i), "X")
+
+    await user.keyboard("{Escape}")
+    const confirm = await screen.findByTestId("commodity-form-close-confirm")
+    expect(confirm).toHaveAttribute("data-variant", "default")
+    expect(confirm.className).not.toContain("max-sm:")
+    expect(wizard.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(onOpenChange).not.toHaveBeenCalled()
+
+    await user.click(screen.getByTestId("commodity-form-close-confirm-cancel"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("commodity-form-close-confirm")).not.toBeInTheDocument()
+    )
+    expect(screen.getByTestId("commodity-form-dialog")).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 
   // Regression: a single dirty input on Basics is enough to make

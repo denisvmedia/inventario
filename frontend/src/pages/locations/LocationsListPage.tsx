@@ -33,8 +33,10 @@ import { useAreas, useCreateArea } from "@/features/areas/hooks"
 import { useAreaItemCounter, useCommodities } from "@/features/commodities/hooks"
 import { useCreateLocation, useDeleteLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { matchesEveryTerm, splitSearchTerms } from "@/features/search/terms"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
 import type { DeleteStrategy } from "@/features/areas/api"
@@ -84,6 +86,9 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     { perPage: ITEM_COUNT_FETCH_CAP, includeInactive: false },
     { enabled }
   )
+  // Locations and areas take writes from admins and owners only; other
+  // members get the page without the actions the server would refuse.
+  const { canManageLocations } = useGroupPermissions()
   const createLocation = useCreateLocation()
   const deleteLocation = useDeleteLocation()
   const countAreaItems = useAreaItemCounter()
@@ -227,8 +232,8 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     try {
       await deleteLocation.mutateAsync({ id, strategy })
       toast.success(t("locations:toast.locationDeleted"))
-    } catch {
-      toast.error(t("locations:toast.locationDeleteError"))
+    } catch (err) {
+      toastMutationError(err, t("locations:toast.locationDeleteError"))
     }
   }
 
@@ -290,15 +295,17 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
           subtitle={t("locations:list.subtitle")}
           subtitleClassName="leading-7"
           actions={
-            <Button
-              type="button"
-              onClick={() => setDialog({ kind: "create-location" })}
-              data-testid="locations-add-button"
-              className="gap-2"
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              {t("locations:list.addLocation")}
-            </Button>
+            canManageLocations ? (
+              <Button
+                type="button"
+                onClick={() => setDialog({ kind: "create-location" })}
+                data-testid="locations-add-button"
+                className="gap-2"
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                {t("locations:list.addLocation")}
+              </Button>
+            ) : undefined
           }
         />
 
@@ -341,17 +348,19 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
               <CardTitle>{t("locations:list.emptyTitle")}</CardTitle>
               <CardDescription>{t("locations:list.emptyDescription")}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button
-                type="button"
-                onClick={() => setDialog({ kind: "create-location" })}
-                data-testid="locations-empty-cta"
-                className="gap-2"
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                {t("locations:list.addLocation")}
-              </Button>
-            </CardContent>
+            {canManageLocations ? (
+              <CardContent>
+                <Button
+                  type="button"
+                  onClick={() => setDialog({ kind: "create-location" })}
+                  data-testid="locations-empty-cta"
+                  className="gap-2"
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {t("locations:list.addLocation")}
+                </Button>
+              </CardContent>
+            ) : null}
           </Card>
         ) : (
           <ul className="space-y-3">
@@ -369,8 +378,14 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
                     itemCount={itemCount}
                     itemCountLoading={itemsCountIsUnknown}
                     itemCountTruncated={itemsCountTruncated}
-                    onAddArea={() => setDialog({ kind: "create-area", locationId: loc.id })}
-                    onDeleteLocation={() => handleDeleteLocation(loc)}
+                    onAddArea={
+                      canManageLocations
+                        ? () => setDialog({ kind: "create-area", locationId: loc.id })
+                        : undefined
+                    }
+                    onDeleteLocation={
+                      canManageLocations ? () => handleDeleteLocation(loc) : undefined
+                    }
                   />
                 </li>
               )
@@ -385,13 +400,13 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
       </Page>
 
       <LocationFormDialog
-        open={dialog.kind === "create-location"}
+        open={canManageLocations && dialog.kind === "create-location"}
         onOpenChange={(open) => (open ? null : closeDialog())}
         onSubmit={handleCreateLocation}
         isPending={createLocation.isPending}
       />
       <AreaFormDialog
-        open={dialog.kind === "create-area"}
+        open={canManageLocations && dialog.kind === "create-area"}
         onOpenChange={(open) => (open ? null : setDialog({ kind: "none" }))}
         locations={locations.data ?? []}
         defaultLocationId={dialog.kind === "create-area" ? dialog.locationId : undefined}
@@ -400,7 +415,7 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
       />
 
       <DeleteWithItemsDialog
-        open={deleteTarget !== null}
+        open={canManageLocations && deleteTarget !== null}
         kind="location"
         name={deleteTarget?.name ?? ""}
         itemCount={deleteTarget?.itemCount ?? 0}
@@ -418,8 +433,10 @@ interface LocationCardProps {
   itemCount: number
   itemCountLoading: boolean
   itemCountTruncated: boolean
-  onAddArea: () => void
-  onDeleteLocation: () => void
+  // Left out for a member who may not change locations; the card then has
+  // no actions menu.
+  onAddArea?: () => void
+  onDeleteLocation?: () => void
 }
 
 // LocationCard renders one location as a click-through tile per the
@@ -537,38 +554,40 @@ function LocationCard({
           loses every click to the Link even though it has
           `pointer-events-auto`. Issue #1654. */}
       <div className="pointer-events-none relative z-10 flex shrink-0 items-center gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              // `cursor-pointer` is intentional: Tailwind v4 preflight
-              // strips `cursor: pointer` from native <button>; same
-              // workaround pattern as AppSidebar.tsx (sidebar Add-item).
-              className="pointer-events-auto size-8 cursor-pointer opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
-              aria-label={t("locations:list.actionsLabel", { name: location.name ?? "" })}
-              data-testid="location-card-menu"
-            >
-              <MoreHorizontal className="size-4" aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onAddArea} data-testid="location-card-add-area">
-              <Plus className="mr-2 size-4" aria-hidden="true" />
-              {t("locations:list.addArea")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={onDeleteLocation}
-              className="text-destructive focus:text-destructive"
-              data-testid="location-card-delete"
-            >
-              <Trash2 className="mr-2 size-4" aria-hidden="true" />
-              {t("common:actions.delete")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {onAddArea || onDeleteLocation ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                // `cursor-pointer` is intentional: Tailwind v4 preflight
+                // strips `cursor: pointer` from native <button>; same
+                // workaround pattern as AppSidebar.tsx (sidebar Add-item).
+                className="pointer-events-auto size-8 cursor-pointer opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+                aria-label={t("locations:list.actionsLabel", { name: location.name ?? "" })}
+                data-testid="location-card-menu"
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onAddArea} data-testid="location-card-add-area">
+                <Plus className="mr-2 size-4" aria-hidden="true" />
+                {t("locations:list.addArea")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={onDeleteLocation}
+                className="text-destructive focus:text-destructive"
+                data-testid="location-card-delete"
+              >
+                <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                {t("common:actions.delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <ChevronRight
           className="size-4 text-muted-foreground transition-colors group-hover:text-foreground"
           aria-hidden="true"

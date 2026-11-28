@@ -103,14 +103,20 @@ func (srd CommodityServiceRequestData) Validate() error {
 
 func (srd CommodityServiceRequestData) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &srd,
-		validation.Field(&srd.ProviderName, validation.Required, validation.Length(1, 200)),
-		validation.Field(&srd.ProviderContact, validation.Length(0, 200)),
-		validation.Field(&srd.Reason, validation.Length(0, 1000)),
+		validation.Field(&srd.ProviderName, validation.Required, validation.RuneLength(1, 200)),
+		validation.Field(&srd.ProviderContact, validation.RuneLength(0, 200)),
+		validation.Field(&srd.Reason, validation.RuneLength(0, 1000)),
 		validation.Field(&srd.SentAt, validation.Required, models.DateFormat),
 		validation.Field(&srd.CostCurrency, validation.By(func(any) error {
-			amountSet := srd.CostAmount != nil && !srd.CostAmount.IsZero()
+			// A currency needs an amount, 0 included (a free repair). An
+			// amount of 0 without a currency is no cost; any other amount
+			// needs a currency.
 			currencySet := srd.CostCurrency != ""
-			if amountSet != currencySet {
+			if currencySet && srd.CostAmount == nil {
+				return validation.NewError("cost_currency_pair_required",
+					"cost_amount and cost_currency must be set together")
+			}
+			if !currencySet && srd.CostAmount != nil && !srd.CostAmount.IsZero() {
 				return validation.NewError("cost_currency_pair_required",
 					"cost_amount and cost_currency must be set together")
 			}
@@ -179,13 +185,13 @@ func (surd CommodityServiceUpdateRequestData) Validate() error {
 func (surd CommodityServiceUpdateRequestData) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0, 5)
 	if surd.ProviderName != nil {
-		fields = append(fields, validation.Field(&surd.ProviderName, validation.Required, validation.Length(1, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderName, validation.Required, validation.RuneLength(1, 200)))
 	}
 	if surd.ProviderContact != nil {
-		fields = append(fields, validation.Field(&surd.ProviderContact, validation.Length(0, 200)))
+		fields = append(fields, validation.Field(&surd.ProviderContact, validation.RuneLength(0, 200)))
 	}
 	if surd.Reason != nil {
-		fields = append(fields, validation.Field(&surd.Reason, validation.Length(0, 1000)))
+		fields = append(fields, validation.Field(&surd.Reason, validation.RuneLength(0, 1000)))
 	}
 	// Pair gate for cost: BOTH or NEITHER on this PATCH.
 	fields = append(fields, validation.Field(&surd.CostCurrency, validation.By(func(any) error {
@@ -241,6 +247,26 @@ type CommodityServiceReturnRequestData struct {
 	CostCurrency *string          `json:"cost_currency,omitempty"`
 }
 
+func (srrd CommodityServiceReturnRequestData) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+// ValidateWithContext refuses a currency sent without an amount. The row
+// keeps its amount when none is sent, and the model reads a currency on an
+// amount of 0 as a recorded cost of 0, so a lone currency would record a
+// free repair the caller never stated.
+func (srrd CommodityServiceReturnRequestData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, &srrd,
+		validation.Field(&srrd.CostCurrency, validation.By(func(any) error {
+			if srrd.CostCurrency != nil && *srrd.CostCurrency != "" && srrd.CostAmount == nil {
+				return validation.NewError("cost_currency_pair_required",
+					"cost_currency needs cost_amount on the same request")
+			}
+			return nil
+		})),
+	)
+}
+
 func (srr *CommodityServiceReturnRequest) Bind(r *http.Request) error {
 	if srr.Data == nil {
 		// Empty body is allowed — the handler defaults returned_at to today.
@@ -248,10 +274,14 @@ func (srr *CommodityServiceReturnRequest) Bind(r *http.Request) error {
 	}
 	return validation.ValidateStructWithContext(r.Context(), srr.Data,
 		validation.Field(&srr.Data.Type, validation.Required, validation.In("commodity_services")),
+		validation.Field(&srr.Data.Attributes),
 	)
 }
 
-var _ render.Binder = (*CommodityServiceReturnRequest)(nil)
+var (
+	_ render.Binder                     = (*CommodityServiceReturnRequest)(nil)
+	_ validation.ValidatableWithContext = (*CommodityServiceReturnRequestData)(nil)
+)
 
 // ServiceCommodityRef is the denormalised commodity-summary block
 // returned alongside service rows on the dedicated /services list.

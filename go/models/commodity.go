@@ -23,13 +23,19 @@ var (
 
 type CommodityStatus string
 
-// Commodity statuses. Adding a new status? Don't forget to update IsValid() method.
+// Commodity statuses. Every status but in_use means the group no longer has
+// the item. Adding a new status? Don't forget to update IsValid() method.
 const (
 	CommodityStatusInUse      CommodityStatus = "in_use"
 	CommodityStatusSold       CommodityStatus = "sold"
 	CommodityStatusLost       CommodityStatus = "lost"
 	CommodityStatusDisposed   CommodityStatus = "disposed"
 	CommodityStatusWrittenOff CommodityStatus = "written_off"
+	// CommodityStatusDonated is an item given away for nothing in return.
+	CommodityStatusDonated CommodityStatus = "donated"
+	// CommodityStatusStolen is an item taken by someone else; lost is an
+	// item that cannot be found.
+	CommodityStatusStolen CommodityStatus = "stolen"
 )
 
 func (c CommodityStatus) IsValid() bool {
@@ -38,7 +44,9 @@ func (c CommodityStatus) IsValid() bool {
 		CommodityStatusSold,
 		CommodityStatusLost,
 		CommodityStatusDisposed,
-		CommodityStatusWrittenOff:
+		CommodityStatusWrittenOff,
+		CommodityStatusDonated,
+		CommodityStatusStolen:
 		return true
 	}
 	return false
@@ -293,6 +301,16 @@ type Commodity struct {
 	// write, and the flag never leaves the server.
 	//ptah:schema:field name="legacy_zero_prices" type="BOOLEAN" not_null="true" default="true"
 	LegacyZeroPrices bool `json:"-" db:"legacy_zero_prices"`
+	// Revision counts the writes to the item: a new item has revision 1, and
+	// every registry write of a column an edit form sends back adds one (an
+	// edit, a bulk change, the draft mark, a tag rename or delete, an item
+	// type delete that moves the item, a currency migration). An edit form
+	// sends the revision it was opened at with its save, and the save is
+	// refused when the item was written since (registry.WithExpectedRevision),
+	// so it cannot undo a change it never showed. Server-managed: Create and
+	// Update ignore the caller's value.
+	//ptah:schema:field name="revision" type="BIGINT" not_null="true" default="1"
+	Revision int64 `json:"revision" db:"revision"`
 	// DeletedAt is when the item was moved to Trash, nil while it is live. A
 	// trashed item keeps its id, asset number, history, loans, service
 	// records, maintenance schedules and attachments, and is left out of every
@@ -412,6 +430,16 @@ func SamePrice(a, b *decimal.Decimal) bool {
 //ptah:schema:function name="commodity_search_text" params="name TEXT, short_name TEXT, serial_number TEXT, extra_serial_numbers JSONB, part_numbers JSONB, tags JSONB, comments TEXT, warranty_notes TEXT, status_note TEXT" returns="TEXT" language="sql" volatility="IMMUTABLE" body="SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')" comment="Builds commodities.search_text, the text the item search matches"
 type CommoditySearchFunctions struct {
 	_ int
+}
+
+// GetRevision returns the item's Revision.
+func (a *Commodity) GetRevision() int64 {
+	return a.Revision
+}
+
+// SetRevision sets the item's Revision. Only the registries call it.
+func (a *Commodity) SetRevision(revision int64) {
+	a.Revision = revision
 }
 
 // IsTrashed reports whether the item is in Trash.
@@ -690,8 +718,8 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	}
 
 	fields = append(fields,
-		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
-		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 40)),
+		validation.Field(&a.Name, rules.NotEmpty, validation.RuneLength(1, 255)),
+		validation.Field(&a.ShortName, rules.NotEmpty, validation.RuneLength(1, 40)),
 		validation.Field(&a.Brand, validation.RuneLength(0, MaxCommodityBrandRunes)),
 		validation.Field(&a.Model, validation.RuneLength(0, MaxCommodityModelRunes)),
 		validation.Field(&a.Type, rules.NotEmpty),
@@ -735,7 +763,7 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 		// updateCommodity handler (it needs the previous status,
 		// which the model layer doesn't carry); these rules cover the
 		// per-row invariants that hold on every write.
-		validation.Field(&a.StatusNote, validation.Length(0, 1024)),
+		validation.Field(&a.StatusNote, validation.RuneLength(0, 1024)),
 		validation.Field(&a.SalePrice, validation.By(func(any) error {
 			if a.SalePrice == nil {
 				return nil

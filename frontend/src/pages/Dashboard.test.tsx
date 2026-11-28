@@ -8,8 +8,14 @@ import i18next from "i18next"
 import { DashboardPage } from "@/pages/Dashboard"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
-import { commodityHandlers, groupHandlers, savedViewHandlers } from "@/test/handlers"
+import {
+  commodityHandlers,
+  groupHandlers,
+  memberHandlers,
+  savedViewHandlers,
+} from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -27,16 +33,21 @@ function commodityResource(id: string, attrs: Record<string, unknown>) {
 // Mounts the dashboard at /g/:groupSlug so GroupProvider's useParams()
 // resolves the slug — the http client then rewrites /commodities ->
 // /g/household/commodities and our MSW handlers match.
+// The page mounts once the caller's role is known (WhenRoleKnown): the
+// Add item entry is offered by role.
 function renderDashboard() {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath: `/g/${SLUG}`,
     routes: (
       <Route
         path="/g/:groupSlug"
         element={
           <GroupProvider>
-            <DashboardPage />
+            <WhenRoleKnown>
+              <DashboardPage />
+            </WhenRoleKnown>
           </GroupProvider>
         }
       />
@@ -48,7 +59,8 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  server.use(...savedViewHandlers.none(SLUG))
+  // Every test runs as the group's owner unless it registers another role.
+  server.use(...savedViewHandlers.none(SLUG), ...memberHandlers.asRole("g1", "owner"))
   localStorage.removeItem(`savedViews:suggestionsDismissed:${SLUG}`)
 })
 
@@ -160,6 +172,7 @@ describe("<DashboardPage />", () => {
     }
     setAccessToken("good-token")
     renderWithProviders({
+      withAuth: true,
       initialPath: `/g/${SLUG}`,
       routes: (
         <>
@@ -167,7 +180,9 @@ describe("<DashboardPage />", () => {
             path="/g/:groupSlug"
             element={
               <GroupProvider>
-                <DashboardPage />
+                <WhenRoleKnown>
+                  <DashboardPage />
+                </WhenRoleKnown>
               </GroupProvider>
             }
           />
@@ -331,6 +346,7 @@ describe("<DashboardPage />", () => {
     }
     setAccessToken("good-token")
     renderWithProviders({
+      withAuth: true,
       initialPath: `/g/${SLUG}`,
       routes: (
         <>
@@ -338,7 +354,9 @@ describe("<DashboardPage />", () => {
             path="/g/:groupSlug"
             element={
               <GroupProvider>
-                <DashboardPage />
+                <WhenRoleKnown>
+                  <DashboardPage />
+                </WhenRoleKnown>
               </GroupProvider>
             }
           />
@@ -386,6 +404,18 @@ describe("<DashboardPage />", () => {
     // `test/setup.ts`) so a copy-edit in the en JSON doesn't break
     // this test — only renaming or removing the key does.
     expect(cta).toHaveAttribute("title", i18next.t("errors:lockedDuringMigration"))
+  })
+
+  it("offers a viewer no Add item (#2886)", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    expect(await screen.findByTestId("page-dashboard")).toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-mobile-add-item")).not.toBeInTheDocument()
   })
 
   it("has no axe violations once data has loaded", async () => {
@@ -473,5 +503,68 @@ describe("<DashboardPage /> — saved views", () => {
     await user.click(await screen.findByTestId("dashboard-suggested-views-dismiss"))
     expect(screen.queryByTestId("dashboard-suggested-views")).not.toBeInTheDocument()
     expect(localStorage.getItem(`savedViews:suggestionsDismissed:${SLUG}`)).toBe("1")
+  })
+})
+
+describe("<DashboardPage /> in a group that hides sections (#1607)", () => {
+  it("leaves out the warranty cards while the group hides warranties", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties", "loans"] }]),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", { name: "Kettle", warranty_expires_at: "2099-01-01" }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("1")
+    )
+    expect(screen.getByTestId("dashboard-total-value")).toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-active-warranties")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-expired-warranties")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-expiring-warranties")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-warranty-health")).not.toBeInTheDocument()
+    expect(screen.getByText("Kettle")).toBeInTheDocument()
+
+    // No ready-made view built on a hidden section.
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-expiringWarranties")
+    ).not.toBeInTheDocument()
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-lentOut")
+    ).not.toBeInTheDocument()
+    expect(within(card).getByTestId("dashboard-suggested-view-add-untagged")).toBeInTheDocument()
+  })
+
+  it("offers the Lent out view while only warranties are hidden", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties"] }]),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    expect(within(card).getByTestId("dashboard-suggested-view-add-lentOut")).toBeInTheDocument()
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-expiringWarranties")
+    ).not.toBeInTheDocument()
+  })
+
+  it("offers the Expiring warranties view while only loans are hidden", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["loans"] }]),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    expect(
+      within(card).getByTestId("dashboard-suggested-view-add-expiringWarranties")
+    ).toBeInTheDocument()
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-lentOut")
+    ).not.toBeInTheDocument()
   })
 })

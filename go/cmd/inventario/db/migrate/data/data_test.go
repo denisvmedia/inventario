@@ -120,3 +120,19 @@ func TestCommand_Examples(t *testing.T) {
 	c.Assert(cmd.Cmd().Long, qt.Contains, "--default-tenant-name")
 	c.Assert(cmd.Cmd().Long, qt.Contains, "--admin-email")
 }
+
+// A "/" in the password ends the host part early, so the rest of the
+// password is the database name. The command refuses such a DSN before it
+// connects.
+func TestCommand_RefusesAnAtAfterTheHost(t *testing.T) {
+	c := qt.New(t)
+
+	cmd := data.New(&shared.DatabaseConfig{DBDSN: "postgres://app:12/tail@host/x"})
+	cmd.Cmd().SetArgs([]string{})
+
+	err := cmd.Cmd().Execute()
+
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Equals,
+		"the database URL has an @ after the host; percent-encode / ? # in the password (%2F %3F %23), and an @ in the database name or a query value as %40")
+}

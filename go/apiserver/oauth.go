@@ -232,7 +232,7 @@ func (api *OAuthAPI) handleStart(w http.ResponseWriter, r *http.Request) {
 func (api *OAuthAPI) handleLinkStart(w http.ResponseWriter, r *http.Request) {
 	user, err := api.auth.userFromBrowserSession(r)
 	if err != nil || user == nil {
-		slog.Info("OAuth link-start: no resolvable session; redirecting to login", "error", err)
+		slog.InfoContext(r.Context(), "OAuth link-start: no resolvable session; redirecting to login", "error", err)
 		http.Redirect(w, r, "/login?reason=session_expired", http.StatusFound)
 		return
 	}
@@ -254,13 +254,13 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 
 	pkce, err := oauthsvc.NewPKCE()
 	if err != nil {
-		slog.Error("OAuth start: failed to generate PKCE pair", "provider", providerName, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth start: failed to generate PKCE pair", "provider", providerName, "error", err)
 		http.Error(w, "Failed to start OAuth flow", http.StatusInternalServerError)
 		return
 	}
 	nonce, err := oauthsvc.NewNonce()
 	if err != nil {
-		slog.Error("OAuth start: failed to generate nonce", "provider", providerName, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth start: failed to generate nonce", "provider", providerName, "error", err)
 		http.Error(w, "Failed to start OAuth flow", http.StatusInternalServerError)
 		return
 	}
@@ -276,7 +276,7 @@ func (api *OAuthAPI) startAuthorizationCode(w http.ResponseWriter, r *http.Reque
 	}
 	signed, err := api.state.Sign(state)
 	if err != nil {
-		slog.Error("OAuth start: failed to sign state", "provider", providerName, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth start: failed to sign state", "provider", providerName, "error", err)
 		http.Error(w, "Failed to start OAuth flow", http.StatusInternalServerError)
 		return
 	}
@@ -307,7 +307,7 @@ func (api *OAuthAPI) prepareProvider(w http.ResponseWriter, r *http.Request, pro
 	if err == nil {
 		return true
 	}
-	slog.Warn("OAuth start: provider is not ready", "provider", provider.Name(), "error", err)
+	slog.WarnContext(r.Context(), "OAuth start: provider is not ready", "provider", provider.Name(), "error", err)
 	if linkUserID != "" {
 		http.Error(w, "The sign-in provider is not reachable. Try again later.", http.StatusBadGateway)
 		return false
@@ -385,14 +385,14 @@ func (api *OAuthAPI) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	tenantID := TenantIDFromContext(r.Context())
 	if tenantID == "" {
-		slog.Error("OAuth callback ran without tenant context")
+		slog.ErrorContext(r.Context(), "OAuth callback ran without tenant context")
 		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
 		return
 	}
 
 	profile, err := provider.Exchange(r.Context(), code, st.Verifier)
 	if err != nil {
-		slog.Warn("OAuth callback: token exchange failed", "provider", providerName, "error", err)
+		slog.WarnContext(r.Context(), "OAuth callback: token exchange failed", "provider", providerName, "error", err)
 		http.Error(w, "OAuth exchange failed", http.StatusBadRequest)
 		return
 	}
@@ -432,14 +432,14 @@ func (api *OAuthAPI) completeSignInFlow(
 
 	existingIdentity, err := api.identityStore.GetByProviderSubject(r.Context(), providerName, profile.ProviderUserID)
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		slog.Error("OAuth callback: identity lookup failed", "provider", providerName, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: identity lookup failed", "provider", providerName, "error", err)
 		http.Error(w, "OAuth sign-in failed", http.StatusInternalServerError)
 		return
 	}
 	if existingIdentity != nil {
 		user, err := api.userRegistry.Get(r.Context(), existingIdentity.UserID)
 		if err != nil || user == nil {
-			slog.Warn("OAuth callback: linked user missing", "user_id", existingIdentity.UserID, "error", err)
+			slog.WarnContext(r.Context(), "OAuth callback: linked user missing", "user_id", existingIdentity.UserID, "error", err)
 			http.Error(w, "User account is not available", http.StatusForbidden)
 			return
 		}
@@ -452,8 +452,8 @@ func (api *OAuthAPI) completeSignInFlow(
 		// outcome surfaces a tenant_mismatch row in login_events so this
 		// shows up clearly in the audit history.
 		if user.TenantID != tenantID {
-			slog.Error("OAuth callback: cross-tenant sign-in attempted (existing identity)",
-				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+			slog.WarnContext(r.Context(), "OAuth callback: cross-tenant sign-in attempted (existing identity)",
+				"user_id", user.ID, "user_tenant_id", user.TenantID, "callback_tenant_id", tenantID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 			return
@@ -464,7 +464,7 @@ func (api *OAuthAPI) completeSignInFlow(
 		// login page with a banner, the same way the email-match branch
 		// below treats them.
 		if !user.IsActive {
-			slog.Warn("OAuth callback: linked user is inactive", "user_id", user.ID, "provider", providerName)
+			slog.WarnContext(r.Context(), "OAuth callback: linked user is inactive", "user_id", user.ID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeAccountDisabled, method, r)
 			http.Redirect(w, r, oauthErrorURL("account_disabled", st.RedirectAfter), http.StatusFound)
 			return
@@ -476,7 +476,7 @@ func (api *OAuthAPI) completeSignInFlow(
 	// No identity row. Try to match by email.
 	user, err := api.userRegistry.GetByEmail(r.Context(), tenantID, profile.Email)
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		slog.Error("OAuth callback: user-by-email lookup failed", "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: user-by-email lookup failed", "error", err)
 		http.Error(w, "OAuth sign-in failed", http.StatusInternalServerError)
 		return
 	}
@@ -488,8 +488,8 @@ func (api *OAuthAPI) completeSignInFlow(
 		// the invariant explicit at the call site so a cross-tenant
 		// auto-link can never happen even if the lower layer regresses.
 		if user.TenantID != tenantID {
-			slog.Error("OAuth callback: cross-tenant sign-in attempted (email match)",
-				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+			slog.ErrorContext(r.Context(), "OAuth callback: cross-tenant sign-in attempted (email match)",
+				"user_id", user.ID, "user_tenant_id", user.TenantID, "callback_tenant_id", tenantID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 			return
@@ -499,7 +499,7 @@ func (api *OAuthAPI) completeSignInFlow(
 		// before the EmailVerified branch keeps a disabled account from
 		// learning whether its email had been used at a given provider.
 		if !user.IsActive {
-			slog.Warn("OAuth callback: email-match auto-link refused for deactivated user",
+			slog.WarnContext(r.Context(), "OAuth callback: email-match auto-link refused for deactivated user",
 				"user_id", user.ID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeAccountDisabled, method, r)
 			http.Redirect(w, r, oauthErrorURL("account_disabled", st.RedirectAfter), http.StatusFound)
@@ -516,7 +516,7 @@ func (api *OAuthAPI) completeSignInFlow(
 		}
 		// Verified — auto-link.
 		if _, err := api.createIdentity(r.Context(), user, providerName, profile); err != nil {
-			slog.Error("OAuth callback: failed to auto-link identity", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "OAuth callback: failed to auto-link identity", "user_id", user.ID, "error", err)
 			http.Error(w, "OAuth link failed", http.StatusInternalServerError)
 			return
 		}
@@ -533,7 +533,7 @@ func (api *OAuthAPI) completeSignInFlow(
 	// hidden / unverified) could otherwise seed an Inventario account
 	// keyed on that email and later collide with the legitimate owner.
 	if !profile.EmailVerified {
-		slog.Warn("OAuth callback: refusing to provision new user from unverified provider email",
+		slog.WarnContext(r.Context(), "OAuth callback: refusing to provision new user from unverified provider email",
 			"provider", providerName, "email", profile.Email)
 		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, nil, models.LoginOutcomeEmailNotVerified, method, r)
 		http.Redirect(w, r, oauthErrorURL("email_unverified", st.RedirectAfter), http.StatusFound)
@@ -567,7 +567,7 @@ func (api *OAuthAPI) completeSignUp(
 		return
 	default:
 		// Fail closed on unknown modes, as handleRegister does.
-		slog.Error("OAuth callback: unknown registration mode, refusing sign-up", "mode", mode)
+		slog.ErrorContext(r.Context(), "OAuth callback: unknown registration mode, refusing sign-up", "mode", mode)
 		api.refuseOAuthSignUp(w, r, tenantID, providerName, st, "unknown registration mode")
 		return
 	}
@@ -575,7 +575,7 @@ func (api *OAuthAPI) completeSignUp(
 	// Provision and link in one logical operation.
 	newUser, err := api.provisionUserFromProfile(r.Context(), tenantID, profile, activate)
 	if err != nil {
-		slog.Error("OAuth callback: user provisioning failed", "email", profile.Email, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: user provisioning failed", "email", profile.Email, "error", err)
 		// REV-6: if the provider sent us a profile that fails our own
 		// User validation (no email, invalid characters, …), don't echo
 		// the validator output to the wire — surface a generic banner.
@@ -587,21 +587,21 @@ func (api *OAuthAPI) completeSignUp(
 		return
 	}
 	if _, err := api.createIdentity(r.Context(), newUser, providerName, profile); err != nil {
-		slog.Error("OAuth callback: failed to persist OAuth identity for new user",
+		slog.ErrorContext(r.Context(), "OAuth callback: failed to persist OAuth identity for new user",
 			"user_id", newUser.ID, "error", err)
 		// Remove the account the identity was for, so a retry is a clean
 		// sign-up. Left in place, it would be an account with no identity;
 		// in approval mode an inactive one, which the email-match branch
 		// refuses with account_disabled until an administrator steps in.
 		if delErr := api.userRegistry.Delete(r.Context(), newUser.ID); delErr != nil {
-			slog.Error("OAuth callback: failed to remove the new user after the identity write failed",
+			slog.ErrorContext(r.Context(), "OAuth callback: failed to remove the new user after the identity write failed",
 				"user_id", newUser.ID, "error", delErr)
 		}
 		http.Error(w, "OAuth account creation failed", http.StatusInternalServerError)
 		return
 	}
 	api.auth.logAuth(r.Context(), "oauth_register", &newUser.ID, &newUser.TenantID, true, r, nil)
-	slog.Info("User registered via OAuth", "user_id", newUser.ID, "provider", providerName, "mode", mode)
+	slog.InfoContext(r.Context(), "User registered via OAuth", "user_id", newUser.ID, "provider", providerName, "mode", mode)
 	if !activate {
 		// Approval mode: no session until an administrator activates the
 		// account. The identity is already linked, so the first sign-in
@@ -620,7 +620,7 @@ func (api *OAuthAPI) refuseOAuthSignUp(
 	w http.ResponseWriter, r *http.Request,
 	tenantID string, providerName models.OAuthProvider, st oauthsvc.State, reason string,
 ) {
-	slog.Info("OAuth callback: sign-up refused", "provider", providerName, "reason", reason)
+	slog.InfoContext(r.Context(), "OAuth callback: sign-up refused", "provider", providerName, "reason", reason)
 	api.auth.logAuth(r.Context(), "oauth_register", nil, &tenantID, false, r, &reason)
 	http.Redirect(w, r, oauthErrorURL("registration_closed", st.RedirectAfter), http.StatusFound)
 }
@@ -642,7 +642,7 @@ func (api *OAuthAPI) completeLinkFlow(
 
 	user, err := api.userRegistry.Get(r.Context(), st.LinkUserID)
 	if err != nil || user == nil || !user.IsActive {
-		slog.Warn("OAuth link: user from state missing or inactive", "user_id", st.LinkUserID, "error", err)
+		slog.WarnContext(r.Context(), "OAuth link: user from state missing or inactive", "user_id", st.LinkUserID, "error", err)
 		http.Error(w, "User account is not available", http.StatusForbidden)
 		return
 	}
@@ -655,8 +655,8 @@ func (api *OAuthAPI) completeLinkFlow(
 	// write a row with tenant_id=B but user_id pointing into tenant A —
 	// corrupting tenant boundaries.
 	if user.TenantID != tenantID {
-		slog.Error("OAuth link: cross-tenant link attempted",
-			"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+		slog.WarnContext(r.Context(), "OAuth link: cross-tenant link attempted",
+			"user_id", user.ID, "user_tenant_id", user.TenantID, "callback_tenant_id", tenantID, "provider", providerName)
 		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 		http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 		return
@@ -667,12 +667,12 @@ func (api *OAuthAPI) completeLinkFlow(
 	// commandeer someone else's OAuth account.
 	existingIdentity, err := api.identityStore.GetByProviderSubject(r.Context(), providerName, profile.ProviderUserID)
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		slog.Error("OAuth link: identity lookup failed", "provider", providerName, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth link: identity lookup failed", "provider", providerName, "error", err)
 		http.Error(w, "OAuth link failed", http.StatusInternalServerError)
 		return
 	}
 	if existingIdentity != nil && existingIdentity.UserID != user.ID {
-		slog.Warn("OAuth link: provider account already attached to another user",
+		slog.WarnContext(r.Context(), "OAuth link: provider account already attached to another user",
 			"user_id", user.ID, "existing_user_id", existingIdentity.UserID,
 			"provider", providerName)
 		http.Error(w, "This account is already linked to a different user", http.StatusConflict)
@@ -694,7 +694,7 @@ func (api *OAuthAPI) completeLinkFlow(
 	}
 
 	if _, err := api.createIdentity(r.Context(), user, providerName, profile); err != nil {
-		slog.Error("OAuth link: persistence failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth link: persistence failed", "user_id", user.ID, "error", err)
 		http.Error(w, "OAuth link failed", http.StatusInternalServerError)
 		return
 	}
@@ -705,7 +705,7 @@ func (api *OAuthAPI) completeLinkFlow(
 	// security-sensitive events so security ops can search a single
 	// stream for "OAuth provider attached to account".
 	api.auth.logAuth(r.Context(), "oauth_link_added", &user.ID, &user.TenantID, true, r, nil)
-	slog.Info("OAuth identity linked", "user_id", user.ID, "provider", providerName)
+	slog.InfoContext(r.Context(), "OAuth identity linked", "user_id", user.ID, "provider", providerName)
 	_ = method // method is informational here; the link path does not mint tokens.
 	// #nosec G710 -- see the idempotent-relink branch above: the target is a
 	// server-built relative path (allow-list-sanitized RedirectAfter + a
@@ -738,12 +738,12 @@ func (api *OAuthAPI) completeOAuthLogin(
 	// recorded; no second pass is needed).
 	mfaEnabled, err := api.auth.userMFAEnabled(r.Context(), user)
 	if err != nil {
-		slog.Error("OAuth callback: MFA enrollment lookup failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: MFA enrollment lookup failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA state", http.StatusInternalServerError)
 		return
 	}
 	if mfaEnabled {
-		slog.Info("OAuth callback: MFA enrolled — refusing OAuth-only sign-in",
+		slog.InfoContext(r.Context(), "OAuth callback: MFA enrolled — refusing OAuth-only sign-in",
 			"user_id", user.ID, "provider", providerName)
 		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeMFARequired, method, r)
 		api.auth.logAuth(r.Context(), "oauth_login_mfa_required", &user.ID, &user.TenantID, true, r, nil)
@@ -753,13 +753,13 @@ func (api *OAuthAPI) completeOAuthLogin(
 
 	rti, rawRefreshToken, err := api.auth.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("OAuth callback: failed to persist refresh token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: failed to persist refresh token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
 	accessTokenString, _, err := api.auth.issueAccessToken(r.Context(), user, rti)
 	if err != nil {
-		slog.Error("OAuth callback: failed to issue access token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: failed to issue access token", "user_id", user.ID, "error", err)
 		api.auth.rollbackRefreshToken(r.Context(), user.ID, rti)
 		http.Error(w, "Failed to generate session", http.StatusInternalServerError)
 		return
@@ -770,7 +770,7 @@ func (api *OAuthAPI) completeOAuthLogin(
 	now := time.Now()
 	user.LastLoginAt = &now
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("OAuth callback: failed to update last_login", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth callback: failed to update last_login", "user_id", user.ID, "error", err)
 	}
 
 	// CSRF token is minted into the cookie store; FE picks it up on the
@@ -801,7 +801,7 @@ func (api *OAuthAPI) recordOAuthLoginEvent(r *http.Request, tenantID string, use
 		UserAgent:           r.UserAgent(),
 	}
 	if _, err := api.auth.loginEventRegistry.Create(r.Context(), event); err != nil {
-		slog.Warn("OAuth callback: failed to record login event", "user_id", user.ID, "error", err)
+		slog.WarnContext(r.Context(), "OAuth callback: failed to record login event", "user_id", user.ID, "error", err)
 	}
 }
 
@@ -841,7 +841,7 @@ func (api *OAuthAPI) provisionUserFromProfile(ctx context.Context, tenantID stri
 	}
 
 	if err := user.ValidateWithContext(ctx); err != nil {
-		slog.Warn("OAuth callback: provider profile failed user validation",
+		slog.WarnContext(ctx, "OAuth callback: provider profile failed user validation",
 			"email", user.Email, "error", err)
 		return nil, errProvisionUserInvalidProfile
 	}
@@ -889,7 +889,7 @@ func (api *OAuthAPI) handleListIdentities(w http.ResponseWriter, r *http.Request
 	}
 	rows, err := api.identityStore.ListByUser(r.Context(), user.TenantID, user.ID)
 	if err != nil {
-		slog.Error("OAuth identities: list failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth identities: list failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to list identities", http.StatusInternalServerError)
 		return
 	}
@@ -940,7 +940,7 @@ func (api *OAuthAPI) handleUnlink(w http.ResponseWriter, r *http.Request) {
 	hasPassword := user.PasswordHash != ""
 	rows, err := api.identityStore.ListByUser(r.Context(), user.TenantID, user.ID)
 	if err != nil {
-		slog.Error("OAuth unlink: list identities failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth unlink: list identities failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to unlink identity", http.StatusInternalServerError)
 		return
 	}
@@ -966,7 +966,7 @@ func (api *OAuthAPI) handleUnlink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.identityStore.DeleteByUserAndProvider(r.Context(), user.TenantID, user.ID, providerName); err != nil {
-		slog.Error("OAuth unlink: delete failed", "user_id", user.ID, "provider", providerName, "error", err)
+		slog.ErrorContext(r.Context(), "OAuth unlink: delete failed", "user_id", user.ID, "provider", providerName, "error", err)
 		http.Error(w, "Failed to unlink identity", http.StatusInternalServerError)
 		return
 	}
@@ -974,7 +974,7 @@ func (api *OAuthAPI) handleUnlink(w http.ResponseWriter, r *http.Request) {
 	// stream as oauth_link_added so a single query reads both sides of
 	// every OAuth identity's lifecycle.
 	api.auth.logAuth(r.Context(), "oauth_link_removed", &user.ID, &user.TenantID, true, r, nil)
-	slog.Info("OAuth identity unlinked", "user_id", user.ID, "provider", providerName)
+	slog.InfoContext(r.Context(), "OAuth identity unlinked", "user_id", user.ID, "provider", providerName)
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -37,6 +37,10 @@ interface PatchVars {
 // the cached SettingsObject on toggle / change so the Switch doesn't
 // flicker, then snaps back to the BE-returned value on success. On
 // error the snapshot is restored so the UI reflects the durable state.
+// The success value is written to every group's cached copy: the
+// settings belong to the user, not to the group the request went
+// through, and a copy left behind would show the old value after a
+// group switch.
 export function usePatchSetting() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
@@ -58,7 +62,7 @@ export function usePatchSetting() {
       }
     },
     onSuccess: (data) => {
-      qc.setQueryData<SettingsObject>(settingsKeys.preferences(slug), data)
+      qc.setQueriesData<SettingsObject>({ queryKey: settingsKeys.all }, data)
     },
   })
 }
@@ -119,6 +123,9 @@ function applyOptimisticPatch(
       break
     case "appearance.language":
       next.appearanceLanguage = value as string
+      break
+    case "whats_new.last_seen_version":
+      next.whatsNewLastSeenVersion = (value as string | null) ?? undefined
       break
   }
   return next

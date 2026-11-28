@@ -190,7 +190,7 @@ helm upgrade --install inventario ./helm/inventario \
 Two things move the database forward, and they are not the same:
 
 - **Schema migrations** — `inventario db migrate up`. Generated files, applied in order, tracked in the revision table.
-- **Data migrations** — `inventario db migrate data`. Idempotent: creates the default tenant and the initial admin if they are missing.
+- **Data migrations** — `inventario db migrate data`. Idempotent: creates the default tenant and the initial admin if they are missing. It never moves a user between tenants. When the admin email exists only in another tenant and the default tenant was already there, which is the case after an operator moved the admin with `inventario users update --tenant`, the job logs a warning naming that tenant and succeeds without creating an admin. When the default tenant did not exist before the run, as on a database restored under another tenant id, the job fails and names the tenant the admin is in.
 
 Both need the DB roles that `inventario db bootstrap` creates, and the `pg_trgm` extension it installs. `migrate up` checks for the extension up front and names it, rather than failing partway through the chain on `gin_trgm_ops`.
 
@@ -248,6 +248,8 @@ This is the part worth being blunt about, because it is easy to read the ArgoCD 
 When the migration runs in the setup Job, the `pre-upgrade` hook migrates to completion **before** the rolling update starts, so old-revision pods serve traffic against the new schema for the whole rollout. When it runs in the pod — `migrateInInitContainer=true` or ArgoCD mode — the migration happens as the first new pod starts, which shortens that window to the rollout itself. Old pods are still up, and still talking to the migrated schema, until the last one is replaced.
 
 Neither mode removes the requirement. Expand and contract over releases: add a column, deploy code that writes both, backfill, deploy code that reads the new one, drop the old one in a later release. The chart cannot enforce this and does not try.
+
+What an old pod survives: a new table, a new index, and a new column that is nullable or has a default. The app ignores columns it does not know, and its inserts and updates name their columns, so the database fills in the default and keeps what the new version wrote. What it does not survive: a dropped or renamed column or table it uses, a changed column type, a new `NOT NULL` column without a default, or a new constraint its writes break. v0.2.x does not ignore unknown columns, so an upgrade from v0.2.x fails reads on the old pods for the whole rollout; `PRODUCTION.md` (Appendix C) says to scale the Deployments to zero first.
 
 ### Concurrency is safe
 
@@ -459,7 +461,7 @@ chart numbers.
 
 No values need to change. What is different:
 
-- `podSecurityContext` sets the `RuntimeDefault` seccomp profile, so the pods pass Pod Security `restricted`. If you set `podSecurityContext` yourself, add `seccompProfile` to it.
+- `podSecurityContext` sets the `RuntimeDefault` seccomp profile, so the chart's own pods pass Pod Security `restricted`. If you set `podSecurityContext` yourself, add `seccompProfile` to it. The demo Redis (`demo.redis.enabled`) and the demo MinIO bucket Job (`demo.minio.enabled`) run as root, so a release with either one needs a namespace that enforces `baseline`.
 - `extraVolumes` and `extraVolumeMounts` are new, for example for the database server's CA.
 - A fresh install applies the setup Job as an ordinary release object; upgrades still run it as the `pre-upgrade` hook. See [What runs when](#what-runs-when).
 - From this release on, the chart is published to `oci://ghcr.io/denisvmedia/charts/inventario`.

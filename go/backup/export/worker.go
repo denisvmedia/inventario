@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -15,6 +16,12 @@ import (
 const (
 	defaultPollInterval = 10 * time.Second
 	// Note: Cleanup interval removed - exports now use immediate hard delete with file entities
+
+	// personalExpireInterval and personalSweepInterval space out the
+	// deletion of expired personal data exports and the sweep for archives
+	// whose row is gone (#2177).
+	personalExpireInterval = time.Minute
+	personalSweepInterval  = time.Hour
 )
 
 // PauseChecker reports whether a worker type is currently soft-paused
@@ -45,6 +52,15 @@ type ExportWorker struct {
 	// racing for it get one winner (#2472); this set is an optimisation on
 	// top of that, not the thing standing between one artifact and two.
 	inFlight sync.Map
+
+	// personal builds and expires personal data exports (#2177); nil
+	// leaves them alone.
+	personal        *PersonalDataExportService
+	lastExpiry      time.Time
+	lastOrphanSweep time.Time
+
+	// lastStallSweep is when recoverStalledExports last swept.
+	lastStallSweep time.Time
 }
 
 // WorkerOption customizes an ExportWorker constructed via NewExportWorker.
@@ -53,6 +69,7 @@ type WorkerOption func(*exportWorkerOptions)
 type exportWorkerOptions struct {
 	pollInterval time.Duration
 	pause        PauseChecker
+	personal     *PersonalDataExportService
 }
 
 // WithPollInterval overrides the default interval between export queue polls.
@@ -76,6 +93,15 @@ func WithPauseController(pc PauseChecker) WorkerOption {
 	}
 }
 
+// WithPersonalDataExports makes the worker build the pending personal data
+// exports and delete the expired ones (#2177), sharing the group exports'
+// concurrency limit.
+func WithPersonalDataExports(s *PersonalDataExportService) WorkerOption {
+	return func(o *exportWorkerOptions) {
+		o.personal = s
+	}
+}
+
 // NewExportWorker creates a new export worker
 func NewExportWorker(exportService *ExportService, factorySet *registry.FactorySet, maxConcurrentExports int, opts ...WorkerOption) *ExportWorker {
 	options := exportWorkerOptions{
@@ -89,6 +115,7 @@ func NewExportWorker(exportService *ExportService, factorySet *registry.FactoryS
 		factorySet:    factorySet,
 		pollInterval:  options.pollInterval,
 		pause:         options.pause,
+		personal:      options.personal,
 		stopCh:        make(chan struct{}),
 		semaphore:     semaphore.NewWeighted(int64(maxConcurrentExports)),
 	}
@@ -114,7 +141,7 @@ func (w *ExportWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	})
 
-	slog.Info("Export worker started")
+	slog.InfoContext(ctx, "Export worker started")
 }
 
 // Stop stops the export worker
@@ -155,8 +182,29 @@ func (w *ExportWorker) run(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
+			w.recoverStalledExports(ctx, time.Now())
 			w.processPendingExports(ctx)
+			w.processPersonalDataExports(ctx)
 		}
+	}
+}
+
+// recoverStalledExports sweeps, every stall.SweepInterval, for the exports
+// whose worker stopped in the middle of a run. It runs while the worker is
+// paused too: a pause stops new runs, and the sweep only moves the dead ones
+// on.
+func (w *ExportWorker) recoverStalledExports(ctx context.Context, now time.Time) {
+	if now.Sub(w.lastStallSweep) < stall.SweepInterval {
+		return
+	}
+	w.lastStallSweep = now
+	out, err := w.exportService.RecoverStalled(ctx, now)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to recover stalled exports", "error", err)
+		return
+	}
+	if out.Requeued > 0 || out.Failed > 0 {
+		slog.WarnContext(ctx, "Recovered exports whose worker stopped", "requeued", out.Requeued, "failed", out.Failed)
 	}
 }
 
@@ -172,7 +220,7 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 	reg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	exports, err := reg.List(ctx)
 	if err != nil {
-		slog.Error("Failed to get exports", "error", err)
+		slog.ErrorContext(ctx, "Failed to get exports", "error", err)
 		return
 	}
 
@@ -195,17 +243,17 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to acquire semaphore", "error", err)
+			slog.DebugContext(ctx, "Failed to acquire semaphore", "error", err)
 			return
 		}
 
 		// Claim the row before dispatching: the condition is in the write, so
 		// exactly one caller wins it however many replicas are polling (#2472).
-		claimed, claimErr := reg.ClaimPending(ctx, export.ID)
+		claimed, claimErr := reg.ClaimPending(ctx, export.ID, time.Now())
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to claim export", "export_id", export.ID, "error", claimErr)
+			slog.ErrorContext(ctx, "Failed to claim export", "export_id", export.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
@@ -218,6 +266,10 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 		go func(exportID string) {
 			defer w.semaphore.Release(1)
 			defer w.inFlight.Delete(exportID)
+			stopBeat := stall.Beat(ctx, stall.HeartbeatInterval, func(ctx context.Context, now time.Time) error {
+				return reg.Heartbeat(ctx, exportID, now)
+			})
+			defer stopBeat()
 			w.processExport(ctx, exportID)
 		}(export.ID)
 	}
@@ -225,11 +277,86 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 
 // processExport processes a single export request
 func (w *ExportWorker) processExport(ctx context.Context, exportID string) {
-	slog.Info("Processing export", "export_id", exportID)
+	slog.InfoContext(ctx, "Processing export", "export_id", exportID)
 
 	if err := w.exportService.ProcessExport(ctx, exportID); err != nil {
-		slog.Error("Failed to process export", "export_id", exportID, "error", err)
+		slog.ErrorContext(ctx, "Failed to process export", "export_id", exportID, "error", err)
 		return
 	}
-	slog.Info("Successfully processed export", "export_id", exportID)
+	slog.InfoContext(ctx, "Successfully processed export", "export_id", exportID)
+}
+
+// processPersonalDataExports dispatches the pending personal data exports and,
+// at its own interval, deletes the expired ones (#2177). Soft-pause stops
+// both, like the group exports.
+func (w *ExportWorker) processPersonalDataExports(ctx context.Context) {
+	if w.personal == nil || (w.pause != nil && w.pause.IsPaused(models.WorkerTypeExport)) {
+		return
+	}
+
+	w.personalHousekeeping(ctx, time.Now())
+
+	reg := w.factorySet.PersonalDataExportRegistry
+	pending, err := reg.ListPending(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to list pending personal data exports", "error", err)
+		return
+	}
+	for _, export := range pending {
+		key := "personal:" + export.ID
+		if _, running := w.inFlight.LoadOrStore(key, struct{}{}); running {
+			continue
+		}
+		if err := w.semaphore.Acquire(ctx, 1); err != nil {
+			w.inFlight.Delete(key)
+			slog.DebugContext(ctx, "Failed to acquire semaphore", "error", err)
+			return
+		}
+		claimed, err := w.personal.Claim(ctx, export.ID)
+		if err != nil || !claimed {
+			w.semaphore.Release(1)
+			w.inFlight.Delete(key)
+			if err != nil {
+				slog.ErrorContext(ctx, "Failed to claim personal data export", "export_id", export.ID, "error", err)
+			}
+			continue
+		}
+		go func(exportID string) {
+			defer w.semaphore.Release(1)
+			defer w.inFlight.Delete(key)
+			slog.InfoContext(ctx, "Processing personal data export", "export_id", exportID)
+			if err := w.personal.Process(ctx, exportID); err != nil {
+				slog.ErrorContext(ctx, "Failed to process personal data export", "export_id", exportID, "error", err)
+				return
+			}
+			slog.InfoContext(ctx, "Successfully processed personal data export", "export_id", exportID)
+		}(export.ID)
+	}
+}
+
+// personalHousekeeping recovers stalled builds and deletes expired
+// exports every personalExpireInterval, and sweeps archives without a row
+// every personalSweepInterval.
+func (w *ExportWorker) personalHousekeeping(ctx context.Context, now time.Time) {
+	if now.Sub(w.lastExpiry) >= personalExpireInterval {
+		w.lastExpiry = now
+		if requeued, failed, err := w.personal.RecoverStalled(ctx); err != nil {
+			slog.ErrorContext(ctx, "Failed to recover stalled personal data exports", "error", err)
+		} else if requeued > 0 || failed > 0 {
+			slog.WarnContext(ctx, "Recovered stalled personal data exports", "requeued", requeued, "failed", failed)
+		}
+		if n, err := w.personal.ExpireDue(ctx); err != nil {
+			slog.ErrorContext(ctx, "Failed to delete expired personal data exports", "deleted", n, "error", err)
+		} else if n > 0 {
+			slog.InfoContext(ctx, "Deleted expired personal data exports", "deleted", n)
+		}
+	}
+	if now.Sub(w.lastOrphanSweep) >= personalSweepInterval {
+		w.lastOrphanSweep = now
+		if n, err := w.personal.SweepOrphanedArchives(ctx); err != nil {
+			slog.ErrorContext(ctx, "Failed to sweep orphaned personal data export archives", "deleted", n, "error", err)
+		} else if n > 0 {
+			slog.InfoContext(ctx, "Deleted orphaned personal data export archives", "deleted", n)
+		}
+	}
 }

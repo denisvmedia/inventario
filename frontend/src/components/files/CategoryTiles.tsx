@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import { Card } from "@/components/ui/card"
+import { NativeSelect } from "@/components/ui/native-select"
 import { FILE_CATEGORY_TILES, type FileCategoryTile } from "@/features/files/constants"
 import { useCategoryLabel } from "@/features/files/labels"
 import type { FileCategoryCounts } from "@/features/files/api"
@@ -27,28 +28,24 @@ export function CategoryTiles({ active, counts, loading, onSelect }: CategoryTil
 
   if (isMobile) {
     return (
-      <label className="block">
-        <span className="sr-only">
-          {t("files:categoryMobileLabel", { defaultValue: "Category" })}
-        </span>
-        {/* eslint-disable-next-line no-restricted-syntax -- mobile-only: the category tiles collapse to a compact native <select> to save screen real-estate (mock-driven). Not a form field */}
-        <select
-          data-testid="files-category-select"
-          value={active}
-          onChange={(e) => onSelect(e.target.value as FileCategoryTile)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {FILE_CATEGORY_TILES.map((tile) => {
-            const value = countForKey(tile.key, counts)
-            const display = loading && value === undefined ? "—" : (value ?? 0)
-            return (
-              <option key={tile.key} value={tile.key}>
-                {labelOf(tile.key)} ({display})
-              </option>
-            )
-          })}
-        </select>
-      </label>
+      <NativeSelect
+        data-testid="files-category-select"
+        aria-label={t("files:categoryMobileLabel", { defaultValue: "Category" })}
+        value={active}
+        onChange={(e) => onSelect(e.target.value as FileCategoryTile)}
+        wrapperClassName="w-full"
+        className="font-medium"
+      >
+        {FILE_CATEGORY_TILES.map((tile) => {
+          const value = countForKey(tile.key, counts)
+          const display = loading && value === undefined ? "—" : (value ?? 0)
+          return (
+            <option key={tile.key} value={tile.key}>
+              {labelOf(tile.key)} ({display})
+            </option>
+          )
+        })}
+      </NativeSelect>
     )
   }
 

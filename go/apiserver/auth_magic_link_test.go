@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -19,6 +20,7 @@ import (
 
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	memreg "go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/services"
 )
@@ -92,6 +94,10 @@ func (m *recordingMagicLinkEmailService) SendMaintenanceReminderEmail(_ context.
 }
 
 func (*recordingMagicLinkEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
+func (*recordingMagicLinkEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
 	return nil
 }
 
@@ -704,4 +710,62 @@ func TestMagicLinkVerify_MFACompletionRecordsMagicLink(t *testing.T) {
 	}
 	c.Check(outcomes[models.LoginOutcomeMFARequired], qt.Equals, 1)
 	c.Check(outcomes[models.LoginOutcomeOK], qt.Equals, 1)
+}
+
+// errMagicLinkStoreDown stands in for a database that cannot answer.
+var errMagicLinkStoreDown = errors.New("database is unavailable")
+
+// failingMagicLinkTokenLookup fails every token lookup with a database error.
+type failingMagicLinkTokenLookup struct {
+	registry.MagicLinkTokenRegistry
+}
+
+func (failingMagicLinkTokenLookup) GetByToken(context.Context, string) (*models.MagicLinkToken, error) {
+	return nil, errMagicLinkStoreDown
+}
+
+// failingUserLookup fails every user lookup by id with a database error.
+type failingUserLookup struct {
+	registry.UserRegistry
+}
+
+func (failingUserLookup) Get(context.Context, string) (*models.User, error) {
+	return nil, errMagicLinkStoreDown
+}
+
+// A link the database cannot look up is not the caller's fault: the verify
+// answers 500, as password reset does, not "invalid or expired".
+func TestMagicLinkVerify_TokenLookupFails(t *testing.T) {
+	c := qt.New(t)
+	f := newMagicLinkFixture(makeMagicLinkUser(true), func(p *apiserver.AuthParams) {
+		p.MagicLinkRegistry = failingMagicLinkTokenLookup{MagicLinkTokenRegistry: p.MagicLinkRegistry}
+	})
+	resp := magicLinkRequest(t, f.router, "/auth/magic-link/verify", map[string]string{"token": "any-token"})
+	c.Assert(resp.Code, qt.Equals, http.StatusInternalServerError)
+}
+
+func TestMagicLinkVerify_UserLookupFails(t *testing.T) {
+	c := qt.New(t)
+	user := makeMagicLinkUser(true)
+	f := newMagicLinkFixture(user, func(p *apiserver.AuthParams) {
+		p.UserRegistry = failingUserLookup{UserRegistry: p.UserRegistry}
+	})
+	token := seedMagicLinkToken(t, f, user, time.Now().Add(time.Hour))
+	resp := magicLinkRequest(t, f.router, "/auth/magic-link/verify", map[string]string{"token": token})
+	c.Assert(resp.Code, qt.Equals, http.StatusInternalServerError)
+}
+
+// The link stays usable when the lookup failed: nothing claimed it.
+func TestMagicLinkVerify_UserLookupFailureDoesNotBurnTheLink(t *testing.T) {
+	c := qt.New(t)
+	user := makeMagicLinkUser(true)
+	f := newMagicLinkFixture(user, func(p *apiserver.AuthParams) {
+		p.UserRegistry = failingUserLookup{UserRegistry: p.UserRegistry}
+	})
+	token := seedMagicLinkToken(t, f, user, time.Now().Add(time.Hour))
+	magicLinkRequest(t, f.router, "/auth/magic-link/verify", map[string]string{"token": token})
+
+	stored, err := f.magicLinkReg.GetByToken(t.Context(), token)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.IsClaimed(), qt.IsFalse)
 }

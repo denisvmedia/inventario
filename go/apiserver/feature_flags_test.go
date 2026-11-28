@@ -70,3 +70,37 @@ func TestFeatureFlags(t *testing.T) {
 		})
 	}
 }
+
+// The plans flag (#1389) is off unless the deployment turns it on, and it
+// moves on its own: the other flags keep their values either way.
+func TestFeatureFlags_Plans(t *testing.T) {
+	cases := []struct {
+		name      string
+		enabled   bool
+		wantPlans bool
+	}{
+		{name: "plans off by default", enabled: false, wantPlans: false},
+		{name: "plans on when the deployment enables them", enabled: true, wantPlans: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			params, _, _ := newParams()
+			params.PlansEnabled = tc.enabled
+			params.FeatureCurrencyMigration = true
+			handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/feature-flags", nil)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+			var raw map[string]any
+			c.Assert(json.Unmarshal(rr.Body.Bytes(), &raw), qt.IsNil)
+			c.Assert(raw["plans"], qt.Equals, tc.wantPlans)
+			c.Assert(raw["currency_migration"], qt.IsTrue)
+		})
+	}
+}

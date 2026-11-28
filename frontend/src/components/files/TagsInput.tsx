@@ -1,5 +1,6 @@
-import { Plus, X } from "lucide-react"
+import { Plus, Sparkles, X } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
@@ -42,6 +43,13 @@ export interface TagsInputProps {
   // usually the tag's label via useTagLabel. A value the resolver does
   // not know, such as text the user just typed, is shown as is.
   labelOf?: (value: string) => string
+  // Values an AI scan suggested (#1626). Their chips carry a sparkle and a
+  // dashed border, and `suggestedLabel` says so on hover and to screen
+  // readers; they are removed like any other chip.
+  suggested?: readonly string[]
+  suggestedLabel?: string
+  // Extra classes for a value's chip, such as the color of a curated tag.
+  chipClassName?: (value: string) => string | undefined
 }
 
 export function TagsInput({
@@ -55,7 +63,11 @@ export function TagsInput({
   compact,
   kind,
   labelOf,
+  suggested,
+  suggestedLabel,
+  chipClassName,
 }: TagsInputProps) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState("")
   // Remote suggestions live in local state and are populated via the
   // `<AutocompleteSink>` sub-component below. The sink is only rendered
@@ -166,24 +178,38 @@ export function TagsInput({
         compact ? "gap-1 px-1.5 py-1" : "gap-1.5 px-2 py-1.5"
       )}
     >
-      {values.map((v) => (
-        <Badge
-          key={v}
-          variant="secondary"
-          className={cn("gap-1", compact ? "h-4 px-1 text-[11px]" : "h-5 px-1.5 text-xs")}
-          data-testid={testId ? `${testId}-chip` : undefined}
-        >
-          {displayOf(v)}
-          <button
-            type="button"
-            className="ml-0.5 inline-flex items-center"
-            aria-label={`remove ${displayOf(v)}`}
-            onClick={() => onChange(values.filter((x) => x !== v))}
+      {values.map((v) => {
+        const isSuggested = !!suggested?.includes(v)
+        return (
+          <Badge
+            key={v}
+            variant={isSuggested ? "outline" : "secondary"}
+            className={cn(
+              "gap-1",
+              compact ? "h-4 px-1 text-[11px]" : "h-5 px-1.5 text-xs",
+              isSuggested && "border-dashed border-amber-500/60",
+              chipClassName?.(v)
+            )}
+            title={isSuggested ? suggestedLabel : undefined}
+            data-testid={testId ? `${testId}-chip` : undefined}
+            data-suggested={isSuggested ? "true" : undefined}
           >
-            <X className="size-3" aria-hidden="true" />
-          </button>
-        </Badge>
-      ))}
+            {isSuggested ? <Sparkles aria-hidden="true" className="size-3 text-amber-500" /> : null}
+            {displayOf(v)}
+            {isSuggested && suggestedLabel ? (
+              <span className="sr-only">{` (${suggestedLabel})`}</span>
+            ) : null}
+            <button
+              type="button"
+              className="ml-0.5 inline-flex items-center"
+              aria-label={t("common:chipInput.remove", { value: displayOf(v) })}
+              onClick={() => onChange(values.filter((x) => x !== v))}
+            >
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          </Badge>
+        )
+      })}
       <input
         id={inputId}
         value={draft}
@@ -273,7 +299,7 @@ export function TagsInput({
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground"
-          aria-label="add"
+          aria-label={t("common:chipInput.add", { value: draft.trim() })}
           onClick={commit}
         >
           <Plus className="size-3.5" aria-hidden="true" />

@@ -631,6 +631,24 @@ func TestCommodityEventService_EmitServiceStarted_IncludesCostWhenSet(t *testing
 	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
 }
 
+func TestCommodityEventService_EmitServiceStarted_IncludesCostOfZero(t *testing.T) {
+	// A free repair records a cost of 0 with its currency; the payload
+	// carries it like any other cost.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	row := makeService("svc-1", "c1", func(s *models.CommodityService) {
+		s.CostCurrency = "EUR"
+	})
+	svc.EmitServiceStarted(ctx, row)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].After["cost_amount"], qt.Equals, "0")
+	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
+}
+
 func TestCommodityEventService_EmitServiceReturned(t *testing.T) {
 	c := qt.New(t)
 	ctx, svc, reg := newEventTestContext(c)
@@ -705,4 +723,90 @@ func TestCommodityEventService_EmitServiceUpdated_CostPairChange(t *testing.T) {
 	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindServiceUpdated)
 	c.Assert(events[0].After["cost_amount"], qt.Equals, "245")
 	c.Assert(events[0].After["cost_currency"], qt.Equals, "EUR")
+}
+
+// specificEventFields are the payload keys of the specific events. The
+// "updated" event of the same save leaves them out, so a change is never
+// recorded twice.
+var specificEventFields = []string{
+	"status", "area_id", "original_price", "original_price_currency",
+	"converted_original_price", "current_price", "cover_file_id",
+}
+
+// A save that changes a field a specific event covers and a generic field
+// records both: the specific event and an "updated" event with the generic
+// fields.
+func TestCommodityEventService_EmitUpdated_SpecificAndGenericInOneSave(t *testing.T) {
+	cover := "f1"
+	tests := []struct {
+		name         string
+		mutate       func(*models.Commodity)
+		wantSpecific models.CommodityEventKind
+		field        string
+		before       any
+		after        any
+	}{
+		{
+			name: "status and type",
+			mutate: func(c *models.Commodity) {
+				c.Status = models.CommodityStatusSold
+				c.Type = models.CommodityTypeElectronics
+			},
+			wantSpecific: models.CommodityEventKindStatusChanged,
+			field:        "type", before: "other", after: "electronics",
+		},
+		{
+			name: "area and name",
+			mutate: func(c *models.Commodity) {
+				c.AreaID = new("area-2")
+				c.Name = "Renamed Item"
+			},
+			wantSpecific: models.CommodityEventKindMoved,
+			field:        "name", before: "Test Item", after: "Renamed Item",
+		},
+		{
+			name: "price and brand",
+			mutate: func(c *models.Commodity) {
+				c.CurrentPrice = new(decimal.NewFromInt(50))
+				c.Brand = "Acme"
+			},
+			wantSpecific: models.CommodityEventKindPriceChanged,
+			field:        "brand", before: "", after: "Acme",
+		},
+		{
+			name: "cover and comments",
+			mutate: func(c *models.Commodity) {
+				c.CoverFileID = &cover
+				c.Comments = "kept in the box"
+			},
+			wantSpecific: models.CommodityEventKindCoverChanged,
+			field:        "comments", before: "", after: "kept in the box",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx, svc, reg := newEventTestContext(c)
+
+			svc.EmitUpdated(ctx, makeCommodity("c1"), makeCommodity("c1", tc.mutate))
+
+			events, err := reg.List(ctx)
+			c.Assert(err, qt.IsNil)
+			c.Assert(events, qt.HasLen, 2)
+			byKind := map[models.CommodityEventKind]*models.CommodityEvent{}
+			for _, e := range events {
+				byKind[e.Kind] = e
+			}
+			c.Assert(byKind[tc.wantSpecific], qt.IsNotNil)
+			updated := byKind[models.CommodityEventKindUpdated]
+			c.Assert(updated, qt.IsNotNil)
+			c.Assert(updated.Before[tc.field], qt.Equals, tc.before)
+			c.Assert(updated.After[tc.field], qt.Equals, tc.after)
+			for _, key := range specificEventFields {
+				_, inBefore := updated.Before[key]
+				_, inAfter := updated.After[key]
+				c.Assert(inBefore || inAfter, qt.IsFalse, qt.Commentf("key %s", key))
+			}
+		})
+	}
 }

@@ -83,13 +83,13 @@ func NewOperationSlotCleanupWorker(r registry.OperationSlotRegistry, opts ...Ope
 // Start launches the background cleanup goroutine. It is a no-op if the registry is nil.
 func (w *OperationSlotCleanupWorker) Start(ctx context.Context) {
 	if w.registry == nil {
-		slog.Warn("OperationSlotCleanupWorker: no registry configured, skipping startup")
+		slog.WarnContext(ctx, "OperationSlotCleanupWorker: no registry configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.runCleanup(ctx)
 	})
-	slog.Info("Operation slot cleanup worker started", "interval", w.cleanupInterval)
+	slog.InfoContext(ctx, "Operation slot cleanup worker started", "interval", w.cleanupInterval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -127,10 +127,10 @@ func (w *OperationSlotCleanupWorker) cleanupOnce(ctx context.Context) {
 
 	deleted, err := w.registry.CleanupExpiredSlots(ctx)
 	if err != nil {
-		slog.Error("Failed to delete expired operation slots", "error", err)
+		slog.ErrorContext(ctx, "Failed to delete expired operation slots", "error", err)
 		return
 	}
 	if deleted > 0 {
-		slog.Debug("Expired operation slots cleaned up", "count", deleted)
+		slog.DebugContext(ctx, "Expired operation slots cleaned up", "count", deleted)
 	}
 }

@@ -1,26 +1,37 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { authKeys } from "@/features/auth/keys"
+import { customFieldKeys } from "@/features/customFields/keys"
+import { itemTypeKeys } from "@/features/itemTypes/keys"
 
 import {
+  addCollectionSet,
   changeMemberRole,
   createGroup,
   createInvite,
   deleteGroup,
+  getCollectionSet,
   getGroup,
   leaveGroup,
   listGroups,
   listInvites,
   listMembers,
+  removeCollectionSet,
   removeMember,
   resendInvite,
   revokeInvite,
+  setHiddenSections,
   updateGroup,
+  type CollectionSetRemoval,
+  type CollectionSetResult,
+  type CreatedGroup,
   type CreateGroupRequest,
   type CreateInviteRequest,
   type DeleteGroupRequest,
   type GroupInvite,
   type GroupRole,
+  type GroupSection,
+  type ItemSetView,
   type LocationGroup,
   type MemberRow,
   type UpdateGroupRequest,
@@ -70,6 +81,16 @@ export function useInvites(groupId: string | undefined, opts: { enabled?: boolea
   })
 }
 
+// The Collection set (#1607) as the group holds it. Read by the group
+// settings; every member may see it.
+export function useCollectionSet(groupId: string | undefined) {
+  return useQuery<ItemSetView>({
+    queryKey: groupKeys.collectionSet(groupId ?? ""),
+    queryFn: ({ signal }) => getCollectionSet(groupId!, signal),
+    enabled: !!groupId,
+  })
+}
+
 // --- Mutations -----------------------------------------------------------
 
 // Creating a group: invalidate the list so the new entry appears in the
@@ -84,7 +105,7 @@ export function useInvites(groupId: string | undefined, opts: { enabled?: boolea
 // new group.
 export function useCreateGroup() {
   const queryClient = useQueryClient()
-  return useMutation<LocationGroup, Error, CreateGroupRequest>({
+  return useMutation<CreatedGroup, Error, CreateGroupRequest>({
     mutationFn: (req) => createGroup(req),
     onSuccess: async () => {
       // Await the refetch so that callers (NoGroupPage's onboarding flow,
@@ -115,6 +136,73 @@ export function useUpdateGroup() {
       queryClient.invalidateQueries({ queryKey: groupKeys.list() })
     },
   })
+}
+
+interface SetHiddenSectionsVars {
+  groupId: string
+  sections: readonly GroupSection[]
+}
+
+// The list query feeds the group context every page reads the setting
+// from, so it is refetched as well as the detail being replaced.
+export function useSetHiddenSections() {
+  const queryClient = useQueryClient()
+  return useMutation<LocationGroup, Error, SetHiddenSectionsVars>({
+    mutationFn: ({ groupId, sections }) => setHiddenSections(groupId, sections),
+    onSuccess: (group, { groupId }) => {
+      queryClient.setQueryData(groupKeys.detail(groupId), group)
+      queryClient.setQueryData<LocationGroup[]>(groupKeys.list(), (groups) =>
+        groups?.map((g) => (g.id === groupId ? { ...g, ...group, id: g.id } : g))
+      )
+      void queryClient.invalidateQueries({ queryKey: groupKeys.list() })
+    },
+  })
+}
+
+interface CollectionSetVars {
+  groupId: string
+  // The group's slug, whose item type and custom field caches the change
+  // makes stale.
+  groupSlug: string
+}
+
+function useCollectionSetMutation<V extends CollectionSetVars>(
+  mutate: (vars: V) => Promise<CollectionSetResult>
+) {
+  const queryClient = useQueryClient()
+  return useMutation<CollectionSetResult, Error, V>({
+    mutationFn: mutate,
+    onSuccess: (result, { groupId }) => {
+      queryClient.setQueryData(groupKeys.collectionSet(groupId), result.set)
+    },
+    // A failed add or remove may have changed part of the set, so the
+    // caches are refreshed either way.
+    onSettled: (_result, _error, { groupId, groupSlug }) => {
+      void queryClient.invalidateQueries({ queryKey: groupKeys.collectionSet(groupId) })
+      if (groupSlug) {
+        void queryClient.invalidateQueries({ queryKey: itemTypeKeys.group(groupSlug) })
+        void queryClient.invalidateQueries({ queryKey: customFieldKeys.group(groupSlug) })
+      }
+    },
+  })
+}
+
+// Adds the Collection set to a group: its item types and custom fields.
+export function useAddCollectionSet() {
+  return useCollectionSetMutation<CollectionSetVars>(({ groupId }) => addCollectionSet(groupId))
+}
+
+interface RemoveCollectionSetVars extends CollectionSetVars {
+  // What the confirmation listed as deleted; nothing else is.
+  removal: CollectionSetRemoval
+}
+
+// Removes the Collection set: deletes what the confirmation listed of what
+// it created and nothing uses.
+export function useRemoveCollectionSet() {
+  return useCollectionSetMutation<RemoveCollectionSetVars>(({ groupId, removal }) =>
+    removeCollectionSet(groupId, removal)
+  )
 }
 
 interface DeleteGroupVars extends DeleteGroupRequest {

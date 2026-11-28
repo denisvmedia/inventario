@@ -129,6 +129,11 @@ type CurrencyMigration struct {
 	// ErrorMessage is populated when status=failed.
 	//ptah:schema:field name="error_message" type="TEXT"
 	ErrorMessage string `json:"error_message,omitempty" db:"error_message" userinput:"false"`
+
+	// DiscardedAt is when an operator discarded the failed migration
+	// (#1307). The row stays in the group's history with its error.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt *time.Time `json:"-" db:"discarded_at" userinput:"false"`
 }
 
 // CurrencyMigrationIndexes defines indexes on currency_migrations.
@@ -198,7 +203,7 @@ func (m *CurrencyMigration) ValidateWithContext(ctx context.Context) error {
 			}
 			return nil
 		})),
-		validation.Field(&m.ErrorMessage, validation.Length(0, 2000)),
+		validation.Field(&m.ErrorMessage, validation.RuneLength(0, 2000)),
 	}
 
 	return validation.ValidateStructWithContext(ctx, m, fields...)

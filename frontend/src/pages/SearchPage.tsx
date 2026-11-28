@@ -24,11 +24,13 @@ import {
   primarySearchMatch,
   type CommoditySearchMatch,
 } from "@/features/commodities/query"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useSearch } from "@/features/search/hooks"
 import {
   areaHref,
   areaItemsHref,
+  locationItemsHref,
   commodityHref,
   commoditySubtitle,
   fileHref,
@@ -37,7 +39,13 @@ import {
   tagListHref,
 } from "@/features/search/results"
 import { useTagLabel } from "@/features/tags/hooks"
-import { clearRecent, getRecent, pushRecent, type RecentEntry } from "@/features/search/recent"
+import {
+  clearRecent,
+  getRecent,
+  pushRecent,
+  recentScope,
+  type RecentEntry,
+} from "@/features/search/recent"
 import type {
   AreaAttrs,
   CommodityAttrs,
@@ -142,15 +150,16 @@ export function SearchPage() {
 
 function EmptyState({ groupSlug }: { groupSlug: string | null }) {
   const { t } = useTranslation()
-  const scope = groupSlug ?? "default"
-  // Recents come from localStorage scoped to the group slug. We snapshot
-  // once on mount + on slug change; the page is single-instance so we
-  // don't need a live-cross-tab subscription.
-  const [recent, setRecent] = useState<RecentEntry[]>(() => getRecent(scope))
-  // Re-snapshot localStorage when the group slug changes.
+  const userId = useOptionalAuth()?.user?.id
+  const scope = userId && groupSlug ? recentScope(userId, groupSlug) : null
+  // Recents come from localStorage scoped to the user and the group. We
+  // snapshot once on mount + on scope change; the page is single-instance
+  // so we don't need a live-cross-tab subscription.
+  const [recent, setRecent] = useState<RecentEntry[]>(() => (scope ? getRecent(scope) : []))
+  // Re-snapshot localStorage when the user or the group slug changes.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRecent(getRecent(scope))
+    setRecent(scope ? getRecent(scope) : [])
   }, [scope])
 
   const hints: Array<keyof typeof HINT_KEYS> = ["item", "tag", "location", "category"]
@@ -192,7 +201,7 @@ function EmptyState({ groupSlug }: { groupSlug: string | null }) {
               variant="ghost"
               data-testid="recent-clear"
               onClick={() => {
-                clearRecent(scope)
+                if (scope) clearRecent(scope)
                 setRecent([])
               }}
             >
@@ -500,11 +509,12 @@ function CardShell({
   ariaLabel: string
   // Remembered when the card is opened, for the empty page and the empty
   // command palette.
-  recent?: { scope: string; entry: Omit<RecentEntry, "visitedAt" | "url"> }
+  recent?: { groupSlug: string; entry: Omit<RecentEntry, "visitedAt" | "url"> }
   // A second link on the card: the items in an area, the items or files
   // carrying a tag.
   related?: RelatedLink | null
 }) {
+  const userId = useOptionalAuth()?.user?.id
   const inner = (
     <div className="flex items-center gap-3">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
@@ -535,7 +545,10 @@ function CardShell({
       </li>
     )
   }
-  const onOpen = recent ? () => pushRecent(recent.scope, { ...recent.entry, url: href }) : undefined
+  const onOpen =
+    recent && userId
+      ? () => pushRecent(recentScope(userId, recent.groupSlug), { ...recent.entry, url: href })
+      : undefined
   if (!related) {
     return (
       <li>
@@ -562,10 +575,19 @@ function CardShell({
       >
         {inner}
       </Link>
+      {/* Below sm the button is its icon alone, so the title keeps the
+          width; its name stays in aria-label and title. */}
       <Button asChild size="sm" variant="ghost" className="shrink-0 text-muted-foreground">
-        <Link to={related.href} aria-label={related.ariaLabel} data-testid={related.testId}>
+        <Link
+          to={related.href}
+          aria-label={related.ariaLabel}
+          title={related.ariaLabel}
+          data-testid={related.testId}
+        >
           <ListFilter aria-hidden="true" />
-          {related.label}
+          <span className="hidden sm:inline" data-testid={`${related.testId}-label`}>
+            {related.label}
+          </span>
         </Link>
       </Button>
     </li>
@@ -595,9 +617,7 @@ function CommodityCard({
       testId={`result-commodity-${resource.id}`}
       ariaLabel={t("search:resultCard.openItem")}
       recent={
-        groupSlug
-          ? { scope: groupSlug, entry: { type: "commodity", id: resource.id, title } }
-          : undefined
+        groupSlug ? { groupSlug, entry: { type: "commodity", id: resource.id, title } } : undefined
       }
     />
   )
@@ -622,9 +642,17 @@ function LocationCard({
       testId={`result-location-${resource.id}`}
       ariaLabel={t("search:resultCard.openLocation")}
       recent={
+        groupSlug ? { groupSlug, entry: { type: "location", id: resource.id, title } } : undefined
+      }
+      related={
         groupSlug
-          ? { scope: groupSlug, entry: { type: "location", id: resource.id, title } }
-          : undefined
+          ? {
+              href: locationItemsHref(groupSlug, resource.id),
+              label: t("search:resultCard.showItems"),
+              ariaLabel: t("search:resultCard.showItemsInLocation", { name: title }),
+              testId: `result-location-items-${resource.id}`,
+            }
+          : null
       }
     />
   )
@@ -647,9 +675,7 @@ function AreaCard({
       testId={`result-area-${resource.id}`}
       ariaLabel={t("search:resultCard.openArea")}
       recent={
-        groupSlug
-          ? { scope: groupSlug, entry: { type: "area", id: resource.id, title } }
-          : undefined
+        groupSlug ? { groupSlug, entry: { type: "area", id: resource.id, title } } : undefined
       }
       related={
         groupSlug
@@ -683,9 +709,7 @@ function TagCard({
       icon={<Tag className="size-4 text-muted-foreground" aria-hidden="true" />}
       testId={`result-tag-${resource.id}`}
       ariaLabel={t("search:resultCard.openTag")}
-      recent={
-        groupSlug ? { scope: groupSlug, entry: { type: "tag", id: resource.id, title } } : undefined
-      }
+      recent={groupSlug ? { groupSlug, entry: { type: "tag", id: resource.id, title } } : undefined}
       related={
         groupSlug
           ? {
@@ -723,9 +747,7 @@ function FileCard({
       testId={`result-file-${resource.id}`}
       ariaLabel={t("search:resultCard.openFile")}
       recent={
-        groupSlug
-          ? { scope: groupSlug, entry: { type: "file", id: resource.id, title } }
-          : undefined
+        groupSlug ? { groupSlug, entry: { type: "file", id: resource.id, title } } : undefined
       }
     />
   )

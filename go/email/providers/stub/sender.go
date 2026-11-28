@@ -18,11 +18,11 @@ func New() *Sender {
 	return &Sender{}
 }
 
-// Send logs recipient/subject metadata and returns success without network I/O.
-func (Sender) Send(_ context.Context, message sender.Message) error {
-	slog.Info("STUB email sender: queued email sent",
-		"to", message.To,
-		"subject", message.Subject,
-	)
+// Send logs that a message was sent and returns success without network I/O.
+// It logs neither the recipient nor the subject: the sender cannot tell a
+// sign-in email from a reminder, and a subject can hold an item name or a
+// feedback sender. The worker's own line names the job and its template.
+func (Sender) Send(ctx context.Context, _ sender.Message) error {
+	slog.InfoContext(ctx, "STUB email sender: queued email sent")
 	return nil
 }

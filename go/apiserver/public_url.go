@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"fmt"
-	"log/slog"
 	"net/url"
 	"strings"
 )
@@ -16,28 +15,14 @@ func buildPublicURL(publicBaseURL, path string, query url.Values) (string, error
 	parsed, err := url.Parse(base)
 	switch {
 	case err != nil:
-		slog.Error("Invalid public URL configuration; cannot build transactional email link",
-			"public_url", base,
-			"error", err,
-		)
 		return "", fmt.Errorf("parse public URL: %w", err)
 	case parsed.Scheme == "" || parsed.Host == "":
-		err := fmt.Errorf("scheme and host are required")
-		slog.Error("Invalid public URL configuration; cannot build transactional email link",
-			"public_url", base,
-			"error", err,
-		)
-		return "", err
+		return "", fmt.Errorf("scheme and host are required")
 	}
 
 	scheme := strings.ToLower(parsed.Scheme)
 	if !isAllowedPublicURLScheme(scheme) {
-		err := fmt.Errorf("unsupported scheme %q", parsed.Scheme)
-		slog.Error("Invalid public URL configuration; only http/https schemes are allowed",
-			"public_url", base,
-			"error", err,
-		)
-		return "", err
+		return "", fmt.Errorf("unsupported scheme %q", parsed.Scheme)
 	}
 
 	parsed.Scheme = scheme

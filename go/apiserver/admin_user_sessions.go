@@ -79,8 +79,8 @@ func (api *adminUsersAPI) revokeSessions(w http.ResponseWriter, r *http.Request)
 			_ = renderEntityError(w, r, err)
 			return
 		}
-		slog.Error("admin revoke sessions: failed to load user", "user_id", userID, "error", err)
-		_ = internalServerError(w, r, err)
+		slog.ErrorContext(r.Context(), "admin revoke sessions: failed to load user", "user_id", userID, "error", err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -98,7 +98,7 @@ func (api *adminUsersAPI) revokeSessions(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte(`{"status":"sessions_revoked"}`)); err != nil {
-		slog.Warn("admin revoke sessions: failed to write the response", "error", err)
+		slog.WarnContext(r.Context(), "admin revoke sessions: failed to write the response", "error", err)
 	}
 }
 

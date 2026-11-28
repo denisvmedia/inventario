@@ -135,8 +135,25 @@ func (r *FileRegistry) lockFileForShare(ctx context.Context, tx *sqlx.Tx, fileID
 	return &file, nil
 }
 
-// AddLink attaches a file to an entity; see the interface doc.
+// AddLink attaches a live file to an entity; see the interface doc.
 func (r *FileRegistry) AddLink(ctx context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(ctx, link, isLiveFile)
+}
+
+// AddLinkIncludingTrashed attaches a file in either state; see the interface
+// doc.
+func (r *FileRegistry) AddLinkIncludingTrashed(ctx context.Context, link models.FileLink) (*models.FileLink, bool, error) {
+	return r.addLink(ctx, link, anyFileState)
+}
+
+func isLiveFile(f *models.FileEntity) bool { return !f.IsTrashed() }
+
+func anyFileState(*models.FileEntity) bool { return true }
+
+// addLink writes the link when inState holds for the file. The file is read
+// under the share lock, which waits for a concurrent Trash to commit, so the
+// state it checks is the one the link is written against.
+func (r *FileRegistry) addLink(ctx context.Context, link models.FileLink, inState func(*models.FileEntity) bool) (*models.FileLink, bool, error) {
 	if link.FileID == "" {
 		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "FileID"))
 	}
@@ -148,6 +165,9 @@ func (r *FileRegistry) AddLink(ctx context.Context, link models.FileLink) (*mode
 		file, err := r.lockFileForShare(ctx, tx, link.FileID)
 		if err != nil {
 			return err
+		}
+		if !inState(file) {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", link.FileID))
 		}
 		stored, created, err = r.insertLink(ctx, tx, file, link)
 		return err
@@ -308,6 +328,53 @@ func (r *FileRegistry) SetChecksum(ctx context.Context, id, sha256 string) error
 	return nil
 }
 
+// ListPendingThumbnailOrientation returns JPEG files whose thumbnails are not
+// marked oriented; see the interface doc.
+func (r *FileRegistry) ListPendingThumbnailOrientation(ctx context.Context, afterID string, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT * FROM %s
+			WHERE NOT thumbnails_oriented AND mime_type = 'image/jpeg' AND original_path <> '' AND id > $1
+			ORDER BY id
+			LIMIT $2`, r.tableNames.Files())
+		rows, err := tx.QueryxContext(ctx, query, afterID, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var file models.FileEntity
+			if err := rows.StructScan(&file); err != nil {
+				return errxtrace.Wrap("failed to scan file", err)
+			}
+			files = append(files, &file)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files pending thumbnail orientation", err)
+	}
+	return files, nil
+}
+
+// SetThumbnailsOriented marks a file's thumbnails oriented; see the interface
+// doc.
+func (r *FileRegistry) SetThumbnailsOriented(ctx context.Context, id string) error {
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET thumbnails_oriented = TRUE WHERE id = $1 AND NOT thumbnails_oriented`, r.tableNames.Files())
+		_, err := tx.ExecContext(ctx, query, id)
+		return err
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to mark thumbnails oriented", err)
+	}
+	return nil
+}
+
 // MoveLegacyLinks moves single links from the legacy columns into file_links;
 // see the interface doc. One statement per batch: the rows are locked with
 // SKIP LOCKED so two instances starting together split the work instead of
@@ -391,6 +458,8 @@ func (r *FileRegistry) createFile(ctx context.Context, file models.FileEntity) (
 	links := file.Links
 	file.Links = nil
 	file.ClearTrashState()
+	// The INSERT leaves the legacy link columns out; the returned file says so.
+	file.LegacyFileLink = models.LegacyFileLink{}
 	file.SetID(uuid.NewString())
 	file.SetUUID(uuid.NewString())
 	if !r.service {

@@ -88,6 +88,19 @@ describe("pending-files-store", () => {
     expect(await loaded[0].file.text()).toBe("hello")
   })
 
+  it("keeps the title typed for a file", async () => {
+    await savePendingFiles("draft:title", [
+      { ...entry("a.png"), title: "Front of the box" },
+      entry("b.png"),
+    ])
+
+    const loaded = await loadPendingFiles("draft:title")
+    expect(loaded.map((e) => [e.file.name, e.title])).toEqual([
+      ["a.png", "Front of the box"],
+      ["b.png", undefined],
+    ])
+  })
+
   it("keeps the server file a draft save uploaded for an entry", async () => {
     await savePendingFiles("draft:uploaded", [
       { ...entry("a.png"), uploadedFileId: "file-7" },
@@ -98,6 +111,29 @@ describe("pending-files-store", () => {
     expect(loaded.map((e) => [e.file.name, e.uploadedFileId])).toEqual([
       ["a.png", "file-7"],
       ["b.png", undefined],
+    ])
+  })
+
+  it("keeps what an AI scan suggested for a file", async () => {
+    await writeRaw("draft:suggestion", [
+      { ...entry("a.png", "x", ["invoice"]), suggestion: { tag: "invoice", title: "Receipt" } },
+      { ...entry("b.png"), suggestion: { tag: 7, title: "Manual" } },
+      { ...entry("c.png"), suggestion: "invoice" },
+      {
+        ...entry("d.png"),
+        suggestion: { rejectedTags: ["photo", 3, "invoice"], rejectedTitle: "Receipt" },
+      },
+      { ...entry("e.png"), suggestion: { rejectedTags: "photo", rejectedTitle: 1 } },
+    ])
+
+    const loaded = await loadPendingFiles("draft:suggestion")
+    // A malformed part of a suggestion is dropped; the file stays.
+    expect(loaded.map((e) => [e.file.name, e.suggestion])).toEqual([
+      ["a.png", { tag: "invoice", title: "Receipt" }],
+      ["b.png", { title: "Manual" }],
+      ["c.png", undefined],
+      ["d.png", { rejectedTags: ["photo", "invoice"], rejectedTitle: "Receipt" }],
+      ["e.png", undefined],
     ])
   })
 
@@ -134,6 +170,7 @@ describe("pending-files-store", () => {
       { id: 42, file: new File(["x"], "bad-id.png"), tags: [] },
       { id: "no-tags", file: new File(["x"], "no-tags.png") },
       { id: "bad-upload", file: new File(["x"], "bad-upload.png"), tags: [], uploadedFileId: 7 },
+      { id: "bad-title", file: new File(["x"], "bad-title.png"), tags: [], title: 7 },
       null,
     ])
 

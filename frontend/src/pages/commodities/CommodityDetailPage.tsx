@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Link,
   useLocation,
@@ -47,7 +47,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CommodityFilesTab } from "@/components/files/CommodityFilesTab"
+import { CommodityFilesTab, FILES_CHIP_PARAM } from "@/components/files/CommodityFilesTab"
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
@@ -89,6 +89,7 @@ import {
   useUpdateCommodity,
 } from "@/features/commodities/hooks"
 import {
+  COMMODITY_STATUS_TEXT_TONES,
   COMMODITY_STATUS_TONES,
   TERMINAL_COMMODITY_STATUSES,
   warrantyStatus,
@@ -99,29 +100,19 @@ import {
 
 // CHANGE-STATUS bar: terminal status transitions surfaced as quick
 // buttons on the detail surface (mock: "Change Status" section).
-// Mirror the mock's set sans `in_use`, since `in_use` is what we're
-// transitioning *from*. Order matches the mock's row.
+// Every status but `in_use`, which is what the item transitions *from*.
+// The mock's row stops at Written Off; Donated and Stolen follow it.
+// Each button is an outline button with its label in the status color
+// (the mock's `cn("gap-1.5 text-xs h-7", c.color)` pattern), the same
+// color as the status pill.
 const TERMINAL_STATUSES = TERMINAL_COMMODITY_STATUSES
-
-// Mock parity colour-only mapping for the CHANGE STATUS quick
-// buttons. Lifted from `inventario-design`'s
-// `COMMODITY_STATUS_CONFIG.color` field — text-only, no bg/border
-// tint, so the buttons are plain outline pills with coloured
-// labels (the mock's `cn("gap-1.5 text-xs h-7", c.color)` pattern).
-// Distinct from the project's `COMMODITY_STATUS_TONES` (which adds
-// bg + border for the inline status pills elsewhere).
-const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], string> = {
-  sold: "text-chart-2",
-  lost: "text-status-expiring",
-  disposed: "text-muted-foreground",
-  written_off: "text-status-expired",
-}
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
-import type {
-  Commodity,
-  LinkedItemSummary,
-  UpdateCommodityRequest,
+import {
+  isCommodityRevisionConflict,
+  type Commodity,
+  type LinkedItemSummary,
+  type UpdateCommodityRequest,
 } from "@/features/commodities/api"
 import { CustomFieldValue } from "@/components/customFields/CustomFieldValue"
 import type { CustomFieldValues } from "@/features/customFields/api"
@@ -130,6 +121,10 @@ import { hasValue } from "@/features/customFields/values"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
+import { useLoansForCommodity } from "@/features/loans/hooks"
+import { useMaintenanceForCommodity } from "@/features/maintenance/hooks"
+import { useServicesForCommodity } from "@/features/services/hooks"
 import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import {
@@ -138,7 +133,7 @@ import {
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
 import { commodityKeys } from "@/features/commodities/keys"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import { setCommodityDraft } from "@/features/inbox/api"
 import { useSetItemDraft } from "@/features/inbox/hooks"
 import { inboxReviewSource, isInboxReviewContext } from "@/features/inbox/listContext"
@@ -155,6 +150,7 @@ import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { ItemHoldContext } from "@/hooks/useItemHold"
 import { fetchRecordAfter, useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
 import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -165,6 +161,7 @@ import {
   type ListContext,
 } from "@/lib/list-context"
 import { parseServerError } from "@/lib/server-error"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { cn } from "@/lib/utils"
 
 type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies" | "maintenance"
@@ -290,7 +287,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // the right tab. `?tab=details` is the default — we strip the param
   // when switching back so the URL stays clean.
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = parseTab(searchParams.get("tab"))
+  const requestedTab = parseTab(searchParams.get("tab"))
   function setTab(next: TabKey) {
     const params = new URLSearchParams(searchParams)
     if (next === "details") params.delete("tab")
@@ -310,6 +307,20 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // the values entered so far. Null while closed.
   const [allFieldsOn, setAllFieldsOn] = useState<{ id: string; values: Commodity } | null>(null)
   const dialogDraft = allFieldsOn?.id === id ? allFieldsOn.values : null
+  // The item whose edit form was opened before the item last changed: a
+  // save from the dialog that form opened was refused (the form tracks its
+  // own refused saves). Reload reads the item again and opens a fresh form
+  // (a new formLoad gives it a new key).
+  const [staleEditOn, setStaleEditOn] = useState<string | null>(null)
+  const [formLoad, setFormLoad] = useState(0)
+  const [reloadingForm, setReloadingForm] = useState(false)
+  // The refusal belongs to the edit form it happened in. Leaving that form
+  // by any way (Cancel, Back, Save and next) forgets it: the refused save
+  // read the item again, so the next form opens on the item as it is.
+  useEffect(() => {
+    if (!editing) return
+    return () => setStaleEditOn(null)
+  }, [editing, id])
   // The Details tab field being edited in place (#2795), if any.
   const [quickEditOn, setQuickEditOn] = useState<{ id: string; field: QuickEditField } | null>(null)
   const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null
@@ -339,7 +350,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     dialogOpen.current =
       quickEdit !== null || transitionTarget !== null || uploadOpen || dialogDraft !== null
   }, [quickEdit, transitionTarget, uploadOpen, dialogDraft])
-  const holdsItem = () => dialogOpen.current || confirmOpen.current
+  // The tabs keep their dialogs and confirms in their own state; each one
+  // holds the item through hooks/useItemHold while it is open.
+  const tabHolds = useRef(0)
+  const holdItem = useCallback(() => {
+    tabHolds.current += 1
+    let held = true
+    return () => {
+      if (!held) return
+      held = false
+      tabHolds.current -= 1
+    }
+  }, [])
+  const holdsItem = () => dialogOpen.current || confirmOpen.current || tabHolds.current > 0
   async function confirm(options: Parameters<typeof askConfirm>[0]) {
     confirmOpen.current = true
     try {
@@ -348,6 +371,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       confirmOpen.current = false
     }
   }
+  // Write actions are offered by the caller's role (features/group/roles.ts).
+  const canWrite = useGroupPermissions().canEditContent
   const dropZone = useFileDropZone({
     onFiles: (files) => {
       setPendingDropFiles(files)
@@ -355,8 +380,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     },
     // Don't catch new drags while the dialog is already open — its
     // own dropzone takes over so a second drop doesn't bounce through
-    // the page wrapper.
-    disabled: uploadOpen,
+    // the page wrapper. A role that cannot attach files catches nothing.
+    disabled: uploadOpen || !canWrite,
   })
 
   // Opened from the Items list, the item carries that list in `?from=`
@@ -385,8 +410,6 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // The list context to carry: on the list page that holds the item.
   const currentContext = walked ? withListContextPage(walked, nav.page) : from
   const contextAt = (page: number) => (walked ? withListContextPage(walked, page) : currentContext)
-  const role = useMyGroupRole()
-  const canWrite = role === "user" || role === "admin" || role === "owner"
   const setDraft = useSetItemDraft()
   // A review and the item's own saves are not started together: a quick
   // save sends the item as the page last read it, draft mark included, and
@@ -421,6 +444,17 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   function itemHref(targetId: string, ctx: ListContext | null, edit = false) {
     return slug ? commodityHref(slug, targetId, ctx, { edit }) : "#"
   }
+  // Walking to another item keeps the tab and the Files chip as chosen, so a
+  // member who checks the photos of each item stays on them.
+  function walkHref(targetId: string, ctx: ListContext | null) {
+    if (!slug) return "#"
+    const view = new URLSearchParams()
+    for (const key of ["tab", FILES_CHIP_PARAM]) {
+      const value = searchParams.get(key)
+      if (value) view.set(key, value)
+    }
+    return commodityHref(slug, targetId, ctx, { view })
+  }
   function startEditing() {
     setQuickEdit(null)
     go(itemHref(id, currentContext, true), currentContext, { editEntered: true })
@@ -437,7 +471,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
   function goToNeighbor(target: ListNeighbor, edit: boolean) {
     const ctx = contextAt(target.page)
-    go(itemHref(target.id, ctx, edit), ctx)
+    go(edit ? itemHref(target.id, ctx, true) : walkHref(target.id, ctx), ctx)
   }
   // Clears the draft mark of an item opened from the inbox, then moves to
   // the next item to review, or back to the inbox after the last one. The
@@ -485,6 +519,37 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   const commodity = detail.data?.commodity
+
+  // A section the group hides (#1607) drops its tab, unless the item holds
+  // data for it: an item with a warranty, a loan, a service record or a
+  // maintenance schedule keeps the tab and shows that data, without the
+  // action that starts a new one. The lists are read only while the
+  // section is hidden; the tabs read them anyway once opened. A tab goes
+  // only once its data has loaded and holds nothing, so a link to the tab
+  // does not fall back to Details while the data loads, and a failed read
+  // does not hide data the item may have.
+  const showWarranties = useSectionVisible("warranties")
+  const showLoans = useSectionVisible("loans")
+  const showMaintenance = useSectionVisible("maintenance")
+  const heldLoans = useLoansForCommodity(id, { enabled: enabled && !showLoans })
+  const heldServices = useServicesForCommodity(id, { enabled: enabled && !showMaintenance })
+  const heldSchedules = useMaintenanceForCommodity(id, {
+    enabled: enabled && !showMaintenance,
+  })
+  const hiddenTabs = new Set<TabKey>()
+  if (!showWarranties && commodity && !commodity.warranty_expires_at && !commodity.warranty_notes) {
+    hiddenTabs.add("warranty")
+  }
+  if (!showLoans && heldLoans.isSuccess && heldLoans.data.loans.length === 0) {
+    hiddenTabs.add("lend")
+  }
+  if (!showMaintenance && heldServices.isSuccess && heldServices.data.services.length === 0) {
+    hiddenTabs.add("service")
+  }
+  if (!showMaintenance && heldSchedules.isSuccess && heldSchedules.data.schedules.length === 0) {
+    hiddenTabs.add("maintenance")
+  }
+  const tab: TabKey = hiddenTabs.has(requestedTab) ? "details" : requestedTab
 
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
@@ -611,10 +676,42 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // Save from the step-by-step dialog: closes it and the edit form under it.
   async function handleDialogSave(values: UpdateCommodityRequest) {
     if (!allFieldsOn) return
-    await update.mutateAsync({ id: allFieldsOn.id, values })
+    const savingOn = allFieldsOn.id
+    try {
+      await update.mutateAsync({ id: savingOn, values })
+    } catch (err) {
+      // The dialog says nothing was saved; the edit form under it offers
+      // the reload.
+      if (isCommodityRevisionConflict(err)) setStaleEditOn(savingOn)
+      throw err
+    }
     toast.success(t("commodities:toast.updated"))
     setAllFieldsOn(null)
     stopEditing()
+  }
+
+  // After a refused save from the edit form: read the item again and open
+  // the form afresh on it. A failed read keeps the form and its alert; the
+  // global error toast reports the failure.
+  async function reloadEditForm() {
+    const reloadingOn = id
+    setReloadingForm(true)
+    try {
+      const result = await detail.refetch()
+      if (result.isError) return
+    } finally {
+      setReloadingForm(false)
+    }
+    setStaleEditOn((on) => (on === reloadingOn ? null : on))
+    setFormLoad((n) => n + 1)
+  }
+
+  // A save built from the item as the page read it is refused when the item
+  // changed since. useUpdateCommodity reads the item again, so trying again
+  // saves on the item as it is now.
+  function toastSaveError(err: unknown, fallback: string) {
+    if (isCommodityRevisionConflict(err)) toast.error(t("commodities:toast.changedMeanwhile"))
+    else toastMutationError(err, fallback)
   }
 
   // A quick edit on the Details tab saves one field and keeps the rest of
@@ -632,7 +729,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       setQuickEditOn((open) => (open?.id === savedOn && open.field === field ? null : open))
       return true
     } catch (err) {
-      toast.error(parseServerError(err, t("commodities:quickEdit.error")))
+      toastSaveError(err, t("commodities:quickEdit.error"))
       return false
     }
   }
@@ -651,13 +748,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       await remove.mutateAsync(deleting)
       toast.success(t("commodities:toast.deleted"), { action: undoDelete([deleting]) })
       navigate(listHref)
-    } catch {
-      toast.error(t("commodities:toast.deleteError"))
+    } catch (err) {
+      toastMutationError(err, t("commodities:toast.deleteError"))
     }
   }
 
   // CHANGE STATUS quick action: drives the row's status transitions.
-  // Forward transitions (in_use → sold/lost/disposed/written_off) open
+  // Forward transitions (in_use → any terminal status) open
   // the StatusTransitionDialog (#1611) so the user can record the
   // status_date / status_note / sale_price triple the BE persists.
   // Revert (terminal → in_use) keeps the lighter useConfirm path and
@@ -690,8 +787,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         },
       })
       toast.success(t("commodities:toast.statusUpdated"))
-    } catch {
-      toast.error(t("commodities:toast.statusUpdateError"))
+    } catch (err) {
+      toastSaveError(err, t("commodities:toast.statusUpdateError"))
     }
   }
 
@@ -718,7 +815,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       toast.success(t("commodities:toast.statusUpdated"))
       setTransitionOn(null)
     } catch (err) {
-      toast.error(t("commodities:toast.statusUpdateError"))
+      toastSaveError(err, t("commodities:toast.statusUpdateError"))
       // Re-throw so the dialog can map field-level 422 errors onto its
       // inputs (it stays open). The toast above is the summary.
       throw err
@@ -748,7 +845,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     />
   )
 
-  if (editing && !migrationLock.locked) {
+  // An edit link followed by a role that cannot change the item shows the
+  // read view.
+  if (editing && canWrite && !migrationLock.locked) {
     return (
       <>
         {isSheet ? null : <RouteTitle title={t("commodities:detail.documentTitle")} />}
@@ -759,14 +858,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         >
           <CommodityEditForm
             // A fresh form per item: "Save and next" lands here with the
-            // next item's values.
-            key={commodity.id}
+            // next item's values. A reload after a refused save opens a
+            // fresh one too.
+            key={`${commodity.id}:${formLoad}`}
             commodity={commodity}
             areas={areas.data ?? []}
             locations={locations.data ?? []}
             groupCurrency={groupCurrency}
             onSubmit={(req) => update.mutateAsync({ id, values: req })}
             isPending={itemSaving}
+            stale={staleEditOn === id}
+            onReload={() => void reloadEditForm()}
+            reloading={reloadingForm}
             nav={nav}
             hrefFor={(target) => itemHref(target.id, contextAt(target.page), true)}
             onExit={stopEditing}
@@ -786,7 +889,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   return (
-    <>
+    <ItemHoldContext.Provider value={holdItem}>
       {/* Document title is owned by the full-page variant only — when
           the sheet is open over the list, the list page already set
           the title and the user expects it to stay. */}
@@ -808,14 +911,20 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             the group actually has locations to choose from. Hidden while
             a currency migration holds the group lock — its CTA opens the
             same edit dialog the main Edit button gates on the lock, so
-            hiding it keeps the banner from being a lock-bypass path. */}
+            hiding it keeps the banner from being a lock-bypass path. A role
+            that cannot change the item gets no banner either (#3038). */}
         <AssignLocationBanner
           // Key by commodity id so the banner remounts when the user
           // navigates between items on the same CommodityDetailContent
           // instance — its in-session dismiss is per-item ("returns on the
           // next mount"), not sticky across commodities.
           key={id}
-          show={!commodity.area_id && (locations.data?.length ?? 0) > 0 && !migrationLock.locked}
+          show={
+            canWrite &&
+            !commodity.area_id &&
+            (locations.data?.length ?? 0) > 0 &&
+            !migrationLock.locked
+          }
           onAssign={() => {
             if (!isSheet) setTab("details")
             setQuickEdit("location")
@@ -832,7 +941,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             <div className="flex items-center gap-2 pt-4 pr-8">
               <ListPager
                 nav={nav}
-                hrefFor={(target) => itemHref(target.id, contextAt(target.page))}
+                hrefFor={(target) => walkHref(target.id, contextAt(target.page))}
                 onNavigate={(target) => goToNeighbor(target, false)}
                 labels={pagerLabels}
                 testIdPrefix="commodity-detail"
@@ -852,7 +961,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             {nav.active ? (
               <ListPager
                 nav={nav}
-                hrefFor={(target) => itemHref(target.id, contextAt(target.page))}
+                hrefFor={(target) => walkHref(target.id, contextAt(target.page))}
                 labels={pagerLabels}
                 testIdPrefix="commodity-detail"
               />
@@ -1032,20 +1141,22 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             button); direct landings still have it on the page
             chrome where it doesn't crowd the action row. */}
         <div className={cn("flex flex-wrap items-center gap-2", isSheet && "pb-4")}>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={startEditing}
-            data-testid="commodity-detail-edit"
-            className="flex-1 gap-1.5"
-            disabled={migrationLock.locked || setDraft.isPending}
-            title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-            aria-disabled={migrationLock.locked || undefined}
-          >
-            <Pencil className="size-3.5" aria-hidden="true" />
-            {t("commodities:detail.edit")}
-          </Button>
+          {canWrite ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={startEditing}
+              data-testid="commodity-detail-edit"
+              className="flex-1 gap-1.5"
+              disabled={migrationLock.locked || setDraft.isPending}
+              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+              aria-disabled={migrationLock.locked || undefined}
+            >
+              <Pencil className="size-3.5" aria-hidden="true" />
+              {t("commodities:detail.edit")}
+            </Button>
+          ) : null}
           {slug && commodity.id ? (
             <Button
               asChild
@@ -1097,30 +1208,33 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               same-row Edit / Insurance Report buttons. The icon
               child stays the same; the destructive tone comes from
               the className. */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:bg-destructive/10"
-            onClick={handleDelete}
-            data-testid="commodity-detail-delete"
-            title={
-              migrationLock.locked
-                ? t("errors:lockedDuringMigration")
-                : t("commodities:detail.delete")
-            }
-            aria-label={t("commodities:detail.delete")}
-            disabled={migrationLock.locked}
-            aria-disabled={migrationLock.locked || undefined}
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </Button>
+          {canWrite ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleDelete}
+              data-testid="commodity-detail-delete"
+              title={
+                migrationLock.locked
+                  ? t("errors:lockedDuringMigration")
+                  : t("commodities:detail.delete")
+              }
+              aria-label={t("commodities:detail.delete")}
+              disabled={migrationLock.locked}
+              aria-disabled={migrationLock.locked || undefined}
+            >
+              <Trash2 className="size-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
 
         {/* CHANGE STATUS bar — `mb-4 rounded-xl border border-border
             bg-muted/30 p-3 space-y-2` lifted from the mock. Only
-            meaningful while the item is still `in_use`. */}
-        {status === "in_use" ? (
+            meaningful while the item is still `in_use`, and offered only
+            to a role that may change the item. */}
+        {status === "in_use" && canWrite ? (
           <div
             className={cn(
               "rounded-xl border border-border bg-muted/30 p-3 space-y-2",
@@ -1138,7 +1252,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   type="button"
                   variant="outline"
                   size="sm"
-                  className={cn("gap-1.5 text-xs h-7", STATUS_TRANSITION_TEXT_TONES[s])}
+                  className={cn("gap-1.5 text-xs h-7", COMMODITY_STATUS_TEXT_TONES[s])}
                   onClick={() => handleStatusTransition(s)}
                   data-testid={`commodity-detail-transition-${s}`}
                   disabled={itemSaving || migrationLock.locked}
@@ -1206,19 +1320,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 })}
               </p>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
-              onClick={() => handleStatusTransition("in_use")}
-              disabled={itemSaving || migrationLock.locked}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              aria-disabled={migrationLock.locked || undefined}
-              data-testid="commodity-detail-revert-status"
-            >
-              {t("commodities:detail.terminalStatus.revert")}
-            </Button>
+            {canWrite ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
+                onClick={() => handleStatusTransition("in_use")}
+                disabled={itemSaving || migrationLock.locked}
+                title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+                aria-disabled={migrationLock.locked || undefined}
+                data-testid="commodity-detail-revert-status"
+              >
+                {t("commodities:detail.terminalStatus.revert")}
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1229,7 +1345,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             right-hand tabs clip past the panel edge. Page mode keeps
             the full strip untouched. */}
         {isSheet ? null : (
-          <Tabs value={tab} onChange={setTab} fileCount={fileCount} variant={variant} />
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            fileCount={fileCount}
+            variant={variant}
+            hidden={hiddenTabs}
+          />
         )}
 
         {/* Tab content gets `mt-4` in sheet mode to mirror the
@@ -1253,8 +1375,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 areaName={areaName(commodity.area_id)}
                 areaLabel={areaLabel(commodity.area_id)}
                 variant={variant}
-                quickEdit={migrationLock.locked ? null : quickEdit}
-                onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
+                quickEdit={migrationLock.locked || !canWrite ? null : quickEdit}
+                onQuickEdit={migrationLock.locked || !canWrite ? undefined : setQuickEdit}
                 onQuickSave={handleQuickSave}
                 saving={itemSaving}
                 areas={areas.data ?? []}
@@ -1285,8 +1407,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 areaName={areaName(commodity.area_id)}
                 areaLabel={areaLabel(commodity.area_id)}
                 variant={variant}
-                quickEdit={migrationLock.locked ? null : quickEdit}
-                onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
+                quickEdit={migrationLock.locked || !canWrite ? null : quickEdit}
+                onQuickEdit={migrationLock.locked || !canWrite ? undefined : setQuickEdit}
                 onQuickSave={handleQuickSave}
                 saving={itemSaving}
                 areas={areas.data ?? []}
@@ -1300,6 +1422,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   key={`reminders-${id}`}
                   commodityId={commodity.id}
                   className="my-6"
+                  canEdit={canWrite}
                 />
               ) : null}
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
@@ -1307,17 +1430,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           ) : tab === "warranty" ? (
             <WarrantyTab
               commodity={commodity}
-              onUploadReceipt={() => {
-                // #2012: open the upload dialog directly (commodity
-                // preselected) — the same dialog the Files-tab dropzone
-                // opens — instead of just switching tabs and leaving the
-                // user to hunt for the dropzone. Switch the underlying
-                // tab to Files too so the newly uploaded receipt is
-                // visible once the dialog closes.
-                setTab("files")
-                setPendingDropFiles([])
-                setUploadFor(id)
-              }}
+              onUploadReceipt={
+                canWrite
+                  ? () => {
+                      // #2012: open the upload dialog directly (commodity
+                      // preselected) — the same dialog the Files-tab dropzone
+                      // opens — instead of just switching tabs and leaving the
+                      // user to hunt for the dropzone. Switch the underlying
+                      // tab to Files too so the newly uploaded receipt is
+                      // visible once the dialog closes.
+                      setTab("files")
+                      setPendingDropFiles([])
+                      setUploadFor(id)
+                    }
+                  : undefined
+              }
             />
           ) : tab === "lend" ? (
             // The tabs write to the item from their own dialogs. One
@@ -1327,20 +1454,26 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
+              canStart={showLoans}
+              canEdit={canWrite}
             />
           ) : tab === "service" ? (
             <ServiceTab
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
+              canStart={showMaintenance}
+              canEdit={canWrite}
             />
           ) : tab === "supplies" ? (
-            <SuppliesTab key={id} commodityId={commodity?.id ?? id} />
+            <SuppliesTab key={id} commodityId={commodity?.id ?? id} canEdit={canWrite} />
           ) : tab === "maintenance" ? (
             <MaintenanceTab
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
+              canStart={showMaintenance}
+              canEdit={canWrite}
             />
           ) : (
             <FilesTab
@@ -1356,35 +1489,44 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                     ? commodity.cover.fileId
                     : undefined,
               }}
-              onSetCover={(fileId) => {
-                setCover.mutate(
-                  { id, fileId },
-                  {
-                    onSuccess: () => {
-                      toast.success(
-                        fileId
-                          ? t("commodities:cover.setSuccess", {
-                              defaultValue: "Cover photo updated.",
-                            })
-                          : t("commodities:cover.clearSuccess", {
-                              defaultValue: "Cover photo cleared.",
-                            })
+              canEdit={canWrite}
+              onSetCover={
+                canWrite
+                  ? (fileId) => {
+                      setCover.mutate(
+                        { id, fileId },
+                        {
+                          onSuccess: () => {
+                            toast.success(
+                              fileId
+                                ? t("commodities:cover.setSuccess", {
+                                    defaultValue: "Cover photo updated.",
+                                  })
+                                : t("commodities:cover.clearSuccess", {
+                                    defaultValue: "Cover photo cleared.",
+                                  })
+                            )
+                          },
+                          onError: () =>
+                            toast.error(
+                              t("commodities:cover.error", {
+                                defaultValue: "Couldn't update the cover photo.",
+                              })
+                            ),
+                        }
                       )
-                    },
-                    onError: () =>
-                      toast.error(
-                        t("commodities:cover.error", {
-                          defaultValue: "Couldn't update the cover photo.",
-                        })
-                      ),
-                  }
-                )
-              }}
+                    }
+                  : undefined
+              }
               coverBusy={setCover.isPending}
-              onAttachClick={() => {
-                setPendingDropFiles([])
-                setUploadFor(id)
-              }}
+              onAttachClick={
+                canWrite
+                  ? () => {
+                      setPendingDropFiles([])
+                      setUploadFor(id)
+                    }
+                  : undefined
+              }
             />
           )}
         </div>
@@ -1440,7 +1582,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           )
         }}
       />
-    </>
+    </ItemHoldContext.Provider>
   )
 }
 
@@ -1456,9 +1598,11 @@ interface TabsProps {
   // narrower panel; `"page"` keeps the existing left-clumped
   // layout that fits the wider canvas.
   variant?: "page" | "sheet"
+  // Tabs of sections the group hides, for an item without data in them.
+  hidden?: ReadonlySet<TabKey>
 }
 
-function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
+function Tabs({ value, onChange, fileCount = 0, variant = "page", hidden }: TabsProps) {
   const { t } = useTranslation()
   const isSheet = variant === "sheet"
   // Files tab gets a leading icon — mock parity (`<Paperclip
@@ -1505,40 +1649,42 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
       )}
       data-testid="commodity-detail-tabs"
     >
-      {tabs.map((tb) => {
-        const Icon = tb.icon
-        return (
-          <button
-            key={tb.key}
-            role="tab"
-            type="button"
-            aria-selected={value === tb.key}
-            onClick={() => onChange(tb.key)}
-            className={cn(
-              "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
-              // Sheet triggers grow to equal width + center their
-              // labels so the tab strip mirrors the mock's
-              // `flex-1 justify-center` `<TabsTrigger>` shape.
-              isSheet ? "flex-1 justify-center px-2" : "px-3",
-              value === tb.key
-                ? "border-primary text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-            data-testid={`commodity-detail-tab-${tb.key}`}
-          >
-            {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
-            {tb.label}
-            {tb.count && tb.count > 0 ? (
-              <span
-                className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
-                data-testid={`commodity-detail-tab-${tb.key}-count`}
-              >
-                {tb.count}
-              </span>
-            ) : null}
-          </button>
-        )
-      })}
+      {tabs
+        .filter((tb) => !hidden?.has(tb.key))
+        .map((tb) => {
+          const Icon = tb.icon
+          return (
+            <button
+              key={tb.key}
+              role="tab"
+              type="button"
+              aria-selected={value === tb.key}
+              onClick={() => onChange(tb.key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
+                // Sheet triggers grow to equal width + center their
+                // labels so the tab strip mirrors the mock's
+                // `flex-1 justify-center` `<TabsTrigger>` shape.
+                isSheet ? "flex-1 justify-center px-2" : "px-3",
+                value === tb.key
+                  ? "border-primary text-foreground font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+              data-testid={`commodity-detail-tab-${tb.key}`}
+            >
+              {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
+              {tb.label}
+              {tb.count && tb.count > 0 ? (
+                <span
+                  className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
+                  data-testid={`commodity-detail-tab-${tb.key}-count`}
+                >
+                  {tb.count}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
     </div>
   )
 }
@@ -2266,7 +2412,8 @@ function DetailLabel({ icon: Icon, label }: { icon: typeof MapPin; label: string
 interface FilesTabProps {
   commodityId: string
   commodityName?: string
-  onAttachClick: () => void
+  onAttachClick?: () => void
+  canEdit: boolean
   coverState?: { current?: string; auto?: string }
   onSetCover?: (fileId: string | null) => void
   coverBusy?: boolean
@@ -2276,6 +2423,7 @@ function FilesTab({
   commodityId,
   commodityName,
   onAttachClick,
+  canEdit,
   coverState,
   onSetCover,
   coverBusy,
@@ -2296,6 +2444,7 @@ function FilesTab({
       commodityId={commodityId}
       commodityName={commodityName}
       onAttachClick={onAttachClick}
+      canEdit={canEdit}
       coverState={coverState}
       onSetCover={onSetCover}
       coverBusy={coverBusy}

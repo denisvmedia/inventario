@@ -231,8 +231,10 @@
       "dateLabel": "Datum",
       "description": {
         "disposed": "Trvale odeberte tuto položku z inventáře.",
+        "donated": "Zaznamenejte darování této položky.",
         "lost": "Označte tuto položku jako ztracenou. Změnu lze později vrátit.",
         "sold": "Zaznamenejte prodej této položky včetně výnosu.",
+        "stolen": "Zaznamenejte krádež této položky, například pro policii nebo pojišťovnu.",
         "written_off": "Odepište tuto položku — obvykle pro pojištění nebo účetnictví."
       },
       "errors": {
@@ -245,8 +247,10 @@
       "noteLabel": "Poznámky (nepovinné)",
       "notePlaceholder": {
         "disposed": "Podrobnosti…",
+        "donated": "Darováno komu…",
         "lost": "Naposledy viděno na…",
         "sold": "Prodáno komu…",
+        "stolen": "Odkud byla ukradena…",
         "written_off": "Podrobnosti…"
       },
       "salePriceLabel": "Prodejní cena",
@@ -263,7 +267,7 @@
     },
     "terminalStatus": {
       "revert": "Vrátit do používání",
-      "revertConfirmDescription": "Tímto se položka vrátí do aktivního používání. Později ji můžete znovu označit jako prodanou, ztracenou, vyřazenou nebo odepsanou.",
+      "revertConfirmDescription": "Tímto se položka vrátí do aktivního používání. Její stav můžete později znovu změnit.",
       "revertConfirmTitle": "Vrátit do používání?",
       "salePrice": "Prodejní cena: {{value}}",
       "statusDate": "Datum: {{date}}"
@@ -370,6 +374,8 @@
     "inactiveHidden": "Skrýt neaktivní",
     "inactiveShown": "Zobrazují se neaktivní",
     "lentOut": "Zapůjčeno",
+    "location": "Umístění",
+    "locationAll": "Všechna umístění",
     "missing": "Chybí",
     "missingOptions": {
       "noPhoto": "Bez fotografie",
@@ -385,6 +391,9 @@
     "warranty": "Záruka"
   },
   "form": {
+    "addFailed": "Položku se nepodařilo přidat.",
+    "addFailedTitle": "Položka nebyla přidána",
+    "addRetryHint": "Nic se nepřidá, dokud se nenahrají všechny soubory. Nahrané soubory zůstávají v seznamu Uloženo s konceptem, kde je můžete odebrat, a Zkusit znovu pokračuje tam, kde se skončilo.",
     "assignLocationBanner": {
       "cta": "Umístit do umístění",
       "dismiss": "Zavřít",
@@ -404,10 +413,22 @@
     },
     "continue": "Pokračovat",
     "createTitle": "Přidat položku",
+    "discardAlreadyAdded": "Položka už byla přidána do inventáře.",
+    "editFailed": "Změny se nepodařilo uložit.",
+    "editFailedTitle": "Změny nebyly uloženy",
+    "editRetryHint": "Změny se uloží, až se nahrají všechny nové soubory. Nahrané soubory už jsou u položky a Zkusit znovu pokračuje tam, kde se skončilo.",
     "editTitle": "Upravit položku",
+    "filesNotUploaded": "Nenahráno: {{names}}",
     "fileUploadFailed": "Soubor {{name}} se nepodařilo nahrát. Můžete jej připojit později ze stránky s podrobnostmi položky.",
     "fillManually": "Vyplnit ručně",
+    "itemChanged": "Položka se od otevření formuláře změnila, proto se nic neuložilo. Zavřete tento dialog a položku načtěte znovu.",
+    "leftoverFilesFailed_few": "{{count}} nahrané soubory se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
+    "leftoverFilesFailed_many": "{{count}} nahraného souboru se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
+    "leftoverFilesFailed_one": "{{count}} nahraný soubor se nepodařilo přesunout do koše. Najdete jej na stránce Soubory.",
+    "leftoverFilesFailed_other": "{{count}} nahraných souborů se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
     "serverError": "Něco se pokazilo. Zkuste to prosím znovu.",
+    "statusChanged": "Stav položky se po otevření formuláře změnil, proto se nic neuložilo. Otevřete položku znovu a podívejte se na její stav.",
+    "statusHelp": "Stav změníte tlačítkem „Změnit stav“ na stránce položky. Zadáte tam i datum a poznámku.",
     "step": {
       "ai": {
         "choose": {
@@ -481,7 +502,14 @@
             "lowConfidence": "Nízká jistota",
             "multipleItems": "Vypadá to na více než jednu položku — předvyplnili jsme tu nejvýraznější. Ostatní přidejte samostatně po uložení.",
             "unreadableSerial": "Sériové číslo bylo špatně čitelné"
-          }
+          },
+          "yours": "Vaše",
+          "scanned": "Sken",
+          "tagsMerge": "Zaškrtnuté štítky se přidají k vašim.",
+          "fileSuggestions_one": "Sken navrhuje štítek nebo název pro {{count}} soubor. Změnit je můžete v kroku Soubory.",
+          "fileSuggestions_few": "Sken navrhuje štítek nebo název pro {{count}} soubory. Změnit je můžete v kroku Soubory.",
+          "fileSuggestions_many": "Sken navrhuje štítek nebo název pro {{count}} souboru. Změnit je můžete v kroku Soubory.",
+          "fileSuggestions_other": "Sken navrhuje štítek nebo název pro {{count}} souborů. Změnit je můžete v kroku Soubory."
         },
         "scanning": {
           "cancel": "Zrušit",
@@ -504,8 +532,16 @@
         "dropzone": "Sem přetáhněte soubory nebo klikněte pro procházení",
         "hint": "Každý soubor zařadíme do kategorie Fotografie, Dokumenty nebo Ostatní podle jeho typu.",
         "intro": "Připojte cokoli, co se týká této položky — fotografie, účtenky, návody. Soubory jsou nepovinné a lze je přidat později.",
+        "status": {
+          "failed": "Nahrání selhalo",
+          "uploaded": "nahráno",
+          "uploading": "nahrává se"
+        },
         "tagsPlaceholder": "Zadejte štítky oddělené čárkou, např. faktura, záruka, návod…",
-        "title": "Soubory"
+        "title": "Soubory",
+        "titleLabel": "Název souboru {{name}}",
+        "suggestedTitle": "Název navržený AI rozpoznáváním",
+        "suggestedTag": "navrženo AI rozpoznáváním"
       },
       "purchase": {
         "title": "Nákup"
@@ -518,7 +554,8 @@
     "stepperLabel": "Kroky formuláře",
     "submitCreate": "Přidat položku",
     "submitEdit": "Uložit změny",
-    "submitting": "Ukládání…"
+    "submitting": "Ukládání…",
+    "uploadingFiles": "Nahrávám {{done}} z {{total}}…"
   },
   "labels": {
     "areaQrTitle": "QR kód pro oblast {{name}}",
@@ -600,6 +637,7 @@
     "conditions": {
       "ascending": "vzestupně",
       "deletedArea": "Smazaná oblast",
+      "deletedLocation": "Smazané umístění",
       "deletedTag": "{{condition}} (štítek smazán)",
       "deletedType": "{{type}} (typ smazán)",
       "descending": "sestupně",
@@ -706,6 +744,7 @@
     "stale": {
       "area": "Oblast tohoto pohledu byla smazána.",
       "hint": "Označené podmínky odkazují na něco, co bylo smazáno. Pohled je stále uplatňuje, takže zobrazuje to, co stále odpovídá.",
+      "location": "Umístění tohoto pohledu bylo smazáno.",
       "sellers_one": "Prodejce tohoto pohledu byl smazán.",
       "sellers_few": "{{count}} prodejci tohoto pohledu byli smazáni.",
       "sellers_many": "{{count}} prodejce tohoto pohledu bylo smazáno.",
@@ -789,9 +828,11 @@
   },
   "status": {
     "disposed": "Vyřazeno",
+    "donated": "Darováno",
     "in_use": "Používá se",
     "lost": "Ztraceno",
     "sold": "Prodáno",
+    "stolen": "Ukradeno",
     "written_off": "Odepsáno"
   },
   "toast": {
@@ -828,6 +869,7 @@
     "bulkUpdated_many": "{{count}} položky upraveno.",
     "bulkUpdated_other": "{{count}} položek upraveno.",
     "bulkUpdateError": "Vybrané položky se nepodařilo upravit.",
+    "changedMeanwhile": "Položka se od načtení stránky změnila, proto se vaše změna neuložila. Stránka teď ukazuje aktuální stav položky; zkuste to znovu.",
     "created": "Položka přidána.",
     "deleted": "Položka přesunuta do koše.",
     "deleteError": "Položku se nepodařilo smazat.",
@@ -885,8 +927,10 @@
   },
   "editForm": {
     "allFields": "Všechna pole",
+    "changedSinceOpened": "Položka se od otevření formuláře změnila, proto se vaše změny neuložily. Načtěte ji znovu, abyste viděli její aktuální stav, a změny proveďte znovu.",
     "editing": "Úpravy",
     "hiddenFieldError": "Je třeba opravit pole, které tento formulář nezobrazuje. Otevřete všechna pole a opravte ho.",
+    "reload": "Načíst znovu",
     "save": "Uložit změny",
     "saveAndNext": "Uložit a další",
     "sections": {
@@ -948,7 +992,8 @@
     "discarded": "Koncept „{{title}}“ byl zahozen",
     "discardedBody": "Byl zahozen v jiném zařízení nebo panelu. Pokud chcete zdejší údaje zachovat, uložte je jako nový koncept.",
     "discardedTitle": "Tento koncept byl zahozen",
-    "discardFailed": "Koncept se nepodařilo zahodit."
+    "discardFailed": "Koncept se nepodařilo zahodit.",
+    "updateFileFailed": "Název a štítky souboru se nepodařilo uložit."
   },
   "intake": {
     "addFromFiles": "Přidat ze souborů",

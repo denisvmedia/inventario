@@ -13,6 +13,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jackc/pgx/v5"
 
+	"go.5x5.cz/inventario/internal/urlerr"
 	"go.5x5.cz/inventario/schema/dsnutil"
 )
 
@@ -184,6 +185,12 @@ func (m *Migrator) Apply(ctx context.Context, args ApplyArgs) error {
 
 	if args.DryRun {
 		return m.dryRun(files, args.Template)
+	}
+
+	// pgx's connect error quotes the database name, which holds the rest of a
+	// password that spilled past the host.
+	if err := urlerr.CheckDatabaseURL(args.DSN); err != nil {
+		return err
 	}
 
 	// Connect to database. pgx.Connect (unlike pgxpool.ParseConfig) does not

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
 
+import { FieldError } from "@/components/FieldError"
 import { FilePreview } from "@/components/files/FilePreview"
 import { ListPager } from "@/components/ListPager"
 import { ImageViewer } from "@/components/files/ImageViewer"
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -402,17 +404,15 @@ function FileReview({
                         id="file-title"
                         data-testid="file-edit-title"
                         aria-invalid={titleError ? true : undefined}
-                        aria-describedby={titleError ? "file-title-error" : "file-title-hint"}
+                        aria-describedby={
+                          titleError?.message ? "file-title-error" : "file-title-hint"
+                        }
                         {...form.register("title")}
                       />
                       <p id="file-title-hint" className="text-xs text-muted-foreground">
                         {t("files:edit.fields.titleHint")}
                       </p>
-                      {titleError ? (
-                        <p id="file-title-error" className="text-xs text-destructive">
-                          {t(titleError.message ?? "")}
-                        </p>
-                      ) : null}
+                      <FieldError id="file-title-error" message={titleError?.message} />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
@@ -421,20 +421,15 @@ function FileReview({
                         id="file-path"
                         data-testid="file-edit-path"
                         aria-invalid={pathError ? true : undefined}
-                        aria-describedby={pathError ? "file-path-error" : "file-path-hint"}
+                        aria-describedby={pathError?.message ? "file-path-error" : "file-path-hint"}
                         {...form.register("path")}
                       />
                       <p id="file-path-hint" className="text-xs text-muted-foreground">
                         {t("files:edit.fields.pathHint")}
                       </p>
-                      {pathError ? (
-                        <p id="file-path-error" className="text-xs text-destructive">
-                          {/* Schema emits the i18n key (see schemas.ts); the
-                            page resolves it via t() at render so cs/ru can
-                            translate. */}
-                          {t(pathError.message ?? "")}
-                        </p>
-                      ) : null}
+                      {/* The schema emits an i18n key (see schemas.ts), which
+                        FieldError resolves through t(). */}
+                      <FieldError id="file-path-error" message={pathError?.message} />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
@@ -453,13 +448,12 @@ function FileReview({
                         control={form.control}
                         name="category"
                         render={({ field }) => (
-                          // eslint-disable-next-line no-restricted-syntax -- file-edit category field; native <select> retained (has native-select coverage). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md
-                          <select
+                          <NativeSelect
                             id="file-category"
                             data-testid="file-edit-category"
                             value={field.value}
                             onChange={(e) => field.onChange(e.target.value)}
-                            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                            wrapperClassName="w-full"
                           >
                             <option value="images">
                               {t("files:categoryImages", { defaultValue: "Images" })}
@@ -470,7 +464,7 @@ function FileReview({
                             <option value="other">
                               {t("files:categoryOther", { defaultValue: "Other" })}
                             </option>
-                          </select>
+                          </NativeSelect>
                         )}
                       />
                     </div>
@@ -547,7 +541,7 @@ function FileReview({
       {url && isPdfMime(file.mime_type) ? (
         <Dialog open={pdfViewerOpen} onOpenChange={setPdfViewerOpen}>
           <DialogContent
-            className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
+            className="flex h-screen max-h-none w-screen max-w-none flex-col gap-0 overflow-visible rounded-none border-0 p-0 [&>button]:hidden sm:max-w-none"
             data-testid="file-review-pdf-fullscreen"
           >
             <DialogHeader className="sr-only">

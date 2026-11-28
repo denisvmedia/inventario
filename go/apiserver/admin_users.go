@@ -147,6 +147,14 @@ type adminUsersAPI struct {
 	blacklist    services.TokenBlacklister
 	auditService services.AuditLogger
 	apiTokens    *services.APITokenService
+	// avatarSigner signs the users' photo URLs for the operator (#2894). Nil
+	// leaves every user without one.
+	avatarSigner *services.FileSigningService
+}
+
+// avatarURL signs each listed user's photo URL for the operator of r.
+func (api *adminUsersAPI) avatarURL(r *http.Request) func(*models.User) string {
+	return func(u *models.User) string { return operatorAvatarURL(r, api.avatarSigner, u) }
 }
 
 // listTenantUsers returns a paginated, filtered, sorted listing of
@@ -212,7 +220,7 @@ func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request
 	// Audit AFTER render so a JSON-encoding / response-writer failure
 	// turns into a Success=false row instead of claiming the client
 	// received their data successfully.
-	renderErr := render.Render(w, r, jsonapi.NewAdminUsersResponse(items, page, perPage, total))
+	renderErr := render.Render(w, r, jsonapi.NewAdminUsersResponse(items, page, perPage, total, api.avatarURL(r)))
 	api.auditListUsers(r, tenantID, renderErr)
 	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)
@@ -294,7 +302,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 			// The membership points at a group this lookup did not return —
 			// deleted, or in another tenant. Rendering blank slug and name
 			// makes an orphan look like an unnamed group (#2131).
-			slog.Warn("admin getUser: membership references an unresolved group",
+			slog.WarnContext(r.Context(), "admin getUser: membership references an unresolved group",
 				"user_id", user.ID, "group_id", m.GroupID)
 		}
 		mems = append(mems, row)
@@ -322,7 +330,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 	if api.factorySet.SystemAdminGrantRegistry != nil {
 		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), user.ID)
 		if err != nil {
-			slog.Warn("admin getUser: grant lookup failed",
+			slog.WarnContext(r.Context(), "admin getUser: grant lookup failed",
 				"user_id", user.ID, "error", err)
 		} else {
 			isAdmin = ok
@@ -339,6 +347,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		Memberships:        mems,
 		ActiveSessionCount: sessionCount,
 		IsSystemAdmin:      isAdmin,
+		AvatarURL:          operatorAvatarURL(r, api.avatarSigner, user),
 	}))
 	api.auditGetUser(r, userID, user.TenantID, renderErr)
 	if renderErr != nil {
@@ -365,6 +374,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
 // @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
+// @Failure 409 {object} jsonapi.Errors "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - self-block or admin-on-admin without force"
 // @Router /admin/users/{userID}/block [post]
 func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
@@ -395,9 +405,9 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 			_ = renderEntityError(w, r, err)
 			return
 		}
-		slog.Error("admin block: failed to load user", "user_id", userID, "error", err)
+		slog.ErrorContext(r.Context(), "admin block: failed to load user", "user_id", userID, "error", err)
 		api.logBlockOutcome(r, actor.ID, userID, "", req, false, err.Error(), false)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -437,9 +447,9 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// column on the users row.
 	targetIsAdmin, grantErr := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), target.ID)
 	if grantErr != nil {
-		slog.Error("admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
+		slog.ErrorContext(r.Context(), "admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, grantErr.Error(), false)
-		_ = internalServerError(w, r, grantErr)
+		_ = renderInternalServerError(w, r, grantErr)
 		return
 	}
 	if targetIsAdmin && !req.Force {
@@ -459,9 +469,9 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	updated.IsActive = false
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
-		slog.Error("admin block: failed to deactivate user", "user_id", target.ID, "error", err)
+		slog.Log(r.Context(), errorLogLevel(err), "admin block: failed to deactivate user", "user_id", target.ID, "error", err)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error(), forced)
-		_ = internalServerError(w, r, err)
+		_ = renderLoggedEntityError(w, r, err)
 		return
 	}
 
@@ -499,6 +509,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
 // @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
+// @Failure 409 {object} jsonapi.Errors "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - invalid reason"
 // @Router /admin/users/{userID}/unblock [post]
 func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
@@ -526,9 +537,9 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 			_ = renderEntityError(w, r, err)
 			return
 		}
-		slog.Error("admin unblock: failed to load user", "user_id", userID, "error", err)
+		slog.ErrorContext(r.Context(), "admin unblock: failed to load user", "user_id", userID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, userID, "", req, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -545,9 +556,9 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	updated.IsActive = true
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
-		slog.Error("admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
+		slog.Log(r.Context(), errorLogLevel(err), "admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderLoggedEntityError(w, r, err)
 		return
 	}
 
@@ -559,31 +570,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 // the right error response and returns ok=false on failure so the
 // caller can early-return without sprinkling decode-error noise.
 func (api *adminUsersAPI) decodeBlockRequest(w http.ResponseWriter, r *http.Request) (AdminBlockRequest, bool) {
-	var req AdminBlockRequest
-	if r.Body == nil {
-		_ = badRequest(w, r, errors.New("missing request body"))
-		return req, false
-	}
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		_ = badRequest(w, r, err)
-		return req, false
-	}
-	if !decoderAtEOF(dec) {
-		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
-		return req, false
-	}
-	req.Reason = strings.TrimSpace(req.Reason)
-	if req.Reason == "" {
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), AdminBlockReasonRequiredCode)
-		return req, false
-	}
-	if utf8.RuneCountInString(req.Reason) > adminBlockReasonMaxLen {
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminBlockReasonTooLongCode)
-		return req, false
-	}
-	return req, true
+	return decodeReasonBody(w, r, blockReasonCodes, func(req *AdminBlockRequest) *string { return &req.Reason })
 }
 
 // decodeUnblockRequest mirrors decodeBlockRequest for the unblock
@@ -591,34 +578,65 @@ func (api *adminUsersAPI) decodeBlockRequest(w http.ResponseWriter, r *http.Requ
 // (no `force` field on unblock) and so a future expansion of either
 // body type doesn't entangle the two.
 func (api *adminUsersAPI) decodeUnblockRequest(w http.ResponseWriter, r *http.Request) (AdminUnblockRequest, bool) {
-	var req AdminUnblockRequest
-	if r.Body == nil {
-		_ = badRequest(w, r, errors.New("missing request body"))
+	// Unblock answers with the admin.block.reason_* codes: the reason means
+	// the same in both, and a parallel admin.unblock.* family would only
+	// duplicate the FE branch.
+	return decodeReasonBody(w, r, blockReasonCodes, func(req *AdminUnblockRequest) *string { return &req.Reason })
+}
+
+// reasonCodes are the error codes of a missing and of an overlong reason.
+type reasonCodes struct {
+	required, tooLong string
+}
+
+var blockReasonCodes = reasonCodes{required: AdminBlockReasonRequiredCode, tooLong: AdminBlockReasonTooLongCode}
+
+// decodeReasonBody decodes a back-office body that carries a required
+// reason: block, unblock, and the tenant suspend and reactivate. It trims
+// the reason in place and refuses a blank one, or one over 500 characters,
+// with the given codes. On a failure it writes the response and returns
+// false.
+func decodeReasonBody[T any](w http.ResponseWriter, r *http.Request, codes reasonCodes, reasonOf func(*T) *string) (T, bool) {
+	var req T
+	if !decodeAdminBody(w, r, &req) {
 		return req, false
 	}
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		_ = badRequest(w, r, err)
+	reason := reasonOf(&req)
+	*reason = strings.TrimSpace(*reason)
+	if *reason == "" {
+		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), codes.required)
 		return req, false
 	}
-	if !decoderAtEOF(dec) {
-		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
-		return req, false
-	}
-	req.Reason = strings.TrimSpace(req.Reason)
-	if req.Reason == "" {
-		// Reuses the admin.block.reason_required code because both DTOs
-		// share the same reason field semantics — having a parallel
-		// admin.unblock.* family would just duplicate the FE branch.
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), AdminBlockReasonRequiredCode)
-		return req, false
-	}
-	if utf8.RuneCountInString(req.Reason) > adminBlockReasonMaxLen {
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminBlockReasonTooLongCode)
+	if utf8.RuneCountInString(*reason) > adminBlockReasonMaxLen {
+		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), codes.tooLong)
 		return req, false
 	}
 	return req, true
+}
+
+// adminBodyMaxBytes caps a back-office JSON body. The largest is a reason of
+// 500 characters; the cap leaves room for that with any encoding.
+const adminBodyMaxBytes int64 = 16 * 1024
+
+// decodeAdminBody decodes a JSON body of at most adminBodyMaxBytes into dst,
+// refusing unknown fields and trailing data. It writes a 400 and returns
+// false when the body is not acceptable.
+func decodeAdminBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if r.Body == nil {
+		_ = badRequest(w, r, errors.New("missing request body"))
+		return false
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, adminBodyMaxBytes))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		_ = badRequest(w, r, err)
+		return false
+	}
+	if !decoderAtEOF(dec) {
+		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
+		return false
+	}
+	return true
 }
 
 // decoderAtEOF reports whether the decoder has consumed all of its
@@ -652,7 +670,7 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 	var msgs []string
 	if api.factorySet != nil && api.factorySet.RefreshTokenRegistry != nil {
 		if err := api.factorySet.RefreshTokenRegistry.RevokeByUserID(r.Context(), userID); err != nil {
-			slog.Warn("admin block: failed to revoke refresh tokens", "user_id", userID, "error", err)
+			slog.ErrorContext(r.Context(), "admin end sessions: failed to revoke refresh tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "revoke_refresh_tokens: "+err.Error())
 		}
 	}
@@ -674,7 +692,7 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 		// invalidation of unrelated tokens; the one-second window is
 		// short enough that an operator can re-block to close it.
 		if err := api.blacklist.BlacklistUserTokens(r.Context(), userID, 2*accessTokenExpiration); err != nil {
-			slog.Warn("admin block: failed to blacklist user tokens", "user_id", userID, "error", err)
+			slog.ErrorContext(r.Context(), "admin end sessions: failed to blacklist access tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "blacklist_user_tokens: "+err.Error())
 		}
 	}
@@ -784,7 +802,7 @@ func (api *adminUsersAPI) lookupIsSystemAdmin(ctx context.Context, userID string
 	}
 	ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(ctx, userID)
 	if err != nil {
-		slog.Warn("admin user envelope: grant lookup failed",
+		slog.WarnContext(ctx, "admin user envelope: grant lookup failed",
 			"user_id", userID, "error", err)
 		return false
 	}
@@ -816,7 +834,7 @@ func (api *adminUsersAPI) writeUserEnvelopeKnownAdmin(w http.ResponseWriter, r *
 		// cannot recover the response, but logging the encode failure
 		// keeps the operator-side trail honest instead of silently
 		// dropping it.
-		slog.Error("admin user envelope: failed to encode response", "user_id", u.ID, "error", err)
+		slog.ErrorContext(r.Context(), "admin user envelope: failed to encode response", "user_id", u.ID, "error", err)
 	}
 }
 

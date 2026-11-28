@@ -12,9 +12,16 @@
 // move. The dialog re-imports every symbol below.
 import type { DeepPartial } from "react-hook-form"
 
-import { attachFile, uploadFile, updateFile } from "@/features/files/api"
+import {
+  attachFile,
+  trashUnlinkedFile,
+  uploadFile,
+  updateFile,
+  type FileLinkEntityType,
+} from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
-import { HttpError } from "@/lib/http"
+import { HttpError, type InGroup } from "@/lib/http"
+import { clearPendingFilesWhere } from "@/lib/pending-files-store"
 import type { CommodityStatusValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
 import { formValueToPrice, priceToFormValue } from "@/features/commodities/price"
@@ -35,9 +42,79 @@ export interface PendingFile {
   id: string
   file: File
   tags: string[]
+  // The title the user typed (#1626). Unset while the file keeps its
+  // default title, the file name without the extension; see
+  // pendingFileTitle.
+  title?: string
   // The server file an earlier draft save uploaded for this entry (#2812),
   // so a retry attaches it instead of uploading the bytes again.
   uploadedFileId?: string
+  // What an AI scan put on the file (#1626), and what of it the user
+  // rejected. See features/commodities/fileSuggestions.ts.
+  suggestion?: PendingFileSuggestion
+}
+
+export interface PendingFileSuggestion {
+  // The suggested tag, added to tags; marked as a suggestion while the file
+  // has it.
+  tag?: string
+  // The suggested title, set as the title; marked while the title is it.
+  title?: string
+  // Suggested tags the user removed. No later scan adds them again.
+  rejectedTags?: string[]
+  // A suggested title the user changed. Once set, no later scan sets the
+  // title, also when the user went back to the file name.
+  rejectedTitle?: string
+}
+
+// The longest title the server takes for a file, in characters (Unicode
+// code points, not UTF-16 units).
+export const FILE_TITLE_MAX_LENGTH = 255
+
+// capFileTitle cuts a title to the longest the server takes. It counts code
+// points, as the server does, so a cut never splits a character that takes
+// two UTF-16 units.
+export function capFileTitle(title: string): string {
+  const chars = Array.from(title)
+  return chars.length > FILE_TITLE_MAX_LENGTH
+    ? chars.slice(0, FILE_TITLE_MAX_LENGTH).join("")
+    : title
+}
+
+// defaultFileTitle is the title a staged file starts with: its name without
+// the extension.
+export function defaultFileTitle(file: File): string {
+  const dot = file.name.lastIndexOf(".")
+  return dot > 0 ? file.name.slice(0, dot) : file.name
+}
+
+// pendingFileTitle is the title a staged file is saved with: the one the
+// user typed, or the default when the field is blank.
+export function pendingFileTitle(entry: PendingFile): string {
+  return capFileTitle(entry.title?.trim() || defaultFileTitle(entry.file))
+}
+
+// placePendingFile gives an uploaded file the staged title and tags, then
+// attaches it to the entity. Both requests can be repeated. The title is
+// always sent: the upload names the file after the stored blob, and
+// PUT /files/{id} replaces the title, the description and the tags together.
+export async function placePendingFile(
+  entry: PendingFile,
+  fileId: string,
+  target: { entityType: FileLinkEntityType; entityId: string },
+  opts: InGroup = {}
+): Promise<void> {
+  await updateFile(fileId, { title: pendingFileTitle(entry), tags: entry.tags }, opts)
+  const category = categoryFromMime(entry.file.type)
+  await attachFile(
+    fileId,
+    {
+      ...target,
+      // "other" names no bucket, so the file keeps its category.
+      meta: category === "other" ? undefined : category,
+    },
+    opts
+  )
 }
 
 // newPendingId mints a stable id for a staged file row. Prefers
@@ -64,10 +141,10 @@ export function fileSignature(file: File): string {
 // is nothing new to add so React can bail out of a no-op state update.
 //
 // This is how AI-scan source files (#1983 Part A) join the Files-step queue:
-// the dialog merges the files the user scanned into `pendingFiles`, then the
-// existing post-create `uploadPendingFiles()` attaches them with the new
-// commodity id — images land in the `images` bucket and PDFs in `documents`
-// (the category is derived from MIME by both the FE row and the BE).
+// the dialog merges the files the user scanned into `pendingFiles`, and the
+// save attaches them to the item like any other staged file — images land in
+// the `images` bucket and PDFs in `documents` (the category is derived from
+// MIME by both the FE row and the BE).
 export function mergePendingFiles(existing: PendingFile[], incoming: File[]): PendingFile[] {
   if (incoming.length === 0) return existing
   const seen = new Set(existing.map((entry) => fileSignature(entry.file)))
@@ -82,6 +159,51 @@ export function mergePendingFiles(existing: PendingFile[], incoming: File[]): Pe
 }
 
 // ---- Draft persistence helpers ------------------------------------------
+
+// Every local recovery slot of the item form starts with SLOT_PREFIX. The
+// draft session keys (features/drafts/save.ts) and the staged files
+// (lib/pending-files-store.ts) are kept under the slot's key as well.
+const SLOT_PREFIX = "commodity-draft:"
+
+// ANON_ITEM_SLOT is the slot of the form a visitor fills before they have
+// an account (#1988). It names no user: the sign-in that follows adds its
+// item, and clears it.
+export const ANON_ITEM_SLOT = `${SLOT_PREFIX}anon:create`
+const ANON_PREFIX = `${SLOT_PREFIX}anon:`
+
+// addItemSlot is the slot of the Add item form of a user in a group. It
+// names the user, so the next person to sign in on this browser starts
+// with a form of their own (#2920).
+export function addItemSlot(userId: string, slug: string): string {
+  return `${SLOT_PREFIX}${userId}:${slug}:create`
+}
+
+function isUserSlotKey(key: string): boolean {
+  return key.startsWith(SLOT_PREFIX) && !key.startsWith(ANON_PREFIX)
+}
+
+// clearItemFormRecovery removes what the item form kept on this browser
+// for any signed-in user: the unsaved values, the draft session keys and
+// the staged files. Signing out calls it. The visitor's slot stays for the
+// sign-in that adds its item.
+export async function clearItemFormRecovery(): Promise<void> {
+  if (typeof window !== "undefined") {
+    for (const area of ["localStorage", "sessionStorage"] as const) {
+      try {
+        const store = window[area]
+        const keys: string[] = []
+        for (let i = 0; i < store.length; i++) {
+          const key = store.key(i)
+          if (key !== null && isUserSlotKey(key)) keys.push(key)
+        }
+        for (const key of keys) store.removeItem(key)
+      } catch {
+        // Disabled storage holds nothing to clear.
+      }
+    }
+  }
+  await clearPendingFilesWhere(isUserSlotKey)
+}
 
 // readDraft pulls the previously-saved form values for `key` (per
 // #1383). Returns undefined when nothing is stored or the JSON has
@@ -234,28 +356,85 @@ export function toRequest(
   }
 }
 
-// uploadPendingFiles uploads each staged file, sets its tags, then attaches
-// it to the freshly-created commodity (POST /uploads/file, PUT /files/:id
-// for the tags, POST /files/:id/links). Per-file failures are reported via
+export interface AttachPendingFilesOptions extends InGroup {
+  // Checked before each file and after each upload. True stops the run; a
+  // file uploaded once it is true goes to Trash instead of onto the item.
+  shouldStop?: () => boolean
+  onFileStart?: (entry: PendingFile) => void
+  // The file reached the server as fileId and is not attached yet.
+  onFileUploaded?: (entry: PendingFile, fileId: string) => void
+  // The file is titled, tagged and attached.
+  onFileAttached?: (entry: PendingFile) => void
+}
+
+export interface AttachPendingFilesResult {
+  // fileId is the upload the file has on the server, not on the item.
+  failed: Array<{ entry: PendingFile; error: unknown; fileId?: string }>
+  // The run stopped on shouldStop; the files from there on were not tried.
+  stopped: boolean
+}
+
+// attachPendingFiles uploads the staged files one at a time and attaches each
+// to an existing item (#2916). A file an earlier run uploaded is attached as
+// it is, unless it was deleted since; a file that fails is reported and the
+// run goes on with the next one. Every request goes to the group named in
+// opts, the item's, when it is set.
+export async function attachPendingFiles(
+  pending: PendingFile[],
+  commodityId: string,
+  opts: AttachPendingFilesOptions = {}
+): Promise<AttachPendingFilesResult> {
+  const target = { entityType: "commodity" as const, entityId: commodityId }
+  const inGroup: InGroup = { group: opts.group }
+  const failed: AttachPendingFilesResult["failed"] = []
+  for (const entry of pending) {
+    if (opts.shouldStop?.()) return { failed, stopped: true }
+    opts.onFileStart?.(entry)
+    let fileId = entry.uploadedFileId
+    try {
+      let placed = false
+      if (fileId) {
+        try {
+          await placePendingFile(entry, fileId, target, inGroup)
+          placed = true
+        } catch (err) {
+          if (!(err instanceof HttpError && err.status === 404)) throw err
+          fileId = undefined
+        }
+      }
+      if (!placed) {
+        fileId = (await uploadFile(entry.file, inGroup)).file.id
+        opts.onFileUploaded?.(entry, fileId)
+        // The form was left while the file was on its way: nothing will
+        // attach it, so it goes to Trash rather than stay without an item.
+        if (opts.shouldStop?.()) {
+          await trashUnlinkedFile(fileId, inGroup).catch(() => false)
+          return { failed, stopped: true }
+        }
+        await placePendingFile(entry, fileId, target, inGroup)
+      }
+      opts.onFileAttached?.(entry)
+    } catch (error) {
+      failed.push({ entry, error, fileId })
+    }
+  }
+  return { failed, stopped: false }
+}
+
+// uploadPendingFiles uploads each staged file, sets its title and tags, then
+// attaches it to the freshly-created commodity (POST /uploads/file, PUT
+// /files/:id, POST /files/:id/links). Per-file failures are reported via
 // `onError`; the commodity itself is already persisted, so a failed attach
-// is non-fatal (the user can retry from the detail page).
+// is non-fatal (the user can retry from the detail page). Every request goes
+// to the group named in opts, the commodity's, when it is set.
 export async function uploadPendingFiles(
   pending: PendingFile[],
   commodityId: string,
-  onError: (entry: PendingFile, err: unknown) => void
+  onError: (entry: PendingFile, err: unknown) => void,
+  opts: InGroup = {}
 ): Promise<void> {
-  const place = async (entry: PendingFile, fileId: string) => {
-    const category = categoryFromMime(entry.file.type)
-    if (entry.tags.length > 0) {
-      await updateFile(fileId, { tags: entry.tags })
-    }
-    await attachFile(fileId, {
-      entityType: "commodity",
-      entityId: commodityId,
-      // "other" names no bucket, so the file keeps its category.
-      meta: category === "other" ? undefined : category,
-    })
-  }
+  const place = (entry: PendingFile, fileId: string) =>
+    placePendingFile(entry, fileId, { entityType: "commodity", entityId: commodityId }, opts)
   const work = pending.map(async (entry) => {
     try {
       // A file a draft save already uploaded is attached as it is, unless
@@ -268,7 +447,7 @@ export async function uploadPendingFiles(
           if (!(err instanceof HttpError && err.status === 404)) throw err
         }
       }
-      const result = await uploadFile(entry.file)
+      const result = await uploadFile(entry.file, opts)
       await place(entry, result.file.id)
     } catch (err) {
       onError(entry, err)

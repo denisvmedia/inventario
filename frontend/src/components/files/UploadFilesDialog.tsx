@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { TagsInput } from "@/components/files/TagsInput"
 import {
   attachFile,
@@ -407,7 +408,11 @@ export function UploadFilesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] sm:max-w-2xl" data-testid="files-upload-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-h-[80vh] sm:max-w-2xl"
+        data-testid="files-upload-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {linkedEntity?.name
@@ -559,7 +564,7 @@ function SelectStep({
       </div>
       {items.length > 0 ? (
         <ul
-          className="max-h-64 divide-y overflow-y-auto rounded-md border"
+          className="max-h-64 divide-y overflow-y-auto rounded-md border max-sm:max-h-none"
           data-testid="files-upload-list"
         >
           {items.map((it) => (
@@ -616,7 +621,7 @@ function MetadataStep({
   return (
     <div className="flex flex-col gap-3">
       <ul
-        className="max-h-[60vh] divide-y overflow-y-auto rounded-md border"
+        className="max-h-[60vh] divide-y overflow-y-auto rounded-md border max-sm:max-h-none"
         data-testid="files-upload-metadata-list"
       >
         {items.map((it) => (
@@ -641,13 +646,12 @@ function MetadataStep({
                 <Label htmlFor={`meta-category-${it.id}`} className="text-xs text-muted-foreground">
                   {t("files:edit.fields.category")}
                 </Label>
-                {/* eslint-disable-next-line no-restricted-syntax -- compact per-file category picker; native <select> retained (covered by upload e2e + unit). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md */}
-                <select
+                <NativeSelect
                   id={`meta-category-${it.id}`}
                   value={it.category}
                   onChange={(e) => onChangeCategory(it.id, e.target.value as FileCategory)}
                   data-testid={`files-upload-meta-category-${it.id}`}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  wrapperClassName="w-full"
                 >
                   <option value="images">
                     {t("files:categoryImages", { defaultValue: "Images" })}
@@ -658,7 +662,7 @@ function MetadataStep({
                   <option value="other">
                     {t("files:categoryOther", { defaultValue: "Other" })}
                   </option>
-                </select>
+                </NativeSelect>
               </div>
             </div>
             {coverEligible && it.category === "images" ? (
@@ -758,7 +762,7 @@ function ProgressStep({ items, totalDone, linked, onUseExisting, onKeepBoth }: P
           defaultValue: "{{count}} of {{total}} uploaded",
         })}
       </p>
-      <ul className="max-h-64 divide-y overflow-y-auto rounded-md border">
+      <ul className="max-h-64 divide-y overflow-y-auto rounded-md border max-sm:max-h-none">
         {items.map((it) => (
           <li
             key={it.id}

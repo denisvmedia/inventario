@@ -25,6 +25,7 @@ import (
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/csrf"
 	"go.5x5.cz/inventario/debug"
 	_ "go.5x5.cz/inventario/docs" // register swagger docs
@@ -143,8 +144,11 @@ func newUsersMeParams(
 	audit services.AuditLogger,
 	mfa *services.MFAService,
 	blacklist services.TokenBlacklister,
+	personalExports *export.PersonalDataExportService,
 ) UsersMeParams {
 	return UsersMeParams{
+		PersonalDataExports:  personalExports,
+		FileSigningService:   services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 		RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
 		LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
 		APITokenService:      apiTokens,
@@ -281,9 +285,13 @@ type Params struct {
 	// at startup when it is set.
 	TestTenantHeaderEnabled bool
 	EmailService            services.EmailService // Transactional email service (queue + providers)
-	PublicURL               string                // Public base URL used in transactional links
-	SupportEmail            string                // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
-	RedisPinger             RedisPinger           // Optional Redis dependency check for /readyz
+	// PersonalDataExports requests, lists and serves personal data exports
+	// (#2177). The run command passes the service the export worker builds
+	// them with; nil gets one without the ready email.
+	PersonalDataExports *export.PersonalDataExportService
+	PublicURL           string      // Public base URL used in transactional links
+	SupportEmail        string      // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
+	RedisPinger         RedisPinger // Optional Redis dependency check for /readyz
 
 	// MetricsToken is the optional shared-secret bearer token for GET
 	// /metrics (issue #2102). When non-empty, /metrics requires the header
@@ -389,6 +397,14 @@ type Params struct {
 	// localhost server the Helm init-data Job boots to curl /seed.
 	SeedEndpointEnabled bool
 
+	// PlansEnabled gates the subscription-plan surfaces (#1389). Default
+	// FALSE: the feature is frozen. When false the plans feature flag reads
+	// false so the FE hides every plan surface, and GET /g/{slug}/plan
+	// reports models.PlanUnlimited whatever the tenant's plan_id is, so no
+	// plan caps reach a client. Nothing on the server enforces plan caps
+	// today; storage quotas are configured outside plans and are unaffected.
+	PlansEnabled bool
+
 	// OAuthRegistry holds the third-party sign-in providers enabled in
 	// this deployment (#1394). Empty means OAuth is unconfigured — the
 	// /auth/oauth/providers endpoint surfaces an empty list and start /
@@ -488,7 +504,7 @@ func MetricsTokenMiddleware(token string) func(http.Handler) http.Handler {
 			// explicit length guard is only to keep the comparison's timing
 			// independent of where the first differing byte falls.
 			if len(got) != len(expected) || subtle.ConstantTimeCompare(got, expected) != 1 {
-				slog.Warn("Unauthorized /metrics access attempt",
+				slog.WarnContext(r.Context(), "Unauthorized /metrics access attempt",
 					"remote_addr", r.RemoteAddr,
 					"user_agent", r.UserAgent(),
 					"path", r.URL.Path,
@@ -522,6 +538,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	})
 
 	r := chi.NewRouter()
+	// First, so that every line logged below it carries request_id and every
+	// response carries X-Request-ID, including a CORS preflight, a request
+	// the tenant-header guards refuse and a failed authentication.
+	r.Use(RequestIDMiddleware())
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 
@@ -536,12 +556,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// through ctx.Done() that the request has timed out and further
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
-	r.Use(middleware.RequestID)
-	// Copies the router's correlation id into appctx so code below the HTTP
-	// layer can read it without importing a router. The audit service uses it to
-	// stamp request_id on its rows, which is what makes a log line and an audit
-	// row provably the same request rather than merely adjacent (#2479).
-	r.Use(RequestIDContextMiddleware())
 	r.Use(middleware.Logger)
 	// RED metrics (#843): registered BEFORE Recoverer so it WRAPS it — the
 	// deferred status read then observes the 500 that Recoverer writes for a
@@ -622,6 +636,14 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 
 	emailSvc := emailServiceOrStub(params.EmailService)
 
+	// Personal data exports (#2177): requested and listed under /users/me,
+	// downloaded from signed URLs. The server's own wiring passes the service
+	// the export worker uses; a test harness gets one without a notifier.
+	personalExports := params.PersonalDataExports
+	if personalExports == nil {
+		personalExports = export.NewPersonalDataExportService(params.FactorySet, params.UploadLocation)
+	}
+
 	// Resolve tenant resolver: default to single-tenant mode if not provided.
 	tenantResolver := params.TenantResolver
 	if tenantResolver == nil {
@@ -685,6 +707,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			GroupMembershipRegistry:  params.FactorySet.GroupMembershipRegistry,
 			LoginEventRegistry:       params.FactorySet.LoginEventRegistry,
 			MFARegistry:              params.FactorySet.UserMFASecretRegistry,
+			TenantRegistry:           params.FactorySet.TenantRegistry,
 			SystemAdminGrantRegistry: params.FactorySet.SystemAdminGrantRegistry,
 			BlacklistService:         blacklist,
 			RateLimiter:              rateLimiter,
@@ -702,6 +725,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			UserPurger:               params.FactorySet.UserPurger,
 			AccountDeletionService:   accountDeletionSvc,
 			APITokenService:          apiTokenSvc,
+			SettingsRegistryFactory:  params.FactorySet.SettingsRegistryFactory,
 		}))
 
 		// Back-office auth plane (issue #1785, Phase 2). Completely
@@ -745,24 +769,26 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(GlobalRateLimitMiddleware(globalRateLimiter, params.GlobalRateTrustedProxyNets))
 			r.Group(Registration(RegistrationParams{
-				UserRegistry:         params.FactorySet.UserRegistry,
-				VerificationRegistry: params.FactorySet.EmailVerificationRegistry,
-				EmailService:         emailSvc,
-				AuditService:         auditSvc,
-				RateLimiter:          rateLimiter,
-				GroupService:         groupService,
-				PublicBaseURL:        params.PublicURL,
+				UserRegistry:            params.FactorySet.UserRegistry,
+				VerificationRegistry:    params.FactorySet.EmailVerificationRegistry,
+				EmailService:            emailSvc,
+				AuditService:            auditSvc,
+				RateLimiter:             rateLimiter,
+				GroupService:            groupService,
+				PublicBaseURL:           params.PublicURL,
+				SettingsRegistryFactory: params.FactorySet.SettingsRegistryFactory,
 			}))
 			r.Group(PasswordReset(PasswordResetParams{
-				UserRegistry:          params.FactorySet.UserRegistry,
-				PasswordResetRegistry: params.FactorySet.PasswordResetRegistry,
-				RefreshTokenRegistry:  params.FactorySet.RefreshTokenRegistry,
-				BlacklistService:      blacklist,
-				EmailService:          emailSvc,
-				AuditService:          auditSvc,
-				RateLimiter:           rateLimiter,
-				PublicBaseURL:         params.PublicURL,
-				APITokenService:       apiTokenSvc,
+				UserRegistry:            params.FactorySet.UserRegistry,
+				PasswordResetRegistry:   params.FactorySet.PasswordResetRegistry,
+				RefreshTokenRegistry:    params.FactorySet.RefreshTokenRegistry,
+				BlacklistService:        blacklist,
+				EmailService:            emailSvc,
+				AuditService:            auditSvc,
+				RateLimiter:             rateLimiter,
+				PublicBaseURL:           params.PublicURL,
+				APITokenService:         apiTokenSvc,
+				SettingsRegistryFactory: params.FactorySet.SettingsRegistryFactory,
 			}))
 			r.Route("/currencies", Currencies())
 			// Feature flags are deployment-scoped (operator kill-switches,
@@ -849,6 +875,11 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// #2113 L-4: GET /admin/debug now lives on the back-office plane.
 			DebugInfo:       params.DebugInfo,
 			APITokenService: apiTokenSvc, // block and revoke-sessions end tokens too
+			UploadLocation:  params.UploadLocation,
+			AvatarSigner:    services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
+			// The custom domains the back office accepts must stay clear of
+			// the hosts the resolver maps to tenant slugs.
+			TenantBaseDomain: tenantBaseDomain(tenantResolver),
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
@@ -858,7 +889,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Per-user account surfaces (#1644): active sessions + login history.
 		// These don't fit under /auth (which is unauth-tolerant on purpose)
 		// nor under /g/{slug}/* (they're tenant-scoped, not group-scoped).
-		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc, blacklist)))
+		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc, blacklist, personalExports)))
 		// In-app feedback / contact support (#1387). Auth-required and
 		// per-user rate-limited (5/hour). The handler returns a typed 503
 		// (feedback.not_configured) when SupportEmail is empty, so it stays
@@ -923,6 +954,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		)
 		r.With(signedURLMiddleware, RLSContextMiddleware(params.FactorySet), RegistrySetMiddleware(params.FactorySet)).Route("/files/download", SignedFiles(params))
 		r.Route("/avatars", SignedAvatars(params))
+		r.Route("/data-exports", SignedPersonalDataExports(params, personalExports, auditSvc))
 	})
 
 	// use Frontend as a root directory
@@ -975,7 +1007,7 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
 		r.Route("/upcoming", Upcoming())
 		r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
-		r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService))
+		r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService, auditSvc))
 		r.Route("/settings", Settings())
 		r.Route("/commodities/values", Values())
 		r.Route("/upload-slots", UploadSlots(params.FactorySet))
@@ -986,8 +1018,10 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// keeping the surface inert in production (#202 §8) until
 		// the operator flips the flag on.
 		r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
+		// #1307: the group's failed background jobs, group admins only.
+		r.Route("/failed-jobs", GroupFailedJobs(params, groupService, auditSvc))
 		r.Route("/storage-usage", StorageUsage())
-		r.Route("/plan", GroupPlan())
+		r.Route("/plan", GroupPlan(params.PlansEnabled))
 		r.Route("/notifications", GroupNotifications(params.FactorySet))
 		// Saved views carry no write gate: viewers keep personal views too;
 		// the service checks who may share and edit.
@@ -1007,7 +1041,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			// Get user from context (set by JWTMiddleware)
 			user := appctx.UserFromContext(r.Context())
 			if user == nil {
-				slog.Error("RLS Security Violation: No user context found",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: No user context found",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"remote_addr", r.RemoteAddr,
@@ -1018,21 +1052,19 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 
 			// Validate user has required fields for RLS
 			if user.ID == "" {
-				slog.Error("RLS Security Violation: User ID is empty",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: User ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
-					"user_email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "Invalid user context", http.StatusUnauthorized)
 				return
 			}
 
 			if user.TenantID == "" {
-				slog.Error("RLS Security Violation: Tenant ID is empty",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: Tenant ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
-					"user_email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "Invalid tenant context", http.StatusUnauthorized)
 				return
@@ -1040,21 +1072,29 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 
 			// Validate user is active
 			if !user.IsActive {
-				slog.Error("RLS Security Violation: Inactive user attempted access",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: Inactive user attempted access",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
-					"user_email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "User account disabled", http.StatusForbidden)
 				return
 			}
 
+			// A suspended tenant's users are refused like a blocked user,
+			// whichever host the session is used on (#1037).
+			var tenants registry.TenantRegistry
+			if factorySet != nil {
+				tenants = factorySet.TenantRegistry
+			}
+			if refuseInactiveUserTenant(w, r, tenants, user) {
+				return
+			}
+
 			// Log successful security validation for monitoring
-			slog.Debug("RLS Security: User context validated",
+			slog.DebugContext(r.Context(), "RLS Security: User context validated",
 				"user_id", user.ID,
 				"tenant_id", user.TenantID,
-				"user_email", user.Email,
 				"method", r.Method,
 				"path", r.URL.Path)
 
@@ -1072,7 +1112,7 @@ func RegistrySetMiddleware(factorySet *registry.FactorySet) func(http.Handler) h
 			// Create user-aware registry set from factory set
 			registrySet, err := factorySet.CreateUserRegistrySet(r.Context())
 			if err != nil {
-				slog.Error("Failed to create user registry set", "error", err)
+				slog.ErrorContext(r.Context(), "Failed to create user registry set", "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}

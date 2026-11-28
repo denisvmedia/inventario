@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { warrantyStatus, type CommodityWarrantyStatus } from "@/features/commodities/constants"
+import { useSectionVisible } from "@/features/group/sections"
 
 import { WARRANTY_STATUS_CONFIG } from "./config"
 
@@ -20,6 +21,9 @@ import { WARRANTY_STATUS_CONFIG } from "./config"
 //   later (e.g. dense tables), add a `size` prop.
 // - No "live update" of the status as the day rolls over. The status
 //   is computed from the commodity payload at render time.
+//
+// In a group that hides warranties (#1607) the "No warranty" pill renders
+// nothing; an item that holds a warranty still shows its status.
 export interface WarrantyBadgeProps {
   // Either pass an already-classified status, or…
   status?: CommodityWarrantyStatus
@@ -46,7 +50,9 @@ export function WarrantyBadge({
   "data-testid": testId,
 }: WarrantyBadgeProps) {
   const { t } = useTranslation()
+  const showWarranties = useSectionVisible("warranties")
   const resolved = status ?? warrantyStatus({ warranty_expires_at: source?.warranty_expires_at })
+  if (resolved === "none" && !showWarranties) return null
   const visual = WARRANTY_STATUS_CONFIG[resolved]
   const Icon = visual.icon
   return (

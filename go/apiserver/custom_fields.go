@@ -124,7 +124,7 @@ func customFieldSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 
 // listCustomFields lists the group's custom fields with their usage.
 // @Summary List custom fields
-// @Description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+// @Description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;
 // @Description each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
 // @Tags custom-fields
 // @Accept json-api
@@ -281,18 +281,18 @@ func (*customFieldsAPI) updateCustomField(w http.ResponseWriter, r *http.Request
 
 // deleteCustomField removes a custom field and, when told to, its values.
 // @Summary Delete a custom field
-// @Description Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
-// @Description unless delete_values=true; then its values are deleted with it, in the same transaction.
+// @Description Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,
+// @Description unless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.
 // @Tags custom-fields
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
 // @Param customFieldID path string true "Custom field ID"
 // @Param delete_values query bool false "Delete the field's values along with it"
-// @Param expected_values query int false "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta"
-// @Success 200 {object} jsonapi.CustomFieldDeleteResponse "Deleted; meta.deleted_values counts the values removed"
+// @Param expected_values query int false "With delete_values=true: how many items and drafts together the member confirmed to lose a value. When another number has one, the delete is refused with 409 custom_field.in_use and the counts"
+// @Success 200 {object} jsonapi.CustomFieldDeleteResponse "Deleted; meta.deleted_values counts the values removed, those of drafts included"
 // @Failure 404 {object} jsonapi.Errors "Custom field not found"
-// @Failure 409 {object} jsonapi.Errors "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one"
+// @Failure 409 {object} jsonapi.Errors "Items or drafts have a value of the field and delete_values was not true, or expected_values is not how many have one"
 // @Failure 422 {object} jsonapi.Errors "delete_values is not a boolean, or expected_values is not a whole number of at least 0"
 // @Router /g/{groupSlug}/custom-fields/{customFieldID} [delete].
 func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request) {
@@ -333,9 +333,9 @@ func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request
 		var meta map[string]any
 		if usage, uerr := regSet.CustomFieldRegistry.Usage(r.Context()); uerr == nil {
 			u := usage[d.ID]
-			meta = map[string]any{"item_count": u.Live, "trashed_item_count": u.Trashed}
+			meta = map[string]any{"item_count": u.Live, "trashed_item_count": u.Trashed, "draft_count": u.Drafts}
 		}
-		codedConflictError(w, r, errors.New("items have a value of this field; confirm to delete the values too"), customFieldInUseCode, meta)
+		codedConflictError(w, r, errors.New("items or drafts have a value of this field; confirm to delete the values too"), customFieldInUseCode, meta)
 		return
 	default:
 		renderEntityError(w, r, err)

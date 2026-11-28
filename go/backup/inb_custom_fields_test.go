@@ -15,6 +15,7 @@ import (
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // customFieldFixture is an inbFixture with a second item, a remote, and
@@ -428,4 +429,180 @@ func TestINBRoundTrip_DraftCustomFieldsFollowTheFields(t *testing.T) {
 		fieldsB["Size"].ID:   float64(0),
 		fieldsB["Remote"].ID: map[string]any{"value": remoteB.ID},
 	})
+}
+
+// The Collection set's marks survive a backup (#1607, format 3.8): a group
+// restored after the set was removed holds the set's types and fields as the
+// set's, so removing the set again deletes them.
+func TestINBRoundTrip_ItemSetEntriesAreKept(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	must.Must(itemTypes.EnsureBuiltins(f.ctx))
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	set := services.NewItemSetService(models.CollectionSet, itemTypes, fields)
+	must.Must(set.Add(f.ctx))
+
+	blobKey, archive := f.runExport(c, signer)
+	manifest, _ := manifestAndItems(c, archive)
+	entries := map[string]string{}
+	for _, t := range manifest.ItemTypes {
+		entries[t.Name] = t.SetEntry
+	}
+	for _, cf := range manifest.CustomFields {
+		entries[cf.Name] = cf.SetEntry
+	}
+	c.Check(entries["Coins"], qt.Equals, "collection/coins")
+	c.Check(entries["Condition"], qt.Equals, "collection/condition")
+
+	removed := must.Must(set.Remove(f.ctx, must.Must(set.Status(f.ctx)).Removal()))
+	c.Assert(removed.DeletedItemTypes, qt.HasLen, len(models.CollectionSet.ItemTypes))
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	st := must.Must(set.Status(f.ctx))
+	c.Check(st.Complete(), qt.IsTrue)
+	for _, ts := range st.ItemTypes {
+		c.Check(ts.State, qt.Equals, services.ItemSetEntryAdded, qt.Commentf("type %s", ts.Entry.Key))
+	}
+	for _, fs := range st.Fields {
+		c.Check(fs.State, qt.Equals, services.ItemSetEntryAdded, qt.Commentf("field %s", fs.Entry.Key))
+	}
+}
+
+// newSetFixture is an inbFixture whose group has the Collection set, with
+// the set service of that group.
+func newSetFixture(c *qt.C) (*inbFixture, *services.ItemSetService) {
+	f := newInbFixture(c)
+	return f, itemSetOf(c, f)
+}
+
+// itemSetOf returns the Collection set service of f's group.
+func itemSetOf(c *qt.C, f *inbFixture) *services.ItemSetService {
+	c.Helper()
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	must.Must(itemTypes.EnsureBuiltins(f.ctx))
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	return services.NewItemSetService(models.CollectionSet, itemTypes, fields)
+}
+
+// otherGroupOf returns a fixture for a second group of f's tenant and user.
+func otherGroupOf(c *qt.C, f *inbFixture) *inbFixture {
+	c.Helper()
+	groupB := must.Must(f.fs.LocationGroupRegistry.Create(f.ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Group B",
+		Status:              models.LocationGroupStatusActive,
+		GroupCurrency:       "USD",
+		CreatedBy:           f.user.ID,
+	}))
+	return &inbFixture{fs: f.fs, ctx: appctx.WithGroup(appctx.WithUser(f.ctx, f.user), groupB), user: f.user, group: groupB}
+}
+
+// A 3.7 backup has no set entries, so a restore creates the set's types
+// and fields as the group's own, and removing the set keeps them.
+func TestINBRestore_37ArchiveRestoresSetRowsAsTheGroupsOwn(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	src, set := newSetFixture(c)
+	must.Must(set.Add(src.ctx))
+
+	_, archive := src.runExport(c, signer)
+	archive = rewriteInnerMember(c, signer, archive, "manifest.json", func(body []byte) []byte {
+		var m map[string]any
+		c.Assert(json.Unmarshal(body, &m), qt.IsNil)
+		m["version"] = "3.7"
+		for _, key := range []string{"itemTypes", "customFields"} {
+			rows, _ := m[key].([]any)
+			c.Assert(rows, qt.Not(qt.HasLen), 0, qt.Commentf("%s in the manifest", key))
+			for _, row := range rows {
+				delete(row.(map[string]any), "setEntry")
+			}
+		}
+		return must.Must(json.Marshal(m))
+	})
+	dst := otherGroupOf(c, src)
+	key := "t/tenant-a/restores/inb-3-7-set.inb"
+	writeArchive(c, dst, key, archive)
+
+	final, err := restoreInbWithOptions(c, dst, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	st := must.Must(itemSetOf(c, dst).Status(dst.ctx))
+	c.Check(st.Complete(), qt.IsTrue)
+	for _, ts := range st.ItemTypes {
+		c.Check(ts.State, qt.Equals, services.ItemSetEntryOwn, qt.Commentf("type %s", ts.Entry.Key))
+	}
+	for _, fs := range st.Fields {
+		c.Check(fs.State, qt.Equals, services.ItemSetEntryOwn, qt.Commentf("field %s", fs.Entry.Key))
+	}
+	removal := st.Removal()
+	c.Check(removal.ItemTypeIDs, qt.HasLen, 0)
+	c.Check(removal.FieldIDs, qt.HasLen, 0)
+}
+
+// A 3.8 backup restored into a group that already has a type and a field of
+// the set's names marks only the rows the restore creates: the group's own
+// Coins and Condition stay its own.
+func TestINBRestore_38ArchiveMarksOnlyTheRowsItCreates(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	src, set := newSetFixture(c)
+	must.Must(set.Add(src.ctx))
+	blobKey, _ := src.runExport(c, signer)
+
+	dst := otherGroupOf(c, src)
+	dstSet := itemSetOf(c, dst)
+	dstTypes := must.Must(dst.fs.ItemTypeRegistryFactory.CreateUserRegistry(dst.ctx))
+	coins := must.Must(dstTypes.Create(dst.ctx, models.ItemType{Name: "Coins", Icon: "coins"}))
+	dstFields := must.Must(dst.fs.CustomFieldRegistryFactory.CreateUserRegistry(dst.ctx))
+	condition := must.Must(dstFields.Create(dst.ctx, models.CustomFieldDefinition{
+		Name: "Condition", Type: models.CustomFieldTypeSelect,
+		Options: models.ValuerSlice[models.CustomFieldOption]{{Label: "Mint"}},
+	}))
+
+	final, err := restoreInbWithOptions(c, dst, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	st := must.Must(dstSet.Status(dst.ctx))
+	// The restore leaves the group's own Condition as it was, on none of
+	// the set's types, so the set is not complete until it is added again.
+	c.Check(st.Complete(), qt.IsFalse)
+	for _, ts := range st.ItemTypes {
+		want := services.ItemSetEntryAdded
+		if ts.Entry.Key == "coins" {
+			want = services.ItemSetEntryOwn
+			c.Check(ts.ItemType.ID, qt.Equals, coins.ID)
+		}
+		c.Check(ts.State, qt.Equals, want, qt.Commentf("type %s", ts.Entry.Key))
+	}
+	for _, fs := range st.Fields {
+		want := services.ItemSetEntryAdded
+		if fs.Entry.Key == "condition" {
+			want = services.ItemSetEntryOwn
+			c.Check(fs.Field.ID, qt.Equals, condition.ID)
+		}
+		c.Check(fs.State, qt.Equals, want, qt.Commentf("field %s", fs.Entry.Key))
+		wantMissing := 0
+		if fs.Entry.Key == "condition" {
+			wantMissing = len(models.CollectionSet.ItemTypes)
+		}
+		c.Check(fs.MissingTemplates, qt.Equals, wantMissing, qt.Commentf("field %s", fs.Entry.Key))
+	}
+	added := must.Must(dstSet.Add(dst.ctx))
+	c.Check(added.AddedTemplates, qt.Equals, len(models.CollectionSet.ItemTypes))
+	c.Check(added.Status.Complete(), qt.IsTrue)
+	st = added.Status
+
+	removed := must.Must(dstSet.Remove(dst.ctx, st.Removal()))
+	c.Check(removed.DeletedItemTypes, qt.HasLen, len(models.CollectionSet.ItemTypes)-1)
+	c.Check(removed.DeletedFields, qt.HasLen, len(models.CollectionSet.Fields)-1)
+	c.Check(must.Must(dstTypes.Get(dst.ctx, coins.ID)).Name, qt.Equals, "Coins")
+	c.Check(must.Must(dstFields.Get(dst.ctx, condition.ID)).Name, qt.Equals, "Condition")
 }

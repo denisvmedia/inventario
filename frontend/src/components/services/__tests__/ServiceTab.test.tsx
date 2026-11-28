@@ -1,4 +1,5 @@
-import { screen, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
+import { http, HttpResponse } from "msw"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { Route } from "react-router-dom"
@@ -11,7 +12,7 @@ import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { groupHandlers, serviceHandlers } from "@/test/handlers"
+import { apiUrl, groupHandlers, loanHandlers, serviceHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
@@ -34,7 +35,7 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab() {
+function renderTab({ canStart, canEdit = true }: { canStart?: boolean; canEdit?: boolean } = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -44,7 +45,7 @@ function renderTab() {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <ServiceTab commodityId={COMMODITY_ID} />
+                <ServiceTab commodityId={COMMODITY_ID} canStart={canStart} canEdit={canEdit} />
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -90,6 +91,27 @@ describe("<ServiceTab />", () => {
     expect(current).toHaveTextContent("screen replacement")
     expect(screen.getByTestId("service-overdue-badge")).toBeInTheDocument()
     expect(screen.queryByTestId("commodity-detail-service-button")).toBeNull()
+  })
+
+  it("shows a recorded cost of 0 on the current-service card", async () => {
+    // A free repair, under warranty for example, keeps its cost line.
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "svc-1",
+          commodity_id: COMMODITY_ID,
+          provider_name: "Apple Service",
+          sent_at: "2026-04-01",
+          returned_at: null,
+          cost_amount: "0",
+          cost_currency: "EUR",
+        },
+      ])
+    )
+    renderTab()
+    const current = await screen.findByTestId("service-current")
+    expect(current).toHaveTextContent("Cost: 0 EUR")
   })
 
   it("renders the history list for completed services", async () => {
@@ -225,5 +247,212 @@ describe("<ServiceTab />", () => {
       const results = await axe(baseElement)
       expect(results).toHaveNoViolations()
     })
+  })
+})
+
+describe("<ServiceTab /> while the group hides maintenance and repairs (#1607)", () => {
+  it("shows the service records without the Send button", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "svc-2",
+          commodity_id: COMMODITY_ID,
+          provider_name: "Bob's Repair Shop",
+          reason: "battery swap",
+          sent_at: "2026-03-01",
+          returned_at: "2026-03-10",
+        },
+      ])
+    )
+    renderTab({ canStart: false })
+    expect(await screen.findByTestId("service-history-row-svc-2")).toHaveTextContent(
+      "Bob's Repair Shop"
+    )
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+  })
+
+  it("does not ask to close a loan before a service the group no longer offers", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, []),
+      ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "l1",
+          commodity_id: COMMODITY_ID,
+          borrower_name: "Anna",
+          lent_at: "2026-03-01",
+          returned_at: null,
+        },
+      ])
+    )
+    renderTab({ canStart: false })
+    expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
+    await expect(
+      screen.findByTestId("service-blocked-by-loan", {}, { timeout: 500 })
+    ).rejects.toThrow()
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+  })
+})
+
+// #3038: the server refuses service writes to a viewer, so the tab shows the
+// records with no action on them.
+describe("<ServiceTab /> for a role that cannot change the item", () => {
+  it("shows the open service without Mark returned or Delete", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "svc-1",
+          commodity_id: COMMODITY_ID,
+          provider_name: "Acme Repairs",
+          sent_at: "2026-04-01",
+          returned_at: null,
+        },
+      ])
+    )
+    renderTab({ canEdit: false })
+    expect(await screen.findByTestId("service-current")).toHaveTextContent("Acme Repairs")
+    expect(screen.queryByTestId("service-mark-returned")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("service-delete")).not.toBeInTheDocument()
+  })
+
+  it("shows neither Send nor the note about the open loan", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, []),
+      ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "l1",
+          commodity_id: COMMODITY_ID,
+          borrower_name: "Anna",
+          lent_at: "2026-03-01",
+          returned_at: null,
+        },
+      ])
+    )
+    renderTab({ canEdit: false })
+    expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
+    await expect(
+      screen.findByTestId("service-blocked-by-loan", {}, { timeout: 500 })
+    ).rejects.toThrow()
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+  })
+})
+
+describe("<ServiceTab /> cost currency (#2909)", () => {
+  // captureStart records the attributes of every start-service POST.
+  function captureStart(): Array<Record<string, unknown>> {
+    const sent: Array<Record<string, unknown>> = []
+    server.use(
+      http.get(apiUrl("/currencies"), () => HttpResponse.json(["USD", "EUR", "CZK"])),
+      http.post(apiUrl(`/g/${SLUG}/commodities/${COMMODITY_ID}/services`), async ({ request }) => {
+        const body = (await request.json()) as {
+          data: { attributes: Record<string, unknown> }
+        }
+        sent.push(body.data.attributes)
+        return HttpResponse.json(
+          {
+            data: {
+              id: "svc-new",
+              type: "commodity_services",
+              attributes: { commodity_id: COMMODITY_ID, provider_name: "Repair Shop" },
+            },
+          },
+          { status: 201 }
+        )
+      })
+    )
+    return sent
+  }
+
+  async function openDialog() {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
+    )
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(await screen.findByTestId("commodity-detail-service-button"))
+    await user.type(await screen.findByTestId("service-provider-name"), "Repair Shop")
+    return user
+  }
+
+  it("starts on the group currency and sends it with the amount", async () => {
+    const sent = captureStart()
+    const user = await openDialog()
+
+    const picker = screen.getByRole("combobox", { name: "Currency" })
+    await waitFor(() => expect(picker).toHaveTextContent("USD"))
+    await user.type(screen.getByTestId("service-cost-amount"), "120.50")
+    await user.click(screen.getByTestId("service-submit"))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toMatchObject({ cost_amount: "120.50", cost_currency: "USD" })
+  })
+
+  it("keeps what was typed when the group is refetched while the dialog is open", async () => {
+    captureStart()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
+    )
+    const user = userEvent.setup()
+    const { queryClient } = renderTab()
+    await user.click(await screen.findByTestId("commodity-detail-service-button"))
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("USD")
+    )
+    await user.type(screen.getByTestId("service-provider-name"), "Repair Shop")
+    await user.type(screen.getByTestId("service-cost-amount"), "80")
+
+    server.use(...groupHandlers.list([{ ...groupFixture[0], group_currency: "EUR" }]))
+    await act(() => queryClient.invalidateQueries())
+
+    expect(screen.getByTestId("service-provider-name")).toHaveValue("Repair Shop")
+    expect(screen.getByTestId("service-cost-amount")).toHaveValue("80")
+    expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("USD")
+  })
+
+  it("saves the currency picked in the currency picker", async () => {
+    const sent = captureStart()
+    const user = await openDialog()
+
+    await user.type(screen.getByTestId("service-cost-amount"), "80")
+    await user.click(screen.getByRole("combobox", { name: "Currency" }))
+    await user.click(await screen.findByRole("option", { name: /EUR/ }))
+    expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("EUR")
+    await user.click(screen.getByTestId("service-submit"))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toMatchObject({ cost_amount: "80", cost_currency: "EUR" })
+  })
+
+  it("sends no cost when the amount is left empty", async () => {
+    const sent = captureStart()
+    const user = await openDialog()
+
+    await user.click(screen.getByTestId("service-submit"))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).not.toHaveProperty("cost_amount")
+    expect(sent[0]).not.toHaveProperty("cost_currency")
+  })
+
+  it("sends a cost of 0 with its currency", async () => {
+    // A free repair, under warranty for example, records a cost of 0; it
+    // is not read as an empty amount.
+    const sent = captureStart()
+    const user = await openDialog()
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("USD")
+    )
+    await user.type(screen.getByTestId("service-cost-amount"), "0")
+    await user.click(screen.getByTestId("service-submit"))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toMatchObject({ cost_amount: "0", cost_currency: "USD" })
+    expect(screen.queryByTestId("service-cost-currency-error")).toBeNull()
   })
 })

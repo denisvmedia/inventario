@@ -2,6 +2,7 @@ package models_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -46,6 +47,12 @@ func TestSettingsObject_Set_HappyPath(t *testing.T) {
 			field:       "appearance.number_format_locale",
 			value:       "cs-CZ",
 			expectedGet: new("cs-CZ"),
+		},
+		{
+			name:        "set the last seen release",
+			field:       "whats_new.last_seen_version",
+			value:       "0.2.2",
+			expectedGet: new("0.2.2"),
 		},
 	}
 
@@ -369,6 +376,12 @@ func TestSettingsObject_ValidateWithContext(t *testing.T) {
 		{name: "empty list", settings: models.SettingsObject{NotificationsWarrantyLeadTimes: []int{}}, wantErr: ".*at least one.*"},
 		{name: "loan lead time of zero", settings: models.SettingsObject{NotificationsLoanLeadTime: new(0)}, wantErr: ".*notificationsLoanLeadTime.*"},
 		{name: "loan lead time too long", settings: models.SettingsObject{NotificationsLoanLeadTime: new(61)}, wantErr: ".*notificationsLoanLeadTime.*"},
+		{name: "last seen release", settings: models.SettingsObject{WhatsNewLastSeenVersion: new("0.2.2")}},
+		{name: "last seen pre-release", settings: models.SettingsObject{WhatsNewLastSeenVersion: new("1.0.0-rc.1")}},
+		{name: "last seen version with a v", settings: models.SettingsObject{WhatsNewLastSeenVersion: new("v0.2.2")}, wantErr: ".*whatsNewLastSeenVersion: must be a release version.*"},
+		{name: "last seen version that is not one", settings: models.SettingsObject{WhatsNewLastSeenVersion: new("edge")}, wantErr: ".*whatsNewLastSeenVersion.*"},
+		{name: "last seen version empty", settings: models.SettingsObject{WhatsNewLastSeenVersion: new("")}, wantErr: ".*whatsNewLastSeenVersion.*"},
+		{name: "last seen version too long", settings: models.SettingsObject{WhatsNewLastSeenVersion: new("1.2.3-" + strings.Repeat("a", 60))}, wantErr: ".*whatsNewLastSeenVersion.*"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

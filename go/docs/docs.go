@@ -83,6 +83,281 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/failed-jobs": {
+            "get": {
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. ` + "`" + `meta.job_types` + "`" + ` lists the job\ntypes with whether each can be retried. A personal data export\nbelongs to a user, not to a group; its title is the user's email\naddress.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n` + "`" + `failed_job.invalid_failed_before` + "`" + `.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List failed background jobs (admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration",
+                            "personal-data-export"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "2026-11-01",
+                        "description": "Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time",
+                        "name": "failed_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminFailedJobListEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - unknown job type or unreadable failed_before",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/bulk-discard": {
+            "post": {
+                "description": "Marks discarded every failed job that failed before ?failed_before\n(#2946), as the single discard does: the jobs leave the failed list\nand the depth gauge and keep their rows and errors. A job without a\nfailure time counts from its creation. The filter is the list's:\n?type limits the discard to one job type and ?tenantID to one tenant,\nand GET /admin/failed-jobs with the same query lists the jobs it\ntakes. ?dry_run=true only counts them. ` + "`" + `meta.discarded` + "`" + ` is how many\njobs were discarded; a job someone retried or discarded in the\nmeantime is not among them.\nA discard writes one audit row that names the filter and the counts,\nalso when it is refused; a dry run writes none. Needs the\nplatform_admin role: a support_agent gets 403 ` + "`" + `admin.role_required` + "`" + `.\nA missing, unreadable or future ?failed_before returns 400\n` + "`" + `failed_job.invalid_failed_before` + "`" + `, an unknown ?type 400\n` + "`" + `failed_job.unknown_type` + "`" + `.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Discard failed background jobs in bulk (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2026-11-01",
+                        "description": "Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future",
+                        "name": "failed_before",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration",
+                            "personal-data-export"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Count the jobs and discard nothing",
+                        "name": "dry_run",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminFailedJobBulkDiscardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - missing, unreadable or future failed_before, or unknown job type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled, or not a platform_admin",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/{jobType}/{jobID}/discard": {
+            "post": {
+                "description": "Marks the failed job discarded (#1307). It leaves the failed list and\nthe depth gauge but keeps its row and its error until the normal\ncleanup removes it. Every job type can be discarded. Needs the\nplatform_admin role: a support_agent gets 403 ` + "`" + `admin.role_required` + "`" + `.\n404 ` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Discard a failed background job (admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration",
+                            "personal-data-export"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "jobType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "jobID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled, or not a platform_admin",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown type or no such failed job",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/{jobType}/{jobID}/retry": {
+            "post": {
+                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once, a personal\ndata export is built again from the start and kept until 7 days after\nthe build finishes; it does not count as a new request. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Retry a failed background job (admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration",
+                            "personal-data-export"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "jobType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "jobID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown type or no such failed job",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - this type of job cannot be retried",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/groups": {
             "get": {
                 "description": "Returns every location group with computed member_count and an owning-tenant chip (id, name, slug). Paginate via ?page\u0026per_page; ?q ILIKE-matches name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.",
@@ -634,6 +909,68 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "description": "Creates a tenant with the same rules as ` + "`" + `inventario tenants create` + "`" + `: an empty slug is generated from the name, the status defaults to active and registration to closed.\nA slug another tenant has is refused with 409 ` + "`" + `tenant.slug_taken` + "`" + `, a domain another tenant has with 409 ` + "`" + `tenant.domain_taken` + "`" + `, and invalid fields with 422 naming them under data.attributes.\nA domain that is the tenant base domain or a host under it is refused with 422 ` + "`" + `tenant.domain_reserved` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create a tenant (admin)",
+                "parameters": [
+                    {
+                        "description": "Tenant",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the slug or the domain is taken",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid fields, or a reserved domain",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
             }
         },
         "/admin/tenants/{tenantID}": {
@@ -676,6 +1013,281 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.\nIt then deletes the tenant, its users, groups, items and files in the background with the rules of ` + "`" + `inventario tenants delete` + "`" + `.\nThe stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.\nA failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.\n` + "`" + `confirm_slug` + "`" + ` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 ` + "`" + `admin.tenant.confirmation_mismatch` + "`" + `.\nDeleting the tenant that serves this request's host is refused with 422 ` + "`" + `admin.tenant.serves_this_host` + "`" + `.\nRequires the platform_admin role.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The tenant's slug, typed to confirm",
+                        "name": "confirm_slug",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted - the tenant is suspended and its deletion is running",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - the confirmation does not match, or the tenant serves this host",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Changes the fields the body sets to a value other than the stored one, with the same rules as ` + "`" + `inventario tenants update` + "`" + `. An empty ` + "`" + `domain` + "`" + ` removes the custom domain. A body that changes nothing writes nothing.\nA status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.\nA change that takes the tenant serving this request off the request's host is refused with 422 ` + "`" + `admin.tenant.serves_this_host` + "`" + `: a status away from active and,\nwith a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.\nA slug another tenant has is refused with 409 ` + "`" + `tenant.slug_taken` + "`" + `, a domain another tenant has with 409 ` + "`" + `tenant.domain_taken` + "`" + `, and invalid fields with 422 naming them under data.attributes.\nA domain that is the tenant base domain or a host under it is refused with 422 ` + "`" + `tenant.domain_reserved` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the slug or the domain is taken",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid fields, a reserved domain, or the tenant serves this host",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/tenants/{tenantID}/reactivate": {
+            "post": {
+                "description": "Sets the tenant's status back to active. Sessions that the suspension ended stay ended: the users sign in again. Reactivating an active tenant returns 200 and changes nothing.\nA missing or blank reason is 422 ` + "`" + `admin.tenant.reason_required` + "`" + `, one over 500 characters ` + "`" + `admin.tenant.reason_too_long` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Reactivate a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid reason",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/tenants/{tenantID}/suspend": {
+            "post": {
+                "description": "Sets the tenant's status to suspended and ends the sessions of every user in it, the same teardown blocking a user runs: refresh tokens and personal API tokens are revoked and access tokens are refused.\nWhile suspended, the tenant's users cannot sign in by any method and every request on the tenant's host is refused. Suspending a suspended tenant ends the sessions again and returns 200.\nSuspending the tenant that serves this request's host is refused with 422 ` + "`" + `admin.tenant.serves_this_host` + "`" + `.\nA missing or blank reason is 422 ` + "`" + `admin.tenant.reason_required` + "`" + `, one over 500 characters ` + "`" + `admin.tenant.reason_too_long` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Suspend a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid reason, or the tenant serves this host",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -875,6 +1487,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity - self-block or admin-on-admin without force",
                         "schema": {
@@ -886,7 +1504,7 @@ const docTemplate = `{
         },
         "/admin/users/{userID}/impersonate": {
             "post": {
-                "description": "Issues a short-lived impersonation access token for the target tenant user on behalf of the calling back-office operator.\nThe token carries ` + "`" + `imp=true` + "`" + `, ` + "`" + `impersonator_id=\u003cbackoffice user id\u003e` + "`" + `, ` + "`" + `impersonator_type=backoffice_user` + "`" + `, and\n` + "`" + `is_system_admin=false` + "`" + `; it cannot be refreshed and cannot start a nested impersonation. The operator's own\n` + "`" + `backoffice_refresh_token` + "`" + ` cookie is captured server-side at start and restored by POST /admin/impersonation/end.\nReturns 422 with ` + "`" + `admin.impersonate.target_is_admin` + "`" + ` when the target is a system admin,\n` + "`" + `admin.impersonate.target_blocked` + "`" + ` when the target account is blocked, and ` + "`" + `admin.impersonate.nested` + "`" + `\nwhen the caller is already impersonating. Returns 429 with ` + "`" + `admin.impersonate.rate_limited` + "`" + ` when the\nper-operator start rate limit (10/hour) is exceeded.",
+                "description": "Issues a short-lived impersonation access token for the target tenant user on behalf of the calling back-office operator.\nThe token carries ` + "`" + `imp=true` + "`" + `, ` + "`" + `impersonator_id=\u003cbackoffice user id\u003e` + "`" + `, ` + "`" + `impersonator_type=backoffice_user` + "`" + `, and\n` + "`" + `is_system_admin=false` + "`" + `; it cannot be refreshed and cannot start a nested impersonation. The operator's own\n` + "`" + `backoffice_refresh_token` + "`" + ` cookie is captured server-side at start and restored by POST /admin/impersonation/end.\nReturns 422 with ` + "`" + `admin.impersonate.target_is_admin` + "`" + ` when the target is a system admin,\n` + "`" + `admin.impersonate.target_blocked` + "`" + ` when the target account is blocked, ` + "`" + `tenant.not_active` + "`" + ` when the target's\ntenant is suspended or inactive, and ` + "`" + `admin.impersonate.nested` + "`" + `\nwhen the caller is already impersonating. Returns 429 with ` + "`" + `admin.impersonate.rate_limited` + "`" + ` when the\nper-operator start rate limit (10/hour) is exceeded.",
                 "consumes": [
                     "application/json"
                 ],
@@ -946,7 +1564,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long",
+                        "description": "Unprocessable Entity - target is admin / blocked / in a tenant that is not active / nested impersonation / reason too long",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -1092,6 +1710,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -1536,6 +2160,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -1566,7 +2196,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update the authenticated user's profile. The name field is required;\ndefault_group_id (#1263, #1592) is optional — send a group UUID the\nuser is a member of to set, or null to clear (only allowed when the\nuser has zero memberships; otherwise rejected with 400). Email, role,\ntenant_id, and is_active are ignored even if submitted.",
+                "description": "Update the authenticated user's profile. Both fields are optional and\na field left out keeps its stored value. name, when sent, must not be\nblank (at most 100 characters).\ndefault_group_id (#1263, #1592): send a group UUID the\nuser is a member of to set, or null to clear (only allowed when the\nuser has zero memberships; otherwise rejected with 400). Email, role,\ntenant_id, and is_active are ignored even if submitted.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2223,7 +2853,7 @@ const docTemplate = `{
         },
         "/avatars/{userID}": {
             "get": {
-                "description": "Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.",
+                "description": "Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.\nA URL names either the user it was issued to (uid) or the back-office operator (op), never both.",
                 "produces": [
                     "image/jpeg"
                 ],
@@ -2250,8 +2880,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "The user the URL was issued to",
                         "name": "uid",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "The back-office operator the URL was issued to",
+                        "name": "op",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -2537,6 +3172,80 @@ const docTemplate = `{
                             "items": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/data-exports/{id}": {
+            "get": {
+                "description": "Streams the tar.gz archive a signed URL from POST /users/me/data-exports/{id}/download-url points at. The URL is bound\nto the session that asked for it and expires; an impersonation session is refused. Every download is recorded in the audit log.",
+                "produces": [
+                    "application/gzip"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Download a personal data export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Personal data export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The user the URL was issued to",
+                        "name": "uid",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Expiry, Unix seconds",
+                        "name": "exp",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Signature",
+                        "name": "sig",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The archive",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or expired URL",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Impersonation session, or the user's tenant is not active",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "No such export, or it expired",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "The export is not finished",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -3008,6 +3717,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Non-empty area (no strategy) or unknown strategy",
                         "schema": {
@@ -3066,7 +3781,7 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "description": "Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR",
                         "name": "status",
                         "in": "query"
                     },
@@ -3080,6 +3795,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Only commodities with no area (ignored when area_id is set)",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
                         "in": "query"
                     },
                     {
@@ -3639,6 +4360,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -3840,7 +4567,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update a commodity",
+                "description": "Replace the item with the values sent. attributes.revision is the revision\nthe values were based on, as the client read it: when the item has been written\nsince (an edit, a bulk change, a tag rename), the save is refused with 409\ncommodity.revision_conflict and nothing is written, so it cannot undo that\nwrite. Without it, or with 0, the save is not checked. The response carries\nthe item's new revision.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3885,6 +4612,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item was written after the revision sent",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -3985,6 +4718,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Commodity or file not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item was written meanwhile and kept changing on every retry",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -5339,7 +6078,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/custom-fields": {
             "get": {
-                "description": "The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;\neach option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.",
+                "description": "The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;\neach option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5464,7 +6203,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,\nunless delete_values=true; then its values are deleted with it, in the same transaction.",
+                "description": "Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,\nunless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5498,14 +6237,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta",
+                        "description": "With delete_values=true: how many items and drafts together the member confirmed to lose a value. When another number has one, the delete is refused with 409 custom_field.in_use and the counts",
                         "name": "expected_values",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Deleted; meta.deleted_values counts the values removed",
+                        "description": "Deleted; meta.deleted_values counts the values removed, those of drafts included",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.CustomFieldDeleteResponse"
                         }
@@ -5517,7 +6256,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one",
+                        "description": "Items or drafts have a value of the field and delete_values was not true, or expected_values is not how many have one",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6412,6 +7151,148 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/failed-jobs": {
+            "get": {
+                "description": "Returns the group's background jobs that failed for good and were\nneither retried nor discarded, newest failure first (#1307). Group\nadmins only. ?type limits the list to one job type; an unknown type\nreturns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `. ` + "`" + `meta.job_types` + "`" + ` lists the\njob types with whether each can be retried.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "failed-jobs"
+                ],
+                "summary": "List the group's failed background jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.FailedJobListEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - unknown job type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - group admins only",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry": {
+            "post": {
+                "description": "Puts the group's failed job back in its queue (#1307). Group admins\nonly. A restore and a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `). 404 ` + "`" + `failed_job.unknown_type` + "`" + ` for an\nunknown type, 404 ` + "`" + `failed_job.not_found` + "`" + ` when the group has no such\nfailed job, also one of another group.",
+                "tags": [
+                    "failed-jobs"
+                ],
+                "summary": "Retry one of the group's failed background jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "jobType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "jobID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - group admins only",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown type or no such failed job",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - this type of job cannot be retried",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/files": {
             "get": {
                 "description": "get files with optional filtering",
@@ -6831,7 +7712,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.",
+                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.\n\nWith unless_linked=true the file goes to Trash only when\nnothing holds it: no link, or only links to items in Trash\n(it then goes with the item linked first). The links are\nchecked and the file trashed in one transaction. A file that a\nlink holds, an export bundle included, stays and the answer is\n409 file.linked; a file that is gone or in Trash already is a\n404.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6856,6 +7737,12 @@ const docTemplate = `{
                         "name": "fileID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Keep the file when a link holds it",
+                        "name": "unless_linked",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6863,7 +7750,19 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "404": {
-                        "description": "File not found",
+                        "description": "File not found, or in Trash already",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "file.linked: with unless_linked=true, a link holds the file, so it stays",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "unless_linked is not a boolean",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7033,6 +7932,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "File or link not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7831,7 +8736,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/item-types": {
             "get": {
-                "description": "The item types of the group: the built-in ones first in their fixed order, then the others by name.\nEach carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.",
+                "description": "The item types of the group: the built-in ones first in their fixed order, then the others by name.\nEach carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7956,7 +8861,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;\nthen every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).",
+                "description": "Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta\nunless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,\nand each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -8003,7 +8908,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "The type is in use and no reassign_to was given, or it is the group's last type",
+                        "description": "Items or drafts have the type and no reassign_to was given, or it is the group's last type",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -8422,6 +9327,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Non-empty location (no strategy) or unknown strategy",
                         "schema": {
@@ -8742,7 +9653,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/plan": {
             "get": {
-                "description": "Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).",
+                "description": "Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids give unlimited, as does any id while the plans feature flag is off (#1389).",
                 "produces": [
                     "application/json"
                 ],
@@ -9328,7 +10239,7 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "description": "Commodities only: filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR",
                         "name": "status",
                         "in": "query"
                     },
@@ -9342,6 +10253,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Commodities only: only items with no area (ignored when area_id is set)",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodities only: only items in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
                         "in": "query"
                     },
                     {
@@ -9883,7 +10800,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/storage-usage": {
             "get": {
-                "description": "Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data \u0026 storage card.",
+                "description": "Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data \u0026 storage card.\nEach file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.",
                 "produces": [
                     "application/json"
                 ],
@@ -10250,6 +11167,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
+                    },
+                    "423": {
+                        "description": "An item tag, while a currency migration runs in the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
                     }
                 }
             },
@@ -10311,6 +11234,12 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "423": {
+                        "description": "A new slug for an item tag, while a currency migration runs in the group",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -11022,7 +11951,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/uploads/restores": {
             "post": {
-                "description": "Upload a signed ` + "`" + `.inb` + "`" + ` backup file to be used for a restore operation.",
+                "description": "Upload a signed ` + "`" + `.inb` + "`" + ` backup file to be used for a restore operation.\nA personal data export (see POST /users/me/data-exports) answers 422 restore.personal_data_export: it cannot be restored.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -11106,7 +12035,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin.",
+                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.\ncollection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11248,7 +12177,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
+                "description": "Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.\nThe group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11274,6 +12203,220 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/jsonapi.LocationGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/collection-set": {
+            "get": {
+                "description": "Lists the item types and custom fields of the Collection set (#1607) and, for each, whether the group has it:\nmissing (adding the set creates it), added (the set created it) or own (a member's type or field of the same name, which the set uses and never deletes).\nEach one the group has carries its item counts and whether removing the set deletes it, or why it stays. Requires group membership.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get the group's Collection set",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group member",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates the item types Art, Books, Coins, Stamps, Records, Watches and Cards and the custom fields Condition, Catalog reference, Edition or variant, Signed, Provenance,\nCertificate of authenticity, Appraised value and Appraisal date, and puts every field on the template of every one of those types.\nA type or field the group already has under that name, ignoring case, is used instead of a new one. Adding again creates only what is missing, so a failed add is finished by repeating it.\nThe names are English; members rename them like any other. meta counts what the request created. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Add the Collection set to the group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The group has 100 item types (item_type.limit), or its types or fields changed during the add twice (item_set.changed)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "The group is being deleted (group.not_active), or has 200 custom fields (custom_field.limit_reached)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.\nA listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.\nTypes and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.\nmeta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Remove the Collection set from the group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The item types and custom fields to delete, by ID",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetRemoveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "The body is missing or invalid, or the group is being deleted (group.not_active)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/hidden-sections": {
+            "put": {
+                "description": "Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.\nAn empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.\nUnknown sections are refused; duplicates are dropped. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Set the group's hidden sections",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Hidden sections",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupHiddenSectionsRequest"
                         }
                     }
                 ],
@@ -11917,6 +13060,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/apiserver.RegisterRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "The UI language the account registers in. The first of en, cs or ru it names becomes the new account's language setting, which the verification and welcome emails use.",
+                        "name": "Accept-Language",
+                        "in": "header"
                     }
                 ],
                 "responses": {
@@ -12239,6 +13388,121 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/me/data-exports": {
+            "get": {
+                "description": "Returns the authenticated user's personal data exports (GDPR Art. 20), newest first, until each expires.\n` + "`" + `next_request_at` + "`" + ` is when a new export may be requested; it is absent when one may be requested now.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "List personal data exports",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.PersonalDataExportsListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Starts building a copy of the authenticated user's data: profile, settings, group memberships, and what they created in each group,\nwith the files they uploaded. The archive is a tar.gz with JSON documents; it is not a group backup and cannot be restored.\nThe export runs in the background and an email says when it is ready. One request is allowed per day: an earlier one answers 429\ndata_export.rate_limited with ` + "`" + `retry_at` + "`" + ` in the error meta and a Retry-After header. An impersonation session answers 403\ndata_export.impersonation_forbidden.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Request a personal data export",
+                "responses": {
+                    "201": {
+                        "description": "Requested",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.PersonalDataExportView"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/data-exports/{id}/download-url": {
+            "post": {
+                "description": "Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only\nfor a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one\n409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works\nonly with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403\ndata_export.session_required.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Get a download URL for a personal data export",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Personal data export ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.PersonalDataExportDownloadURLResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/users/me/login-history": {
             "get": {
                 "description": "Returns the authenticated user's most recent login attempts (default 100, max 500). Also returns failed_last_7d for the optional banner.",
@@ -12525,6 +13789,108 @@ const docTemplate = `{
                 }
             }
         },
+        "apiserver.AdminFailedJobBulkDiscardMeta": {
+            "type": "object",
+            "properties": {
+                "by_type": {
+                    "description": "ByType counts per job type; a type with none is left out.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "discarded": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "dry_run": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobBulkDiscardResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/apiserver.AdminFailedJobBulkDiscardMeta"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.AdminFailedJobResource"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/apiserver.FailedJobListMeta"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.AdminFailedJobView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "failed_jobs"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobView": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "failed_at": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "group_slug": {
+                    "type": "string"
+                },
+                "job_type": {
+                    "type": "string",
+                    "example": "export"
+                },
+                "retryable": {
+                    "type": "boolean"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "tenant_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.AdminMemberEnvelope": {
             "type": "object",
             "properties": {
@@ -12588,6 +13954,73 @@ const docTemplate = `{
                     "description": "Reason is the free-form justification for ending the sessions\n(max 500 chars).",
                     "type": "string",
                     "maxLength": 500
+                }
+            }
+        },
+        "apiserver.AdminTenantCreateRequest": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "description": "Domain is an optional custom domain the tenant is reached on.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the tenant's display name (1 to 100 characters).",
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Slug is generated from the name when empty: lowercase letters, digits\nand hyphens, at most 50 characters.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status defaults to active.",
+                    "enum": [
+                        "active",
+                        "suspended",
+                        "inactive"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TenantStatus"
+                        }
+                    ]
+                }
+            }
+        },
+        "apiserver.AdminTenantStatusRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "description": "Reason is the operator's justification (1 to 500 characters).",
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.AdminTenantUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "description": "Domain set to an empty string removes the custom domain.",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status away from active ends the sessions of the tenant's users, as\nPOST /admin/tenants/{tenantID}/suspend does.",
+                    "enum": [
+                        "active",
+                        "suspended",
+                        "inactive"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TenantStatus"
+                        }
+                    ]
                 }
             }
         },
@@ -12855,6 +14288,110 @@ const docTemplate = `{
                 }
             }
         },
+        "apiserver.FailedJobListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.FailedJobResource"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/apiserver.FailedJobListMeta"
+                }
+            }
+        },
+        "apiserver.FailedJobListMeta": {
+            "type": "object",
+            "properties": {
+                "job_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.FailedJobTypeInfo"
+                    }
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "example": 50
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "apiserver.FailedJobResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.FailedJobView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "failed_jobs"
+                }
+            }
+        },
+        "apiserver.FailedJobTypeInfo": {
+            "type": "object",
+            "properties": {
+                "retryable": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "export"
+                }
+            }
+        },
+        "apiserver.FailedJobView": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is the last error the job recorded.",
+                    "type": "string"
+                },
+                "failed_at": {
+                    "type": "string"
+                },
+                "job_type": {
+                    "description": "JobType is the worker type that ran the job.",
+                    "type": "string",
+                    "example": "export"
+                },
+                "retryable": {
+                    "description": "Retryable is false for a type whose jobs can only be discarded.",
+                    "type": "boolean"
+                },
+                "title": {
+                    "description": "Title names the job: an export's description, a file's title.",
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "UserID is the member who started the job.",
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.FeatureFlags": {
             "type": "object",
             "properties": {
@@ -12864,6 +14401,10 @@ const docTemplate = `{
                 },
                 "magic_link_login": {
                     "description": "MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point\nis pre-login (a \"Email me a sign-in link\" affordance on the Login\npage), so it is exposed here on the public /feature-flags surface\nrather than the auth-gated /system endpoint. When false the FE hides\nthe affordance and the /auth/magic-link routes return 404.",
+                    "type": "boolean"
+                },
+                "plans": {
+                    "description": "Plans mirrors Params.PlansEnabled (#1389). The plans feature is\nfrozen, so the flag is off by default. When false the FE hides every\nplan surface (plan badge, Upgrade links, the /plans page, the plan\npart of the group settings card and the plan in the admin tenant\npages) and GET /g/{groupSlug}/plan reports the unlimited plan.",
                     "type": "boolean"
                 },
                 "public_scan": {
@@ -13210,6 +14751,83 @@ const docTemplate = `{
             "properties": {
                 "value": {
                     "description": "Value is the setting value to apply and is required when using the object envelope."
+                }
+            }
+        },
+        "apiserver.PersonalDataExportDownloadURLResponse": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL is relative to the server root and needs no bearer token. It is\nbound to the session that asked for it.",
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.PersonalDataExportView": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "description": "CompletedAt is when the archive was finished; absent until then.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "CreatedAt is when the user requested it.",
+                    "type": "string"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is when the archive and this entry are deleted.",
+                    "type": "string"
+                },
+                "file_count": {
+                    "type": "integer"
+                },
+                "group_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "item_count": {
+                    "type": "integer"
+                },
+                "size_bytes": {
+                    "description": "SizeBytes is the archive's size, 0 until it is finished.",
+                    "type": "integer"
+                },
+                "status": {
+                    "enum": [
+                        "pending",
+                        "in_progress",
+                        "completed",
+                        "failed"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.PersonalDataExportStatus"
+                        }
+                    ]
+                }
+            }
+        },
+        "apiserver.PersonalDataExportsListResponse": {
+            "type": "object",
+            "properties": {
+                "exports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.PersonalDataExportView"
+                    }
+                },
+                "next_request_at": {
+                    "description": "NextRequestAt is when the user may request a new export; absent when\nthey may now.",
+                    "type": "string"
+                },
+                "retention_days": {
+                    "description": "RetentionDays is how long a finished archive is kept.",
+                    "type": "integer"
                 }
             }
         },
@@ -13640,6 +15258,10 @@ const docTemplate = `{
         "jsonapi.AdminGroupMemberUser": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the member's profile photo, valid for the\noperator and session that requested the list. Absent when the member\nhas none.",
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -13795,6 +15417,10 @@ const docTemplate = `{
                 "active_session_count": {
                     "type": "integer"
                 },
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the user's profile photo, valid for the\noperator and session that requested it. Absent when the user has none.",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -13860,6 +15486,10 @@ const docTemplate = `{
         "jsonapi.AdminUserListItem": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the user's profile photo, valid for the\noperator and session that requested the list. Absent when the user has\nnone.",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -14382,7 +16012,9 @@ const docTemplate = `{
                         "in_use",
                         "lost",
                         "disposed",
-                        "written_off"
+                        "written_off",
+                        "donated",
+                        "stolen"
                     ],
                     "example": "disposed"
                 }
@@ -15421,9 +17053,17 @@ const docTemplate = `{
                     }
                 },
                 "fields": {
+                    "description": "Fields are the values read, keyed by field name. Its document_type\nclassifies the scan as a whole; files is the per-file source, and\ndocument_type is derived from it when the model gives none.",
                     "type": "object",
                     "additionalProperties": {
                         "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
+                "files": {
+                    "description": "Files holds one suggestion per input file the model said something\nusable about, ordered by index; a file without one has no entry.\nAbsent when there are none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFileGuess"
                     }
                 },
                 "items": {
@@ -15447,6 +17087,27 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.9
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "invoice",
+                        "receipt",
+                        "manual",
+                        "warranty",
+                        "photo",
+                        "other"
+                    ],
+                    "example": "invoice"
+                }
+            }
+        },
         "jsonapi.CommodityScanFieldGuess": {
             "type": "object",
             "properties": {
@@ -15456,6 +17117,25 @@ const docTemplate = `{
                 "value": {
                     "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanFileGuess": {
+            "type": "object",
+            "required": [
+                "index"
+            ],
+            "properties": {
+                "document_type": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanDocumentTypeGuess"
+                },
+                "index": {
+                    "description": "Index is the file's position among the photos parts of the request,\ncounted from 0. An empty part the server skipped still counts.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "title": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanTitleGuess"
                 }
             }
         },
@@ -15496,6 +17176,20 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityScanResource"
+                }
+            }
+        },
+        "jsonapi.CommodityScanTitleGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.8
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "example": "Bosch invoice, March 2024"
                 }
             }
         },
@@ -15544,7 +17238,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {
@@ -16195,6 +17889,12 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts with a value of the\nfield. Deleting the field takes the value out of them too.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
                 "item_count": {
                     "description": "ItemCount and TrashedItemCount are the items with a value of the\nfield. Deleting the field deletes those values.",
                     "type": "integer",
@@ -16723,6 +18423,25 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.GroupCreateItemSetOutcome": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_custom_fields": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 8
+                },
+                "created_item_types": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 7
+                }
+            }
+        },
         "jsonapi.GroupDeleteRequest": {
             "type": "object",
             "properties": {
@@ -16731,6 +18450,41 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
+                }
+            }
+        },
+        "jsonapi.GroupHiddenSectionsAttributes": {
+            "type": "object",
+            "properties": {
+                "hidden_sections": {
+                    "description": "HiddenSections is the full list of sections to hide: warranties,\nmaintenance, loans, upcoming. An empty list shows every section.\nUnknown sections are refused and duplicates dropped.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.GroupSection"
+                    }
+                }
+            }
+        },
+        "jsonapi.GroupHiddenSectionsData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.GroupHiddenSectionsAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "groups"
+                    ],
+                    "example": "groups"
+                }
+            }
+        },
+        "jsonapi.GroupHiddenSectionsRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.GroupHiddenSectionsData"
                 }
             }
         },
@@ -17118,6 +18872,13 @@ const docTemplate = `{
         "jsonapi.IntakeCandidateReviewAttrs": {
             "type": "object",
             "properties": {
+                "accepted_custom_fields": {
+                    "description": "AcceptedCustomFields are the IDs of the custom fields whose scanned\nvalue goes into the draft; each must be one the scan read a value for.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "accepted_fields": {
                     "type": "array",
                     "items": {
@@ -17774,6 +19535,296 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.ItemSetFieldView": {
+            "type": "object",
+            "properties": {
+                "custom_field_id": {
+                    "description": "CustomFieldID is the ID of the group's field; absent while missing or\ntaken.",
+                    "type": "string",
+                    "example": "5d2e..."
+                },
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts with a value of the\nfield.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "field_type": {
+                    "description": "FieldType is the type of the group's field, or the set's type for a\nmissing one.",
+                    "type": "string",
+                    "example": "select"
+                },
+                "item_count": {
+                    "description": "ItemCount and TrashedItemCount count the items with a value of the\nfield, outside Trash and in it.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "keep_reason": {
+                    "description": "KeepReason says why removing the set keeps a field the group has:\nown or in_use (items or drafts have a value of it). Absent when the\nfield is removable or missing.",
+                    "type": "string",
+                    "enum": [
+                        "own",
+                        "in_use"
+                    ],
+                    "example": "in_use"
+                },
+                "key": {
+                    "description": "Key identifies the field within the set.",
+                    "type": "string",
+                    "example": "condition"
+                },
+                "missing_templates": {
+                    "description": "MissingTemplates counts the set's types in the group that do not offer\nthe field. Adding the set offers it on them; until then the set is\nnot complete.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "name": {
+                    "description": "Name is the name of the group's field, which a member may have\nchanged, or the set's name for a field the group does not have.",
+                    "type": "string",
+                    "example": "Condition"
+                },
+                "removable": {
+                    "description": "Removable is true when removing the set deletes the field.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "state": {
+                    "description": "State is missing, added, own or taken, as for an item type.",
+                    "type": "string",
+                    "enum": [
+                        "missing",
+                        "added",
+                        "own",
+                        "taken"
+                    ],
+                    "example": "added"
+                },
+                "taken_by": {
+                    "description": "TakenBy is the key of the set's field that has this field's name, for\na taken field.",
+                    "type": "string",
+                    "example": "signed"
+                },
+                "trashed_item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                }
+            }
+        },
+        "jsonapi.ItemSetItemTypeView": {
+            "type": "object",
+            "properties": {
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts that have the type.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "icon": {
+                    "type": "string",
+                    "example": "coins"
+                },
+                "item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "item_type_id": {
+                    "description": "ItemTypeID is the ID of the group's type; absent while missing or\ntaken.",
+                    "type": "string",
+                    "example": "8f1c..."
+                },
+                "keep_reason": {
+                    "description": "KeepReason says why removing the set keeps a type the group has:\nown (a member made it), in_use (items, in Trash or not, or drafts have\nit) or last_type (a group keeps at least one type). Absent when the\ntype is removable or missing.",
+                    "type": "string",
+                    "enum": [
+                        "own",
+                        "in_use",
+                        "last_type"
+                    ],
+                    "example": "in_use"
+                },
+                "key": {
+                    "description": "Key identifies the type within the set.",
+                    "type": "string",
+                    "example": "coins"
+                },
+                "name": {
+                    "description": "Name is the name of the group's type, which a member may have changed,\nor the set's name for a type the group does not have.",
+                    "type": "string",
+                    "example": "Coins"
+                },
+                "removable": {
+                    "description": "Removable is true when removing the set deletes the type.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "state": {
+                    "description": "State is missing when the group has no such type and adding the set\ncreates it, added when the set created the type, own when it is a\nmember's type of the same name, which the set uses and never deletes,\nand taken when another type of the set was renamed to its name, so\nadding cannot create it.",
+                    "type": "string",
+                    "enum": [
+                        "missing",
+                        "added",
+                        "own",
+                        "taken"
+                    ],
+                    "example": "added"
+                },
+                "taken_by": {
+                    "description": "TakenBy is the key of the set's type that has this type's name, for a\ntaken type.",
+                    "type": "string",
+                    "example": "coins"
+                },
+                "trashed_item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                }
+            }
+        },
+        "jsonapi.ItemSetMeta": {
+            "type": "object",
+            "properties": {
+                "added_templates": {
+                    "description": "AddedTemplates counts the fields the add put on a type's template,\nbesides those of the fields it created.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "created_custom_fields": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 8
+                },
+                "created_item_types": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 7
+                },
+                "deleted_custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deleted_item_types": {
+                    "description": "DeletedItemTypes and DeletedCustomFields name what a remove deleted.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kept_custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kept_item_types": {
+                    "description": "KeptItemTypes and KeptCustomFields name what the remove request\nlisted but kept: an item started to use it since the confirmation,\nor it became the group's last type.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.ItemSetRemoveAttributes": {
+            "type": "object",
+            "properties": {
+                "custom_field_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "item_type_ids": {
+                    "description": "ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,\nby ID. It deletes those that are removable when it runs; one that\nstopped being removable stays and is listed in meta, and an ID that\nnames no type or field of the set is ignored. Either list may be\nempty.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.ItemSetRemoveData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemSetRemoveAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_sets"
+                    ],
+                    "example": "item_sets"
+                }
+            }
+        },
+        "jsonapi.ItemSetRemoveRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemSetRemoveData"
+                }
+            }
+        },
+        "jsonapi.ItemSetResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemSetResponseData"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ItemSetMeta"
+                }
+            }
+        },
+        "jsonapi.ItemSetResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemSetView"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "collection"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_sets"
+                    ],
+                    "example": "item_sets"
+                }
+            }
+        },
+        "jsonapi.ItemSetView": {
+            "type": "object",
+            "properties": {
+                "complete": {
+                    "description": "Complete is true when adding the set has nothing left to do: the group\nhas every type and field of the set but those taken, and each of those\nfields is offered on each of those types.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ItemSetFieldView"
+                    }
+                },
+                "item_types": {
+                    "description": "ItemTypes and CustomFields list the set's entries in the set's order.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ItemSetItemTypeView"
+                    }
+                }
+            }
+        },
         "jsonapi.ItemTypeDeleteMeta": {
             "type": "object",
             "properties": {
@@ -17903,6 +19954,12 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "draft_count": {
+                    "description": "DraftCount is the number of unfinished drafts with this type.\nDeleting the type moves them along with the items.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
                 },
                 "icon": {
                     "type": "string",
@@ -18035,6 +20092,10 @@ const docTemplate = `{
         "jsonapi.LocationGroupAttributes": {
             "type": "object",
             "properties": {
+                "collection_set": {
+                    "description": "CollectionSet, on create, adds the Collection set to the new group\n(#1607): its item types and custom fields, as POST\n/groups/{groupID}/collection-set does. It is not stored; the response\nmeta says whether the set was added. Create only: an update with the\nattribute, true or false, is refused.",
+                    "type": "boolean"
+                },
                 "description": {
                     "description": "Description is the free-form one-line subtitle surfaced on the\ngroup settings page and the sidebar group-switcher (#1647).\nOptional; empty string means \"no description\". Capped at\n200 chars to match the locations.description cap.",
                     "type": "string"
@@ -18043,11 +20104,31 @@ const docTemplate = `{
                     "description": "GroupCurrency is set once at group creation and is immutable after.\nOn create the handler validates the ISO code and defaults to USD\nwhen nil. On update the handler rejects a change with 422 — a\nreprice-aware currency migration is tracked under #202.",
                     "type": "string"
                 },
+                "hidden_sections": {
+                    "description": "HiddenSections lists the sections the group hides for all its\nmembers: warranties, maintenance, loans, upcoming. Optional. On\ncreate, absent means the group hides nothing; on update, absent\nleaves the list as it is and a list replaces it. Unknown sections\nare refused and duplicates dropped.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.GroupSection"
+                    }
+                },
                 "icon": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "jsonapi.LocationGroupCreateMeta": {
+            "type": "object",
+            "properties": {
+                "collection_set": {
+                    "description": "CollectionSet reports on adding the Collection set, when the request\nhad collection_set.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.GroupCreateItemSetOutcome"
+                        }
+                    ]
                 }
             }
         },
@@ -18082,6 +20163,14 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.LocationGroupResponseData"
+                },
+                "meta": {
+                    "description": "Meta is set on a create that asked for extras such as the Collection\nset.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.LocationGroupCreateMeta"
+                        }
+                    ]
                 }
             }
         },
@@ -20211,6 +22300,10 @@ const docTemplate = `{
                 "registered_date": {
                     "type": "string"
                 },
+                "revision": {
+                    "description": "Revision counts the writes to the item: a new item has revision 1, and\nevery registry write of a column an edit form sends back adds one (an\nedit, a bulk change, the draft mark, a tag rename or delete, an item\ntype delete that moves the item, a currency migration). An edit form\nsends the revision it was opened at with its save, and the save is\nrefused when the item was written since (registry.WithExpectedRevision),\nso it cannot undo a change it never showed. Server-managed: Create and\nUpdate ignore the caller's value.",
+                    "type": "integer"
+                },
                 "sale_price": {
                     "description": "SalePrice is the realised proceeds for a ` + "`" + `sold` + "`" + ` transition. NULL\nfor any other status. Stored in the commodity's original purchase\ncurrency — sale-side currency reporting is out of scope for #1611.",
                     "type": "number"
@@ -20380,7 +22473,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {
@@ -20439,14 +22532,18 @@ const docTemplate = `{
                 "sold",
                 "lost",
                 "disposed",
-                "written_off"
+                "written_off",
+                "donated",
+                "stolen"
             ],
             "x-enum-varnames": [
                 "CommodityStatusInUse",
                 "CommodityStatusSold",
                 "CommodityStatusLost",
                 "CommodityStatusDisposed",
-                "CommodityStatusWrittenOff"
+                "CommodityStatusWrittenOff",
+                "CommodityStatusDonated",
+                "CommodityStatusStolen"
             ]
         },
         "models.CurrencyMigration": {
@@ -20978,9 +23075,31 @@ const docTemplate = `{
                 "GroupRoleOwner"
             ]
         },
+        "models.GroupSection": {
+            "type": "string",
+            "enum": [
+                "warranties",
+                "maintenance",
+                "loans",
+                "upcoming"
+            ],
+            "x-enum-varnames": [
+                "GroupSectionWarranties",
+                "GroupSectionMaintenance",
+                "GroupSectionLoans",
+                "GroupSectionUpcoming"
+            ]
+        },
         "models.IntakeCandidate": {
             "type": "object",
             "properties": {
+                "accepted_custom_fields": {
+                    "description": "AcceptedCustomFields are the IDs of the custom fields whose scanned\nvalue goes into the draft.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "accepted_fields": {
                     "type": "array",
                     "items": {
@@ -20989,6 +23108,14 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "custom_fields": {
+                    "description": "CustomFields is what the scan read for the group's custom fields, by\nfield ID, a select field's value as its option ID.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeFields"
+                        }
+                    ]
                 },
                 "draft_id": {
                     "description": "DraftID is the draft made for the candidate. The draft can be\ndiscarded or promoted later, so there is no foreign key.",
@@ -21240,6 +23367,13 @@ const docTemplate = `{
                     "description": "GroupCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
                     "type": "string"
                 },
+                "hidden_sections": {
+                    "description": "HiddenSections lists the sections the group hides for all its members\n(see GroupSection). Empty for a group that hides nothing. Admins change\nit through the group's update endpoints; every member reads it with the\ngroup.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.GroupSection"
+                    }
+                },
                 "icon": {
                     "description": "Icon is an optional emoji from the curated set in\nmodels.ValidGroupIcons. Empty string means \"no icon\". Issue #1255.",
                     "type": "string"
@@ -21377,6 +23511,21 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.PersonalDataExportStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "in_progress",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "PersonalDataExportStatusPending",
+                "PersonalDataExportStatusInProgress",
+                "PersonalDataExportStatusCompleted",
+                "PersonalDataExportStatusFailed"
+            ]
         },
         "models.Plan": {
             "type": "object",
@@ -21661,6 +23810,10 @@ const docTemplate = `{
                 },
                 "theme": {
                     "type": "string"
+                },
+                "whatsNewLastSeenVersion": {
+                    "description": "WhatsNewLastSeenVersion is the newest release the user has seen on the\nWhat's new page. The app shows an unread dot while the build carries a\nnewer release, and writes the build's newest release here when the\npage opens. Kept on the server so it follows the user across devices.",
+                    "type": "string"
                 }
             }
         },
@@ -21789,7 +23942,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar_path": {
-                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key ends in a revision number (` + "`" + `avatars/\u003cuser\u003e/3.jpg` + "`" + `) which exists to\nbust browser caches: replacing a photo writes a new key rather than\noverwriting one, so nothing has to reason about cache headers to make the\nnew picture show up.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
+                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key lives under the user's tenant and ends in a revision number and a\nrandom suffix (` + "`" + `t/\u003ctenant\u003e/avatars/\u003cuser\u003e/3-a1b2c3d4e5f6.jpg` + "`" + `; a photo\nwith a flat ` + "`" + `avatars/\u003cuser\u003e/...` + "`" + ` key works the same). Replacing a\nphoto writes a new key rather than overwriting one, so nothing has to\nreason about cache headers to make the new picture show up, and a tenant\nmove copies the photo to a new key under the new tenant.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
                     "type": "string"
                 },
                 "avatar_url": {

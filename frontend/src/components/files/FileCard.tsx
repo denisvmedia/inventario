@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FadeInImage } from "@/components/ui/fade-in-image"
-import { ordinaryLinks, type FileEntity, type URLData } from "@/features/files/api"
+import {
+  isCoverCandidate,
+  ordinaryLinks,
+  type FileEntity,
+  type URLData,
+} from "@/features/files/api"
 import {
   FILE_CATEGORY_TILES,
   FILE_TAG_PILLS,
@@ -33,6 +38,9 @@ import { cn } from "@/lib/utils"
 export interface FileCardCoverState {
   current?: string
   auto?: string
+  // The item the cover belongs to. The star shows only on the files the
+  // server accepts as its cover.
+  itemId?: string
 }
 
 // One row in the Files grid. Renders a thumbnail (image MIME) or a
@@ -107,11 +115,11 @@ export function FileCard({
   })
   const sizeStr = file.size_bytes ? formatBytes(file.size_bytes) : ""
   const linkedLabel = linkSummary(ordinaryLinks(file))
-  // Star is only shown for photos and only when the parent wired up a
-  // mutation handler. The auto-pick branch surfaces the same star with
+  // Star is only shown for the item's photos and only when the parent wired
+  // up a mutation handler. The auto-pick branch surfaces the same star with
   // an outline + tooltip "Pin as cover", so the user can promote the
   // current implicit cover to an explicit one without re-uploading.
-  const canPin = !!onSetCover && file.category === "images"
+  const canPin = !!onSetCover && !!coverState?.itemId && isCoverCandidate(file, coverState.itemId)
   const isExplicit = canPin && coverState?.current === file.id
   const isAutoPick = canPin && !coverState?.current && coverState?.auto === file.id
   const showStar = canPin

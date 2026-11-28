@@ -220,6 +220,68 @@ func TestParseCommodityPatch_NormalizesTags(t *testing.T) {
 	c.Assert(patch.Status.Note, qt.Equals, "clear-out")
 }
 
+// Donated and stolen are terminal statuses like lost: a bulk change sets
+// them with a date and an optional note.
+func TestParseCommodityPatch_DonatedAndStolen(t *testing.T) {
+	for _, status := range []models.CommodityStatus{models.CommodityStatusDonated, models.CommodityStatusStolen} {
+		t.Run(string(status), func(t *testing.T) {
+			c := qt.New(t)
+			patch := parsePatch(c, services.CommodityPatchInput{
+				Status: &services.CommodityStatusInput{Value: string(status), Date: "2026-11-26", Note: "note"},
+			})
+			c.Assert(patch.Status.Status, qt.Equals, status)
+			c.Assert(string(*patch.Status.Date), qt.Equals, "2026-11-26")
+			c.Assert(patch.Status.Note, qt.Equals, "note")
+
+			f := newBulkFixture(c)
+			_, err := services.ParseCommodityPatch(f.ctx, f.set.ItemTypeRegistry, services.CommodityPatchInput{
+				Status: &services.CommodityStatusInput{Value: string(status)},
+			})
+			errs, ok := errors.AsType[validation.Errors](err)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
+			c.Assert(errs["status_date"], qt.IsNotNil, qt.Commentf("errs = %v", errs))
+		})
+	}
+}
+
+func TestValidateCommodityStatusTransition(t *testing.T) {
+	date := models.ToPDate("2026-11-26")
+	price := new(decimal.NewFromInt(5))
+	tests := []struct {
+		name      string
+		prev      models.CommodityStatus
+		next      models.CommodityStatus
+		date      models.PDate
+		salePrice *decimal.Decimal
+		field     string
+	}{
+		{name: "donated with a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusDonated, date: date},
+		{name: "stolen with a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusStolen, date: date},
+		{name: "lost with a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusLost, date: date},
+		{name: "sold with a date and a price", prev: models.CommodityStatusInUse, next: models.CommodityStatusSold, date: date, salePrice: price},
+		{name: "donated without a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusDonated, field: "status_date"},
+		{name: "stolen without a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusStolen, field: "status_date"},
+		{name: "sold without a price", prev: models.CommodityStatusInUse, next: models.CommodityStatusSold, date: date, field: "sale_price"},
+		// Only leaving in_use is checked here; the item rules cover the rest.
+		{name: "stolen back to in use", prev: models.CommodityStatusStolen, next: models.CommodityStatusInUse},
+		{name: "donated to stolen", prev: models.CommodityStatusDonated, next: models.CommodityStatusStolen},
+		{name: "staying in use", prev: models.CommodityStatusInUse, next: models.CommodityStatusInUse},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			err := services.ValidateCommodityStatusTransition(tt.prev, tt.next, tt.date, tt.salePrice)
+			if tt.field == "" {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			errs, ok := errors.AsType[validation.Errors](err)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
+			c.Assert(errs[tt.field], qt.IsNotNil, qt.Commentf("errs = %v", errs))
+		})
+	}
+}
+
 func TestCommodityPatch_Apply(t *testing.T) {
 	sold := func(c *models.Commodity) {
 		c.Status = models.CommodityStatusSold
@@ -490,6 +552,25 @@ func TestCommodityBulkService_UpdateStatus(t *testing.T) {
 	c.Assert(got.StatusNote, qt.Equals, "")
 }
 
+// A bulk edit that sets the type and the status records both changes.
+func TestCommodityBulkService_UpdateTypeAndStatus(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	lamp := f.item(c, "Lamp")
+
+	patch := parsePatch(c, services.CommodityPatchInput{
+		Type:   new(string(models.CommodityTypeElectronics)),
+		Status: &services.CommodityStatusInput{Value: "donated", Date: "2026-11-25"},
+	})
+	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, byID(lamp.ID), patch)
+
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{lamp.ID})
+	c.Assert(f.eventKinds(c, lamp.ID), qt.DeepEquals, []models.CommodityEventKind{
+		models.CommodityEventKindStatusChanged,
+		models.CommodityEventKindUpdated,
+	})
+}
+
 func TestCommodityBulkService_MoveAndDelete(t *testing.T) {
 	c := qt.New(t)
 	f := newBulkFixture(c)
@@ -538,29 +619,47 @@ func TestCommodityBulkService_UpdateKeepsAnEditSavedAfterTheSelection(t *testing
 	c.Assert(got.Comments, qt.Equals, "saved by someone else")
 }
 
-// lateCustomFieldEdit is a commodity registry where another member saves a
-// custom field value right after each Get, so the copy a bulk action read is
-// stale by the time it writes.
-type lateCustomFieldEdit struct {
+// editBeforeWrite is a commodity registry where another member saves an
+// edit of an item right before each bulk write takes the item, after the
+// bulk action resolved its selection.
+type editBeforeWrite struct {
 	registry.CommodityRegistry
-	fieldID string
+	edit func(*models.Commodity)
 }
 
-func (r lateCustomFieldEdit) Get(ctx context.Context, id string) (*models.Commodity, error) {
+func (r editBeforeWrite) Patch(ctx context.Context, id string, addTags []string, change func(models.Commodity) (models.Commodity, bool, error)) (before, after *models.Commodity, err error) {
 	read, err := r.CommodityRegistry.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	edit := *read
-	edit.CustomFields = models.CustomFieldValues{r.fieldID: json.RawMessage(`"saved later"`)}
+	r.edit(&edit)
 	if _, err := r.CommodityRegistry.Update(ctx, edit); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return read, nil
+	return r.CommodityRegistry.Patch(ctx, id, addTags, change)
+}
+
+// A bulk tag change starts from the item as stored when it writes it: the
+// name and the tag another member saved stay, and the bulk tag is added.
+func TestCommodityBulkService_UpdateKeepsAnEditSavedBeforeTheWrite(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	drill := f.item(c, "Drill", withTags("garage"))
+	items := editBeforeWrite{CommodityRegistry: f.set.CommodityRegistry, edit: func(c *models.Commodity) {
+		c.Name = "Cordless drill"
+		c.Tags = append(c.Tags, "power-tools")
+	}}
+
+	out := f.svc.Update(f.ctx, items, byID(drill.ID), parsePatch(c, services.CommodityPatchInput{AddTags: []string{"insured"}}))
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{drill.ID})
+	got := f.get(c, drill.ID)
+	c.Assert(got.Name, qt.Equals, "Cordless drill")
+	c.Assert([]string(got.Tags), qt.DeepEquals, []string{"garage", "power-tools", "insured"})
 }
 
 // A bulk action edits no custom field, so it keeps a value saved after it
-// read the item.
+// resolved its selection.
 func TestCommodityBulkService_KeepsACustomFieldValueSavedMeanwhile(t *testing.T) {
 	c := qt.New(t)
 	f := newBulkFixture(c)
@@ -568,7 +667,9 @@ func TestCommodityBulkService_KeepsACustomFieldValueSavedMeanwhile(t *testing.T)
 	plate := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Plate", Type: models.CustomFieldTypeText}))
 	location := must.Must(f.set.LocationRegistry.Create(f.ctx, models.Location{Name: "Home"}))
 	area := must.Must(f.set.AreaRegistry.Create(f.ctx, models.Area{Name: "Garage", LocationID: location.ID}))
-	items := lateCustomFieldEdit{CommodityRegistry: f.set.CommodityRegistry, fieldID: plate.ID}
+	items := editBeforeWrite{CommodityRegistry: f.set.CommodityRegistry, edit: func(c *models.Commodity) {
+		c.CustomFields = models.CustomFieldValues{plate.ID: json.RawMessage(`"saved later"`)}
+	}}
 	withPlate := func(c *models.Commodity) {
 		c.CustomFields = models.CustomFieldValues{plate.ID: json.RawMessage(`"read first"`)}
 	}

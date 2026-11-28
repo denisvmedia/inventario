@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
+import whatsNewMeta from "virtual:whats-new/meta"
 
 import { AppSidebar } from "@/components/AppSidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
@@ -12,10 +13,13 @@ import {
   authHandlers,
   groupHandlers,
   inboxHandlers,
+  memberHandlers,
   savedViewHandlers,
+  settingsHandlers,
 } from "@/test/handlers"
 import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -24,8 +28,12 @@ import { __resetHttpForTests } from "@/lib/http"
 // Mount AppSidebar inside the same provider chain Shell uses at runtime
 // (AuthProvider -> GroupProvider -> SidebarProvider) so the test sees the
 // same currentGroup / groups wiring the production sidebar does.
-function renderSidebar(initialPath = "/no-group") {
+// With `waitForRole` the sidebar mounts once the caller's role in the group
+// is known (WhenRoleKnown), so a missing role-gated entry means the role
+// was read.
+function renderSidebar(initialPath = "/no-group", { waitForRole = false } = {}) {
   setAccessToken("good-token")
+  const sidebar = <AppSidebar />
   // The current cases only need the root /g/:slug shape — if a future
   // test passes /g/<slug>/<sub>, this mount will still resolve only
   // /g/:slug, won't match, and AppSidebar won't render. Widen the
@@ -40,7 +48,7 @@ function renderSidebar(initialPath = "/no-group") {
           <AuthProvider>
             <GroupProvider>
               <SidebarProvider>
-                <AppSidebar />
+                {waitForRole ? <WhenRoleKnown>{sidebar}</WhenRoleKnown> : sidebar}
               </SidebarProvider>
             </GroupProvider>
           </AuthProvider>
@@ -54,12 +62,16 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  // The sidebar lists the group's saved views and counts its inbox.
+  // The sidebar lists the group's saved views, counts its inbox, and reads
+  // the user's settings for the What's new dot.
+  const seen = { whatsNewLastSeenVersion: whatsNewMeta.latestVersion ?? undefined }
   server.use(
     ...savedViewHandlers.none("household"),
     ...savedViewHandlers.none("office"),
     ...inboxHandlers.empty("household"),
-    ...inboxHandlers.empty("office")
+    ...inboxHandlers.empty("office"),
+    ...settingsHandlers.backend("household", seen).handlers,
+    ...settingsHandlers.backend("office", seen).handlers
   )
 })
 
@@ -137,6 +149,22 @@ describe("<AppSidebar /> — group-section gating (#1886)", () => {
     renderSidebar("/no-group")
     const help = await screen.findByTestId("sidebar-help")
     expect(help.getAttribute("href")).toBe("/settings?section=help")
+  })
+})
+
+describe("<AppSidebar /> — Add item by role (#2886)", () => {
+  // The server takes item writes from users, admins and owners.
+  it("offers Add item to a user", async () => {
+    server.use(...groupHandlers.list(), ...memberHandlers.asRole("g1", "user"))
+    renderSidebar("/g/household", { waitForRole: true })
+    expect(await screen.findByTestId("sidebar-add-item")).toBeInTheDocument()
+  })
+
+  it("offers a viewer no Add item", async () => {
+    server.use(...groupHandlers.list(), ...memberHandlers.asRole("g1", "viewer"))
+    renderSidebar("/g/household", { waitForRole: true })
+    expect(await screen.findByTestId("sidebar-inventory-group")).toBeInTheDocument()
+    expect(screen.queryByTestId("sidebar-add-item")).not.toBeInTheDocument()
   })
 })
 
@@ -270,5 +298,130 @@ describe("<AppSidebar /> — inbox (#2794)", () => {
     const inventory = await screen.findByTestId("sidebar-inventory-group")
     expect(await within(inventory).findByRole("link", { name: "Inbox" })).toBeInTheDocument()
     expect(within(inventory).queryByTestId("sidebar-inbox-count")).not.toBeInTheDocument()
+  })
+})
+
+describe("<AppSidebar /> — What's new dot (#1386)", () => {
+  it("marks Help while the build has a release the user has not seen", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...settingsHandlers.backend("household", { whatsNewLastSeenVersion: "0.0.1" }).handlers
+    )
+    renderSidebar("/g/household")
+    expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+    expect(screen.getByTestId("sidebar-help")).toHaveAccessibleName("Help, new release")
+  })
+
+  it("marks Help for a user who never opened the page", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...settingsHandlers.backend("household").handlers
+    )
+    renderSidebar("/g/household")
+    expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+  })
+
+  // CHANGELOG.md decides whether the newest release has anything besides
+  // Operators entries; the two tests below hold either way.
+  it("leaves out a newer release with only Operators entries for a user", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+  })
+
+  it("counts every newer release for a system administrator", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(
+      ...authHandlers.signedIn({ user: { is_system_admin: true } }),
+      ...groupHandlers.list(),
+      ...fake.handlers
+    )
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    if (whatsNewMeta.latestVersion !== whatsNewMeta.latestUserVersion) {
+      expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+    } else {
+      await new Promise((r) => setTimeout(r, 50))
+      expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+    }
+  })
+
+  it("shows no dot once the newest release was seen", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestVersion ?? undefined,
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+    expect(screen.getByTestId("sidebar-help")).toHaveAccessibleName("Help")
+  })
+})
+
+describe("<AppSidebar /> — hidden sections (#1607)", () => {
+  function inventoryLinkTexts(inventory: HTMLElement): string[] {
+    return within(inventory)
+      .getAllByRole("link")
+      .map((l) => l.textContent ?? "")
+  }
+
+  it("lists every section while the group hides none", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderSidebar("/g/household")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    await within(inventory).findByRole("link", { name: "Warranties" })
+    expect(inventoryLinkTexts(inventory)).toEqual(
+      expect.arrayContaining(["Upcoming", "Warranties", "Maintenance", "Lent out", "In service"])
+    )
+  })
+
+  it("leaves out the entries of the sections the group hides", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list([
+        {
+          id: "g1",
+          slug: "household",
+          name: "Household",
+          hidden_sections: ["warranties", "maintenance"],
+        },
+        { id: "g2", slug: "office", name: "Office" },
+      ])
+    )
+    renderSidebar("/g/household")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    await within(inventory).findByRole("link", { name: "Lent out" })
+    expect(inventoryLinkTexts(inventory)).toEqual([
+      "Dashboard",
+      "Inbox",
+      "Locations",
+      "All Items",
+      "Upcoming",
+      "Lent out",
+    ])
+  })
+
+  it("follows the setting of the group in the URL", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list([
+        { id: "g1", slug: "household", name: "Household", hidden_sections: ["loans"] },
+        { id: "g2", slug: "office", name: "Office", hidden_sections: ["upcoming"] },
+      ])
+    )
+    renderSidebar("/g/office")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    await within(inventory).findByRole("link", { name: "Lent out" })
+    expect(inventoryLinkTexts(inventory)).not.toContain("Upcoming")
   })
 })

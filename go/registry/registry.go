@@ -68,6 +68,31 @@ type Registry[T any] interface {
 	Count(context.Context) (int, error)
 }
 
+// CreatorLister lists the rows one user created (#2934). The personal data
+// export reads each group through it, so its work grows with what the user
+// created rather than with the size of the group.
+type CreatorLister[T any] interface {
+	// ListCreatedBy returns the live rows of the scope whose creator is
+	// userID, in no particular order. A row that belongs to an item in
+	// Trash, such as a loan, is listed too, also where List leaves it out;
+	// an item or a file in Trash is listed by ListTrashedCreatedBy.
+	ListCreatedBy(ctx context.Context, userID string) ([]*T, error)
+}
+
+// EntityRef names a row without reading the rest of it: its id, its UUID and
+// its name. Name is empty for a row that has none.
+type EntityRef struct {
+	ID   string `db:"id"`
+	UUID string `db:"uuid"`
+	Name string `db:"name"`
+}
+
+// AreaRef is the EntityRef of an area with the location it belongs to.
+type AreaRef struct {
+	EntityRef
+	LocationID string `db:"location_id"`
+}
+
 // Factory interfaces for creating context-aware registries
 // These replace the unsafe UserAwareRegistry and ServiceAwareRegistry patterns
 
@@ -89,6 +114,9 @@ type ServiceRegistryFactory[T any, P Registry[T]] interface {
 // items come back unassigned when restored.
 type AreaRegistry interface {
 	Registry[models.Area]
+
+	// ListRefs names every area of the scope, in no particular order.
+	ListRefs(ctx context.Context) ([]AreaRef, error)
 
 	// GetCommodities returns the ids of the live items filed under the area.
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
@@ -149,7 +177,7 @@ type CommodityListOptions struct {
 	// values match nothing. Empty = unrestricted.
 	Types []models.CommodityType
 	// Statuses restricts by the Status enum (in_use, sold, lost,
-	// disposed, written_off). Empty = unrestricted.
+	// disposed, written_off, donated, stolen). Empty = unrestricted.
 	Statuses []models.CommodityStatus
 	// AreaID, when non-empty, restricts to a single area. Use "" to
 	// disable the filter (rather than a sentinel like "*").
@@ -160,6 +188,11 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
+	// LocationID, when non-empty, restricts the result to commodities in
+	// any area of that location (#2897). It is AND-ed with AreaID, so an
+	// area of another location matches nothing, and an item without an
+	// area is in no location. An unknown ID matches nothing.
+	LocationID string
 	// SellerIDs, when non-empty, restricts the result to commodities whose
 	// seller is one of the listed IDs (#2804). Empty = unrestricted.
 	SellerIDs []string
@@ -273,10 +306,37 @@ type CommodityEventListOptions struct {
 // page's history rail.
 type CommodityEventRegistry interface {
 	Registry[models.CommodityEvent]
+	CreatorLister[models.CommodityEvent]
 
 	// ListByCommodity returns paginated events for the given commodity,
 	// newest first. Total reflects the filtered count (post-Kinds, pre-LIMIT).
 	ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts CommodityEventListOptions) ([]*models.CommodityEvent, int, error)
+}
+
+// expectedRevisionCtxKey keys the revision an update is based on (see
+// WithExpectedRevision).
+type expectedRevisionCtxKey struct{}
+
+// WithExpectedRevision marks ctx so the next CommodityRegistry.Update writes
+// the item only when its stored Revision is revision, and otherwise returns
+// ErrRevisionConflict and writes nothing. The check and the write run under
+// the item's row lock. An edit form names the revision it was opened at, so
+// it cannot undo a change saved after it loaded the item. It is a context
+// signal because Update's signature is the generic Registry's; without it
+// Update writes whatever the item's revision is.
+func WithExpectedRevision(ctx context.Context, revision int64) context.Context {
+	return context.WithValue(ctx, expectedRevisionCtxKey{}, revision)
+}
+
+// ExpectedRevisionFromContext returns the revision set by
+// WithExpectedRevision, if present and positive. Consumed only by the
+// CommodityRegistry Update implementations.
+func ExpectedRevisionFromContext(ctx context.Context) (int64, bool) {
+	revision, ok := ctx.Value(expectedRevisionCtxKey{}).(int64)
+	if !ok || revision <= 0 {
+		return 0, false
+	}
+	return revision, true
 }
 
 // restoreAcquisitionCtxKey keys a trusted, restore-only acquisition pair on a
@@ -399,8 +459,25 @@ type CommodityName struct {
 // ListPaginated with CommodityListOptions.Trashed see trashed items only. Update refuses a trashed item with ErrNotFound. Code that
 // queries the commodities table directly (a new worker, a report) has to apply
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
+//
+// Revision: Create stores revision 1 and Update stores the next one, whatever
+// the caller sent; Patch, SetDraft, the tag rename and delete of TagRegistry,
+// the type move of ItemTypeRegistry.Delete, a currency migration and
+// BackfillLegacyPrices add one too. Update refuses with ErrRevisionConflict
+// when the context names another revision (WithExpectedRevision). A new
+// writer of a column an edit form sends back adds one as well, or a form
+// opened before it can undo its change.
 type CommodityRegistry interface {
 	Registry[models.Commodity]
+	CreatorLister[models.Commodity]
+
+	// ListTrashedCreatedBy returns every item in Trash whose creator is
+	// userID, the rows ListTrashed pages through, in no particular order.
+	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.Commodity, error)
+
+	// ListRefs names every item of the scope, live or in Trash, in no
+	// particular order.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
 
 	// GetTrashed returns a trashed item by id; ErrNotFound when it does not
 	// exist or is live.
@@ -434,6 +511,26 @@ type CommodityRegistry interface {
 	// records what changed compares the two and not an earlier read.
 	// ErrNotFound when the item does not exist or is in Trash.
 	SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error)
+
+	// Patch changes the columns a bulk action edits on a live item: its
+	// tags, type, status, status date, status note, sale price and area. It
+	// reads the item under the item's row lock, hands a copy to change, and
+	// writes those columns of the item change returns. Every other column
+	// and the custom field values keep what is stored, so Patch never writes
+	// back a value an edit saved since the caller last read the item.
+	//
+	// addTags names every tag change may add. They are locked before the
+	// item, as every write of an item's tags locks them, and a change that
+	// adds any other tag fails with ErrInvalidInput. A new type must be one
+	// of the group's item types (ErrUnknownItemType), and a new area one the
+	// group can see (ErrNotFound).
+	//
+	// change reports whether it changed anything; when it did not, nothing
+	// is written and after is nil. An error from change is returned as is,
+	// and nothing is written. before is the item as it was under the lock
+	// and after the item as stored. ErrNotFound when the item does not exist
+	// or is in Trash.
+	Patch(ctx context.Context, id string, addTags []string, change func(models.Commodity) (models.Commodity, bool, error)) (before, after *models.Commodity, err error)
 
 	// PurgeTrashed deletes the row of a trashed item; its loans, service
 	// records, maintenance schedules, supply links and events go with it
@@ -562,6 +659,9 @@ type NativePhotoFilterer interface {
 type LocationRegistry interface {
 	Registry[models.Location]
 
+	// ListRefs names every location of the scope, in no particular order.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
+
 	GetAreas(ctx context.Context, locationID string) ([]string, error)
 
 	// ListPaginated returns a paginated list of locations along with the total count.
@@ -589,8 +689,48 @@ type ExportRegistry interface {
 	// ClaimPending moves an export from pending to in_progress and reports
 	// whether this caller is the one that moved it. The condition lives in
 	// the write, so two workers racing for the same row get one true and one
-	// false instead of both producing an artifact (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// false instead of both producing an artifact (#2472). The claim counts a
+	// run in AttemptCount and records at as the run's first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of the run of an
+	// in_progress export. An export in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// RecoverStalled handles the exports (jobType models.WorkerTypeExport)
+	// or the imports (models.WorkerTypeImport) whose run the sweep takes
+	// for dead. One that has run sweep.MaxRuns times fails with
+	// sweep.ErrorMessage at sweep.Now; the others go back to pending, for
+	// the next claim to run them again. Exports in the trash are left alone.
+	// It works across tenants and is meant for the service registry.
+	RecoverStalled(ctx context.Context, jobType models.WorkerType, sweep StalledJobSweep) (StalledJobs, error)
+}
+
+// StalledJobSweep says which runs of exports, imports and restores a sweep
+// takes for dead, and what it records on the jobs it fails.
+type StalledJobSweep struct {
+	// HeartbeatBefore: a run whose latest heartbeat is older than this is
+	// dead.
+	HeartbeatBefore time.Time
+	// CreatedBefore: a run with no heartbeat at all, claimed by a version
+	// that recorded none, is dead when its job was created before this.
+	CreatedBefore time.Time
+	// Now is when a job the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxRuns is how many runs an export or an import gets before a dead
+	// run fails it instead of queuing it again. A restore is never queued
+	// again, so it ignores this.
+	MaxRuns int
+	// ErrorMessage is stored on each job the sweep fails.
+	ErrorMessage string
+}
+
+// StalledJobs is what one sweep for dead runs changed.
+type StalledJobs struct {
+	// Requeued counts the jobs that went back to pending.
+	Requeued int
+	// Failed counts the jobs that failed for good.
+	Failed int
 }
 
 // FileRegistry stores files and their links.
@@ -609,6 +749,12 @@ type ExportRegistry interface {
 // see trashed files only. Update refuses a trashed file with ErrNotFound.
 type FileRegistry interface {
 	Registry[models.FileEntity]
+	CreatorLister[models.FileEntity]
+
+	// ListTrashedCreatedBy returns every file in Trash whose creator is
+	// userID, those deleted with their item included, with their links, in
+	// no particular order.
+	ListTrashedCreatedBy(ctx context.Context, userID string) ([]*models.FileEntity, error)
 
 	// GetTrashed returns a trashed file by id; ErrNotFound when it does not
 	// exist or is live.
@@ -642,6 +788,14 @@ type FileRegistry interface {
 	// age. A user registry reads its group; a service registry reads every
 	// group.
 	ListStrandedTrashed(ctx context.Context, limit int) ([]*models.FileEntity, error)
+
+	// PatchTags changes the tags of a live file. It reads the file under the
+	// file's row lock, hands a copy to change, and writes the tags of the
+	// file change returns with a new update time; every other column and
+	// the links keep what is stored. addTags, change, before and after work
+	// as in CommodityRegistry.Patch. ErrNotFound when the file does not
+	// exist or is in Trash.
+	PatchTags(ctx context.Context, id string, addTags []string, change func(models.FileEntity) (models.FileEntity, bool, error)) (before, after *models.FileEntity, err error)
 
 	// Trash moves a live file to Trash. withCommodityID names the item whose
 	// deletion takes the file along, or is empty for a file deleted on its
@@ -706,13 +860,21 @@ type FileRegistry interface {
 	// NativePhotoFilterer.
 	CommodityIDsWithPhotos(ctx context.Context) ([]string, error)
 
-	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
-	// Meta come from the argument; the registry sets the ids, tenant, group,
-	// creator and created_at. Idempotent: when the file is already linked to
-	// that entity the stored link is returned with created=false and left
-	// unchanged. The caller is responsible for checking that the target exists
-	// in the file's group.
+	// AddLink attaches a live file to an entity. FileID, EntityType, EntityID
+	// and Meta come from the argument; the registry sets the ids, tenant,
+	// group, creator and created_at. Idempotent: when the file is already
+	// linked to that entity the stored link is returned with created=false and
+	// left unchanged. ErrNotFound when the file does not exist or is in Trash;
+	// the state is read under the file's row lock, so a file that goes to
+	// Trash after the caller read it takes no new link. The caller is
+	// responsible for checking that the target exists in the file's group.
 	AddLink(ctx context.Context, link models.FileLink) (stored *models.FileLink, created bool, err error)
+
+	// AddLinkIncludingTrashed is AddLink that also links a file in Trash.
+	// A restore uses it for a file it created in Trash, because every link
+	// known at that point was to an item in Trash, when a later reference in
+	// the archive links that file again. Every other caller uses AddLink.
+	AddLinkIncludingTrashed(ctx context.Context, link models.FileLink) (stored *models.FileLink, created bool, err error)
 
 	// RemoveLink removes one link of a file and returns it. ErrNotFound when
 	// the file carries no link with that id. Removing a file's last link
@@ -745,6 +907,18 @@ type FileRegistry interface {
 	// column, so it cannot overwrite a concurrent metadata edit. Service mode
 	// only.
 	SetChecksum(ctx context.Context, id, sha256 string) error
+
+	// ListPendingThumbnailOrientation returns up to limit JPEG files that have
+	// a blob and are not marked ThumbnailsOriented, ordered by id and starting
+	// after afterID, for the startup thumbnail orientation pass. Trashed files
+	// are included. Service mode only.
+	ListPendingThumbnailOrientation(ctx context.Context, afterID string, limit int) ([]*models.FileEntity, error)
+
+	// SetThumbnailsOriented marks a file's thumbnails as made from the photo
+	// turned the way its EXIF orientation says. It writes only that column, so
+	// it cannot overwrite a concurrent metadata edit; an unknown id is not an
+	// error. Service mode only.
+	SetThumbnailsOriented(ctx context.Context, id string) error
 
 	// MoveLegacyLinks moves the single link that up to limit files still carry
 	// in their legacy linked_entity_* columns into file_links, and empties those
@@ -1168,6 +1342,7 @@ type LoanListOptions struct {
 // ids they are given.
 type CommodityLoanRegistry interface {
 	Registry[models.CommodityLoan]
+	CreatorLister[models.CommodityLoan]
 
 	// ListByCommodity returns all loans (open + closed) for a single
 	// commodity, ordered most-recent-first. Used by the per-item Lend
@@ -1292,6 +1467,7 @@ type ServiceListOptions struct {
 // (List, Count, ListPaginated) leave them out.
 type CommodityServiceRegistry interface {
 	Registry[models.CommodityService]
+	CreatorLister[models.CommodityService]
 
 	// ListByCommodity returns all service rows (open + completed) for a
 	// single commodity, ordered most-recent-first. Used by the per-item
@@ -1319,6 +1495,7 @@ type CommodityServiceRegistry interface {
 // and a per-commodity bulk reorder.
 type SupplyLinkRegistry interface {
 	Registry[models.SupplyLink]
+	CreatorLister[models.SupplyLink]
 
 	// ListByCommodity returns all supply links for one commodity, ordered
 	// by sort_order ASC, created_at ASC. Drives the per-item Supplies card
@@ -1442,6 +1619,7 @@ type MaintenanceListOptions struct {
 // maintenance reminder worker quiet about them.
 type MaintenanceScheduleRegistry interface {
 	Registry[models.MaintenanceSchedule]
+	CreatorLister[models.MaintenanceSchedule]
 
 	// ListByCommodity returns all schedules for a single commodity,
 	// ordered by next_due_at ascending. Used by the per-item
@@ -1505,6 +1683,7 @@ type MaintenanceReminderRegistry interface {
 // worker reads it that way.
 type CommodityReminderRegistry interface {
 	Registry[models.CommodityReminder]
+	CreatorLister[models.CommodityReminder]
 
 	// ListByCommodity returns the reminders of one item, ordered by
 	// due_on ascending.
@@ -1520,6 +1699,11 @@ type CommodityReminderRegistry interface {
 // repeated create with its client key or a repeated promotion finds it.
 type CommodityDraftRegistry interface {
 	Registry[models.CommodityDraft]
+	CreatorLister[models.CommodityDraft]
+
+	// ListRefs gives the id and the UUID of every draft List returns, in no
+	// particular order. A draft has no name.
+	ListRefs(ctx context.Context) ([]EntityRef, error)
 
 	// CreateOrGet stores a new open draft unless the group already has a
 	// draft with the same ClientKey, which is returned unchanged with
@@ -1641,6 +1825,25 @@ type IntakeScan struct {
 	// Selected, AcceptedFields and Quantity are stored as given.
 	Candidates []models.IntakeCandidate
 	Warnings   []models.IntakeWarning
+	// Files are the changes the scan makes to the source's files (#1626).
+	// They are written with the scan, so a source reads scanned only once
+	// its files carry them, and a scan that is not stored changes no file.
+	Files []IntakeFileUpdate
+}
+
+// IntakeFileUpdate is the change a scan makes to one file of its source.
+type IntakeFileUpdate struct {
+	FileID string
+	// Tags are the file tags Apply may add. The caller creates them in the
+	// group beforehand; the registry locks them before the file, the order
+	// every file write takes, so a tag deleted meanwhile is created again
+	// rather than left referenced by the file.
+	Tags []string
+	// Apply returns the file with the change made and whether it changed.
+	// It gets the file as stored, read under the file's lock. The registry
+	// writes back the title, the tags and the update time. A file that is
+	// gone, in the trash or in another group is left out.
+	Apply func(models.FileEntity) (models.FileEntity, bool)
 }
 
 // IntakeCandidateReview is a member's review of a detected product. A nil
@@ -1648,7 +1851,19 @@ type IntakeScan struct {
 type IntakeCandidateReview struct {
 	Selected       *bool
 	AcceptedFields *[]string
-	Quantity       *int
+	// AcceptedCustomFields are the IDs of the custom fields whose scanned
+	// value goes into the draft.
+	AcceptedCustomFields *[]string
+	Quantity             *int
+}
+
+// IntakeSweep is what one SweepStuckSources changed.
+type IntakeSweep struct {
+	// Changed counts the sources the sweep changed in any way.
+	Changed int
+	// Failed counts the sources among them that used their attempts and
+	// failed for good (#1307).
+	Failed int
 }
 
 // IntakeRegistry is the group-scoped registry of intake sessions with their
@@ -1759,15 +1974,17 @@ type IntakeRegistry interface {
 	// (models.IntakeSource.CountedAttempts): then it fails with errorCode, so
 	// a file that kills its worker is not scanned forever. A source canceled
 	// during such a scan loses the claim, so a resume can queue it. It
-	// returns how many sources it changed.
-	SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error)
+	// returns how many sources it changed and how many of them failed.
+	SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (IntakeSweep, error)
 
 	// ClaimNextSource takes the pending source that has been due the
 	// longest, marks it scanning and counts an attempt. Two workers never
 	// get the same source. ErrNotFound when nothing is due.
 	ClaimNextSource(ctx context.Context, now time.Time) (*models.IntakeSource, error)
 
-	// StoreScan stores the outcome of a scan and marks the source scanned.
+	// StoreScan stores the outcome of a scan, writes its file updates and
+	// marks the source scanned, all at once. An error from a file update
+	// stores nothing.
 	// attempt is the source's Attempts as ClaimNextSource returned it; when
 	// the source is no longer that scan (neither scanning nor canceled with
 	// that attempt), nothing is stored and ErrIntakeSourceChanged is
@@ -1866,18 +2083,28 @@ type SellerRegistry interface {
 	ItemCounts(ctx context.Context) (map[string]int, error)
 }
 
-// ItemTypeUsage counts the items of a group that have one item type.
+// ItemTypeUsage counts the items and the open drafts of a group that have
+// one item type.
 type ItemTypeUsage struct {
 	// Live counts the items outside Trash, drafts and inactive items
 	// included.
 	Live int
 	// Trashed counts the items in Trash.
 	Trashed int
+	// Drafts counts the open drafts (CommodityDraftRegistry) whose values
+	// name the type.
+	Drafts int
 }
 
 // Total is the number of items, in Trash or not, that have the type.
 func (u ItemTypeUsage) Total() int {
 	return u.Live + u.Trashed
+}
+
+// InUse reports whether an item, in Trash or not, or an open draft has the
+// type.
+func (u ItemTypeUsage) InUse() bool {
+	return u.Total() > 0 || u.Drafts > 0
 }
 
 // ItemTypeRegistry is the group-scoped registry of item types (#2802).
@@ -1905,17 +2132,20 @@ type ItemTypeRegistry interface {
 	// English default name.
 	GetByName(ctx context.Context, name string) (*models.ItemType, error)
 
-	// ItemCounts returns, per type slug, how many items of the group have
-	// that type. A slug without items is absent from the map.
+	// ItemCounts returns, per type slug, how many items and open drafts of
+	// the group have that type. A slug that neither has is absent from the
+	// map.
 	ItemCounts(ctx context.Context) (map[models.CommodityType]ItemTypeUsage, error)
 
 	// DeleteReassigning deletes the type with id. When items of the group,
-	// those in Trash included, have it, they are first given the type
-	// reassignTo, in the same transaction, and the count of moved items is
-	// returned; with an empty reassignTo the delete fails with
-	// ErrItemTypeInUse instead. A reassignTo that is not another type of
-	// the group fails with ErrInvalidInput. The last type of a group cannot
-	// be deleted (ErrLastItemType).
+	// those in Trash included, or its open drafts have it, they are first
+	// given the type reassignTo, in the same transaction, and the count of
+	// moved items is returned; each moved draft gets a new revision, so a
+	// save from a tab that loaded it before is refused. With an empty
+	// reassignTo the delete fails with ErrItemTypeInUse instead. A
+	// reassignTo that is not another type of the group fails with
+	// ErrInvalidInput. The last type of a group cannot be deleted
+	// (ErrLastItemType).
 	DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error)
 
 	// EnsureBuiltins seeds the built-in types into the registry's group when
@@ -1928,14 +2158,17 @@ type ItemTypeRegistry interface {
 	BackfillBuiltins(ctx context.Context) (int, error)
 }
 
-// CustomFieldUsage counts the items of a group that have a value for one
-// custom field.
+// CustomFieldUsage counts the items and the open drafts of a group that
+// have a value for one custom field.
 type CustomFieldUsage struct {
 	// Live counts the items outside Trash, drafts and inactive items
 	// included.
 	Live int
 	// Trashed counts the items in Trash.
 	Trashed int
+	// Drafts counts the open drafts (CommodityDraftRegistry) that hold a
+	// value of the field (models.DraftCustomFieldHasValue).
+	Drafts int
 	// Options counts, for a select field, the items with each option ID,
 	// those in Trash included. Nil for other types.
 	Options map[string]int
@@ -1944,6 +2177,12 @@ type CustomFieldUsage struct {
 // Total is the number of items, in Trash or not, that have a value.
 func (u CustomFieldUsage) Total() int {
 	return u.Live + u.Trashed
+}
+
+// InUse reports whether an item, in Trash or not, or an open draft has a
+// value of the field.
+func (u CustomFieldUsage) InUse() bool {
+	return u.Total() > 0 || u.Drafts > 0
 }
 
 // CustomFieldRegistry is the group-scoped registry of custom field
@@ -1960,9 +2199,9 @@ func (u CustomFieldUsage) Total() int {
 // template defaults that name them. Get and List return the definitions
 // with their templates; List orders them by name key, then ID.
 //
-// Delete deletes a field no item has a value of; a field that items, those
-// in Trash included, have a value of fails with ErrCustomFieldInUse and
-// nothing is deleted.
+// Delete deletes a field that no item and no open draft has a value of; a
+// field that items, those in Trash included, or open drafts have a value of
+// fails with ErrCustomFieldInUse and nothing is deleted.
 type CustomFieldRegistry interface {
 	Registry[models.CustomFieldDefinition]
 
@@ -1970,16 +2209,28 @@ type CustomFieldRegistry interface {
 	// or ErrNotFound.
 	GetByName(ctx context.Context, name string) (*models.CustomFieldDefinition, error)
 
-	// Usage returns, per field ID, how many items of the group have a
-	// value for the field. A field without values is absent from the map.
+	// Usage returns, per field ID, how many items and open drafts of the
+	// group have a value for the field. A field without values is absent
+	// from the map.
 	Usage(ctx context.Context) (map[string]CustomFieldUsage, error)
 
 	// DeleteWithValues deletes the field with id together with its values
 	// and template entries, in one transaction, and returns how many items
-	// had a value. expected is how many items the caller confirmed to lose
-	// a value, or AnyValueCount; when another number of items has a value,
-	// it fails with ErrCustomFieldInUse and nothing is deleted.
+	// and open drafts had a value. It also takes the field's entry out of
+	// every open draft that holds a value of it, and gives each such draft a
+	// new revision; a draft whose entry is empty keeps it and its revision.
+	// expected is how many items and drafts together
+	// the caller confirmed to lose a value, or AnyValueCount; when another
+	// number has a value, it fails with ErrCustomFieldInUse and nothing is
+	// deleted.
 	DeleteWithValues(ctx context.Context, id string, expected int) (int, error)
+
+	// AddTemplates puts the field with id on the template of each item
+	// type in itemTypeIDs it is not on yet, with no default, and returns
+	// how many entries it added. The entries the field has keep their
+	// defaults. An ID that names no item type of the group fails with
+	// ErrInvalidInput and adds nothing.
+	AddTemplates(ctx context.Context, id string, itemTypeIDs []string) (int, error)
 }
 
 // AnyValueCount lets CustomFieldRegistry.DeleteWithValues delete the values
@@ -2110,8 +2361,20 @@ type RestoreOperationRegistry interface {
 	// ClaimPending moves an operation from pending to running and reports
 	// whether this caller is the one that moved it. Two workers racing for
 	// the same row get one true and one false, rather than both replaying a
-	// restore over live data (#2472).
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// restore over live data (#2472). The claim records at as the run's
+	// first heartbeat.
+	ClaimPending(ctx context.Context, id string, at time.Time) (bool, error)
+
+	// Heartbeat records at as the latest sign of life of a running
+	// operation. An operation in any other state is left alone.
+	Heartbeat(ctx context.Context, id string, at time.Time) error
+
+	// FailStalled fails, with sweep.ErrorMessage at sweep.Now, the running
+	// operations whose run the sweep takes for dead, and returns how many
+	// it failed. A restore is never queued again: it may have written part
+	// of its backup. It works across tenants and is meant for the service
+	// registry.
+	FailStalled(ctx context.Context, sweep StalledJobSweep) (int, error)
 }
 
 // PreviewTokenInputs is the deterministic, replay-resistant payload
@@ -2190,6 +2453,16 @@ type CurrencyMigrationRegistry interface {
 	// background worker calls this every tick AND on startup. Returns
 	// the rows it transitioned.
 	SweepStuckRunning(ctx context.Context, now time.Time, threshold time.Duration) ([]*models.CurrencyMigration, error)
+
+	// DeleteFinishedBefore deletes at most limit completed and failed
+	// migrations, discarded or not, that finished before the cutoff,
+	// together with their audit rows, and returns how many it deleted.
+	// A migration that has no completion time counts from its creation.
+	// A pending or running migration is never deleted, and neither is
+	// one a group still references through
+	// location_groups.currency_migration_id. A limit of zero or less
+	// deletes every match. Service registry only.
+	DeleteFinishedBefore(ctx context.Context, before time.Time, limit int) (int, error)
 
 	// IssuePreviewToken signs `inputs` with the registry's HMAC key and
 	// returns the encoded token. The token is stateless — IssuePreviewToken
@@ -2694,6 +2967,57 @@ type LocationGroupRegistry interface {
 	// transition it returns (item, false, nil); on a missing group it returns
 	// (nil, false, ErrNotFound).
 	MarkPendingDeletionAdmin(ctx context.Context, groupID string) (item *AdminGroupDetail, alreadyPending bool, err error)
+
+	// SetHiddenSections replaces the sections an active group hides and
+	// sets updated_at, writing those two columns only, so a rename or a
+	// deletion that commits meanwhile is kept. The caller passes a
+	// validated, normalized list. It returns the stored group and
+	// applied=true. A group that is not active is left as it is: the call
+	// returns the group with applied=false. A missing group gives
+	// ErrNotFound.
+	SetHiddenSections(ctx context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// UpdateDetails writes the name, icon and description of an active
+	// group, its hidden sections when details carries them, and updated_at.
+	// No other column is written, so a deletion, a currency migration or a
+	// settings change that commits meanwhile is kept. The name is required.
+	// It returns the stored group and applied=true. A group that is not
+	// active is left as it is: the call returns the group with
+	// applied=false. A missing group gives ErrNotFound.
+	//
+	// The generic Update writes every column from the value it is given;
+	// the API's write paths use UpdateDetails, SetHiddenSections,
+	// MarkPendingDeletion and SetCurrencyMigrationID instead.
+	UpdateDetails(ctx context.Context, groupID string, details GroupDetails, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// MarkPendingDeletion moves an active group to pending_deletion and sets
+	// updated_at, writing those two columns only; the group purge worker
+	// deletes the group later. It returns the stored group and
+	// applied=true. A group that is not active is left as it is: the call
+	// returns the group with applied=false. A missing group gives
+	// ErrNotFound. MarkPendingDeletionAdmin is the cross-tenant form the
+	// back office uses.
+	MarkPendingDeletion(ctx context.Context, groupID string, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
+
+	// SetCurrencyMigrationID records the currency migration that holds the
+	// group's item write lock, writing currency_migration_id only. It writes
+	// nothing and returns applied=false when the group is not active, or
+	// when the migration is no longer pending or running: the worker that
+	// finished it has already cleared the id, and writing the id back would
+	// show the group as migrating until another migration replaced it. The
+	// memory backend runs no migrations, so it checks the group alone. A
+	// missing group gives ErrNotFound.
+	SetCurrencyMigrationID(ctx context.Context, groupID, migrationID string) (applied bool, err error)
+}
+
+// GroupDetails is what LocationGroupRegistry.UpdateDetails writes: the name,
+// icon and description, which are always written, and the hidden sections,
+// which are written only when HiddenSections is not nil.
+type GroupDetails struct {
+	Name           string
+	Icon           string
+	Description    string
+	HiddenSections *models.GroupSections
 }
 
 // AdminGroupSortField names the columns the admin group listing endpoint
@@ -2867,6 +3191,13 @@ type GroupMembershipRegistry interface {
 	// for `LeaveGroup` and the admin-initiated remove-member API;
 	// callers that bypass the invariants (e.g. group deletion) keep
 	// using the plain `Delete`.
+	//
+	// With the membership go the rows that were personal to the member
+	// in the group (#2892): their saved view placements and personal
+	// views, notification overrides, item reminders, drafts other than
+	// the ones made for delivered documents, Add item sessions and the
+	// invites they created that nobody used; their API tokens limited to
+	// the group are revoked. Postgres does it in the same transaction.
 	DeleteWithMemberInvariants(ctx context.Context, membershipID string) error
 
 	// UpdateRoleWithMemberInvariants atomically swaps the row's role
@@ -3182,6 +3513,16 @@ type RefreshTokenRegistry interface {
 // no caller can rewrite a token's scope, group or owner after creation.
 type APITokenRegistry interface {
 	// Create inserts a token. ID, UUID and CreatedAt are assigned here.
+	//
+	// A token limited to a group is inserted only while its user is a
+	// member of that group. The check and the insert are serialized with
+	// GroupMembershipRegistry.DeleteWithMemberInvariants: postgres takes
+	// the same per-group lock, memory checks under the token store lock
+	// that the removal's revocation takes after the membership is gone.
+	// A removal therefore either finds the new token and revokes it, or
+	// the insert finds the membership gone and returns
+	// ErrNotAGroupMember, so no token limited to the group outlives the
+	// membership.
 	Create(ctx context.Context, token models.APIToken) (*models.APIToken, error)
 
 	// GetByTokenHash returns the token whose digest matches, revoked or not.
@@ -3210,6 +3551,75 @@ type APITokenRegistry interface {
 	// whether it wrote, so concurrent requests on several replicas produce one
 	// write per interval instead of one each.
 	TouchLastUsed(ctx context.Context, id string, at, staleBefore time.Time) (bool, error)
+}
+
+// PersonalDataExportRegistry stores personal data exports (#2177). It runs in
+// service mode: the export worker builds and expires the exports of every
+// user. Each method that reads one user's rows takes the user and filters by
+// it, so a guessed id of another user's export answers ErrNotFound.
+type PersonalDataExportRegistry interface {
+	// CreateUnlessRequestedSince inserts export unless the user made a request
+	// after since. It returns the inserted row, or nil and the user's
+	// newest request when that request is what stops the insert. The check
+	// and the insert are one step: two concurrent requests insert one row.
+	// ID, UUID, CreatedAt and Status are assigned here.
+	CreateUnlessRequestedSince(ctx context.Context, export models.PersonalDataExport, since time.Time) (created, blocking *models.PersonalDataExport, err error)
+
+	// Get returns an export by id, whoever owns it. Only the worker calls it.
+	Get(ctx context.Context, id string) (*models.PersonalDataExport, error)
+
+	// GetByUser returns the user's export by id, ErrNotFound for an id that
+	// is not one of theirs.
+	GetByUser(ctx context.Context, userID, id string) (*models.PersonalDataExport, error)
+
+	// ListByUserID returns the user's exports, newest first.
+	ListByUserID(ctx context.Context, userID string) ([]*models.PersonalDataExport, error)
+
+	// ListPending returns the pending exports of every user, oldest first.
+	ListPending(ctx context.Context) ([]*models.PersonalDataExport, error)
+
+	// ClaimPending moves an export from pending to in_progress, records
+	// startedAt as the start of its build, counts the build in
+	// AttemptCount, and reports whether this caller is the one that moved
+	// it. The condition is part of the write, so two workers racing for one
+	// row get one true.
+	ClaimPending(ctx context.Context, id string, startedAt time.Time) (bool, error)
+
+	// RecoverStalled handles the exports whose build started before
+	// sweep.StartedBefore and is still in_progress. A build whose process
+	// dies records no result, and its row would otherwise stay in_progress
+	// until it expires. An export that has started sweep.MaxBuilds builds
+	// fails with sweep.ErrorMessage at sweep.Now; the others go back to
+	// pending, for the next claim to build them again.
+	RecoverStalled(ctx context.Context, sweep PersonalDataExportStalledSweep) (requeued, failed int, err error)
+
+	// Update writes the status, start, archive and statistics columns of an
+	// existing export. The owner, tenant and creation time never change.
+	Update(ctx context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error)
+
+	// ListExpired returns up to limit exports whose expiry is at or before
+	// now, oldest expiry first.
+	ListExpired(ctx context.Context, now time.Time, limit int) ([]*models.PersonalDataExport, error)
+
+	// Delete removes one export row. Deleting a row that is gone is not an
+	// error.
+	Delete(ctx context.Context, id string) error
+}
+
+// PersonalDataExportStalledSweep says which builds of personal data exports
+// RecoverStalled takes for dead, and what it records on the exports it
+// fails.
+type PersonalDataExportStalledSweep struct {
+	// StartedBefore: a build still in_progress that started before this
+	// is dead.
+	StartedBefore time.Time
+	// Now is when an export the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxBuilds is how many builds an export gets before a dead build
+	// fails it instead of queuing it again.
+	MaxBuilds int
+	// ErrorMessage is stored on each export the sweep fails.
+	ErrorMessage string
 }
 
 // LoginEventRegistry stores the append-only login_events audit trail
@@ -3426,20 +3836,79 @@ type TenantPurger interface {
 	// tenant after a partial failure must succeed and leave the database in
 	// the same state.
 	PurgeTenantDependents(ctx context.Context, tenantID string) error
+	// CheckTenantPurge reports whether PurgeTenantDependents and the deletion
+	// of the tenants row would succeed now, without changing anything. A
+	// tenant deletion runs it before removing the tenant's stored files, which
+	// cannot be restored when the row purge then fails.
+	CheckTenantPurge(ctx context.Context, tenantID string) error
 }
 
-// UserPurger hard-deletes a single user's auth / identity rows (and orphans the
-// nullable authorship back-refs) before the users row itself is dropped by the
-// orchestration layer (#2116). It exists because a bare DELETE FROM users is
-// rejected by the many NO ACTION child FKs pointing at users(id). This includes
-// the user's group_invites_audit references (created_by / used_by), which are
-// NOT NULL FKs that nothing else clears (#2147).
+// FailedJobScope narrows a failed-jobs query to one tenant, or to one group
+// of a tenant (#1307). The zero value reads every tenant: the system-admin
+// plane and the metrics use it.
+type FailedJobScope struct {
+	// TenantID limits the query to one tenant when set.
+	TenantID string
+	// GroupID limits the query to one group when set. It requires TenantID.
+	GroupID string
+	// FailedBefore, when set, limits the query to the jobs that failed
+	// before it. A job without a failure time counts from its creation.
+	FailedBefore time.Time
+}
+
+// FailedJobRegistry reads and acts on the jobs that failed for good, over
+// each job type's own table (#1307). There is no table of failed jobs: an
+// adapter per worker type knows which rows of its table are failed, how a
+// failed row is put back in the queue and how it is marked discarded.
 //
-// PRECONDITION: the user must no longer OWN shared content
-// (commodities/files/areas/locations/exports/groups/tags/…). Those rows carry
-// NOT NULL user_id + NOT NULL created_by columns that cannot be orphaned, so
-// this purger deliberately does not touch them; the final DELETE FROM users
-// will fail loudly with an FK violation if any remain. The users row itself is
+// A discarded job keeps its row and its error; it only leaves the failed
+// list and the counts. Every method filters by the scope in its query, not
+// only through row-level security, so a group scope never reaches another
+// group's rows whichever database role runs it.
+type FailedJobRegistry interface {
+	// ListFailed returns the failed jobs of the type in the scope that are
+	// not discarded, newest failure first. A limit above zero caps the
+	// result.
+	ListFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, limit int) ([]*models.FailedJob, error)
+
+	// CountFailed counts the jobs ListFailed would return without a limit.
+	CountFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope) (int, error)
+
+	// GetFailed returns one failed job that is not discarded. ErrNotFound
+	// when the type has no such job in the scope.
+	GetFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string) (*models.FailedJob, error)
+
+	// Retry puts a failed job back in its queue the way its type runs it
+	// again. ErrNotFound when the type has no failed, undiscarded job with
+	// the id in the scope; ErrFailedJobNotRetryable for a type whose jobs
+	// cannot be run again safely.
+	Retry(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// Discard marks a failed job discarded at now. ErrNotFound when the
+	// type has no failed, undiscarded job with the id in the scope.
+	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// DiscardFailed marks every failed, undiscarded job of the type in the
+	// scope discarded at now and returns how many it marked. The scope
+	// must set FailedBefore (ErrFieldRequired otherwise), so a bulk discard
+	// always names the jobs it acts on by their failure time.
+	DiscardFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, now time.Time) (int, error)
+}
+
+// UserPurger clears what references a single user before the users row itself
+// is dropped by the orchestration layer (#2116). A bare DELETE FROM users is
+// rejected by the many NO ACTION child FKs pointing at users(id), so the purge
+// deletes the user's auth / identity and personal rows (memberships, invites,
+// reminders, drafts, saved views, ...) and hands the group rows the user
+// created (tags, sellers, item history, loans, service records, maintenance,
+// item types, ...) to another member of their group. Each group whose rows
+// were handed over gets one audit row with AuditActionAccountDeletionHandOver.
+//
+// PRECONDITION: the user must no longer OWN shared content (items, files,
+// places, exports, groups). Those rows carry a NOT NULL
+// created_by column and are the user's own, so this purger deliberately does
+// not touch them; the final DELETE FROM users will fail loudly with an FK
+// violation if any remain. The users row itself is
 // NOT touched here — the caller (services.admin DeleteUser) drops it after the
 // dependents are gone.
 type UserPurger interface {
@@ -3450,6 +3919,12 @@ type UserPurger interface {
 	PurgeUserDependents(ctx context.Context, tenantID, userID string) error
 }
 
+// AuditActionAccountDeletionHandOver is the audit action of the row a user
+// purge writes for each group whose rows it handed to another member: the
+// deleted user is the actor, the group the entity, and the breadcrumb names
+// the member who received the rows and counts them per table.
+const AuditActionAccountDeletionHandOver = "account_deletion_handover"
+
 // UserContentOwnershipChecker answers, without mutating anything, whether a user
 // still OWNS content that survives a self-service account deletion (#2147). It
 // is the read-only pre-check the account-deletion orchestration runs BEFORE any
@@ -3457,19 +3932,20 @@ type UserPurger interface {
 // of being discovered at the final DELETE FROM users (which would leave a
 // half-erased account).
 //
-// "Owned content" means any row that carries a NOT NULL FK to users(id) which
-// cannot be orphaned without a schema change:
-//   - content authored by the user (created_by_user_id) in a group that is NOT
-//     being purged (commodities/files/areas/locations/exports/tags), and
-//   - location_groups the user created (created_by) that are NOT being purged.
+// "Owned content" means a row that carries a NOT NULL FK to users(id) and that
+// UserPurger can neither delete nor hand over, in a group that is NOT being
+// purged:
+//   - content authored by the user (created_by_user_id): items, files, file
+//     links, places, exports, and
+//   - a row UserPurger hands over (a group the user created, tags, item
+//     history, …) whose group has no member other than the user to take it.
 //
 // purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale
 // (the user's content there disappears with the group, so it does not count).
 // The check is tenant-scoped as defense-in-depth.
 type UserContentOwnershipChecker interface {
-	// HasRetainedOwnedContent reports whether the user owns any content (or
-	// created any location group) that would survive deleting only the
-	// purgedGroupIDs groups. It performs no writes. A true result means the
+	// HasRetainedOwnedContent reports whether the user owns any content that
+	// would survive deleting only the purgedGroupIDs groups. It performs no writes. A true result means the
 	// account cannot be erased unilaterally; false means the purge sequence is
 	// safe to run.
 	HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error)

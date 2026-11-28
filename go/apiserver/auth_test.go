@@ -239,6 +239,10 @@ func (*mockEmailServiceForAuth) SendItemReminderEmail(_ context.Context, _, _, _
 	return nil
 }
 
+func (*mockEmailServiceForAuth) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (m *mockEmailServiceForAuth) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }
@@ -1827,6 +1831,56 @@ func TestAuthAPI_UpdateCurrentUser(t *testing.T) {
 		c.Assert(storedErr, qt.IsNil)
 		c.Assert(stored.DefaultGroupID, qt.IsNotNil)
 		c.Assert(*stored.DefaultGroupID, qt.Equals, groupID)
+	})
+
+	// A group switch sends only default_group_id. The stored name must stay,
+	// so a client holding a stale copy cannot write back a name the user
+	// changed elsewhere since it loaded.
+	t.Run("name absent leaves the stored name unchanged", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		groupID := "22222222-2222-2222-2222-222222222222"
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		memberships := newMockGroupMembershipRegistryForAuth(struct {
+			groupID string
+			userID  string
+		}{groupID: groupID, userID: "user-123"})
+		authHandler := apiserver.Auth(apiserver.AuthParams{
+			UserRegistry:            userRegistry,
+			GroupMembershipRegistry: memberships,
+			JWTSecret:               jwtSecret,
+		})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{"default_group_id": groupID})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusOK)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.Name, qt.Equals, "Original Name")
+		c.Assert(stored.DefaultGroupID, qt.IsNotNil)
+		c.Assert(*stored.DefaultGroupID, qt.Equals, groupID)
+	})
+
+	t.Run("null name is rejected", func(t *testing.T) {
+		c := qt.New(t)
+		testUser := setupUser(t)
+		userRegistry := &mockUserRegistryForAuth{users: map[string]*models.User{"user-123": testUser}}
+		authHandler := apiserver.Auth(apiserver.AuthParams{UserRegistry: userRegistry, JWTSecret: jwtSecret})
+
+		req, resp := makeRequest(t, makeToken(t), map[string]any{"name": nil})
+
+		router := chi.NewRouter()
+		authHandler(router)
+		router.ServeHTTP(resp, req)
+
+		c.Assert(resp.Code, qt.Equals, http.StatusBadRequest)
+		stored, storedErr := userRegistry.Get(context.Background(), "user-123")
+		c.Assert(storedErr, qt.IsNil)
+		c.Assert(stored.Name, qt.Equals, "Original Name")
 	})
 
 	t.Run("default_group_id for a group the user does not belong to is rejected", func(t *testing.T) {

@@ -60,8 +60,8 @@ func commodityCtx() func(http.Handler) http.Handler {
 
 			commodity, err := comReg.Get(r.Context(), commodityID)
 			if err != nil {
-				slog.Error("CommodityCtx: Failed to get commodity", "error", err, "commodity_id", commodityID, "method", r.Method, "commodity_registry_type", fmt.Sprintf("%T", comReg))
-				renderEntityError(w, r, err)
+				slog.Log(r.Context(), errorLogLevel(err), "CommodityCtx: Failed to get commodity", "error", err, "commodity_id", commodityID, "method", r.Method, "commodity_registry_type", fmt.Sprintf("%T", comReg))
+				renderLoggedEntityError(w, r, err)
 				return
 			}
 

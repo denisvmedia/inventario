@@ -35,8 +35,10 @@ import {
   CommandSeparator,
 } from "@/components/ui/command"
 import { commodityListHref, primarySearchMatch } from "@/features/commodities/query"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import type { LocationGroup } from "@/features/group/api"
+import { isSectionHidden, type GroupSection } from "@/features/group/sections"
 import type {
   AreaAttrs,
   CommodityAttrs,
@@ -45,10 +47,11 @@ import type {
   TagAttrs,
 } from "@/features/search/api"
 import { useSearch } from "@/features/search/hooks"
-import { getRecent, pushRecent, type RecentEntry } from "@/features/search/recent"
+import { getRecent, pushRecent, recentScope, type RecentEntry } from "@/features/search/recent"
 import {
   areaHref,
   areaItemsHref,
+  locationItemsHref,
   commodityHref,
   commoditySubtitle,
   fileHref,
@@ -72,6 +75,9 @@ interface PaletteEntry {
   // AppSidebar.NavEntry.
   to: (group: LocationGroup | null) => string | null
   icon: typeof Search
+  // The group section the entry belongs to; the entry leaves the palette
+  // while the active group hides it (#1607).
+  section?: GroupSection
 }
 
 const NAVIGATION: PaletteEntry[] = [
@@ -99,6 +105,7 @@ const NAVIGATION: PaletteEntry[] = [
     labelKey: "common:nav.warranties",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
+    section: "warranties",
   },
   {
     labelKey: "common:nav.tags",
@@ -228,8 +235,8 @@ interface ResultRowProps {
   subtitle?: string
   onSelect: () => void
   testId: string
-  // A second action on the row: the items in an area, the items or files
-  // carrying a tag. It is an option of its own, so arrow keys, a click and
+  // A second action on the row: the items in a location or an area, the
+  // items or files carrying a tag. It is an option of its own, so arrow keys, a click and
   // a tap reach it like the row.
   related?: RelatedAction
 }
@@ -253,7 +260,9 @@ function ResultRow({
       <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
         <Icon className="size-3.5 text-muted-foreground" />
       </div>
-      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+      {/* Below sm the subtitle goes under the title, so a narrow screen
+          gives the title the whole row. */}
+      <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
         <span className="truncate text-sm font-medium">{title}</span>
         {subtitle ? (
           <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
@@ -262,6 +271,8 @@ function ResultRow({
     </CommandItem>
   )
   if (!related) return row
+  // Below sm the second action is its icon alone; its name stays in
+  // aria-label and title.
   return (
     <div className="flex items-center gap-1">
       {row}
@@ -269,11 +280,14 @@ function ResultRow({
         value={`${value}:related`}
         onSelect={related.onSelect}
         aria-label={related.ariaLabel}
+        title={related.ariaLabel}
         className="shrink-0 gap-1.5 text-xs text-muted-foreground"
         data-testid={related.testId}
       >
         <ListFilter className="size-3.5" />
-        <span>{related.label}</span>
+        <span className="hidden sm:inline" data-testid={`${related.testId}-label`}>
+          {related.label}
+        </span>
       </CommandItem>
     </div>
   )
@@ -324,6 +338,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? null
+  const userId = useOptionalAuth()?.user?.id
+  const recentKey = userId && groupSlug ? recentScope(userId, groupSlug) : null
   const [query, setQuery] = useState("")
   const trimmedQuery = query.trim()
   const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
@@ -356,8 +372,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   // Read once per open; the palette is not on screen while a result is
   // being visited.
   const recent = useMemo(
-    () => (groupSlug ? getRecent(groupSlug).slice(0, RECENT_LIMIT) : []),
-    [groupSlug]
+    () => (recentKey ? getRecent(recentKey).slice(0, RECENT_LIMIT) : []),
+    [recentKey]
   )
 
   const sections = [items, locations, areas, files, tags]
@@ -376,7 +392,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   // Opens a result and remembers it for the empty palette and the empty
   // search page.
   function openResult(entry: Omit<RecentEntry, "visitedAt">) {
-    if (groupSlug) pushRecent(groupSlug, entry)
+    if (recentKey) pushRecent(recentKey, entry)
     go(entry.url)
   }
 
@@ -504,6 +520,12 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                     })
                   }
                   testId={`palette-result-location-${r.id}`}
+                  related={{
+                    label: t("search:resultCard.showItems"),
+                    ariaLabel: t("search:resultCard.showItemsInLocation", { name: title }),
+                    onSelect: () => go(locationItemsHref(groupSlug, r.id)),
+                    testId: `palette-location-items-${r.id}`,
+                  }}
                 />
               )
             })}
@@ -621,7 +643,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         ) : null}
 
         <CommandGroup heading={t("common:shell.commandGroupNavigation")}>
-          {NAVIGATION.map((entry) => (
+          {NAVIGATION.filter(
+            (entry) => !entry.section || !isSectionHidden(currentGroup, entry.section)
+          ).map((entry) => (
             <PaletteRow
               key={entry.labelKey}
               entry={entry}

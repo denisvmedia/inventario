@@ -135,7 +135,7 @@ func (api *AuthAPI) handleMFAStatus(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, registry.ErrNotFound):
 			// no enrollment — default state ("none") is correct.
 		case err != nil:
-			slog.Error("MFA status lookup failed", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "MFA status lookup failed", "user_id", user.ID, "error", err)
 			http.Error(w, "Failed to read MFA status", http.StatusInternalServerError)
 			return
 		default:
@@ -180,7 +180,7 @@ func (api *AuthAPI) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 	// user thinking their device is still bound.
 	existing, err := api.mfaRegistry.GetByUser(r.Context(), user.TenantID, user.ID)
 	if err != nil && !errors.Is(err, registry.ErrNotFound) {
-		slog.Error("MFA setup precheck failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA setup precheck failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to read MFA state", http.StatusInternalServerError)
 		return
 	}
@@ -191,13 +191,13 @@ func (api *AuthAPI) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 
 	enrollment, err := api.mfaService.GenerateEnrollment(user.Email)
 	if err != nil {
-		slog.Error("MFA setup: generate enrollment failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA setup: generate enrollment failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to start MFA setup", http.StatusInternalServerError)
 		return
 	}
 	encrypted, err := api.mfaService.EncryptSecret(enrollment.Secret)
 	if err != nil {
-		slog.Error("MFA setup: encrypt secret failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA setup: encrypt secret failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to store MFA secret", http.StatusInternalServerError)
 		return
 	}
@@ -207,7 +207,7 @@ func (api *AuthAPI) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 	// all get cleared.
 	if existing != nil {
 		if err := api.mfaRegistry.DeleteByUser(r.Context(), user.TenantID, user.ID); err != nil {
-			slog.Error("MFA setup: failed to clear previous enrollment", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "MFA setup: failed to clear previous enrollment", "user_id", user.ID, "error", err)
 			http.Error(w, "Failed to start MFA setup", http.StatusInternalServerError)
 			return
 		}
@@ -222,7 +222,7 @@ func (api *AuthAPI) handleMFASetup(w http.ResponseWriter, r *http.Request) {
 		BackupCodesHashed: models.ValuerSlice[string]{},
 	}
 	if _, err := api.mfaRegistry.Create(r.Context(), row); err != nil {
-		slog.Error("MFA setup: persist row failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA setup: persist row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to start MFA setup", http.StatusInternalServerError)
 		return
 	}
@@ -274,7 +274,7 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		slog.Error("MFA verify: load row failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA verify: load row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA", http.StatusInternalServerError)
 		return
 	}
@@ -293,7 +293,7 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 
 	_, ok, err := api.mfaService.VerifyTOTPStep(*row, req.Code)
 	if err != nil {
-		slog.Error("MFA verify: totp check failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA verify: totp check failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA", http.StatusInternalServerError)
 		return
 	}
@@ -312,7 +312,7 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	// don't want a half-enrolled row.
 	plain, hashes, err := api.mfaService.GenerateBackupCodes(services.MFABackupCodeCount)
 	if err != nil {
-		slog.Error("MFA verify: backup code generation failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA verify: backup code generation failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA", http.StatusInternalServerError)
 		return
 	}
@@ -337,7 +337,7 @@ func (api *AuthAPI) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
 	// gate on the password / step-1 mfa_token).
 	row.BackupCodesHashed = models.ValuerSlice[string](hashes)
 	if _, err := api.mfaRegistry.Update(r.Context(), *row); err != nil {
-		slog.Error("MFA verify: persist row failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA verify: persist row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA", http.StatusInternalServerError)
 		return
 	}
@@ -390,7 +390,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		slog.Error("MFA disable: load row failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA disable: load row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
 		return
 	}
@@ -411,7 +411,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.mfaRegistry.DeleteByUser(r.Context(), user.TenantID, user.ID); err != nil {
-		slog.Error("MFA disable: delete row failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA disable: delete row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
 		return
 	}
@@ -426,7 +426,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 	// is a one-step ritual, not a silent foot-gun.
 	if api.refreshTokenRegistry != nil {
 		if revErr := api.refreshTokenRegistry.RevokeByUserID(r.Context(), user.ID); revErr != nil {
-			slog.Error("MFA disable: failed to revoke refresh tokens", "user_id", user.ID, "error", revErr)
+			slog.ErrorContext(r.Context(), "MFA disable: failed to revoke refresh tokens", "user_id", user.ID, "error", revErr)
 		}
 	}
 	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
@@ -434,7 +434,7 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 	}
 	if api.blacklistService != nil {
 		if blErr := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 2*accessTokenExpiration); blErr != nil {
-			slog.Error("MFA disable: failed to blacklist user tokens", "user_id", user.ID, "error", blErr)
+			slog.ErrorContext(r.Context(), "MFA disable: failed to blacklist user tokens", "user_id", user.ID, "error", blErr)
 		}
 	}
 	api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, true, r, nil)
@@ -478,14 +478,14 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 		return
 	}
 	if err != nil {
-		slog.Error("MFA regenerate: load row failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA regenerate: load row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
 
 	matchedStep, ok, err := api.mfaService.VerifyTOTPStep(*row, req.Code)
 	if err != nil {
-		slog.Error("MFA regenerate: totp check failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA regenerate: totp check failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
@@ -504,7 +504,7 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 	now := time.Now()
 	won, casErr := api.mfaRegistry.MarkTOTPStepUsedAtomic(r.Context(), user.TenantID, user.ID, matchedStep, now)
 	if casErr != nil {
-		slog.Error("MFA regenerate: totp step CAS failed", "user_id", user.ID, "error", casErr)
+		slog.ErrorContext(r.Context(), "MFA regenerate: totp step CAS failed", "user_id", user.ID, "error", casErr)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
@@ -517,7 +517,7 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 
 	plain, hashes, err := api.mfaService.GenerateBackupCodes(services.MFABackupCodeCount)
 	if err != nil {
-		slog.Error("MFA regenerate: backup codes failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA regenerate: backup codes failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
@@ -528,7 +528,7 @@ func (api *AuthAPI) handleMFARegenerateBackupCodes(w http.ResponseWriter, r *htt
 	// the meantime, re-opening the replay window (#2124). Keeping the CAS the
 	// sole writer of last_used_step preserves monotonicity.
 	if err := api.mfaRegistry.UpdateBackupCodes(r.Context(), user.TenantID, user.ID, hashes, now); err != nil {
-		slog.Error("MFA regenerate: persist failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA regenerate: persist failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to regenerate codes", http.StatusInternalServerError)
 		return
 	}
@@ -567,15 +567,20 @@ func (api *AuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := api.parseMFAToken(req.MFAToken)
 	if err != nil {
-		slog.Warn("MFA login: invalid mfa_token", "error", err)
+		slog.WarnContext(r.Context(), "MFA login: invalid mfa_token", "error", err)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
 
 	user, err := api.userRegistry.Get(r.Context(), claims.UserID)
 	if err != nil || !user.IsActive || user.TenantID != claims.TenantID {
-		slog.Warn("MFA login: user lookup failed", "user_id", claims.UserID, "error", err)
+		slog.WarnContext(r.Context(), "MFA login: user lookup failed", "user_id", claims.UserID, "error", err)
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
+		return
+	}
+	// The challenge can be completed on another host than the one it was
+	// issued on, so the host's tenant check does not cover the user's own.
+	if refuseInactiveUserTenant(w, r, api.tenantRegistry, user) {
 		return
 	}
 
@@ -619,7 +624,7 @@ func (api *AuthAPI) checkMFALoginLockout(w http.ResponseWriter, r *http.Request,
 	}
 	locked, resetAt, lockErr := api.rateLimiter.IsAccountLocked(r.Context(), email)
 	if lockErr != nil {
-		slog.Error("MFA login: rate-limiter lookup failed", "error", lockErr)
+		slog.ErrorContext(r.Context(), "MFA login: rate-limiter lookup failed", "error", lockErr)
 		return true
 	}
 	if !locked {
@@ -637,14 +642,14 @@ func (api *AuthAPI) checkMFALoginLockout(w http.ResponseWriter, r *http.Request,
 func (api *AuthAPI) afterMFALoginSuccess(ctx context.Context, email, userID string, claims *mfaTokenClaims) {
 	if api.rateLimiter != nil {
 		if clrErr := api.rateLimiter.ClearFailedLogins(ctx, email); clrErr != nil {
-			slog.Error("MFA login: clear failed-login counter", "error", clrErr)
+			slog.ErrorContext(ctx, "MFA login: clear failed-login counter", "error", clrErr)
 		}
 	}
 	if api.blacklistService != nil && claims.JTI != "" && !claims.ExpiresAt.IsZero() {
 		if blErr := api.blacklistService.BlacklistToken(ctx, claims.JTI, claims.ExpiresAt); blErr != nil {
 			// Not fatal — session still issues. Replay risk is
 			// scoped to <5 min, single-use code already consumed.
-			slog.Error("MFA login: failed to blacklist mfa_token jti", "user_id", userID, "error", blErr)
+			slog.ErrorContext(ctx, "MFA login: failed to blacklist mfa_token jti", "user_id", userID, "error", blErr)
 		}
 	}
 }
@@ -660,13 +665,13 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 	// the client with a valid session cookie if mint fails.
 	rti, rawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("MFA login: refresh token failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA login: refresh token failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return false
 	}
 	accessToken, _, err := api.issueAccessToken(r.Context(), user, rti)
 	if err != nil {
-		slog.Error("MFA login: access token failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA login: access token failed", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, rti)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return false
@@ -675,7 +680,7 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 	now := time.Now()
 	user.LastLoginAt = &now
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("Failed to update user last login time", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update user last login time", "user_id", user.ID, "error", err)
 	}
 
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
@@ -741,7 +746,7 @@ func consumeMFACode(
 				ctx, user.TenantID, user.ID, time.Now(), matcher,
 			)
 			if err != nil {
-				slog.Error("MFA verify path: atomic backup-code consume failed", "user_id", user.ID, "error", err)
+				slog.ErrorContext(ctx, "MFA verify path: atomic backup-code consume failed", "user_id", user.ID, "error", err)
 				return false
 			}
 			if ok {
@@ -771,7 +776,7 @@ func consumeTOTPCode(
 ) (consumed, abort bool) {
 	matchedStep, ok, err := mfaService.VerifyTOTPStep(*row, totpCode)
 	if err != nil {
-		slog.Error("MFA verify path: totp check failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(ctx, "MFA verify path: totp check failed", "user_id", user.ID, "error", err)
 		return false, true
 	}
 	if !ok {
@@ -779,7 +784,7 @@ func consumeTOTPCode(
 	}
 	won, casErr := mfaRegistry.MarkTOTPStepUsedAtomic(ctx, user.TenantID, user.ID, matchedStep, time.Now())
 	if casErr != nil {
-		slog.Error("MFA verify path: totp step CAS failed", "user_id", user.ID, "error", casErr)
+		slog.ErrorContext(ctx, "MFA verify path: totp step CAS failed", "user_id", user.ID, "error", casErr)
 		return false, true
 	}
 	return won, false

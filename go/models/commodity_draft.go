@@ -134,6 +134,52 @@ func MapDraftCustomFieldReference(entry any, mapID func(string) string) any {
 	return nil
 }
 
+// DraftBlank is the white space a draft's custom field text may consist of
+// and still hold no value.
+const DraftBlank = " \t\n\r"
+
+// DraftItemType returns the item type slug a draft's values name, empty when
+// they name none.
+func (v CommodityDraftValues) DraftItemType() CommodityType {
+	t, _ := v["type"].(string)
+	return CommodityType(t)
+}
+
+// DraftCustomFields returns the custom_fields entries of a draft's values by
+// field ID, nil when the values hold none.
+func (v CommodityDraftValues) DraftCustomFields() map[string]any {
+	entries, _ := v["custom_fields"].(map[string]any)
+	return entries
+}
+
+// DraftCustomFieldHasValue reports whether an entry of a draft's
+// custom_fields holds a value: a text that is not blank, a number or a
+// yes/no, either as such or as the "value" of the form's {value, currency}
+// object, or money as {amount, currency} with an amount. The item form keeps
+// an entry with an empty value for each field it shows that nothing was
+// entered in; such an entry holds no value.
+func DraftCustomFieldHasValue(entry any) bool {
+	if obj, ok := entry.(map[string]any); ok {
+		if value, ok := obj["value"]; ok {
+			return draftScalarHasValue(value)
+		}
+		amount, ok := obj["amount"]
+		return ok && amount != nil
+	}
+	return draftScalarHasValue(entry)
+}
+
+func draftScalarHasValue(v any) bool {
+	switch x := v.(type) {
+	case string:
+		return strings.Trim(x, DraftBlank) != ""
+	case float64, int, int64, json.Number, bool:
+		return true
+	default:
+		return false
+	}
+}
+
 // CommodityDraftValuesRule checks the size and the number of fields of the
 // values, and the type of each field the item form knows. The request
 // validation and the model share it.
@@ -399,7 +445,7 @@ func (d *CommodityDraft) ValidateWithContext(ctx context.Context) error {
 // author yet.
 func (d *CommodityDraft) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, d,
-		validation.Field(&d.ClientKey, rules.NotEmpty, validation.Length(1, CommodityDraftClientKeyMaxLength), clientKeyRule),
+		validation.Field(&d.ClientKey, rules.NotEmpty, validation.RuneLength(1, CommodityDraftClientKeyMaxLength), clientKeyRule),
 		validation.Field(&d.Values, CommodityDraftValuesRule),
 	)
 }

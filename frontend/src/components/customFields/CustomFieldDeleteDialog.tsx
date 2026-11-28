@@ -32,6 +32,7 @@ export interface CustomFieldDeleteDialogProps {
 interface Usage {
   live: number
   trashed: number
+  drafts: number
 }
 
 interface DialogState {
@@ -50,8 +51,9 @@ function freshState(field: CustomField | null): DialogState {
 }
 
 // CustomFieldDeleteDialog deletes a custom field (#2803). A field that
-// items have values for, in Trash included, is deleted only once the member
-// confirms that the values go too; the dialog says how many items lose one.
+// items have values for, in Trash included, or drafts have values for, is
+// deleted only once the member confirms that the values go too; the dialog
+// says how many items and drafts lose one.
 // The mock has no custom fields; the dialog follows ItemTypeDeleteDialog
 // with a checkbox in place of the type picker.
 export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDialogProps) {
@@ -70,8 +72,10 @@ export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDia
   const usage = refusedUsage ?? {
     live: shown?.item_count ?? 0,
     trashed: shown?.trashed_item_count ?? 0,
+    drafts: shown?.draft_count ?? 0,
   }
-  const count = usage.live + usage.trashed
+  const items = usage.live + usage.trashed
+  const count = items + usage.drafts
   const inUse = count > 0
   const name = shown?.name ?? ""
   const pending = deleteMutation.isPending
@@ -80,8 +84,8 @@ export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDia
     if (!shown || (inUse && !confirmed)) return
     setState((prev) => ({ ...prev, serverError: null }))
     try {
-      // The count the dialog shows: the server refuses the delete when
-      // another number of items has a value by now.
+      // The count the dialog shows, items and drafts together: the server
+      // refuses the delete when another number has a value by now.
       await deleteMutation.mutateAsync({
         id: shown.id,
         deleteValues: inUse,
@@ -98,6 +102,7 @@ export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDia
           refusedUsage: {
             live: Number(meta?.item_count ?? 0) || 0,
             trashed: Number(meta?.trashed_item_count ?? 0) || 0,
+            drafts: Number(meta?.draft_count ?? 0) || 0,
           },
         }))
         return
@@ -118,11 +123,16 @@ export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDia
         <DialogHeader>
           <DialogTitle>{t("customFields:delete.title", { name })}</DialogTitle>
           <DialogDescription data-testid="custom-field-delete-description">
-            {inUse
-              ? t("customFields:delete.inUse", { count })
-              : t("customFields:delete.description")}
+            {items > 0
+              ? t("customFields:delete.inUse", { count: items })
+              : usage.drafts > 0
+                ? t("customFields:delete.draftsOnly", { count: usage.drafts })
+                : t("customFields:delete.description")}
             {usage.trashed > 0
               ? ` ${t("customFields:delete.trashed", { count: usage.trashed })}`
+              : ""}
+            {items > 0 && usage.drafts > 0
+              ? ` ${t("customFields:delete.drafts", { count: usage.drafts })}`
               : ""}
           </DialogDescription>
         </DialogHeader>

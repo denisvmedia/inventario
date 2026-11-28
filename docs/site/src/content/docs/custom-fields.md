@@ -14,6 +14,14 @@ who may edit items may add, rename, and delete fields (see
 [Groups & sharing](../groups-and-sharing/)). A field stays with the group when
 the member who added it leaves or deletes their account.
 
+A group admin can add the [Collection set](../groups-and-sharing/#add-the-collection-set),
+which creates fields collectors track, such as **Condition**, **Provenance**,
+and **Appraised value**, and offers them on the set's item types. They are
+ordinary fields you can rename or delete. When the group already has a field or
+type of the same name, the set offers that field on its types, or its fields on
+that type. Removing the set keeps those links; change them under
+[Offer a field on item types](#offer-a-field-on-item-types).
+
 ## Open the Custom fields page
 
 Click **Custom fields** in the **Group** section of the sidebar, or search for
@@ -90,13 +98,16 @@ items when you save; the dialog says how many items that is before you click
 
 Point at a row and click the bin.
 
-- When no item has a value for the field, confirm and the field is removed.
-- When items have a value, the dialog says how many, Trash included. Tick
-  **Delete the values too** and click **Delete field**: the field and every one
-  of its values are deleted. This cannot be undone.
+- When no item and no [draft](../items/#save-as-draft) has a value for the
+  field, confirm and the field is removed. A field a draft shows empty does not
+  count, and that draft is left as it is: a member editing it can keep going.
+- When items or drafts have a value, the dialog says how many items, Trash
+  included, and how many drafts. Tick **Delete the values too** and click
+  **Delete field**: the field and every one of its values are deleted, and the
+  drafts lose theirs. This cannot be undone.
 
-If another member gives an item a value for the field while the dialog is
-open, the dialog shows the new count and asks you to confirm again.
+If another member gives an item or a draft a value for the field while the
+dialog is open, the dialog shows the new count and asks you to confirm again.
 
 ## Fill in custom fields on an item
 
@@ -183,6 +194,13 @@ reads a photo or a document, it can also fill in up to 25 of your group's
 custom fields. **Money** and **Link to an item** fields are not filled in. The
 values it read appear in the review list under the field's name, and only the
 ones you keep ticked are filled in.
+
+A batch of [files added for the AI scan](../items/#add-items-from-files) reads
+the same fields for each product. The values are listed after the item fields
+under **N fields used** on the review page, and each draft gets the ones you
+keep ticked. A value the field cannot hold, such as a date that is not a real
+date, is not listed. Neither is a value of a field deleted after the scan, or a
+choice removed from its field since, and no draft gets it.
 
 ## Custom fields in reports and backups
 

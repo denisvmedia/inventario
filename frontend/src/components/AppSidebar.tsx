@@ -63,10 +63,14 @@ import { SETTINGS_HELP_URL } from "@/lib/settings-url"
 import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useInboxCount } from "@/features/inbox/hooks"
+import { useWhatsNewUnread } from "@/features/whats-new/hooks"
+import { WhatsNewDot, WhatsNewUnreadLabel } from "@/features/whats-new/WhatsNewDot"
 import { SidebarSavedViews } from "@/features/saved-views/SidebarSavedViews"
 import type { LocationGroup } from "@/features/group/api"
+import { isSectionHidden, type GroupSection } from "@/features/group/sections"
 
 interface NavEntry {
   // Full translation key (namespace-qualified, e.g. "common:nav.dashboard").
@@ -88,6 +92,9 @@ interface NavEntry {
   // A count shown at the end of the row. The inbox shows the server's
   // count of what it holds.
   badge?: "inbox"
+  // The group section the entry belongs to. The row leaves the sidebar
+  // while the active group hides that section (#1607).
+  section?: GroupSection
 }
 
 // Three sidebar groups mirror the legacy Vue + design-mock layout:
@@ -129,27 +136,32 @@ const INVENTORY: NavEntry[] = [
     labelKey: "common:nav.upcoming",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/upcoming` : null),
     icon: BellRing,
+    section: "upcoming",
   },
   {
     labelKey: "common:nav.warranties",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
     tourKey: "nav-warranties",
+    section: "warranties",
   },
   {
     labelKey: "common:nav.maintenance",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/maintenance` : null),
     icon: CalendarClock,
+    section: "maintenance",
   },
   {
     labelKey: "common:nav.lent",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/lent` : null),
     icon: HandCoins,
+    section: "loans",
   },
   {
     labelKey: "common:nav.inService",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/in-service` : null),
     icon: Wrench,
+    section: "maintenance",
   },
 ]
 
@@ -329,10 +341,14 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const { user, logout } = useAuth()
   const { groups, currentGroup } = useCurrentGroup()
+  const { canEditContent } = useGroupPermissions()
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
+  // Help leads to Settings → Help, where the What's new row is, so it
+  // carries that row's unread dot (#1386).
+  const whatsNewUnread = useWhatsNewUnread()
 
   // Inventory + Group(Manage) entries all require an active group to resolve
   // (`/g/<slug>/...`), so rendering empty section headers when the user
@@ -352,9 +368,11 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   // dialog via the /commodities/new side-effect route. Hidden when there
   // is no active group (the destination needs a slug) and disabled while
   // a currency migration locks writes for the active group.
-  const addItemHref = currentGroup?.slug
-    ? `/g/${encodeURIComponent(currentGroup.slug)}/commodities/new`
-    : null
+  // Offered only to a role that adds items (features/group/roles.ts).
+  const addItemHref =
+    currentGroup?.slug && canEditContent
+      ? `/g/${encodeURIComponent(currentGroup.slug)}/commodities/new`
+      : null
   const addItemLabel = t("commodities:list.addItem")
 
   // The bottom-of-sidebar user button. The label falls back to the email's
@@ -432,7 +450,9 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
             <SidebarGroupLabel>{t("common:nav.groupInventory")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {INVENTORY.map((e) => (
+                {INVENTORY.filter(
+                  (e) => !e.section || !isSectionHidden(currentGroup, e.section)
+                ).map((e) => (
                   <NavRow
                     key={e.labelKey}
                     entry={e}
@@ -512,8 +532,16 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
               <Link to={withGroupQuery(SETTINGS_HELP_URL, currentGroup?.slug)}>
                 <CircleHelp className="size-4" />
                 <span>{t("common:nav.help")}</span>
+                {whatsNewUnread ? <WhatsNewUnreadLabel /> : null}
               </Link>
             </SidebarMenuButton>
+            {/* Like the inbox count, the dot sits in the badge slot outside
+                the link; the link carries its meaning for screen readers. */}
+            {whatsNewUnread ? (
+              <SidebarMenuBadge aria-hidden="true">
+                <WhatsNewDot labelled={false} testId="sidebar-help-unread" />
+              </SidebarMenuBadge>
+            ) : null}
           </SidebarMenuItem>
           <SidebarMenuItem>
             <DropdownMenu>

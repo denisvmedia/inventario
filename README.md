@@ -141,13 +141,22 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # "Hostnames and tenants".
 ./inventario tenants update acme --domain=inventory.acme.com
 
-# Delete tenant with confirmation
+# Remove the tenant's domain
+./inventario tenants update acme --domain=
+
+# Delete tenant with confirmation (type the tenant's slug to confirm)
 ./inventario tenants delete acme
 
 # Preview operations without making changes
 ./inventario tenants create --dry-run --name="Test Org"
 ./inventario tenants delete acme --dry-run
 ```
+
+A back-office `platform_admin` can do the same in the browser: create, edit,
+suspend, reactivate and delete tenants. Suspending a tenant signs its users
+out and keeps them out until it is reactivated; a status change made with
+`tenants update` does the same. The rules are in
+[the admin runbook](devdocs/admin-runbook.md#11-managing-tenants-1037).
 
 #### User Management
 ```bash
@@ -176,8 +185,11 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 ./inventario users update admin@acme.com --name="New Name"
 ./inventario users update admin@acme.com --active=false      # block / deactivate
 ./inventario users update admin@acme.com --password          # prompts securely
+./inventario users update new@acme.com --tenant=acme --upload-location=s3://bucket   # move to another tenant
 
-# Delete user with confirmation
+# Delete user with confirmation (refused, changing nothing, while they own
+# items, files, places or exports, created a group nobody else is in, or are
+# the only owner of a group that has other members)
 ./inventario users delete admin@acme.com
 
 # Preview operations without making changes
@@ -191,6 +203,24 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 > use `admin grant-system-admin` (see
 > [System Administrators](#system-administrators) below) — that privilege is
 > not a user-row field.
+
+> **Moving a user to another tenant:** `--tenant` moves only a user who
+> belongs to no group and owns or authored nothing in their tenant, typically
+> an account created in the wrong tenant. Otherwise the command refuses and
+> lists what blocks the move (for example "member of 2 groups, 14 items, 3
+> files"), and nothing changes. The target tenant must be active and must
+> have no user with the same email. `--dry-run` runs the same checks, the
+> photo storage included. A move signs
+> the user out everywhere (sessions and API tokens are deleted) and keeps
+> their password, second factor, linked sign-in accounts, language and other
+> settings. The profile photo is copied into the new tenant's storage, so pass
+> `--upload-location` (or `INVENTARIO_USERS_UPDATE_UPLOAD_LOCATION`) with the
+> server's upload location. Moving a user together with their content is not
+> supported.
+
+> **Deleting a user** also deletes their profile photo from storage, so pass
+> `--upload-location` (or `INVENTARIO_USERS_DELETE_UPLOAD_LOCATION`) with the
+> server's upload location, as for a move.
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 
@@ -250,6 +280,29 @@ is distinct from `run workers`, which *starts* the worker process. See the
 [System Admin Operations Runbook §7](devdocs/admin-runbook.md) for the
 canonical worker types, the equivalent admin REST API, and the
 `inventario_worker_paused` metric.
+
+#### Failed Background Jobs (#1307)
+
+List, retry and discard the background jobs that failed for good, across
+every tenant. A discarded job keeps its row and its error; it only leaves
+the failed list.
+
+```bash
+# List the failed jobs nobody retried or discarded, newest first
+./inventario jobs failed list --type export --tenant acme
+
+# Put a job back in its queue
+./inventario jobs failed retry --type thumbnail <job-id>
+
+# Discard a job (restores and currency migrations can only be discarded)
+./inventario jobs failed discard --type restore <job-id>
+```
+
+These commands require a PostgreSQL DSN. See the
+[System Admin Operations Runbook §10](devdocs/admin-runbook.md) for the job
+types, what a retry does for each, the admin REST API and the
+`inventario_jobs_dead_lettered_total` and `inventario_jobs_dead_letter_depth`
+metrics.
 
 #### Command Options
 
@@ -481,6 +534,7 @@ This test validates:
 - [Email Deliverability Runbook](devdocs/email-deliverability.md) - SPF/DKIM/DMARC for the sending domain, and how to check that verification and invite mail lands
 - [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery
 - [Admin Section Threat Model](devdocs/security/admin-threat-model.md) - Security model for the cross-tenant admin surface
+- [Logging Guideline](devdocs/logging.md) - Log levels, field names, what never goes into a log, and request ids
 
 ## Security
 

@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
@@ -45,6 +46,11 @@ type UsersMeParams struct {
 	// Nil skips that part of the check, which only tests do.
 	UserRegistry     registry.UserRegistry
 	TokenBlacklister services.TokenBlacklister
+	// PersonalDataExports backs /users/me/data-exports (#2177), and
+	// FileSigningService signs their download URLs. Nil leaves those routes
+	// unmounted.
+	PersonalDataExports *export.PersonalDataExportService
+	FileSigningService  *services.FileSigningService
 }
 
 // usersMeAPI is the handler set behind /users/me/{sessions,login-history}.
@@ -117,6 +123,14 @@ func UsersMe(params UsersMeParams) func(r chi.Router) {
 			r.Post("/api-tokens", tokens.createAPIToken)
 			r.Delete("/api-tokens/{id}", tokens.revokeAPIToken)
 		}
+		if params.PersonalDataExports != nil && params.FileSigningService != nil {
+			exports := &personalDataExportsAPI{
+				service: params.PersonalDataExports,
+				signer:  params.FileSigningService,
+				audit:   params.AuditService,
+			}
+			exports.routes(r)
+		}
 	}
 }
 
@@ -146,7 +160,7 @@ func (api *usersMeAPI) listSessions(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := api.refreshTokenRegistry.ListActiveByUserID(r.Context(), user.ID)
 	if err != nil {
-		slog.Error("Failed to list sessions", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to list sessions", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to list sessions", http.StatusInternalServerError)
 		return
 	}
@@ -218,7 +232,7 @@ func (api *usersMeAPI) revokeSession(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Session not found", http.StatusNotFound)
 			return
 		}
-		slog.Error("Failed to revoke session", "user_id", user.ID, "session_id", id, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to revoke session", "user_id", user.ID, "session_id", id, "error", err)
 		http.Error(w, "Failed to revoke session", http.StatusInternalServerError)
 		return
 	}
@@ -316,7 +330,7 @@ func (api *usersMeAPI) revokeAllOtherSessions(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := api.refreshTokenRegistry.RevokeAllExceptID(r.Context(), user.ID, keepID); err != nil {
-		slog.Error("Failed to revoke other sessions", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to revoke other sessions", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to revoke sessions", http.StatusInternalServerError)
 		return
 	}
@@ -357,7 +371,7 @@ func (api *usersMeAPI) listLoginHistory(w http.ResponseWriter, r *http.Request) 
 
 	events, err := api.loginEventRegistry.ListByUser(r.Context(), user.TenantID, user.ID, limit)
 	if err != nil {
-		slog.Error("Failed to list login history", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to list login history", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to list login history", http.StatusInternalServerError)
 		return
 	}
@@ -380,7 +394,7 @@ func (api *usersMeAPI) listLoginHistory(w http.ResponseWriter, r *http.Request) 
 		// Log and fall through with 0 — the banner is a nice-to-have,
 		// not a gate, and we don't want a count failure to kill the
 		// whole page.
-		slog.Warn("Failed to count failed logins in last 7d", "user_id", user.ID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to count failed logins in last 7d", "user_id", user.ID, "error", err)
 		failed = 0
 	}
 

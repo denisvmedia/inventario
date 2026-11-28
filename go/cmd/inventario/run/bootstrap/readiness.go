@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/redis/go-redis/v9"
+
+	"go.5x5.cz/inventario/internal/redisurl"
 )
 
 type redisReadinessTarget struct {
@@ -104,7 +106,7 @@ func NewReadinessRedisPinger(cfg *Config) *ReadinessRedisPinger {
 	targets := make([]redisReadinessTarget, 0, len(orderedURLs))
 	for _, redisURL := range orderedURLs {
 		dependencyNames := groupedNamesByURL[redisURL]
-		opts, err := redis.ParseURL(redisURL)
+		opts, err := redisurl.Parse(redisURL)
 		if err != nil {
 			slog.Warn(
 				"Invalid Redis URL for readiness check; Redis dependency checks will be skipped",

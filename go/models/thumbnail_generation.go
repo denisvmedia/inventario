@@ -73,6 +73,11 @@ type ThumbnailGenerationJob struct {
 	// UpdatedAt is when the job was last updated
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+
+	// DiscardedAt is when an operator discarded the failed job (#1307). The
+	// row stays, with its error, until the job cleanup removes it.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt *time.Time `json:"-" db:"discarded_at"`
 }
 
 // PostgreSQL-specific indexes for thumbnail generation jobs
@@ -103,6 +108,14 @@ type ThumbnailGenerationJobIndexes struct {
 	// Index for cleanup queries (completed/failed jobs)
 	//ptah:schema:index name="idx_thumbnail_jobs_cleanup" fields="status,processing_completed_at" table="thumbnail_generation_jobs"
 	_ int
+}
+
+// AwaitsOperator reports whether the job failed for good and nobody has
+// retried or discarded it yet (#1307). While it does, viewing its file
+// starts no new job, so a file that cannot be thumbnailed stays one failed
+// job instead of one per view.
+func (t *ThumbnailGenerationJob) AwaitsOperator() bool {
+	return t.Status == ThumbnailStatusFailed && t.DiscardedAt == nil
 }
 
 func (*ThumbnailGenerationJob) Validate() error {

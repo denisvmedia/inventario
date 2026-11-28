@@ -12,6 +12,8 @@
 // failures shouldn't block submit (the user can still re-pick files
 // the old way).
 
+import type { PendingFileSuggestion } from "@/features/commodities/draft"
+
 const DB_NAME = "inventario-drafts"
 const STORE_NAME = "pending-files"
 const DB_VERSION = 1
@@ -20,8 +22,29 @@ export interface StoredPendingFile {
   id: string
   file: File
   tags: string[]
+  // The title the user typed for the file (#1626).
+  title?: string
   // Set once a server draft save uploaded the file (#2812).
   uploadedFileId?: string
+  // The tag and title an AI scan suggested for the file, and the ones the
+  // user rejected (#1626).
+  suggestion?: PendingFileSuggestion
+}
+
+// suggestionOf keeps a stored suggestion only in the shape the form writes;
+// a part of another shape is dropped, not the whole entry.
+function suggestionOf(raw: unknown): PendingFileSuggestion | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const { tag, title, rejectedTags, rejectedTitle } = raw as Record<string, unknown>
+  const out: PendingFileSuggestion = {}
+  if (typeof tag === "string") out.tag = tag
+  if (typeof title === "string") out.title = title
+  if (Array.isArray(rejectedTags)) {
+    const tags = rejectedTags.filter((t): t is string => typeof t === "string")
+    if (tags.length > 0) out.rejectedTags = tags
+  }
+  if (typeof rejectedTitle === "string") out.rejectedTitle = rejectedTitle
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -79,15 +102,22 @@ export async function loadPendingFiles(key: string): Promise<StoredPendingFile[]
     if (!Array.isArray(result)) return []
     // Defensive shape-check: only return entries that have all
     // expected fields. Old / malformed records get dropped.
-    return result.filter(
-      (entry): entry is StoredPendingFile =>
-        !!entry &&
-        typeof entry === "object" &&
-        typeof (entry as StoredPendingFile).id === "string" &&
-        (entry as StoredPendingFile).file instanceof File &&
-        Array.isArray((entry as StoredPendingFile).tags) &&
-        ["undefined", "string"].includes(typeof (entry as StoredPendingFile).uploadedFileId)
-    )
+    return result
+      .filter(
+        (entry): entry is StoredPendingFile =>
+          !!entry &&
+          typeof entry === "object" &&
+          typeof (entry as StoredPendingFile).id === "string" &&
+          (entry as StoredPendingFile).file instanceof File &&
+          Array.isArray((entry as StoredPendingFile).tags) &&
+          ["undefined", "string"].includes(typeof (entry as StoredPendingFile).title) &&
+          ["undefined", "string"].includes(typeof (entry as StoredPendingFile).uploadedFileId)
+      )
+      .map((entry) => {
+        const { suggestion, ...rest } = entry
+        const kept = suggestionOf(suggestion)
+        return kept ? { ...rest, suggestion: kept } : rest
+      })
   } catch (err) {
     console.warn("[pending-files] load failed", err)
     return []
@@ -103,6 +133,28 @@ export async function clearPendingFiles(key: string): Promise<void> {
       tx.onerror = () => reject(tx.error ?? new Error("IDB clear failed"))
       tx.onabort = () => reject(tx.error ?? new Error("IDB clear aborted"))
       tx.objectStore(STORE_NAME).delete(key)
+    })
+  } catch (err) {
+    console.warn("[pending-files] clear failed", err)
+  }
+}
+
+// clearPendingFilesWhere drops the staged files of every key match accepts.
+export async function clearPendingFilesWhere(match: (key: string) => boolean): Promise<void> {
+  try {
+    const db = await openDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite")
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error ?? new Error("IDB clear failed"))
+      tx.onabort = () => reject(tx.error ?? new Error("IDB clear aborted"))
+      const store = tx.objectStore(STORE_NAME)
+      const req = store.getAllKeys()
+      req.onsuccess = () => {
+        for (const key of req.result) {
+          if (typeof key === "string" && match(key)) store.delete(key)
+        }
+      }
     })
   } catch (err) {
     console.warn("[pending-files] clear failed", err)

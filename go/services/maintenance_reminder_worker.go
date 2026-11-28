@@ -109,13 +109,13 @@ func NewMaintenanceReminderWorker(service *MaintenanceReminderService, opts ...M
 // Start launches the goroutine. No-op if no service is configured.
 func (w *MaintenanceReminderWorker) Start(ctx context.Context) {
 	if w.service == nil {
-		slog.Warn("MaintenanceReminderWorker: no service configured, skipping startup")
+		slog.WarnContext(ctx, "MaintenanceReminderWorker: no service configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Maintenance reminder worker started", "interval", w.interval)
+	slog.InfoContext(ctx, "Maintenance reminder worker started", "interval", w.interval)
 }
 
 // Stop signals the worker and waits for the goroutine to exit.
@@ -153,7 +153,7 @@ func (w *MaintenanceReminderWorker) tick(ctx context.Context) {
 
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
-		slog.Error("Maintenance reminder sweep failed", "error", err)
+		slog.ErrorContext(ctx, "Maintenance reminder sweep failed", "error", err)
 		return
 	}
 	if stats.Failed > 0 {
@@ -167,12 +167,12 @@ func (w *MaintenanceReminderWorker) tick(ctx context.Context) {
 		}
 	}
 	if total := stats.Sent(); total > 0 {
-		slog.Info("Maintenance reminder sweep completed",
+		slog.InfoContext(ctx, "Maintenance reminder sweep completed",
 			"reminders_sent", total,
 			"failed", stats.Failed,
 		)
 	} else {
-		slog.Debug("Maintenance reminder sweep completed",
+		slog.DebugContext(ctx, "Maintenance reminder sweep completed",
 			"reminders_sent", 0,
 			"failed", stats.Failed,
 		)

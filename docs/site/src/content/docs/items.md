@@ -65,6 +65,36 @@ If AI vision is enabled on your server:
 4. The files you scanned are attached to the item automatically — manage them
    on the **Files** step.
 
+A scan never replaces what you entered unless you ask it to. When a field
+already holds your value, the review shows both, **Yours** and **Scan**, and
+the field starts unticked; tick it to take the scan's value. Tags work the
+same way, except that ticked scanned tags are added to your tags instead of
+replacing them. This holds when you scan again later, too: a value an earlier
+scan filled in counts as yours. The currency a new item starts with is not
+your value, so the scan's currency starts ticked. Neither is the short name
+the form makes from the name you typed, nor a
+[custom field](../custom-fields/) that still holds the default its item type
+gives it. When you edit an item, its saved values count as yours.
+
+The scan also suggests a tag and a title for each file you scanned, and the
+review says how many files got one. On the **Files** step the suggested tag
+shows on the file as a chip with a sparkle: an invoice or a receipt gets the
+**Invoice** tag, a manual **Manual**, a warranty card **Warranty**, and a
+photo of the product **Photo**. Remove the chip if the tag is wrong. A
+suggested title, such as "Bosch invoice, March 2024", replaces the file name
+in the title field and is marked with the same sparkle; type over it to change
+it. What you set yourself stays: a file you gave a title keeps it, a file
+that already has one of those four tags gets no other, and a scan does not
+put back a tag you removed, however many scans suggested it. Once you change
+a suggested title, also back to the file name, later scans leave the title
+alone. A tag you add back by hand is yours and shows without the sparkle.
+
+When you finish a saved draft, a file the draft holds already, under **Saved
+with this draft**, is not added again, whether you scan it again or pick it
+on the **Files** step. It keeps the title and tags it was saved with; the
+scan's suggestions for it are not applied, so change them on its row if you
+want to.
+
 A few things to know:
 
 - If AI finds more than one product, it pre-fills the most prominent one and
@@ -112,7 +142,10 @@ of the whole line.
 
 - Tick the products you want to keep. Every product starts ticked.
 - Change the **Quantity** if the scan read it wrong.
-- Open **N fields used** to see each value the scan read, with its confidence.
+- Open **N fields used** to see each value the scan read, with its confidence,
+  then the values it read for your group's
+  [custom fields](../custom-fields/#custom-fields-read-by-ai) under each
+  field's name. A value read with a confidence under 30% starts unticked.
   Untick a value to leave that field empty in the draft. A value the scan did
   not read stays empty too: an unknown price is not a price of 0. See
   [Unknown is not zero](#unknown-is-not-zero).
@@ -158,8 +191,33 @@ decision or for their draft, or a file that could not be read.
 
 A file you dropped is an ordinary file of the group: you find it on the
 [Files](../files-and-photos/) page, where its detail says it was **Added from
-files**. A file uploaded before the batch was queued (if you closed the dialog
-after an upload failed, for example) stays there as a standalone file.
+files**. If you close the dialog before the batch is queued (after an upload
+failed, for example), the files it already uploaded go to the
+[Trash](../trash/).
+
+The scan also suggests a type and a title for each file, and sets them on the
+file once the file is scanned:
+
+- The type becomes a tag: an invoice or a receipt gets the **Invoice** tag, a
+  manual the **Manual** tag, a warranty card the **Warranty** tag, and a photo
+  of the product the **Photo** tag. Any other file gets no tag.
+- The title is short and readable, such as "Bosch invoice, March 2024", in the
+  language of the document. The file name does not change.
+
+What you set yourself stays. The scan changes a file only while the file is as
+the upload left it: its title is still the file name without the extension,
+and it has none of the **Invoice**, **Manual**, **Warranty** and **Photo**
+tags. A file you renamed, or gave one of those tags, before the scan finished
+keeps what you gave it, and gets neither suggestion; any other tag does not
+stop the suggestions. A suggestion the scan is unsure of is
+left out. A **Rescan** leaves a file alone once the scan has changed it. A
+file [another system sent](../documents-from-other-systems/) is not scanned,
+so it keeps the title it came with.
+
+A file gets its new title and tag in the same step that marks it scanned, so
+the batch page shows them as soon as the file is scanned, without a reload.
+To check or change them, open the draft: its files are on the **Files** step,
+under **Saved with this draft**.
 
 ## All the fields
 
@@ -178,7 +236,7 @@ The form is split across the five steps. Only a handful of fields are required
 | **Type** * | One of your group's [item types](../item-types/). A new group starts with **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, and **Other**. Choose **New type** at the end of the list to add one without leaving the form. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
 | **Location** / **Area** | Only when you edit an item; a new item is placed after it is saved. Where the item lives: pick a location first, then an area. Both are optional. Owners and administrators can also add a new location or area from the pickers. See [Locations & areas](../locations-and-areas/). |
-| **Status** * | Starts as **In Use** (see [Status lifecycle](#status-lifecycle)). |
+| **Status** | Only when you edit an item, and only shown: change it with **Change Status** on the item page (see [Status lifecycle](#status-lifecycle)). A new item starts as **In Use**. |
 
 ### Purchase
 
@@ -222,6 +280,70 @@ the dropzone or click to browse. Inventario sorts each file into **Photos**,
 **Documents**, or **Other** based on its type; you can change a file's category
 later from its detail page. Files are always optional and can be added at any
 time. More in [Files & photos](../files-and-photos/).
+
+Each file has a title and tags. The title starts as the file name without its
+extension (`receipt` for `receipt.pdf`); type over it to name the file
+differently. A tag and a title marked with a sparkle were suggested by
+[Fill with AI](#fill-with-ai). In **Add item**, the files and their titles are
+kept with the rest of the form, so a reload does not lose them. Files you add
+while editing an item are not kept: after a reload, add them again.
+
+The files already saved with a draft are listed under **Saved with this
+draft**, each with its title and tags, such as the ones a
+[batch of files](#add-items-from-files) gave it. Change them there: a tag is
+saved as soon as you add or remove it, a title when you leave the field. A
+title you clear goes back to the file name.
+
+When you click **Add item**, the files are uploaded first, one at a time, and
+the item is created only once all of them are uploaded. The dialog stays open
+while this runs: the button counts the uploads (**Uploading 1 of 3…**), and
+each file shows whether it is uploading, uploaded, or failed. Until it ends you
+cannot change the form or close the dialog. If you leave the page while the
+files upload, for example with the browser's Back button, the upload stops
+after the file in progress and no item is created. The next time you open
+**Add item**, the form has what you entered, and **Add item** goes on from
+there with the files still missing. Once the files are uploaded and the item is
+being created, leaving the page does not stop it, and the item may be created
+anyway. Look for it in the items list before you add it again.
+
+- If a file fails to upload, no item is created. The dialog names the file,
+  marks it **Upload failed**, and keeps everything you entered. The files that
+  made it move to the **Saved with this draft** list. **Retry** goes on from
+  there: it uploads only the files still missing, then creates the item. You
+  do not pick the files again.
+- A file is uploaded a second time when its first upload reached the server
+  but the answer did not, for example over a dropped connection. The first
+  copy then stays on the [Files](../files-and-photos/) page without an item;
+  you can delete it there.
+- If the files are uploaded but the item cannot be created, the dialog says
+  so and **Retry** creates it with the files already uploaded.
+- For a new item, the files wait in a draft until the item is created, so a
+  failed **Add item** leaves that draft in the [Inbox](../inbox/). If you
+  close the dialog with **Discard**, that draft is deleted and the files the
+  dialog uploaded go to the [Trash](../trash/), and so does a file you remove
+  from the list after it was uploaded. A draft you saved yourself since, from
+  the Inbox or on another device, stays.
+- When you are finishing a saved draft, a failed **Add item** leaves the
+  draft's values as they were last saved. The files it uploaded stay with the
+  draft, under **Saved with this draft**, where you can remove them;
+  **Discard changes** does not take them off.
+
+When you click **Save changes** while editing an item, the new files are
+uploaded first, one at a time, and attached to the item; your changes are
+saved once all of them are on it. The dialog stays open while this runs and
+shows each file's state, as for **Add item**.
+
+- If a file fails, your changes are not saved yet. The dialog names the file,
+  marks it **Upload failed**, and keeps what you entered. The files that made
+  it are on the item already and leave the list. **Retry** goes on with the
+  files still missing, then saves your changes.
+- A file that was uploaded but could not be attached to the item goes to the
+  [Trash](../trash/) when you close the dialog without retrying, or remove the
+  file from the list.
+- If you leave the dialog while a file is still being sent, for example with
+  the browser's Back button, that file is not attached to the item: once its
+  upload finishes it goes to the [Trash](../trash/). Files attached before you
+  left stay on the item, and your changes are not saved.
 
 ## Quantity and bundles
 
@@ -351,18 +473,29 @@ those fields blank on a finished item too.
 While the **Add item** dialog is open, what you type and the files you add are
 also kept in this browser, so a reload or a closed tab does not lose them. That
 copy stays on this device only; to continue on another device, save a draft.
+It is kept for you and for the group you opened the dialog in: someone else who
+signs in on this browser starts with an empty form, and signing out removes it.
 
 - If a draft cannot be saved, for example while you are offline, the dialog
   says so and keeps your input on this device. Click **Retry** when you are
   back online. A file that was already uploaded is not uploaded again.
+- **Add item** uploads the files to a draft the same way before it creates
+  the item, and keeps what you entered on this device until the item exists,
+  so a failed upload loses nothing.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
+- The dialog keeps its draft in the group you opened it in. The draft, its
+  saved files and what the dialog is still sending when you leave it, for
+  example with the browser's **Back** button, stay in that group, also when
+  you switch to another group meanwhile.
 
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to
 **Save as draft**, **Discard**, or **Keep editing**. **Save as draft** saves a
 draft as described above. When you continue a draft, **Discard changes**
-drops only what you changed since it was last saved.
+drops only what you changed since it was last saved; files that **Add item**
+already uploaded to the draft stay with it. **Discard** also moves the files
+the dialog uploaded for an item it did not create to the [Trash](../trash/).
 :::
 
 ## The item detail page
@@ -413,7 +546,9 @@ The header also has:
 
 A **History** section lists every change — who, when, and what — including
 status changes, price changes, moves, cover-photo changes, and a change of
-[seller](../sellers/).
+[seller](../sellers/). A save that changes several things shows one row for
+each status, price, area, or cover change, and one more row for the other
+fields it changed, such as the name or the type.
 
 :::note
 Lending, service, and supplies tracking are only available on single-unit
@@ -457,10 +592,20 @@ if you use it.
 
 Links, extra serial numbers, part numbers, status, and the draft switch are not
 on this form. **All fields** opens the step-by-step dialog with everything you
-have typed so far.
+have typed so far. The dialog shows the status but does not change it.
 
 The edit form has its own address (the item's address followed by `/edit`), so
 reloading the page keeps you in it.
+
+If the item changes after you open the edit form, for example because a bulk
+action added a tag to it or someone saved it on another device, **Save
+changes** does not save. Saving would put back what the form shows and undo
+that change. The form says that the item changed since you opened it and
+offers **Reload**, which shows the item as it is now; make your changes again
+and save. The **All fields** dialog does the same and asks you to close it and
+reload the item. A quick edit or a status change on a page that shows an older
+version of the item is not saved either: a message says so, the page shows
+the item as it is now, and you can try again.
 
 ### Quick edits
 
@@ -480,6 +625,9 @@ from, with its search, filters, sort, and page:
 
 - The item page, the side panel, and the edit form show the item's place in
   that list (for example, "4 of 17") and arrows to the previous and next item.
+- Moving to the previous or next item keeps the tab you are on, and on the
+  **Files** tab the filter you picked, so you can check the photos of each item
+  in turn.
 - **Back to items** returns to that list, on the page you reached.
 - On the edit form, **Save and next** saves the item and opens the next item's
   edit form. It moves on to the list's next page when needed.
@@ -550,6 +698,10 @@ the first photo you attached. To set or change it, open the **Files** tab, find
 the image you want, and choose to set it as the cover. You can also clear the
 cover to fall back to the first photo.
 
+Only an image attached to the item as one of its photos can be the cover. An
+image the item holds as a document, for example one first attached to another
+item and then attached here as a document, has no cover button.
+
 Inventario keeps smaller copies of each photo for cards and the item page, and
 loads the one that fits your screen. A photo that has no copy at the size a
 card needs yet shows a "generating" placeholder while Inventario makes the
@@ -567,16 +719,25 @@ an item as:
 | **Lost** | You can't find it — you can revert later. |
 | **Disposed** | Permanently removed from your inventory. |
 | **Written Off** | Written off, usually for insurance or accounting. |
+| **Donated** | You gave it away. |
+| **Stolen** | Someone took it; the note can hold a police report number. Use **Lost** for an item you can't find. |
 
 To change status, open the item and use the **Change Status** buttons, or
 change several items at once from the bulk-action bar (see [Select and change
 items in bulk](#select-and-change-items-in-bulk)). Marking
 an item as anything other than In Use opens a short dialog where you record the
-**date**, an optional **note**, and — for **Sold** — the **sale price**.
+**date**, an optional **note**, and — for **Sold** — the **sale price**. The
+edit form and the **All fields** dialog don't change the status, and saving
+them keeps its date, note, and sale price.
 
 Once an item is in one of these end states, the detail page shows that status
 (with the captured date, note, and sale price) and a **Revert to In Use**
 button so you can put it back into active use at any time.
+
+An item in an end state gets no reminder emails and is left out of the
+Upcoming page and of the weekly digest's coming-up list. Reverting it to In
+Use brings back the reminders that are still due. See [Reminder
+emails](../warranties-loans-maintenance/#reminder-emails).
 
 ## The All Items page: search, filter, sort
 
@@ -587,8 +748,12 @@ The **All Items** page lists every item in your group. Across the top you have:
   notes, warranty notes, status note, or asset ID (`A-0042`). See [Searching for
   items](#searching-for-items).
 - **Type** — filter by one or more of your group's [item types](../item-types/).
-- **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
-  **Written Off**.
+- **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**,
+  **Written Off**, **Donated**, or **Stolen**.
+- **Location** — narrow to the items in the areas of one
+  [location](../locations-and-areas/), or **All locations**. The **Area** menu
+  then lists only that location's areas. Choosing a location turns off **No
+  location**, since an item without an area is in no location.
 - **Area** — narrow to a single area, or **All areas**.
 - **Seller** — show items bought from one or more [sellers](../sellers/). The
   menu appears once your group has a seller.
@@ -598,7 +763,8 @@ The **All Items** page lists every item in your group. Across the top you have:
   menu appears once your group has a custom field.
 - **Warranty** — filter by warranty state (active, expiring, expired, or none).
 - **Lent out** — show only items currently lent out.
-- **No location** — show only items not placed in any area.
+- **No location** — show only items not placed in any area. Turning it on
+  clears the **Location** filter.
 - **Missing** — show items without a photo, without a purchase price, or
   without a purchase date. Pick more than one to find items that lack all of
   them. An unknown price or date counts as missing even after the item was
@@ -723,13 +889,14 @@ matches the view, and the **Views** menu offers **Save changes** (to update the
 view) and **Revert to saved** (to go back to it). **Close view** keeps the
 current filters and leaves the view.
 
-If a view refers to an area, a tag, a seller, an [item type](../item-types/) or
-a [custom field](../custom-fields/) that was deleted, it still opens and still
-applies that condition, so it shows what still matches (often nothing, for a
-deleted area, seller, type or field). The **Views** button shows a warning, and
-the menu says what no longer exists; on the **Saved views** page the condition
-reads **Deleted area**, **Deleted seller** or **Deleted field**, or a tag or an
-item type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
+If a view refers to a location, an area, a tag, a seller, an
+[item type](../item-types/) or a [custom field](../custom-fields/) that was
+deleted, it still opens and still applies that condition, so it shows what
+still matches (often nothing, for a deleted location, area, seller, type or
+field). The **Views** button shows a warning, and the menu says what no longer
+exists; on the **Saved views** page the condition reads **Deleted location**,
+**Deleted area**, **Deleted seller** or **Deleted field**, or a tag or an item
+type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 
 **Manage views** in the **Views** menu, or the gear next to **Saved views** in
@@ -796,13 +963,13 @@ On the **All Items** page you can act on several items at once:
        item's tags.
      - **Type…** — pick one of your group's [item types](../item-types/), or add
        one with **New type**, and click **Set type**.
-     - Under **Set status**, a status. **Lost**, **Disposed**, and
-       **Written Off** open the same dialog as a single change, for the
-       **date** and an optional **note**. An item that already has that
-       status keeps its own date and note. **In Use** asks for confirmation and
-       clears the status date, note, and sale price. **Sold** is not offered,
-       because each item needs its own sale price: mark items sold one at a
-       time.
+     - Under **Set status**, a status. **Lost**, **Disposed**,
+       **Written Off**, **Donated**, and **Stolen** open the same dialog as a
+       single change, for the **date** and an optional **note**. An item that
+       already has that status keeps its own date and note. **In Use** asks
+       for confirmation and clears the status date, note, and sale price.
+       **Sold** is not offered, because each item needs its own sale price:
+       mark items sold one at a time.
    - **Print labels** — opens the label page with a label for each selected
      item (see [Print labels](#print-labels)).
    - **Delete** — moves the selected items to the [Trash](../trash/) after a
@@ -811,7 +978,12 @@ On the **All Items** page you can act on several items at once:
      second message says so; those files stay on the Files page.
 
 Each item is changed the way a single change would change it: the same checks
-apply, and the change shows in the item's history. An item that already has
+apply, and the change shows in the item's history. The action writes only
+what it sets, so a change someone saves to one of the items while it runs,
+such as a new name or another tag, is kept. The other way round, an edit form
+opened on one of the items before the action does not undo it: its save is
+refused and the form offers to reload the item (see
+[Edit an item](#edit-an-item)). An item that already has
 what you set, such as a tag it already carries, is left as it is, and so is
 an item that does not have a tag you remove. When no item changed, a message
 says which of the two it was.

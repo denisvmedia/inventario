@@ -20,7 +20,10 @@ name: Helm Kind Smoke Test
 #   - the init-data Job creates the default tenant + admin and (with
 #     seedDatabase=true) seeds demo data,
 #   - a second `helm upgrade --install` (no-op re-sync) re-runs the Jobs
-#     idempotently and the Deployment stays Ready.
+#     idempotently and the Deployment stays Ready,
+#   - every pod comes up in a namespace with the Pod Security labels the
+#     preview ApplicationSets put on theirs, and the chart rendered with each
+#     ApplicationSet's own values passes that level (`argocd` lane).
 #
 # A real ArgoCD-managed e2e (Application targeting the chart at HEAD,
 # verifying actual sync-wave ordering across an image bump) is a separate
@@ -34,6 +37,9 @@ on:
       - 'Dockerfile'
       - 'go/**'
       - 'helm/**'
+      - 'infra/argocd/**'
+      - 'infra/helm-overlays/**'
+      - '.github/scripts/preview-manifests.py'
       - '.github/workflows/helm-kind-smoke-test.yml'
       - '.github/workflows/_wait-for-docker-image.yml'
   pull_request:
@@ -41,6 +47,9 @@ on:
       - 'Dockerfile'
       - 'go/**'
       - 'helm/**'
+      - 'infra/argocd/**'
+      - 'infra/helm-overlays/**'
+      - '.github/scripts/preview-manifests.py'
       - '.github/workflows/helm-kind-smoke-test.yml'
       - '.github/workflows/_wait-for-docker-image.yml'
 
@@ -51,7 +60,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   resolve-build:
@@ -182,6 +191,54 @@ jobs:
           tag="${INVENTARIO_IMAGE##*:}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Create the namespace with the preview Pod Security labels
+        # The labels come from the ApplicationSets in infra/argocd/, so the
+        # pods below are admitted under the same level as on a preview.
+        run: |
+          set -euo pipefail
+          out="$(.github/scripts/preview-manifests.py labels)"
+          mapfile -t labels <<<"$out"
+          printf 'namespace label: %s\n' "${labels[@]}"
+          kubectl create namespace "$K8S_NAMESPACE"
+          kubectl label namespace "$K8S_NAMESPACE" "${labels[@]}"
+
+      - name: Check the preview renders against Pod Security
+        # The install below uses this workflow's own values. This step covers
+        # what the previews deploy: the chart rendered with each
+        # ApplicationSet's value files and inline values, sent as a
+        # server-side dry run to a namespace that warns at the enforce level.
+        # Pod Security checks the pod template of a Deployment or Job only at
+        # `warn` and `audit`, so a warning here is a pod that a preview
+        # namespace would refuse.
+        if: matrix.mode == 'argocd'
+        run: |
+          set -euo pipefail
+          level="$(.github/scripts/preview-manifests.py labels \
+            | sed -n 's|^pod-security.kubernetes.io/enforce=||p')"
+          [ -n "$level" ] || { echo "::error::no enforce level found" >&2; exit 1; }
+          ns=preview-pod-security
+          kubectl create namespace "$ns"
+          kubectl label namespace "$ns" "pod-security.kubernetes.io/warn=$level"
+          .github/scripts/preview-manifests.py render "$RUNNER_TEMP/previews" "$ns"
+          failed=0
+          for manifest in "$RUNNER_TEMP"/previews/*.yaml; do
+            name="$(basename "$manifest" .yaml)"
+            if ! kubectl apply --dry-run=server -n "$ns" -f "$manifest" \
+              > "$RUNNER_TEMP/$name.out" 2> "$RUNNER_TEMP/$name.err"; then
+              echo "::error::the API server rejected the $name preview render"
+              cat "$RUNNER_TEMP/$name.err"
+              failed=1
+            elif grep -q 'would violate PodSecurity' "$RUNNER_TEMP/$name.err"; then
+              echo "::error::the $name preview has pods that Pod Security $level refuses"
+              grep 'would violate PodSecurity' "$RUNNER_TEMP/$name.err"
+              failed=1
+            else
+              echo "$name: $(grep -c . "$RUNNER_TEMP/$name.out") objects pass Pod Security $level"
+            fi
+          done
+          kubectl delete namespace "$ns" --wait=false
+          exit "$failed"
+
       - name: Start pod log capture
         run: |
           set -euo pipefail
@@ -200,7 +257,6 @@ jobs:
           set -euo pipefail
           helm upgrade --install "$RELEASE_NAME" helm/inventario \
             --namespace "$K8S_NAMESPACE" \
-            --create-namespace \
             --set-string image.tag="${{ steps.image-tag.outputs.tag }}" \
             --set demo.postgresql.enabled=true \
             --set demo.redis.enabled=true \

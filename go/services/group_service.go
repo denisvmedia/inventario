@@ -64,7 +64,40 @@ var (
 	// is not scoped to one tenant), so the check is explicit here
 	// rather than delegated to RLS.
 	ErrTenantMismatch = errx.NewSentinel("user and group belong to different tenants")
+	// ErrInvalidGroupSection is returned when a list of hidden sections names
+	// a section outside models.AllGroupSections.
+	ErrInvalidGroupSection = errx.NewSentinel("unknown group section")
 )
+
+// GroupOption sets a group setting as CreateGroup or UpdateGroup writes the
+// group, in the same write as the rest of the change. UpdateGroup writes only
+// the settings registry.GroupDetails carries, so an option for another column
+// needs a field there as well.
+type GroupOption func(*models.LocationGroup) error
+
+// WithHiddenSections sets the sections the group hides for all its members.
+// The list replaces the current one; it is checked against
+// models.AllGroupSections and stored without duplicates. Pass no sections to
+// show every section.
+func WithHiddenSections(sections ...models.GroupSection) GroupOption {
+	return func(g *models.LocationGroup) error {
+		list := models.GroupSections(sections)
+		if err := list.Validate(); err != nil {
+			return errxtrace.Classify(ErrInvalidGroupSection, errx.Attrs("hidden_sections", sections, "reason", err.Error()))
+		}
+		g.HiddenSections = list.Normalize()
+		return nil
+	}
+}
+
+func applyGroupOptions(g *models.LocationGroup, opts []GroupOption) error {
+	for _, opt := range opts {
+		if err := opt(g); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // DefaultMaxGroupMembershipsPerUser caps how many groups a single
 // user may belong to (#1388). Enforced by CreateGroup / AddMember /
@@ -149,7 +182,10 @@ func (s *GroupService) SetUserRegistry(userRegistry registry.UserRegistry) {
 // don't apply DB defaults) still produce a valid group — commodity validation
 // would otherwise trip on an empty currency. `description` is an optional
 // free-form one-liner (issue #1647); the empty string means "no description".
-func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon, description string, groupCurrency models.Currency) (*models.LocationGroup, error) {
+// opts set further settings in the same insert, for example
+// WithHiddenSections(models.GroupSectionWarranties) for a group that starts
+// with warranties hidden; without them the group hides nothing.
+func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, icon, description string, groupCurrency models.Currency, opts ...GroupOption) (*models.LocationGroup, error) {
 	maxMemberships := MaxGroupMembershipsPerUser()
 	// Pre-check the cap before creating the group so we don't have to
 	// roll back a successful group insert when the user is already at
@@ -180,13 +216,17 @@ func (s *GroupService) CreateGroup(ctx context.Context, tenantID, userID, name, 
 		TenantAwareEntityID: models.TenantAwareEntityID{
 			TenantID: tenantID,
 		},
-		Slug:          slug,
-		Name:          name,
-		Icon:          icon,
-		Description:   description,
-		Status:        models.LocationGroupStatusActive,
-		CreatedBy:     userID,
-		GroupCurrency: groupCurrency,
+		Slug:           slug,
+		Name:           name,
+		Icon:           icon,
+		Description:    description,
+		Status:         models.LocationGroupStatusActive,
+		CreatedBy:      userID,
+		GroupCurrency:  groupCurrency,
+		HiddenSections: models.GroupSections{},
+	}
+	if err := applyGroupOptions(&group, opts); err != nil {
+		return nil, err
 	}
 
 	created, err := s.groupRegistry.Create(ctx, group)
@@ -249,44 +289,77 @@ func (s *GroupService) GetGroupBySlug(ctx context.Context, tenantID, slug string
 	return s.groupRegistry.GetBySlug(ctx, tenantID, slug)
 }
 
-// UpdateGroup updates group metadata. Only name, icon, and description can
-// be changed — `group_currency` is immutable here (tracked under #202), the
-// remaining columns are server-managed.
-func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon, description string) (*models.LocationGroup, error) {
-	group, err := s.groupRegistry.Get(ctx, groupID)
+// UpdateGroup updates group metadata: name, icon and description, plus the
+// settings opts carry (WithHiddenSections). `group_currency` is immutable
+// here (tracked under #202), the remaining columns are server-managed.
+//
+// It writes those columns alone, so a deletion, a currency migration or a
+// settings change that commits meanwhile is kept. A group that is not active
+// gives ErrGroupNotActive.
+func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon, description string, opts ...GroupOption) (*models.LocationGroup, error) {
+	// The options run on a blank group; the registry writes the settings
+	// registry.GroupDetails carries and no other column.
+	var settings models.LocationGroup
+	if err := applyGroupOptions(&settings, opts); err != nil {
+		return nil, err
+	}
+	details := registry.GroupDetails{Name: name, Icon: icon, Description: description}
+	if settings.HiddenSections != nil {
+		details.HiddenSections = new(settings.HiddenSections)
+	}
+
+	group, applied, err := s.groupRegistry.UpdateDetails(ctx, groupID, details, time.Now())
 	if err != nil {
 		return nil, err
 	}
+	if !applied {
+		return nil, errxtrace.Classify(ErrGroupNotActive, errx.Attrs("group_id", groupID, "status", group.Status))
+	}
+	return group, nil
+}
 
-	if !group.IsActive() {
-		return nil, errxtrace.Classify(ErrGroupNotActive)
+// SetHiddenSections replaces the sections the group hides for all its
+// members. The list is checked against models.AllGroupSections and stored
+// without duplicates; an empty list shows every section. Hiding a section
+// keeps its data.
+//
+// It writes the list alone, so a rename or a deletion that commits meanwhile
+// is kept. A group that is not active gives ErrGroupNotActive.
+func (s *GroupService) SetHiddenSections(ctx context.Context, groupID string, sections ...models.GroupSection) (*models.LocationGroup, error) {
+	var target models.LocationGroup
+	if err := WithHiddenSections(sections...)(&target); err != nil {
+		return nil, err
 	}
 
-	group.Name = name
-	group.Icon = icon
-	group.Description = description
-	group.UpdatedAt = time.Now()
-
-	return s.groupRegistry.Update(ctx, *group)
+	group, applied, err := s.groupRegistry.SetHiddenSections(ctx, groupID, target.HiddenSections, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	if !applied {
+		return nil, errxtrace.Classify(ErrGroupNotActive, errx.Attrs("group_id", groupID, "status", group.Status))
+	}
+	return group, nil
 }
 
 // InitiateGroupDeletion marks a group as pending_deletion.
 // The actual deletion is handled by a background job.
+//
+// It writes the status alone, so a rename that commits meanwhile cannot undo
+// it. A group whose deletion has already started stays as it is and the
+// call succeeds.
 func (s *GroupService) InitiateGroupDeletion(ctx context.Context, groupID, confirmWord, expectedWord string) error {
 	if confirmWord != expectedWord {
 		return errxtrace.Classify(ErrInvalidConfirmation)
 	}
 
-	group, err := s.groupRegistry.Get(ctx, groupID)
+	group, applied, err := s.groupRegistry.MarkPendingDeletion(ctx, groupID, time.Now())
 	if err != nil {
 		return err
 	}
-
-	group.Status = models.LocationGroupStatusPendingDeletion
-	group.UpdatedAt = time.Now()
-
-	_, err = s.groupRegistry.Update(ctx, *group)
-	return err
+	if !applied && group.Status != models.LocationGroupStatusPendingDeletion {
+		return errxtrace.Classify(ErrGroupNotActive, errx.Attrs("group_id", groupID, "status", group.Status))
+	}
+	return nil
 }
 
 // ListUserGroups returns all active groups the user belongs to. Each returned

@@ -13,7 +13,9 @@ import (
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/internal/backupsign"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -85,6 +87,40 @@ func NewExportService(factorySet *registry.FactorySet, uploadLocation string, si
 	}
 }
 
+// markExportFailed stores the export as failed for good with the cause and
+// the time it failed. The worker does not pick a failed export again; an
+// operator or a group admin retries it from the failed jobs (#1307).
+func (s *ExportService) markExportFailed(ctx context.Context, export *models.Export, cause error) error {
+	export.Status = models.ExportStatusFailed
+	export.ErrorMessage = cause.Error()
+	export.CompletedDate = models.PNow()
+	if _, err := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export); err != nil {
+		return err
+	}
+	metrics.RecordJobDeadLettered(string(models.WorkerTypeExport))
+	return nil
+}
+
+// StalledExportError is stored on an export whose worker stopped during its
+// last allowed run.
+const StalledExportError = "the worker stopped before the export finished"
+
+// RecoverStalled handles the exports whose worker stopped in the middle of a
+// run, which stays in_progress otherwise: an export that has runs left goes
+// back to the queue, and one that has used them fails for good and counts as
+// dead-lettered. See package stall for when a run counts as stopped.
+func (s *ExportService) RecoverStalled(ctx context.Context, now time.Time) (registry.StalledJobs, error) {
+	reg := s.factorySet.ExportRegistryFactory.CreateServiceRegistry()
+	out, err := reg.RecoverStalled(ctx, models.WorkerTypeExport, stall.NewSweep(now, StalledExportError))
+	if err != nil {
+		return registry.StalledJobs{}, errxtrace.Wrap("failed to recover stalled exports", err)
+	}
+	for range out.Failed {
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeExport))
+	}
+	return out, nil
+}
+
 // ProcessExport processes an export request in the background. It is
 // format-agnostic: the per-build generateExport produces either a signed `.inb`
 // archive (default) or a legacy XML bundle, and createExportFileEntity stamps
@@ -118,7 +154,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	ctx = appctx.WithUser(ctx, user)
 	ctx = appctx.WithGroup(ctx, group)
 
-	// Update status to in_progress
+	// The claim moved the row to in_progress and counted the run.
 	export.Status = models.ExportStatusInProgress
 	expReg, err := s.factorySet.ExportRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
@@ -132,11 +168,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	// Generate the export and collect statistics using user context
 	filePath, stats, err := s.generateExport(ctx, *export)
 	if err != nil {
-		// Update status to failed
-		export.Status = models.ExportStatusFailed
-		export.ErrorMessage = err.Error()
-		_, expErr := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export)
-		return errxtrace.Wrap("failed to generate export", errors.Join(err, expErr))
+		return errxtrace.Wrap("failed to generate export", errors.Join(err, s.markExportFailed(ctx, export, err)))
 	}
 
 	// Probe size before creating the FileEntity — both rows need it: the
@@ -150,11 +182,7 @@ func (s *ExportService) ProcessExport(ctx context.Context, exportID string) erro
 	// Create file entity for the export using user context
 	fileEntity, err := s.createExportFileEntity(ctx, export.ID, export.Description, filePath, artifactSize)
 	if err != nil {
-		// Update status to failed
-		export.Status = models.ExportStatusFailed
-		export.ErrorMessage = err.Error()
-		_, updateErr := s.factorySet.ExportRegistryFactory.CreateServiceRegistry().Update(ctx, *export)
-		return errxtrace.Wrap("failed to create export file entity", errors.Join(err, updateErr))
+		return errxtrace.Wrap("failed to create export file entity", errors.Join(err, s.markExportFailed(ctx, export, err)))
 	}
 
 	// Store statistics in export record

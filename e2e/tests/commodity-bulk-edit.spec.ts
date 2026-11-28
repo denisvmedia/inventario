@@ -7,13 +7,15 @@
  * `/commodities?q=<suffix>`, so the list holds exactly the seeded rows
  * whatever else the shared e2e database carries. Results are read back
  * through the API: the list hides items that leave in_use. Cleanup is
- * registered before seeding and purges the rows from Trash too.
+ * registered before seeding, purges the rows from Trash too, and deletes
+ * the tags the run created, which the dialog lists for the whole group.
  */
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 import { test } from '../fixtures/app-fixture.js'
 import {
   createCommodityViaAPI,
+  deleteCommodityTagsViaAPI,
   deleteCommodityViaAPI,
   ensureLocationAndArea,
   extractApiAuth,
@@ -63,11 +65,13 @@ async function cleanupItems(
   auth: ApiAuth,
   slug: string,
   ids: string[],
+  suffix: string,
 ): Promise<void> {
   for (const id of ids) {
     await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {})
     await purgeTrashedCommodityViaAPI(request, auth, slug, id).catch(() => {})
   }
+  await deleteCommodityTagsViaAPI(request, auth, slug, suffix).catch(() => {})
 }
 
 test.describe('Commodities — bulk edit', () => {
@@ -161,7 +165,7 @@ test.describe('Commodities — bulk edit', () => {
       await expect(page.locator(`[data-commodity-id="${ids[0]}"]`)).toHaveCount(0)
       await auditList(page)
     } finally {
-      await cleanupItems(request, auth, group.slug, ids)
+      await cleanupItems(request, auth, group.slug, ids, suffix)
     }
   })
 
@@ -239,7 +243,64 @@ test.describe('Commodities — bulk edit', () => {
       expect((await deleted).status()).toBe(200)
       await expect(page.getByTestId('commodities-empty-filtered')).toBeVisible({ timeout: 15000 })
     } finally {
-      await cleanupItems(request, auth, group.slug, ids)
+      await cleanupItems(request, auth, group.slug, ids, suffix)
+    }
+  })
+
+  // A default dialog taller than the window stays inside it and scrolls as a
+  // whole, so its buttons can be reached (#2988). Both palettes list every
+  // tag of the group, so 30 tags make the tags dialog taller than the window
+  // at a desktop and at a phone size.
+  test('keeps the tags dialog inside a window it is taller than', async ({ page, request }) => {
+    const auth = await extractApiAuth(page)
+    const group = await resolveActiveGroup(request, auth)
+    const { areaId } = await ensureLocationAndArea(request, auth, group.slug)
+    const suffix = newSuffix()
+    const tags = Array.from({ length: 30 }, (_, i) => `tall-${i}-${suffix}`)
+    const ids: string[] = []
+
+    try {
+      const item = await createCommodityViaAPI(
+        request,
+        auth,
+        group.slug,
+        { name: `Bulk Edit Tall ${suffix}`, areaId, tags },
+        group.groupCurrency,
+      )
+      ids.push(item.id)
+
+      for (const size of [
+        { width: 1280, height: 720 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(size)
+        await gotoScoped(page, group, suffix)
+        const cb = page.locator(`[data-commodity-id="${item.id}"] [data-testid="commodity-select"]`)
+        await expect(cb).toBeVisible({ timeout: 15000 })
+        await cb.click()
+        const bar = page.getByTestId('commodities-bulk-bar')
+        await openEditItem(page, bar, 'commodities-bulk-edit-tags')
+        const dialog = page.getByTestId('bulk-tags-dialog')
+        await expect(dialog).toHaveAttribute('data-state', 'open')
+        await expect(dialog.getByTestId(`bulk-tags-remove-option-${tags[29]}`)).toBeAttached()
+
+        // The card fits the window and its content scrolls.
+        await expect
+          .poll(async () => {
+            const b = await dialog.boundingBox()
+            return b !== null && b.y >= 0 && b.y + b.height <= size.height
+          })
+          .toBe(true)
+        expect(await dialog.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+
+        const confirm = dialog.getByTestId('bulk-tags-confirm')
+        await confirm.scrollIntoViewIfNeeded()
+        await expect(confirm).toBeInViewport()
+        await page.keyboard.press('Escape')
+        await expect(dialog).toBeHidden()
+      }
+    } finally {
+      await cleanupItems(request, auth, group.slug, ids, suffix)
     }
   })
 })

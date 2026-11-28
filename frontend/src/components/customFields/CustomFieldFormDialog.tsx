@@ -196,7 +196,11 @@ export function CustomFieldFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-testid="custom-field-form-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="custom-field-form-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t("customFields:dialog.editTitle") : t("customFields:dialog.createTitle")}
@@ -214,10 +218,9 @@ export function CustomFieldFormDialog({
               id="custom-field-name"
               placeholder={t("customFields:dialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={CUSTOM_FIELD_NAME_MAX}
               disabled={isPending}
               aria-invalid={!!errors.name}
-              aria-describedby={errors.name ? "custom-field-name-error" : undefined}
+              aria-describedby={errors.name?.message ? "custom-field-name-error" : undefined}
               data-testid="custom-field-name-input"
               {...form.register("name")}
             />
@@ -307,7 +310,6 @@ export function CustomFieldFormDialog({
                         placeholder={t("customFields:dialog.optionPlaceholder", {
                           index: index + 1,
                         })}
-                        maxLength={CUSTOM_FIELD_OPTION_LABEL_MAX}
                         disabled={isPending}
                         aria-invalid={!!error}
                         data-testid={`custom-field-option-input-${index}`}

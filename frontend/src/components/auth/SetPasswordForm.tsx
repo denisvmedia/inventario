@@ -118,7 +118,7 @@ export function SetPasswordForm() {
               disabled={changePasswordMutation.isPending}
               aria-invalid={!!form.formState.errors.newPassword}
               aria-describedby={
-                form.formState.errors.newPassword ? "set-new-password-error" : undefined
+                form.formState.errors.newPassword?.message ? "set-new-password-error" : undefined
               }
               data-testid="set-new-password"
               {...form.register("newPassword")}
@@ -144,7 +144,9 @@ export function SetPasswordForm() {
               disabled={changePasswordMutation.isPending}
               aria-invalid={!!form.formState.errors.confirmPassword}
               aria-describedby={
-                form.formState.errors.confirmPassword ? "set-confirm-password-error" : undefined
+                form.formState.errors.confirmPassword?.message
+                  ? "set-confirm-password-error"
+                  : undefined
               }
               data-testid="set-confirm-password"
               {...form.register("confirmPassword")}

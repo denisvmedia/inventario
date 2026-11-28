@@ -1,10 +1,21 @@
 name: Docker image
 
+# This workflow builds the image and also runs the lanes that test it: the
+# e2e lanes and the kind smoke test. They wait for the image through `needs:
+# merge`, not by polling the Actions API, so waiting for a queued build costs
+# no API requests (#3025). See devdocs/ci/github-api-budget.md.
+#
+# The e2e lanes are jobs of this workflow rather than a called workflow on
+# purpose. A called workflow prefixes its check names with the caller's job
+# name, and `E2E Tests (chromium)` is a required check that has to keep its
+# exact name.
+#
+# helm-kind-smoke-test.yml still waits through _wait-for-docker-image.yml.
+
 on:
-  # Build on every PR, not just PRs targeting master — downstream consumers
-  # (kind-smoke-test, e2e-tests) run on all PRs and pull the pr-<num> tag
-  # this workflow publishes. Restricting to master broke PR-train branches
-  # where the base is a feature branch (#1248).
+  # Build on every PR, not just PRs targeting master — the e2e lanes below run
+  # on all PRs and need the image of the PR head. Restricting to master broke
+  # PR-train branches where the base is a feature branch (#1248).
   pull_request:
     types: [opened, synchronize, reopened, closed]
   push:
@@ -14,9 +25,20 @@ on:
 # PRs cancel each other per-PR; master push and each tag have their own
 # group keyed by ref. Pull-request and push runs never collide because
 # pull_request.number and github.ref are mutually exclusive.
+#
+# A push run is never cancelled once it has started: the image, the ArgoCD
+# pin and the lanes that test it belong to one commit, and a run cancelled
+# halfway leaves master with an image nothing tested. A push that arrives
+# while a run is in progress waits as the group's one pending run; a newer push
+# replaces it before it starts, and that newer run tests the replaced commit
+# too. Because the e2e lanes are part of the run, a master push waits for the
+# previous push's e2e lanes as well as its build.
+#
+# On a pull request the `closed` event cancels a run still in progress, e2e
+# lanes included. A merged pull request is tested again by the master push.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -31,20 +53,56 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       image_inputs: ${{ steps.filter.outputs.image_inputs }}
       frontend: ${{ steps.filter.outputs.frontend }}
       e2e: ${{ steps.filter.outputs.e2e }}
       ci: ${{ steps.filter.outputs.ci }}
+      linux_browsers: ${{ steps.matrix.outputs.linux_browsers }}
+      run_webkit: ${{ steps.matrix.outputs.run_webkit }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Find the commit the pull request merges into
+        id: base
+        uses: ./.github/actions/pr-merge-base
       - name: Filter changed paths
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           filters: .github/filters.yml
+          # Diff with git: the pull request files API would spend the
+          # repository's hourly request budget (devdocs/ci/github-api-budget.md).
+          token: ''
+          base: ${{ steps.base.outputs.sha }}
+      # The e2e browser matrix. Backend-only PRs run Chromium only; frontend /
+      # e2e / CI changes run the full matrix; pushes always run full. See
+      # devdocs/ci/conditional-execution.md for the decision table.
+      - name: Decide browser matrix
+        id: matrix
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FRONTEND: ${{ steps.filter.outputs.frontend }}
+          E2E: ${{ steps.filter.outputs.e2e }}
+          CI: ${{ steps.filter.outputs.ci }}
+        run: |
+          set -euo pipefail
+          # Full browser coverage on any non-PR event (master push, tag
+          # push), or any frontend / e2e / CI diff. Backend-only or
+          # image-only PRs (e.g. a Dockerfile-only change with no UI
+          # impact) run Chromium only — webkit and firefox add cost
+          # without proportional signal for those diffs.
+          if [ "$EVENT_NAME" != "pull_request" ] \
+             || [ "$FRONTEND" = "true" ] \
+             || [ "$E2E" = "true" ] \
+             || [ "$CI" = "true" ]; then
+            printf 'linux_browsers=%s\n' '["chromium","firefox"]' >> "$GITHUB_OUTPUT"
+            echo "run_webkit=true" >> "$GITHUB_OUTPUT"
+          else
+            printf 'linux_browsers=%s\n' '["chromium"]' >> "$GITHUB_OUTPUT"
+            echo "run_webkit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     name: Build ${{ matrix.platform }}
@@ -243,6 +301,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: ghcr.io/${{ github.repository }}
+    outputs:
+      # The reference the test lanes pull: sha-<7> of the commit under test,
+      # or the version tag on a tag push. sha-<7> is immutable per commit, so
+      # a lane cannot pick up an earlier commit's image through a moved pr-N
+      # or edge pointer.
+      image: ${{ steps.meta.outputs.image }}
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
@@ -308,6 +372,10 @@ jobs:
                 ;;
             esac
             echo "EOF"
+            case "${GH_REF}" in
+              refs/tags/v*) echo "image=${IMAGE}:${REF_NAME}" ;;
+              *) echo "image=${IMAGE}:sha-${SHORT_SHA}" ;;
+            esac
           } >> "$GITHUB_OUTPUT"
 
       # NB: there is deliberately NO "delete the previous PR version before
@@ -474,6 +542,623 @@ jobs:
           git push -f origin "$PIN_BRANCH"
           echo "Pinned inv-vcl01-master image to sha-${SHORT_SHA}"
 
+  # ---- Test lanes -----------------------------------------------------------
+  # Everything below `merge` that pulls the image. Each lane needs `merge`
+  # directly, so it starts the moment the manifest is published and never
+  # waits for the vulnerability scan, the ArgoCD pin or cleanup.
+
+  # The kind smoke test of k8s/dev. Called only when the manifest job
+  # succeeded, the same predicate as the build itself; a failed build is
+  # reported by the build job and by the required e2e lane.
+  kind-smoke-test:
+    name: Kind
+    needs: merge
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/kind-smoke-test.yml
+    with:
+      image: ${{ needs.merge.outputs.image }}
+
+  e2e-tests-linux:
+    name: E2E Tests (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    needs: [changes, build, merge]
+    timeout-minutes: 45
+    # Runs even when there is no image to test, so the matrix always expands
+    # and `E2E Tests (chromium)` is a check run that exists on every pull
+    # request. A job skipped before expansion reports once under the literal
+    # name `E2E Tests (${{ matrix.browser }})` instead, and a required context
+    # that never appears blocks the merge forever (#2569). The `gate` step
+    # below decides whether there is anything to run. `!cancelled()` rather
+    # than `always()`, so a superseded pull request run still cancels promptly.
+    # Tag pushes run no e2e lane: the tag's commit was tested on master.
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      # Matrix is populated from the changes job — Chromium only for
+      # backend-/image-only PRs, Chromium + Firefox otherwise.
+      matrix:
+        browser: ${{ fromJson(needs.changes.outputs.linux_browsers) }}
+
+    # Exported at job scope so both the "up" and "down" compose invocations can
+    # resolve ${INVENTARIO_IMAGE:?} in docker-compose.e2e.yaml.
+    env:
+      INVENTARIO_IMAGE: ${{ needs.merge.outputs.image }}
+
+    steps:
+      - name: Decide whether there is an image to test
+        id: gate
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          MERGE_RESULT: ${{ needs.merge.result }}
+          IMAGE: ${{ needs.merge.outputs.image }}
+        run: |
+          set -euo pipefail
+          case "$MERGE_RESULT" in
+            success)
+              if [ -z "$IMAGE" ]; then
+                echo "::error::The manifest job succeeded but reported no image reference."
+                exit 1
+              fi
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              ;;
+            skipped)
+              if [ "$BUILD_RESULT" = "skipped" ]; then
+                # No image is built for this diff (or for a fork), so there
+                # is nothing this commit could be tested against. Green here
+                # means "nothing to run", the same as a path-filter skip.
+                echo "::notice::No image is built for this diff; nothing to run against."
+                echo "run=false" >> "$GITHUB_OUTPUT"
+              else
+                # The build was meant to run and the manifest never did.
+                # Reporting green would recreate the silence of #2536.
+                echo "::error::The image build ended as '$BUILD_RESULT'; refusing to report green."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::The manifest job ended as '$MERGE_RESULT'; refusing to report green."
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout code
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: mise.toml
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: cd e2e && npm ci
+
+      - name: Cache Playwright browsers
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('e2e/package-lock.json') }}
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        if: steps.gate.outputs.run == 'true'
+        run: cd e2e && npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Log in to GHCR
+        if: steps.gate.outputs.run == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `needs: merge` means the sha-<7> manifest of this commit exists.
+
+      - name: Prepare host directories
+        if: steps.gate.outputs.run == 'true'
+        # Both inventario-init-data (/app/state) and inventario (/app/uploads)
+        # run as UID 1001 per the Dockerfile. Bind-mounted host dirs are
+        # auto-created by Docker as root if absent, which then blocks writes
+        # from the container — and a silently non-writable uploads dir is how
+        # the export worker quietly stops completing, so tests timeout waiting
+        # for .export-status--completed.
+        run: |
+          mkdir -p .docker/init-state .docker/inventario/uploads
+          chmod 777 .docker/init-state .docker/inventario/uploads
+
+      - name: Bring up the Inventario stack (pre-built image)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          # Deterministic e2e secrets; shared across inventario-init-data and
+          # inventario so JWT/file-signing keys match between services.
+          JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+          FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+          # Credentials must match e2e/tests/includes/auth.ts TEST_CREDENTIALS.
+          # These flow into inventario-init-data via ${VAR:-default} in the base
+          # compose file, so they must be set in the shell env here.
+          ADMIN_EMAIL: "admin@test-org.com"
+          ADMIN_PASSWORD: "TestPassword123"
+          ADMIN_NAME: "Test Administrator"
+          DEFAULT_TENANT_NAME: "Test Organization"
+          DEFAULT_TENANT_SLUG: "test-org"
+          # e2e exercises the self-registration flow (registration.spec.ts,
+          # mailpit-email.spec.ts); the default tenant must therefore allow
+          # open registration. Production defaults to 'closed' (fail-closed).
+          DEFAULT_TENANT_REGISTRATION_MODE: "open"
+          SEED_DATABASE: "true"
+        run: |
+          docker pull "$INVENTARIO_IMAGE"
+          # --wait blocks until the inventario healthcheck (curl /readyz) passes
+          # and the one-shot bootstrap/migrate/init-data containers exit 0.
+          #
+          # Mailpit is NOT named here but still comes up — the inventario
+          # service's `depends_on` in docker-compose.yaml includes `mailpit`
+          # and `mailpit-sidecar`, and --wait follows the dependency chain,
+          # blocking on mailpit-sidecar's HTTP healthcheck against Mailpit's
+          # /api/v1/info. This is what makes e2e/tests/mailpit-email.spec.ts
+          # (issue #1282) see a reachable Mailpit at http://localhost:8025
+          # — the host port is mapped by the base compose file.
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            up -d --wait --wait-timeout 300 --no-build inventario
+
+      # As of #1658, inventario-init-data's /api/v1/seed call provisions the
+      # test-org fixture users itself (admin + user2 + orphan + family +
+      # default groups + multi-member memberships + pending invite) — the
+      # CLI / curl provisioning steps that used to live here are no longer
+      # needed and were dropped. If a future change moves these fixtures
+      # back out of the seed, restore them from git history.
+
+      - name: Run fast-fail test
+        if: steps.gate.outputs.run == 'true'
+        env:
+          USE_PREBUILT: "true"
+        run: |
+          cd e2e && npx playwright test --project=${{ matrix.browser }} --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+
+      - name: Run full test suite
+        if: success() && steps.gate.outputs.run == 'true'
+        env:
+          USE_PREBUILT: "true"
+        run: |
+          cd e2e && npx playwright test --project=${{ matrix.browser }}
+
+      - name: Dump container logs on failure
+        if: failure() && steps.gate.outputs.run == 'true'
+        run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml logs
+
+      - name: Upload test results
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: e2e/playwright-report/
+          retention-days: 30
+
+      - name: Tear down
+        if: always() && steps.gate.outputs.run == 'true'
+        run: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml down -v
+
+  # The @oauth specs self-skip unless OAUTH_STUB_ENABLED=true, and nothing set
+  # it, so Google sign-in, GitHub sign-in and account linking had no CI
+  # coverage at all (#2634). They get their own job rather than a flag on the
+  # lanes above, because a forged identity provider is configuration no other
+  # spec should run against.
+  #
+  # Chromium only: these are redirects and form posts, so a second browser
+  # engine repeats the same assertions at twice the cost.
+  e2e-tests-oauth:
+    name: E2E Tests (oauth)
+    runs-on: ubuntu-latest
+    needs: [changes, build, merge]
+    timeout-minutes: 30
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: read
+      packages: read
+
+    env:
+      INVENTARIO_IMAGE: ${{ needs.merge.outputs.image }}
+      OAUTH_STUB_PORT: "4444"
+
+    steps:
+      - name: Decide whether there is an image to test
+        id: gate
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          MERGE_RESULT: ${{ needs.merge.result }}
+          IMAGE: ${{ needs.merge.outputs.image }}
+        run: |
+          set -euo pipefail
+          case "$MERGE_RESULT" in
+            success)
+              if [ -z "$IMAGE" ]; then
+                echo "::error::The manifest job succeeded but reported no image reference."
+                exit 1
+              fi
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              ;;
+            skipped)
+              if [ "$BUILD_RESULT" = "skipped" ]; then
+                # No image is built for this diff (or for a fork), so there
+                # is nothing this commit could be tested against. Green here
+                # means "nothing to run", the same as a path-filter skip.
+                echo "::notice::No image is built for this diff; nothing to run against."
+                echo "run=false" >> "$GITHUB_OUTPUT"
+              else
+                # The build was meant to run and the manifest never did.
+                # Reporting green would recreate the silence of #2536.
+                echo "::error::The image build ended as '$BUILD_RESULT'; refusing to report green."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::The manifest job ended as '$MERGE_RESULT'; refusing to report green."
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout code
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: mise.toml
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: cd e2e && npm ci
+
+      - name: Cache Playwright browsers
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('e2e/package-lock.json') }}
+
+      - name: Install Playwright browser (chromium)
+        if: steps.gate.outputs.run == 'true'
+        run: cd e2e && npx playwright install --with-deps chromium
+
+      - name: Log in to GHCR
+        if: steps.gate.outputs.run == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare host directories
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          mkdir -p .docker/init-state .docker/inventario/uploads
+          chmod 777 .docker/init-state .docker/inventario/uploads
+
+      # Before the stack, not after: the backend reads the endpoint overrides
+      # at boot, so a stub that starts with Playwright's global setup would
+      # already be too late. 0.0.0.0 because the backend reaches it from
+      # inside a container, across the Docker host gateway.
+      - name: Start the OAuth stub
+        if: steps.gate.outputs.run == 'true'
+        env:
+          OAUTH_STUB_HOST: "0.0.0.0"
+          # The issuer in the stub's OpenID Connect discovery document. It
+          # must equal INVENTARIO_RUN_OAUTH_OIDC_ISSUER_URL in
+          # docker-compose.e2e-oauth.yaml (#2786).
+          OAUTH_STUB_OIDC_ISSUER: "http://localhost:${{ env.OAUTH_STUB_PORT }}/oidc"
+        run: |
+          set -euo pipefail
+          cd e2e
+          nohup npm run oauth-stub > "$RUNNER_TEMP/oauth-stub.log" 2>&1 &
+          for _ in $(seq 1 40); do
+            # 404 is the stub answering; it has no route at /.
+            if curl -fsS -o /dev/null "http://localhost:${OAUTH_STUB_PORT}/authorize" \
+               || curl -sS -o /dev/null "http://localhost:${OAUTH_STUB_PORT}/"; then
+              echo "OAuth stub is up on :${OAUTH_STUB_PORT}"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "::error::The OAuth stub never came up."
+          cat "$RUNNER_TEMP/oauth-stub.log"
+          exit 1
+
+      - name: Bring up the Inventario stack (pre-built image)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+          FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+          ADMIN_EMAIL: "admin@test-org.com"
+          ADMIN_PASSWORD: "TestPassword123"
+          ADMIN_NAME: "Test Administrator"
+          DEFAULT_TENANT_NAME: "Test Organization"
+          DEFAULT_TENANT_SLUG: "test-org"
+          DEFAULT_TENANT_REGISTRATION_MODE: "open"
+          SEED_DATABASE: "true"
+        run: |
+          docker pull "$INVENTARIO_IMAGE"
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.e2e.yaml \
+            -f docker-compose.e2e-oauth.yaml \
+            up -d --wait --wait-timeout 300 --no-build inventario
+
+      # @cross-tenant is excluded: those two need /api/v1/seed on the
+      # long-running service, which the base compose file refuses on purpose.
+      # They stay a local run — see the spec header.
+      - name: Run the OAuth suite
+        if: steps.gate.outputs.run == 'true'
+        env:
+          USE_PREBUILT: "true"
+          OAUTH_STUB_ENABLED: "true"
+          PLAYWRIGHT_JSON_OUTPUT_NAME: oauth-report.json
+        run: |
+          cd e2e && npx playwright test --project=chromium \
+            --grep "@oauth" --grep-invert "@cross-tenant" \
+            --reporter=list,html,json
+
+      # A spec that quietly rejoins the skipped set is the failure this job
+      # exists to prevent, and a skipped test reports green on its own.
+      - name: Assert nothing was skipped
+        if: always() && steps.gate.outputs.run == 'true'
+        run: cd e2e && node scripts/assert-report.mjs oauth-report.json 4
+
+      - name: Dump logs on failure
+        if: failure() && steps.gate.outputs.run == 'true'
+        run: |
+          docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+            -f docker-compose.e2e-oauth.yaml logs
+          echo "--- oauth stub ---"
+          cat "$RUNNER_TEMP/oauth-stub.log" || true
+
+      - name: Upload test results
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report-oauth
+          path: e2e/playwright-report/
+          retention-days: 30
+
+      - name: Tear down
+        if: always() && steps.gate.outputs.run == 'true'
+        run: |
+          pkill -f run-oauth-stub.ts || true
+          docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+            -f docker-compose.e2e-oauth.yaml down -v
+
+  # macOS webkit consumes the darwin/arm64 binary that darwin-binary produced
+  # in this run. No Go rebuild here — macos-latest is Apple Silicon, so
+  # the binary runs natively. Its embedded frontend bundle and this lane's
+  # Playwright runner use the Node version from mise.toml. The Docker image
+  # builds its frontend with the independently pinned Node base image.
+  #
+  # No Mailpit is started here: the webkit lane runs inventario directly as
+  # a host binary without docker-compose, so EMAIL_PROVIDER defaults to
+  # "stub" and mailpit-email.spec.ts (issue #1282) self-skips via its
+  # beforeAll reachability probe against http://localhost:8025.
+  e2e-tests-macos:
+    name: E2E Tests (webkit)
+    runs-on: macos-latest
+    needs: [changes, merge, darwin-binary]
+    # Webkit is the most expensive e2e lane and adds the least signal for
+    # backend-only PRs. Skip when the diff is purely backend/image inputs.
+    # Forced on for any frontend / e2e / CI diff and for a master push.
+    #
+    # And only when there is something to run against: with no `if:` status
+    # function, the job is skipped unless the manifest and the darwin binary
+    # both succeeded in this run. Unlike the linux lane this is not a matrix
+    # job, so skipping it reports under its own name and passes. A failed
+    # build is reported by the build job and the linux lane.
+    if: >-
+      (github.event_name == 'pull_request' &&
+       needs.changes.outputs.run_webkit == 'true') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    permissions:
+      contents: read
+    timeout-minutes: 45
+
+    env:
+      INVENTARIO_DB_DSN: postgres://postgres@localhost:5432/inventario?sslmode=disable
+      INVENTARIO_LOG_FORMAT: json
+      INVENTARIO_ADDR: ":3333"
+      INVENTARIO_UPLOAD_LOCATION: "file:///tmp/inventario-uploads?create_dir=1"
+      INVENTARIO_RUN_AUTH_RATE_LIMIT_DISABLED: "true"
+      INVENTARIO_RUN_GLOBAL_RATE_LIMIT_DISABLED: "true"
+      # Shared admin piles up many groups across parallel workers (#1388
+      # caps a real user at 3); 0 disables the per-user cap for e2e.
+      INVENTARIO_RUN_MAX_GROUP_MEMBERSHIPS_PER_USER: "0"
+      # Currency-migration surface defaults on in the binary now
+      # (Config.FeatureCurrencyMigration env-default since #1612). Set
+      # INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=false here only if
+      # this lane needs to flip the kill-switch.
+      INVENTARIO_RUN_JWT_SECRET: "e2e-jwt-secret-please-change-for-prod"
+      INVENTARIO_RUN_FILE_SIGNING_KEY: "e2e-file-signing-key-please-change"
+      INVENTARIO_RUN_PUBLIC_URL: "http://localhost:3333"
+      # This lane runs the host binary with the stub provider (no Mailpit) while
+      # a public URL is set, so opt into the #2093 guard — otherwise the backend
+      # treats stub+public-URL as a fatal misconfiguration and refuses to start.
+      INVENTARIO_RUN_ALLOW_STUB_EMAIL: "true"
+      # Feedback (#1387) needs a destination address or the handler 503s.
+      # The 503 propagates as MaintenancePage on the FE (lib/http.ts),
+      # which masks the toast assertion. The stub email provider doesn't
+      # actually deliver anything; this value just satisfies the
+      # "configured?" check so e2e exercises the happy path.
+      INVENTARIO_RUN_SUPPORT_EMAIL: "support@e2e.test"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up PostgreSQL
+        run: |
+          brew install postgresql@17
+          brew services start postgresql@17
+          export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 2>/dev/null; then
+              echo "PostgreSQL is ready"
+              break
+            fi
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 1
+          done
+          createuser -s postgres
+          createdb -O postgres inventario
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: mise.toml
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        run: cd e2e && npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ${{ runner.os }}-playwright-webkit-${{ hashFiles('e2e/package-lock.json') }}
+
+      - name: Install Playwright browser (webkit)
+        run: cd e2e && npx playwright install --with-deps webkit
+
+      # Same run as darwin-binary, so the download goes through the run's own
+      # artifact store and needs no run ID, token or Actions API request.
+      - name: Download inventario darwin/arm64 binary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: inventario-darwin-arm64
+          path: ./bin
+
+      - name: Prepare binary
+        run: |
+          chmod +x ./bin/inventario
+          ./bin/inventario --help >/dev/null
+          ./bin/inventario version || true
+
+      - name: Bootstrap DB and create admin user
+        # Mirrors what inventario-bootstrap / inventario-migrate / inventario-
+        # init-data do inside Docker for the Linux lane. The same `inventario`
+        # binary drives both paths — this is the gap #1247 set out to close.
+        # As of #1658, the user2 + orphan + family fixture users are
+        # provisioned by the /api/v1/seed call below (POST runs after the
+        # server is up) rather than by per-user CLI invocations here.
+        run: |
+          ./bin/inventario db bootstrap apply --username=postgres
+          ./bin/inventario db migrate up
+          ./bin/inventario db migrate data \
+            --default-tenant-name="Test Organization" \
+            --default-tenant-slug=test-org \
+            --default-tenant-registration-mode=open \
+            --admin-email=admin@test-org.com \
+            --admin-password=TestPassword123 \
+            --admin-name="Test Administrator"
+
+      - name: Start inventario
+        env:
+          # Opt the seed into the system-admin fixture (sysadmin@test-org.com)
+          # so the admin-section e2e suite (#1758) can authenticate as a
+          # platform admin. OFF by default in the binary — /api/v1/seed is
+          # unauthenticated, so this must never be set in a real deployment.
+          INVENTARIO_SEED_SYSTEM_ADMIN_FIXTURE: "true"
+          # Opt the seed into the back-office operator fixtures
+          # (operator@backoffice.test / support@backoffice.test) so the
+          # admin-section e2e suite (#2100) can sign in to the back-office
+          # plane. Same posture as the fixture above: OFF by default,
+          # never set in a real deployment.
+          INVENTARIO_SEED_BACKOFFICE_FIXTURE: "true"
+          # Mount the public POST /api/v1/seed route (#2039) so the
+          # "Seed test fixtures" step below can reach it. OFF by default in
+          # the binary (it runs a privileged, RLS-bypassing operation); set
+          # here only for this throwaway CI server, never in a real deployment.
+          INVENTARIO_RUN_ENABLE_SEED_ENDPOINT: "true"
+          # The deterministic mock AI provider with no hourly limit, as in
+          # docker-compose.e2e.yaml for the Linux lanes. Batch intake (#2810)
+          # scans on the server, so its spec needs a provider that the
+          # browser cannot stand in for. No key, no spend.
+          INVENTARIO_RUN_AI_VISION_PROVIDER: "mock"
+          INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR: "0"
+        run: |
+          mkdir -p /tmp/inventario-uploads
+          nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &
+          echo $! > /tmp/inventario.pid
+          echo "Waiting for http://localhost:3333/readyz..."
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/readyz > /dev/null; then
+              echo "Ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "ERROR: /readyz never returned 200"
+          cat /tmp/inventario.log
+          exit 1
+
+      - name: Seed test fixtures
+        # Matches scripts/init-data.sh's seed call — populates the test-org
+        # tenant with locations/areas/commodities AND the fixture users
+        # (admin/user2/orphan/family + their default groups + the
+        # multi-member membership rows expected by the e2e suite).
+        run: |
+          curl -fsS -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"user_email":"admin@test-org.com","tenant_slug":"test-org"}' \
+            http://localhost:3333/api/v1/seed
+
+      - name: Run fast-fail test
+        env:
+          USE_PREBUILT: "true"
+        run: |
+          cd e2e && npx playwright test --project=webkit --grep "should update and immediately retrieve a commodity \(fast-fail debug\)"
+
+      - name: Run full test suite
+        if: success()
+        env:
+          USE_PREBUILT: "true"
+        run: |
+          cd e2e && npx playwright test --project=webkit
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat /tmp/inventario.log || true
+
+      - name: Stop inventario
+        if: always()
+        run: |
+          if [ -f /tmp/inventario.pid ]; then
+            kill "$(cat /tmp/inventario.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report-webkit
+          path: e2e/playwright-report/
+          retention-days: 30
+
   cleanup:
     name: Cleanup PR images
     if: |
@@ -493,10 +1178,13 @@ jobs:
     steps:
       - name: Wait for this PR's runs to finish
         id: drain
-        # Merging a pull request fires this job immediately, and the lanes it
-        # started are still pulling sha-<7>. Deleting underneath them turns a
-        # merged change red with `manifest unknown` — a failure that means
-        # "merged", which reads exactly like one that means "broken" (#2570).
+        # Merging a pull request fires this job immediately, and lanes in
+        # other workflows (helm-kind-smoke-test.yml) may still be pulling
+        # sha-<7>. Deleting underneath them turns a merged change red with
+        # `manifest unknown` — a failure that means "merged", which reads
+        # exactly like one that means "broken" (#2570). The close event
+        # cancels this workflow's own lanes (same concurrency group), and the
+        # count below includes that run until it has finished cancelling.
         #
         # This run is excluded from the count: it is triggered by the same
         # close event and attributed to the same commit, so it would never
@@ -508,9 +1196,11 @@ jobs:
           SELF_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          # 30-minute ceiling (120 * 15s), longer than a full e2e + kind pass
-          # on a busy fleet.
-          for i in $(seq 1 120); do
+          # 30-minute ceiling (30 * 60s), longer than a full e2e + kind pass
+          # on a busy fleet. Once a minute, because every request here comes
+          # out of the same hourly GITHUB_TOKEN limit as every other API call
+          # in CI (devdocs/ci/github-api-budget.md).
+          for i in $(seq 1 30); do
             # gh's --jq takes a filter and nothing else — no --argjson — so
             # this run is excluded in the shell rather than in jq.
             busy="$(
@@ -524,16 +1214,17 @@ jobs:
               echo "No runs left on $HEAD_SHA; safe to reclaim."
               exit 0
             fi
-            echo "Waiting for $busy run(s) on $HEAD_SHA to finish... ($i/120)"
-            sleep 15
+            echo "Waiting for $busy run(s) on $HEAD_SHA to finish... ($i/30)"
+            sleep 60
           done
 
-          # Not a failure. An image left behind costs storage until the next
-          # close or the time-based sweep; an image deleted early costs a
+          # Not a failure. An image left behind costs storage until a later
+          # close of this PR or a deletion by hand (nothing sweeps the package
+          # on a schedule); an image deleted early costs a
           # re-run and a red check that means "merged". Leaving it is the
           # cheaper mistake, so say so and stop.
           echo "reclaim=false" >> "$GITHUB_OUTPUT"
-          echo "::notice::Runs on $HEAD_SHA are still going after 30 minutes. Leaving this PR's images in place rather than deleting them from under a live lane; the next close or GHCR retention reclaims them."
+          echo "::notice::Runs on $HEAD_SHA are still going after 30 minutes. Leaving this PR's images in place rather than deleting them from under a live lane; a later close of this PR reclaims them, or they stay until deleted by hand."
 
       - name: Delete all GHCR image versions published by this PR
         if: steps.drain.outputs.reclaim == 'true'
@@ -548,13 +1239,15 @@ jobs:
           REPO: ${{ github.repository }}
           PACKAGE_NAME: inventario
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
         run: |
           set -euo pipefail
 
           # Tags this PR may have published: pr-<N> + sha-<7> for every commit
           # on the PR (paginated, so long PRs are fully covered). Commits that
-          # were rebased/force-pushed away aren't in this list; any image they
-          # left behind is swept later by time-based GHCR retention, not here.
+          # were rebased/force-pushed away aren't in this list; an image they
+          # left behind stays in the package, since nothing sweeps it on a
+          # schedule.
           declare -A pr_tags=( ["pr-${PR_NUMBER}"]=1 )
           while IFS= read -r full_sha; do
             [ -z "$full_sha" ] && continue
@@ -572,26 +1265,70 @@ jobs:
           fi
 
           # Pass 1 — collect the version ids to delete. We must NOT delete
-          # inside the `gh api --paginate` stream: removing a version from an
-          # earlier page shifts the remaining pages, so later matches would be
-          # skipped and survive cleanup. Drain the full listing first, then
-          # delete in pass 2. A version is ours if ANY of its tags is one of
-          # ours — the multi-arch manifest list carries both pr-<N> and its
-          # sha-<7>; intermediate per-commit versions carry only sha-<7>.
+          # while paging: removing a version from an earlier page shifts the
+          # remaining pages, so later matches would be skipped and survive
+          # cleanup. Read the pages first, then delete in pass 2. A version is
+          # ours if ANY of its tags is one of ours — the multi-arch manifest
+          # list carries both pr-<N> and its sha-<7>; intermediate per-commit
+          # versions carry only sha-<7>.
+          #
+          # The package holds every version ever published (12,845 on
+          # 2026-11-28), and reading all of them cost 129 API requests per
+          # close. docker.yml builds only on pull request events, so every
+          # version this PR published was created after the PR was opened.
+          # The listing comes newest first, so paging stops at the first page
+          # whose newest version is older than that, less an hour of slack for
+          # clock skew. That order is what GitHub returns, not a documented
+          # contract, so each page is checked: if a page is not newest first,
+          # or starts newer than the previous page ended, the stop is off for
+          # the rest of the listing and it reads everything, as before. A
+          # version the listing misses is left in place, never deleted.
+          cutoff="$(jq -nr --arg t "$PR_CREATED_AT" '($t | fromdateiso8601) - 3600')"
           versions_to_delete=()
-          while IFS=$'\t' read -r version_id tags_csv; do
-            [ -z "$version_id" ] && continue
-            IFS=',' read -ra tags <<< "${tags_csv}"
-            for t in "${tags[@]}"; do
-              if [ -n "${pr_tags[$t]:-}" ]; then
-                versions_to_delete+=("${version_id}"$'\t'"${tags_csv}")
-                break
-              fi
-            done
-          done < <(
-            gh api "${package_api}?per_page=100" --paginate \
-              --jq '.[] | [(.id|tostring), ((.metadata.container.tags // []) | join(","))] | @tsv'
-          )
+          listed=0
+          pages=0
+          stopped_early=false
+          newest_first=true
+          prev_oldest=""
+          page=1
+          while :; do
+            body="$(gh api "${package_api}?per_page=100&page=${page}")"
+            pages=$((pages + 1))
+            count="$(jq 'length' <<< "${body}")"
+            [ "${count}" -eq 0 ] && break
+            while IFS=$'\t' read -r version_id tags_csv; do
+              [ -z "$version_id" ] && continue
+              listed=$((listed + 1))
+              IFS=',' read -ra tags <<< "${tags_csv}"
+              for t in "${tags[@]}"; do
+                if [ -n "${pr_tags[$t]:-}" ]; then
+                  versions_to_delete+=("${version_id}"$'\t'"${tags_csv}")
+                  break
+                fi
+              done
+            done < <(
+              jq -r '.[] | [(.id|tostring), ((.metadata.container.tags // []) | join(","))] | @tsv' <<< "${body}"
+            )
+            # An unreadable date counts as new, which breaks the order check
+            # and turns the stop off.
+            read -r newest oldest sorted < <(
+              jq -r '[.[] | (.created_at | try fromdateiso8601 catch 9999999999)]
+                | "\(max) \(min) \(. == (sort | reverse))"' <<< "${body}"
+            )
+            if [ "${sorted}" != "true" ] || { [ -n "${prev_oldest}" ] && [ "${newest}" -gt "${prev_oldest}" ]; }; then
+              newest_first=false
+            fi
+            prev_oldest="${oldest}"
+            if [ "${newest_first}" = "true" ] && [ "${newest}" -lt "${cutoff}" ]; then
+              stopped_early=true
+              break
+            fi
+            [ "${count}" -lt 100 ] && break
+            page=$((page + 1))
+          done
+          # Logged so the request budget can count it
+          # (devdocs/ci/github-api-budget.md).
+          echo "Listed ${listed} package version(s) in ${pages} request(s) to the versions API (newest first: ${newest_first}; stopped at versions older than the PR: ${stopped_early})."
 
           # Pass 2 — delete the collected versions.
           deleted=0

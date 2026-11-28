@@ -12,6 +12,8 @@ import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Page, PageHeader } from "@/components/ui/page"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
+import { useSectionVisible } from "@/features/group/sections"
 import { useDashboardData } from "@/features/dashboard/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { formatCurrency } from "@/lib/intl"
@@ -36,6 +38,10 @@ import { cn } from "@/lib/utils"
 //   6. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
 //   7. Full-width WarrantyHealth card.
 //
+// A group that hides warranties (#1607) gets neither the two warranty stat
+// cards nor ExpiringWarranties and WarrantyHealth; Recently Added then
+// takes the full width.
+//
 // Note: the previous "Value by location" / "Value by area" stub cards
 // were removed — the design-mock dashboard has no per-place value
 // breakdown, the `ComingSoonBanner` they shipped pointed at the wrong
@@ -54,10 +60,14 @@ export function DashboardPage() {
   const { currentGroup } = useCurrentGroup()
   const data = useDashboardData()
   const migrationLock = useGroupMigrationLock()
+  const showWarranties = useSectionVisible("warranties")
   const slug = currentGroup?.slug
   const currency = currentGroup?.group_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
-  const addItemHref = slug ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
+  // Offered only to a role that adds items (features/group/roles.ts).
+  const canAddItems = useGroupPermissions().canEditContent
+  const addItemHref =
+    slug && canAddItems ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
   // Warranty stat cards drill into the dedicated WarrantiesListPage with
   // its tab pre-selected — `?tab=active|expired` matches the param the
   // page reads in `parseTab(searchParams.get("tab"))`.
@@ -151,7 +161,12 @@ export function DashboardPage() {
           </Alert>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div
+              className={cn(
+                "grid grid-cols-2 gap-4",
+                showWarranties ? "lg:grid-cols-4" : "lg:grid-cols-2"
+              )}
+            >
               <StatCard
                 label={t("dashboard:stats.totalItems")}
                 value={data.isLoading ? "—" : data.totalItems}
@@ -161,32 +176,36 @@ export function DashboardPage() {
                 isLoading={data.isLoading}
                 testId="dashboard-commodities-count"
               />
-              <StatCard
-                label={t("dashboard:stats.activeWarranties")}
-                value={data.isLoading ? "—" : activeCount}
-                // Always-truthy `sub` so `StatCard` reserves the
-                // sub-line skeleton during loading and the card height
-                // doesn't change once data resolves. While loading,
-                // `expiringCount` is 0 (initial state); the rendered
-                // text is hidden behind the skeleton so the placeholder
-                // `0 expiring soon` never paints.
-                sub={t("dashboard:stats.activeWarrantiesSub", { count: expiringCount })}
-                icon={ShieldCheck}
-                tone="text-status-active"
-                to={activeWarrantiesHref}
-                isLoading={data.isLoading}
-                testId="dashboard-active-warranties"
-              />
-              <StatCard
-                label={t("dashboard:stats.expiredWarranties")}
-                value={data.isLoading ? "—" : expiredCount}
-                sub={t("dashboard:stats.expiredWarrantiesSub")}
-                icon={ShieldOff}
-                tone="text-status-expired"
-                to={expiredWarrantiesHref}
-                isLoading={data.isLoading}
-                testId="dashboard-expired-warranties"
-              />
+              {showWarranties ? (
+                <>
+                  <StatCard
+                    label={t("dashboard:stats.activeWarranties")}
+                    value={data.isLoading ? "—" : activeCount}
+                    // Always-truthy `sub` so `StatCard` reserves the
+                    // sub-line skeleton during loading and the card height
+                    // doesn't change once data resolves. While loading,
+                    // `expiringCount` is 0 (initial state); the rendered
+                    // text is hidden behind the skeleton so the placeholder
+                    // `0 expiring soon` never paints.
+                    sub={t("dashboard:stats.activeWarrantiesSub", { count: expiringCount })}
+                    icon={ShieldCheck}
+                    tone="text-status-active"
+                    to={activeWarrantiesHref}
+                    isLoading={data.isLoading}
+                    testId="dashboard-active-warranties"
+                  />
+                  <StatCard
+                    label={t("dashboard:stats.expiredWarranties")}
+                    value={data.isLoading ? "—" : expiredCount}
+                    sub={t("dashboard:stats.expiredWarrantiesSub")}
+                    icon={ShieldOff}
+                    tone="text-status-expired"
+                    to={expiredWarrantiesHref}
+                    isLoading={data.isLoading}
+                    testId="dashboard-expired-warranties"
+                  />
+                </>
+              ) : null}
               <StatCard
                 label={t("dashboard:stats.totalValue")}
                 value={formattedValue}
@@ -208,12 +227,18 @@ export function DashboardPage() {
 
             <SavedViewsSection />
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <ExpiringWarranties items={data.expiringWarranties} isLoading={data.isLoading} />
-              <RecentlyAdded items={data.recent} isLoading={data.isLoading} />
-            </div>
+            {showWarranties ? (
+              <>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <ExpiringWarranties items={data.expiringWarranties} isLoading={data.isLoading} />
+                  <RecentlyAdded items={data.recent} isLoading={data.isLoading} />
+                </div>
 
-            <WarrantyHealth counts={data.warrantyStatusCounts} isLoading={data.isLoading} />
+                <WarrantyHealth counts={data.warrantyStatusCounts} isLoading={data.isLoading} />
+              </>
+            ) : (
+              <RecentlyAdded items={data.recent} isLoading={data.isLoading} />
+            )}
           </>
         )}
       </Page>

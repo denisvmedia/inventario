@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -290,27 +288,6 @@ func (c *Command) collectRegistrationMode(cfg *Config, ctx context.Context) (mod
 	return mode, nil
 }
 
-// generateSlug generates a URL-friendly slug from the tenant name
-func (c *Command) generateSlug(name string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(name)
-
-	// Replace spaces and special characters with hyphens
-	reg := regexp.MustCompile(`[^a-z0-9]+`)
-	slug = reg.ReplaceAllString(slug, "-")
-
-	// Remove leading/trailing hyphens
-	slug = strings.Trim(slug, "-")
-
-	// Limit length
-	if len(slug) > 50 {
-		slug = slug[:50]
-		slug = strings.TrimSuffix(slug, "-")
-	}
-
-	return slug
-}
-
 // printTenantRequest prints tenant request information for dry run
 func (c *Command) printTenantRequest(req *admin.TenantCreateRequest) {
 	out := c.Cmd().OutOrStdout()
@@ -350,7 +327,7 @@ func (c *Command) printTenantInfo(tenant *models.Tenant) {
 
 // collectSlug collects or generates slug for the tenant
 func (c *Command) collectSlug(cfg *Config, ctx context.Context) (string, error) {
-	generatedSlug := c.generateSlug(cfg.Name)
+	generatedSlug := admin.GenerateTenantSlug(cfg.Name)
 	if !cfg.Interactive {
 		return generatedSlug, nil
 	}

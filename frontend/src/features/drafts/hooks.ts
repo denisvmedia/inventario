@@ -13,20 +13,24 @@ import { useInvalidateTrash } from "@/features/trash/hooks"
 import { discardDraft, getDraft, listDraftFiles, promoteDraft, type Draft } from "./api"
 import { draftKeys } from "./keys"
 
-// The current group's slug, or "" outside a group. The item dialog also
-// renders outside a GroupProvider in unit tests, so these hooks use the
-// optional context and stay disabled without a slug.
-function useSlug(): string {
-  return useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+// The slug of group when one is given, else of the current group, or ""
+// outside a group. The item dialog also renders outside a GroupProvider in
+// unit tests, so these hooks use the optional context and stay disabled
+// without a slug.
+function useSlug(group?: string): string {
+  const current = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+  return group || current
 }
 
-// useDraft reads one draft. Always fetched fresh: another device may have
-// saved it since this one last looked.
-export function useDraft(id: string | null | undefined) {
-  const slug = useSlug()
+// useDraft reads one draft in group, by default the current group. The item
+// form names the group it opened in, so the draft it holds is read there
+// after the member moves to another group (#2920). Always fetched fresh:
+// another device may have saved it since this one last looked.
+export function useDraft(id: string | null | undefined, group?: string) {
+  const slug = useSlug(group)
   return useQuery<Draft>({
     queryKey: draftKeys.detail(slug, id ?? ""),
-    queryFn: ({ signal }) => getDraft(id ?? "", signal),
+    queryFn: ({ signal }) => getDraft(id ?? "", { signal, group: slug }),
     enabled: !!slug && !!id,
     staleTime: 0,
     gcTime: 0,
@@ -34,11 +38,13 @@ export function useDraft(id: string | null | undefined) {
   })
 }
 
-export function useDraftFiles(id: string | null | undefined) {
-  const slug = useSlug()
+// useDraftFiles lists the files of a draft in group, by default the current
+// group, as useDraft does.
+export function useDraftFiles(id: string | null | undefined, group?: string) {
+  const slug = useSlug(group)
   return useQuery<ListedFile[]>({
     queryKey: draftKeys.files(slug, id ?? ""),
-    queryFn: ({ signal }) => listDraftFiles(id ?? "", signal),
+    queryFn: ({ signal }) => listDraftFiles(id ?? "", { signal, group: slug }),
     enabled: !!slug && !!id,
     staleTime: 0,
   })
@@ -46,16 +52,19 @@ export function useDraftFiles(id: string | null | undefined) {
 
 // useInvalidateDrafts refreshes the draft list and details, the file lists,
 // which name the draft each file is attached to, and the inbox, which lists
-// the drafts.
+// the drafts. The function it returns takes the group, by default the
+// current group.
 export function useInvalidateDrafts() {
   const qc = useQueryClient()
-  const slug = useSlug()
-  return () =>
-    Promise.all([
+  const current = useSlug()
+  return (group?: string) => {
+    const slug = group || current
+    return Promise.all([
       qc.invalidateQueries({ queryKey: draftKeys.group(slug) }),
       qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
       qc.invalidateQueries({ queryKey: inboxKeys.all(slug) }),
     ])
+  }
 }
 
 // Discarding moves the files nothing else uses to Trash.
@@ -73,6 +82,8 @@ export interface PromoteDraftInput {
   revision: number
   promotionKey: string
   values: CreateCommodityRequest
+  // The group the draft is in; unset, the current group.
+  group?: string
 }
 
 export function usePromoteDraft() {
@@ -80,13 +91,13 @@ export function usePromoteDraft() {
   const slug = useSlug()
   const invalidateDrafts = useInvalidateDrafts()
   return useMutation<Commodity & { id: string }, Error, PromoteDraftInput>({
-    mutationFn: ({ id, revision, promotionKey, values }) =>
-      promoteDraft(id, revision, promotionKey, values),
-    onSuccess: () =>
+    mutationFn: ({ id, revision, promotionKey, values, group }) =>
+      promoteDraft(id, revision, promotionKey, values, { group }),
+    onSuccess: (_item, { group }) =>
       Promise.all([
-        invalidateDrafts(),
-        qc.invalidateQueries({ queryKey: commodityKeys.group(slug) }),
-        qc.invalidateQueries({ queryKey: tagKeys.group(slug) }),
+        invalidateDrafts(group),
+        qc.invalidateQueries({ queryKey: commodityKeys.group(group || slug) }),
+        qc.invalidateQueries({ queryKey: tagKeys.group(group || slug) }),
       ]).then(() => undefined),
   })
 }
@@ -99,6 +110,9 @@ export interface DraftRef {
   id: string
   revision: number
   promotionKey?: string
+  // The group the draft is in. The promotion goes there even when the
+  // member has moved to another group since the form opened.
+  group?: string
 }
 
 // newPromotionKey stands in for a caller that keeps no key: its attempts
@@ -123,6 +137,7 @@ export function useSubmitNewItem() {
             revision: draft.revision,
             promotionKey: draft.promotionKey ?? newPromotionKey(),
             values,
+            group: draft.group,
           })
         : create.mutateAsync(values),
   }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -59,7 +60,15 @@ Examples:
 }
 
 func (c *Command) registerFlags() {
+	shared.RegisterDryRunFlag(c.Cmd(), &c.config.DryRun)
+
+	c.Cmd().Flags().StringVar(&c.config.Name, "name", c.config.Name, "New tenant name")
+	c.Cmd().Flags().StringVar(&c.config.Slug, "slug", c.config.Slug, "New tenant slug")
+	c.Cmd().Flags().StringVar(&c.config.Domain, "domain", c.config.Domain, "New tenant domain; an empty value (--domain=) removes the domain")
+	c.Cmd().Flags().StringVar(&c.config.Status, "status", c.config.Status, "New tenant status (active, suspended, inactive)")
+	c.Cmd().Flags().StringVar(&c.config.Settings, "settings", c.config.Settings, "New tenant settings as JSON")
 	c.Cmd().Flags().StringVar(&c.config.RegistrationMode, "registration-mode", c.config.RegistrationMode, "Registration mode (open, approval, closed)")
+	c.Cmd().Flags().BoolVar(&c.config.Interactive, "interactive", c.config.Interactive, "Prompt for each field")
 }
 
 // updateTenant handles the tenant update process
@@ -115,6 +124,14 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 
 	// Update the tenant via service
 	finalTenant, err := adminService.UpdateTenant(context.Background(), idOrSlug, *updateReq)
+	if errors.Is(err, admin.ErrTenantSessionsNotEnded) {
+		// The update is saved; only ending some sessions failed. The tenant's
+		// users are refused anyway while it is not active.
+		fmt.Fprintln(out, "Tenant updated, but ending the sessions of some of its users failed.")
+		fmt.Fprintln(out, "Their requests are refused while the tenant is not active. Suspend the tenant in the back office to end the remaining sessions.")
+		c.printTenantInfo(finalTenant)
+		return fmt.Errorf("tenant updated, but ending its sessions failed: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to update tenant: %w", err)
 	}
@@ -235,7 +252,10 @@ func (c *Command) updateDomain(cfg *Config, original *models.Tenant, req *admin.
 	if original.Domain != nil {
 		originalDomain = *original.Domain
 	}
-	if cfg.Domain != "" && cfg.Domain != originalDomain {
+	// An empty --domain is a request to remove the domain, which an unset
+	// flag is not.
+	domainGiven := cfg.Domain != "" || c.Cmd().Flags().Changed("domain")
+	if domainGiven && cfg.Domain != originalDomain {
 		req.Domain = &cfg.Domain
 		return true, nil
 	}
@@ -286,7 +306,11 @@ func (c *Command) printUpdateRequest(req *admin.TenantUpdateRequest) {
 		fmt.Fprintf(out, "  Slug:     %s\n", *req.Slug)
 	}
 	if req.Domain != nil {
-		fmt.Fprintf(out, "  Domain:   %s\n", *req.Domain)
+		domain := *req.Domain
+		if domain == "" {
+			domain = "(none)"
+		}
+		fmt.Fprintf(out, "  Domain:   %s\n", domain)
 	}
 	if req.Status != nil {
 		fmt.Fprintf(out, "  Status:   %s\n", *req.Status)

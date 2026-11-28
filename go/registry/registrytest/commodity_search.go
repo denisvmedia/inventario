@@ -250,6 +250,8 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 
 	t.Run("drafts only", func(t *testing.T) { runDraftsOnlyCase(t, newEnv) })
 
+	t.Run("statuses", func(t *testing.T) { runStatusesCase(t, newEnv) })
+
 	t.Run("tag labels stay within their kind", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -335,6 +337,10 @@ type searchCase struct {
 	match *registry.CommoditySearchMatch
 }
 
+// searchCases ignore case only in ASCII letters. How postgres ignores the
+// case of other letters depends on the collation of the database, so a case
+// that relies on it passes or fails by where the tests run; the comment on
+// registry's ContainsFold lists the differences.
 func searchCases(hose *models.Commodity) []searchCase {
 	match := func(field registry.CommoditySearchField, value string) *registry.CommoditySearchMatch {
 		return &registry.CommoditySearchMatch{Field: field, Value: value}
@@ -589,6 +595,53 @@ func runTrashedItemsCase(t *testing.T, newEnv func(t *testing.T) CommoditySearch
 		{Brand: "bosch", Count: 1},
 		{Brand: "Gardena", Count: 1},
 	})
+}
+
+// runStatusesCase checks that the default view keeps only the items in use,
+// and that the Statuses filter finds an item by any status, donated and
+// stolen included.
+func runStatusesCase(t *testing.T, newEnv func(t *testing.T) CommoditySearchEnv) {
+	c := qt.New(t)
+	env := newEnv(t)
+	all := []models.CommodityStatus{
+		models.CommodityStatusInUse,
+		models.CommodityStatusSold,
+		models.CommodityStatusLost,
+		models.CommodityStatusDisposed,
+		models.CommodityStatusWrittenOff,
+		models.CommodityStatusDonated,
+		models.CommodityStatusStolen,
+	}
+	for _, status := range all {
+		_, err := env.Commodities.Create(env.Ctx, models.Commodity{
+			Name:                  string(status),
+			ShortName:             string(status),
+			Type:                  models.CommodityTypeOther,
+			AreaID:                new(env.AreaID),
+			Count:                 1,
+			OriginalPriceCurrency: "USD",
+			Status:                status,
+		})
+		c.Assert(err, qt.IsNil, qt.Commentf("seeding %s", status))
+	}
+
+	got, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, registry.CommodityListOptions{})
+	c.Assert(err, qt.IsNil)
+	c.Check(names(got), qt.DeepEquals, []string{"in_use"})
+
+	got, _, err = env.Commodities.ListPaginated(env.Ctx, 0, 50, registry.CommodityListOptions{
+		Statuses: []models.CommodityStatus{models.CommodityStatusDonated, models.CommodityStatusStolen},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Check(names(got), qt.DeepEquals, []string{"donated", "stolen"})
+
+	opts := make([]registry.CommodityListOptions, 0, len(all))
+	for _, status := range all {
+		opts = append(opts, registry.CommodityListOptions{Statuses: []models.CommodityStatus{status}})
+	}
+	counts, err := env.Commodities.CountEach(env.Ctx, opts)
+	c.Assert(err, qt.IsNil)
+	c.Check(counts, qt.DeepEquals, []int{1, 1, 1, 1, 1, 1, 1})
 }
 
 // runDraftsOnlyCase checks DraftsOnly: it keeps the live items marked as

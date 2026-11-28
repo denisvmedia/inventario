@@ -12,6 +12,15 @@ export interface SignedInOptions {
   user?: Partial<User>
 }
 
+// fakeAccessToken builds an unsigned JWT whose payload carries `user_id`, the
+// claim lib/auth-storage reads to tell one signed-in user from another. Pass a
+// different `jti` to model a refreshed token for the same user.
+export function fakeAccessToken(userId: string, jti = "1"): string {
+  const encode = (value: object) =>
+    btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ user_id: userId, jti })}.signature`
+}
+
 export const fixtureUser: User = {
   id: "u1",
   email: "denis@example.com",

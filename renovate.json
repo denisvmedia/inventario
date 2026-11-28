@@ -65,14 +65,14 @@
       ]
     },
     {
-      "description": "Go modules configuration",
+      "description": "Go modules configuration. allowedVersions keeps its earlier condition, `^0\\.`, and also refuses builds of a development branch: a version that ends in `-dev` or has `-dev.` in it. ptah.run v0.36.0 and earlier required google.golang.org/grpc v1.86.0-dev, and Renovate reads an unstable current version as consent to more unstable ones (stokaro/ptah#6695). Both conditions sit in one expression, because the allowedVersions of a later rule would replace this one.",
       "matchManagers": [
         "gomod"
       ],
       "matchFileNames": [
         "go/**"
       ],
-      "allowedVersions": "!/^0\\./",
+      "allowedVersions": "!/^0\\.|-dev(\\.|$)/",
       "schedule": [
         "before 6am on monday"
       ]
@@ -208,6 +208,16 @@
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s+\\w+_VERSION=\"(?<currentValue>[^\"]+)\""
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "The cluster-extras manifests are applied by bootstrap.sh, not by a tool Renovate knows, so their images are invisible to it. An `image:` line right under a `# renovate:` comment is bumped here, tag and digest together (#1946).",
+      "managerFilePatterns": [
+        "/^infra/vm/cluster-extras/[^/]+\\.yaml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>docker) depName=(?<depName>\\S+)\\s+image: [^:\\s]+:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ]
     }
   ]

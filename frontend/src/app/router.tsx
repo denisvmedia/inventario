@@ -10,8 +10,9 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { RequireBackofficeAuth } from "@/components/routing/RequireBackofficeAuth"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
+import { SectionRoute } from "@/components/routing/SectionRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
-import { ComingSoonPage } from "@/components/coming-soon"
+import { PlansRoute } from "@/components/routing/PlansRoute"
 import { AdminShell } from "@/app/AdminShell"
 import { Shell } from "@/app/Shell"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -192,6 +193,9 @@ const WarrantiesListPage = lazy(() =>
 const UpcomingPage = lazy(() =>
   import("@/pages/upcoming/UpcomingPage").then((m) => ({ default: m.UpcomingPage }))
 )
+const WhatsNewPage = lazy(() =>
+  import("@/pages/WhatsNewPage").then((m) => ({ default: m.WhatsNewPage }))
+)
 const InboxPage = lazy(() =>
   import("@/pages/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))
 )
@@ -246,6 +250,9 @@ const AdminGroupDetailPage = lazy(() =>
     default: m.AdminGroupDetailPage,
   }))
 )
+const AdminFailedJobsPage = lazy(() =>
+  import("@/pages/admin/AdminFailedJobsPage").then((m) => ({ default: m.AdminFailedJobsPage }))
+)
 // Back-office auth plane pages (#1785 Phase 6). The login page is a
 // public route; the operator-card lives under the same guard as
 // /admin/*.
@@ -267,8 +274,8 @@ const BackofficeMePage = lazy(() =>
 //     use useCurrentGroup and the http client picks up the URL slug:
 //     - group-exempt onboarding-friendly routes (mirrors the legacy
 //       GROUP_EXEMPT_ROUTE_NAMES list): no-group, profile, groups/new,
-//       groups/:id/settings, plus the mock-only "coming soon" stubs that
-//       don't need a group (plans, help, whats-new).
+//       groups/:id/settings, what's new, plus the mock-only "coming soon"
+//       stubs and redirects that don't need a group (plans, help).
 //     - group-required routes: / (redirects to /g/<first-slug> or /no-group)
 //       and the entire /g/:groupSlug/* subtree.
 //   - catch-all: NotFoundPage.
@@ -354,8 +361,10 @@ export function AppRoutes() {
           {/* Permanent "coming soon" pages — features whose backend isn't
               implemented yet. Each links to its own per-surface tracker
               (resolved from the registry); #1417 is the umbrella aggregator
-              issue, not the destination of these links. */}
-          <Route path="/plans" element={<ComingSoonPage surface="plans" />} />
+              issue, not the destination of these links. /plans is one only
+              when the deployment has plans on (#1389); otherwise it
+              redirects to the group home. */}
+          <Route path="/plans" element={<PlansRoute />} />
           {/* /help is not its own page: everything it would hold — docs,
               shortcuts, what's new, feedback, the version footer — already
               lives in Settings → Help. The route stays so existing links and
@@ -367,7 +376,10 @@ export function AppRoutes() {
               page — Settings → Help → Keyboard shortcuts opens it
               directly, and the global `?` keybinding works everywhere
               the Shell is mounted. */}
-          <Route path="/whats-new" element={<ComingSoonPage surface="whatsNew" />} />
+          {/* What's new (#1386) — the release notes this build contains,
+              read from CHANGELOG.md at build time. Group-exempt; reached
+              from Settings → Help and by URL. */}
+          <Route path="/whats-new" element={<WhatsNewPage />} />
           {/* UI Showcase — dev-only design-system reference (#1542). The
               chunk only ships in dev builds; in prod the route is
               omitted entirely. */}
@@ -433,9 +445,23 @@ export function AppRoutes() {
               <Route path="sellers" element={<SellersListPage />} />
               <Route path="item-types" element={<ItemTypesListPage />} />
               <Route path="custom-fields" element={<CustomFieldsListPage />} />
-              <Route path="lent" element={<LoansListPage />} />
+              <Route
+                path="lent"
+                element={
+                  <SectionRoute section="loans">
+                    <LoansListPage />
+                  </SectionRoute>
+                }
+              />
               <Route path="trash" element={<TrashPage />} />
-              <Route path="in-service" element={<ServicesListPage />} />
+              <Route
+                path="in-service"
+                element={
+                  <SectionRoute section="maintenance">
+                    <ServicesListPage />
+                  </SectionRoute>
+                }
+              />
               <Route path="members" element={<MembersPage />} />
               <Route path="exports" element={<ExportsListPage />} />
               <Route path="exports/new" element={<ExportNewPage />} />
@@ -447,13 +473,34 @@ export function AppRoutes() {
                   list view with All/Active/Expiring/Expired tabs. The
                   inline panels on commodities detail still surface
                   per-item status alongside this group-wide page. */}
-              <Route path="warranties" element={<WarrantiesListPage />} />
+              <Route
+                path="warranties"
+                element={
+                  <SectionRoute section="warranties">
+                    <WarrantiesListPage />
+                  </SectionRoute>
+                }
+              />
               {/* Maintenance reminders (#1368) — group-wide upcoming
                   maintenance, sorted by next_due_at. */}
-              <Route path="maintenance" element={<MaintenanceListPage />} />
+              <Route
+                path="maintenance"
+                element={
+                  <SectionRoute section="maintenance">
+                    <MaintenanceListPage />
+                  </SectionRoute>
+                }
+              />
               {/* Upcoming (#2805) — item reminders, warranty expiries, loan
                   and maintenance due dates in one date-ordered list. */}
-              <Route path="upcoming" element={<UpcomingPage />} />
+              <Route
+                path="upcoming"
+                element={
+                  <SectionRoute section="upcoming">
+                    <UpcomingPage />
+                  </SectionRoute>
+                }
+              />
               {/* Inbox (#2794): drafts and items marked as draft, the
                   group's unfinished work, with the step that clears each. */}
               <Route path="inbox" element={<InboxPage />} />
@@ -513,6 +560,7 @@ export function AppRoutes() {
               <Route path="users/:userId" element={<AdminUserDetailPage />} />
               <Route path="groups" element={<AdminGroupsPage />} />
               <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />
+              <Route path="failed-jobs" element={<AdminFailedJobsPage />} />
             </Route>
           </Route>
         </Route>

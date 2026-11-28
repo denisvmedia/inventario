@@ -47,6 +47,10 @@ A file in the trash still counts toward your group's storage until it is
 deleted for good. **Group settings → Data & storage** shows how much of the
 used space is in the trash, with a link to the Trash page.
 
+A file in the trash can't be attached to an item, location, or area, and
+**Attach an existing file** doesn't list it; restore it first. If someone
+moves a file to the trash while you attach it, the attach fails with an error.
+
 ## The Trash page
 
 The page has two tabs:
@@ -67,6 +71,11 @@ in the group:
 | **Viewer** | Sees the lists. |
 | **User** | Also restores items and files. |
 | **Administrator**, **Owner** | Also deletes entries for good and empties the trash. |
+
+Each restore and each delete for good is recorded in the audit log of the
+server, with who did it and which items and files it restored or deleted. So
+is the automatic deletion of entries whose time in the trash is up. The people
+who run the server can read that log; group members don't see it.
 
 ## Restore
 

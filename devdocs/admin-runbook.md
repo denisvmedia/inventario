@@ -10,8 +10,9 @@ a user is a system admin iff they have a row there — and gates the
 
 > **Scope.** System admins can list tenants, inspect/block users,
 > oversee groups (including soft-delete), edit group memberships, and
-> impersonate users for support. There is **no tenant CRUD** — tenants
-> are administered out-of-band (see [CLI Commands](../README.md#cli-commands)).
+> impersonate users for support. A back-office `platform_admin` also
+> creates, edits, suspends, reactivates and deletes tenants (§11); the
+> [CLI](../README.md#cli-commands) does the same out-of-band.
 
 ---
 
@@ -144,6 +145,7 @@ Admin actions use the `admin.` action prefix:
 | `admin.list_groups` / `…get_group` / `…delete_group` | group endpoints |
 | `admin.group_member_add` / `…remove` / `…role_change` | membership endpoints |
 | `admin.impersonate_start` / `admin.impersonate_end` | impersonation endpoints |
+| `admin.tenant_create` / `…tenant_update` / `…tenant_suspend` / `…tenant_reactivate` / `…tenant_delete` | tenant write endpoints (§11); the breadcrumb holds the slug, the requested name, slug and domain of a create (refused ones included), the reason of a suspend or reactivate, the old and new value of every field an update changes, and the `phase` of a delete (`accepted`, then `finished`) |
 | `admin.worker_pause` | `POST /api/v1/admin/workers/{type}/pause` (actor = back-office operator) or `inventario workers pause` (`paused_by="cli"`); subject = worker type (#1308) |
 | `admin.worker_resume` | `POST /api/v1/admin/workers/{type}/resume` (actor = back-office operator) or `inventario workers resume`; subject = worker type (#1308) |
 
@@ -418,8 +420,8 @@ multi-transaction, because the file→entity link is polymorphic and cannot
 carry an FK):
 
 1. **Crash window** — a process dies between an entity-row delete and its
-   linked-file sweep, leaving file rows pointing at an entity that no
-   longer exists.
+   linked-file sweep, leaving file rows whose links point at an entity
+   that no longer exists.
 2. **Concurrent attach** — a file is linked to an entity while that
    entity's delete is in flight.
 3. **Thumbnail mid-generation race** — a file is deleted while the
@@ -429,9 +431,10 @@ carry an FK):
 
 It sweeps exactly two classes:
 
-- **File ROWS** whose `linked_entity_type` is one of
-  `commodity` / `area` / `location` **and** whose `linked_entity_id`
-  names a row that does not exist anywhere in the database.
+- **File ROWS** that have at least one link in `file_links`, **and**
+  every one of whose links is of type `commodity` / `area` / `location`
+  and names a row that does not exist anywhere in the database. One
+  link to a live entity keeps the file.
 - **THUMBNAIL blobs** under `t/<tenant>/thumbnails/` whose owning file
   row is gone. Thumbnails are derived and regenerable, and the key
   embeds the owning row's primary key, so orphan-ness is an exact
@@ -442,10 +445,10 @@ enumerated in the first place:
 
 | Class | Why it is never touched |
 | ----- | ----------------------- |
-| Standalone files (`linked_entity_type = ''`) | First-class since #2235; exported in backups. **"No link" is not "orphan."** The candidate predicate is a positive allowlist, so a standalone file cannot enter it. |
+| Standalone files (no row in `file_links`) | First-class since #2235; exported in backups. **"No link" is not "orphan."** A candidate must have a link, so a standalone file cannot enter the scan. |
 | Files in Trash (`deleted_at` set) | Owned by `trash-purge` (§9). A link to an item in Trash also counts as a live link, so the files of a trashed item are never candidates. |
-| `export`-linked files | Owned by the backup subsystem's own lifecycle. The exports table is never probed, so a soft-deleted (recoverable) export can never be misread as "gone". |
-| Any unknown / future link type | Fails closed — kept until someone explicitly adds it to the allowlist. |
+| Files with an `export` link | Owned by the backup subsystem's own lifecycle. The exports table is never probed, so a soft-deleted (recoverable) export can never be misread as "gone". |
+| Files with a link of an unknown / future type | Fails closed — kept until someone explicitly adds the type to the allowlist. |
 | `t/<tenant>/files/` blobs | Upload, restore, and `inventario backfill blobs` are all **blob-first / row-second**, so a rowless blob is a normal transient state. Reclaiming these safely needs a provably-complete global keep-set; the failure mode is irreversible loss of the user's file bytes. Out of scope for an autonomous worker. (Crash-window blobs are still reclaimed — via the row sweep, which deletes the blob and thumbnails with the row.) |
 | `t/<tenant>/exports/` blobs | A failed export leaves its `.inb` referenced by nothing at all. Fix belongs at the source. |
 | `t/<tenant>/restores/` blobs | An uploaded `.inb` awaiting import has **no row of any kind** — and stays rowless forever if the import fails or is never submitted. Deleting one destroys a user's uploaded backup. |
@@ -500,10 +503,12 @@ never evaluated the gate (paused worker, `mode=off`, or a gate-build failure)
 resets it to `0` rather than leaving the previous tick's value standing and
 faking a pinned tenant forever.
 
-There is no heartbeat on exports/restores, so a **crashed** operation stays
-`running` / `in_progress` forever and pins its tenant permanently. That is
-the correct direction (under-collecting forever beats one wrong delete),
-but it needs manual attention: investigate and resolve the stuck operation.
+An export or restore whose worker crashed pins its tenant until the sweep
+in §10 takes the worker for dead, ten minutes after its last heartbeat,
+and fails the job or queues it again (a queued export pins the tenant
+until it has run). That is the correct direction (under-collecting beats
+one wrong delete). A blocker that stays in progress longer is one of the
+cases §10 lists that the sweep does not catch: investigate and resolve it.
 **Do not add a "stale after N hours → ignore it" escape hatch** — that
 re-opens exactly the race the gate closes.
 
@@ -564,6 +569,28 @@ keeps running rounds while they delete something. An entry that keeps
 failing is retried on the next interval. A sweep that deleted something
 logs `Purged expired Trash entries` with the counts.
 
+Every change to Trash writes an audit row with the group as the entity
+(`entity_type = location_group`):
+
+| Action | Written by | `user_id` |
+| ------ | ---------- | --------- |
+| `trash_restore` | restoring an item or a file, one at a time or in bulk | the member |
+| `trash_purge` | deleting an item or a file for good, one at a time or in bulk | the member |
+| `trash_empty` | "Empty trash" | the member |
+| `trash_purge_expired` | a sweep of `trash-purge`, one row per group it deleted something in | none |
+
+A request writes one row, a bulk one included, and so does a request that
+failed (`success = false`, with what it did before failing). An
+impersonated member's row names the operator in `impersonated_by`. The
+breadcrumb in `user_agent` holds `items`, `item_ids`, `files` and
+`file_ids`: the items restored or deleted, and the files restored or
+deleted with them or on their own (for a purge, the files that were
+deleted, not those that went back to a live item). A bulk request adds
+`failed` and `failed_ids`; a sweep adds its `cutoff`. Each ID list keeps
+at most 1000 IDs and sets `ids_truncated` when it was cut; the counts are
+always complete. A full-replace backup restore, which empties the Trash
+first, writes no Trash row.
+
 ### Knobs
 
 | Flag | Env | Default | Notes |
@@ -585,6 +612,398 @@ inventario workers pause --type trash-purge --reason "holding expired entries" \
 
 Entries keep expiring while the worker is paused and are purged on the first
 sweep after it resumes.
+
+---
+
+## 10. Failed jobs (#1307)
+
+A background job that fails for good stays in its own table with its last
+error, status `failed`. There is no separate dead-letter table: each job
+type reads, retries and discards its failed jobs in the table it already
+uses.
+
+| Type | Table | Failed when | Retry |
+| ---- | ----- | ----------- | ----- |
+| `export` | `exports` (`type <> 'imported'`) | the export run returns an error, or its worker stops during its third run | yes: runs again from the start |
+| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated, or its worker stops during its third run | yes: reads the uploaded file again |
+| `restore` | `restore_operations` | the restore run returns an error, or its worker stops while it runs | no: it may have written part of the backup; start a new restore |
+| `thumbnail` | `thumbnail_generation_jobs` | the last of its attempts fails | yes: gets a fresh set of attempts |
+| `intake` | `intake_sources` | the scan fails for good, or the sweep gives up on it | yes: due at once, with its attempt count kept |
+| `currency-migration` | `currency_migrations` | the recovery sweep finds it stuck | no: the rate was confirmed for that moment; start a new migration |
+| `personal-data-export` | `personal_data_exports` | the build returns an error, or its worker stops during its third build | yes: builds the copy again from the start |
+
+The email queue, the reminder sweeps, group purge and the cleanup sweepers
+keep no failed jobs: they retry on their next run.
+
+### Runs whose worker stopped
+
+An export, import or restore whose worker stops in the middle of the run,
+because the process crashed, was killed or was shut down, would otherwise
+stay in progress for good. While a job runs, its worker records a heartbeat
+on the job's row every minute (`heartbeat_at`). Every minute the export,
+import and restore workers each sweep their table for jobs in progress
+whose heartbeat is more than **10 minutes** old, and take their worker for
+dead. How long a job runs does not matter, only whether its worker is
+alive:
+
+- An export or an import goes back to the queue and the next worker runs
+  it again from the start. Each claim counts a run in the job's attempts
+  (the attempts column of `inventario jobs failed list`), a retry's too.
+  A job whose worker stops during its **third** run fails for good with
+  "the worker stopped before the export finished" (or "the import"), so a
+  job that kills its worker every time does not run forever.
+- A restore fails for good at once with "the worker stopped before the
+  restore finished": it may have written part of its backup, so it is not
+  run again.
+
+Each of these failures is listed here and counts once in
+`inventario_jobs_dead_lettered_total`. The sweeps run while a worker type is
+paused, too. A job in progress without any heartbeat was claimed by a
+version that recorded none. Upgrading from such a version stops its pods
+first (`PRODUCTION.md`, Appendix C), so no worker is left on the job; it is
+taken for dead once the job is a day old, since the job's creation is the
+only time it carries.
+
+The sweep does not catch two cases:
+
+- An export or import worker that waits for a free slot to start a queued
+  job does not sweep until it gets one: the sweep runs in the same loop.
+  On a replica whose slots are all taken by long runs, a dead run waits
+  for one of them to end, or for the sweep of another replica. The restore
+  worker does not wait for a slot, so it always sweeps.
+- A run that hangs while its process stays up keeps its heartbeat, which
+  is recorded apart from the run, and is never taken for dead. It stays in
+  progress until the process is restarted; the job then has no heartbeat
+  younger than ten minutes, and the sweep moves it on.
+
+A personal data export belongs to a user, not to a group. Its title is the
+user's email address, and it has no group. A build whose worker stops is
+taken for dead an hour after it started; the export goes back to the queue,
+and once its worker has stopped during its third build it fails with "the
+worker stopped before the personal data export finished". Each claim counts
+a build in the attempts, a retry's too. A retry clears the error, the
+start and end of the build and the archive, and keeps the row for 7 more
+days while the copy waits for the worker; when the build finishes, the
+copy is kept 7 days from then, like any other. A retry is not a new
+request: the user's daily limit still counts from the request they made,
+so it neither uses up nor resets their next request.
+
+Only the newest thumbnail job of a file counts. While that job is failed and
+nobody has retried or discarded it, viewing the file starts no new job, so a
+file that cannot be thumbnailed is one failed job, not one per view. Once it
+is discarded, the next view tries again; if that fails too, the new job is
+listed.
+
+**Discard** marks a job (`discarded_at`); it does not delete it. The job
+leaves the failed list and the depth gauge, but its row and its error stay
+until the cleanup of that table removes them (see below). Discarding works
+for every type. A retried job leaves the list too; if it fails again, it
+comes back. So does an intake scan whose session is resumed, or that is
+scanned again from the Inbox: both clear a discard.
+
+### How long a failed job stays
+
+Discarded or not, a failed job stays until its table's own cleanup removes
+it:
+
+- `export` and `import`: until the export is deleted, by a member on the
+  Exports page or with its group.
+- `restore`: until the export it restored from is deleted; deleting an
+  export deletes its restores.
+- `thumbnail`: the thumbnail worker deletes finished and failed jobs older
+  than `--thumbnail-job-retention-period` (24 h by default). After that, the
+  next view of the file tries again.
+- `intake`: until the member deletes the intake session in the Inbox, or
+  the group is deleted.
+- `personal-data-export`: until the row expires, 7 days after the user's
+  request or after the latest retry; the export worker then deletes it.
+  Deleting the user or the tenant deletes it too.
+- `currency-migration`: the currency migration worker deletes completed and
+  failed migrations, discarded or not, once they ended more than
+  `--currency-migration-retention` ago
+  (`INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION`, `2160h` (90 days) by
+  default), with their per-item audit rows. It checks once an hour, also
+  while the worker is paused. A pending or running migration, and one a
+  group still points to (`location_groups.currency_migration_id`), is never
+  deleted. The period must be at least `24h`, because the daily limit of two
+  migrations per group counts the completed ones since UTC midnight; a
+  shorter value stops the server at startup. A deleted migration leaves the
+  group's migration history as well; the audit log keeps its
+  `currency_migration.start` and `currency_migration.complete` or
+  `currency_migration.fail` rows
+  ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
+
+Jobs that failed before the upgrade to this version are listed and counted
+like new ones, so an alert on a depth above zero fires from the first
+collection. Discard them in bulk by the time they failed before (see
+[Discarding in bulk](#discarding-in-bulk)), then alert on what fails after
+the upgrade.
+
+### Discarding in bulk
+
+A bulk discard (#2946) marks discarded every failed job that failed before a
+time, of one type or of every type, in one tenant or in every tenant. A job
+without a failure time counts from its creation. The time is a date, which
+stands for its midnight UTC, or an RFC 3339 time; a time in the future is
+refused, so a job that fails between the dry run and the discard is never
+taken without having been counted. Each job is discarded as a single
+discard does: its row and its error stay.
+
+```bash
+# Count the jobs, discard nothing
+inventario jobs failed discard --failed-before 2026-11-01 --dry-run --db-dsn postgres://...
+
+# See them: list takes the same filter
+inventario jobs failed list --failed-before 2026-11-01 --limit 0 --db-dsn postgres://...
+
+# Discard them, of one type and one tenant here
+inventario jobs failed discard --type export --tenant acme --failed-before 2026-11-01 --db-dsn postgres://...
+```
+
+The command prints how many jobs it discarded, per type, for example
+`Discarded 12 failed jobs that failed before 2026-11-01T00:00:00Z: export 10, thumbnail 2.`
+A job someone retried or discarded in the meantime is not counted. In the
+back office, **Discard older…** on the Failed jobs page does the same for
+the type and tenant the filters show, and asks with the count first. Both
+need the `platform_admin` role on the back office.
+
+### Who sees what
+
+- **System admins** see the failed jobs of every tenant on the back office
+  page **Admin → Failed jobs** (`/admin/failed-jobs`), with type and tenant
+  filters, Retry and Discard. A `support_agent` may list and retry; Discard
+  needs the `platform_admin` role.
+- **Group admins and owners** see their own group's failed jobs in **Group
+  settings → Data & storage**, with Retry. They cannot discard: for a
+  restore or a currency migration the card tells them to start a new one,
+  and an operator can discard the failed one. Personal data exports are not
+  in the group card: they belong to a user, so only the back office and the
+  CLI show them, and the group routes answer `failed_job.unknown_type` for
+  the type.
+
+### CLI
+
+`inventario jobs failed` acts on every tenant, like the back office page
+(PostgreSQL only; `memory://` is rejected):
+
+```bash
+# List the failed jobs nobody retried or discarded, newest first
+inventario jobs failed list --db-dsn postgres://user:pass@localhost:5432/inventario
+
+# One type, one tenant (id or slug), at most 20 rows (0 prints all)
+inventario jobs failed list --type export --tenant acme --limit 20 --db-dsn postgres://...
+
+# Put a job back in its queue
+inventario jobs failed retry --type thumbnail <job-id> --db-dsn postgres://...
+
+# Discard a job
+inventario jobs failed discard --type restore <job-id> --db-dsn postgres://...
+
+# Discard every job that failed before a time (see "Discarding in bulk")
+inventario jobs failed discard --failed-before 2026-11-01 --db-dsn postgres://...
+```
+
+`list` prints the type, id, tenant, group, failure time, attempts, whether
+the job can be retried, its title and its error. `retry` on a restore or a
+currency migration fails with "this kind of job cannot be retried"; a job
+that is no longer failed fails with "not found".
+
+### Admin REST API
+
+| Method & path | Effect |
+| ------------- | ------ |
+| `GET /api/v1/admin/failed-jobs` | List failed jobs across tenants. `?type`, `?tenantID`, `?failed_before`, `?page`, `?per_page` (default 50, at most 100). `meta.job_types` lists every type with whether it can be retried. |
+| `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/retry` | Retry one job (204). |
+| `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/discard` | Discard one job (204). `platform_admin` only; a `support_agent` gets 403 `admin.role_required`. |
+| `POST /api/v1/admin/failed-jobs/bulk-discard` | Discard every job that failed before `?failed_before` (required), with the list's `?type` and `?tenantID`; `?dry_run=true` only counts. 200 with `meta.discarded` and `meta.by_type`. `platform_admin` only, the dry run too. |
+| `GET /api/v1/g/{groupSlug}/failed-jobs` | A group admin's list of the group's failed jobs. Its `meta.job_types` leaves out `personal-data-export`. |
+| `POST /api/v1/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` | A group admin's retry. |
+
+Error codes: `failed_job.unknown_type` (404 on a path, 400 on the `?type`
+filter), `failed_job.not_found` (404: no such job, or it is no longer
+failed), `failed_job.not_retryable` (409), `failed_job.invalid_failed_before`
+(400: `?failed_before` is not a date or an RFC 3339 time, or, on a bulk
+discard, is missing or in the future). Members without the admin role get
+403 on the group routes.
+
+### Audit
+
+Every retry and discard writes an audit row, also when it is refused, an
+unknown job type included: `admin.failed_job_retry` and
+`admin.failed_job_discard` from the back office and the CLI (the CLI has no
+actor, as for `workers pause`), and `failed_job_retry` from group settings.
+The entity type is the job type as sent and the entity id is the job id.
+Listing from the back office writes `admin.failed_job_list`, also for a
+refused `?type`. A bulk discard writes one `admin.failed_job_bulk_discard`
+row, from the back office and the CLI, also when it is refused: the tenant
+of the filter, the job type of the filter as the entity type, and in the
+`user_agent` breadcrumb the filter (`failed_before`, `type`, the CLI's
+`tenant` as typed) with `discarded` and `by_type`. A dry run writes none. A
+discard that `RequirePlatformAdmin` turns away is not audited, as for
+impersonation.
+
+### Observability
+
+- `inventario_jobs_dead_lettered_total{type}` is a counter: the jobs this
+  process marked failed for good. It is exported by the processes that run
+  workers (`run workers` and `run all`), with a zero series per type from
+  the start. `run apiserver` exports no series: the API only queues jobs,
+  and the workers that run them are the ones that mark them failed. Sum it
+  across processes:
+  `sum by (type) (increase(inventario_jobs_dead_lettered_total[1h]))`.
+- `inventario_jobs_dead_letter_depth{type}` is a gauge: the failed jobs that
+  are neither retried nor discarded, across every tenant. It is collected by
+  the housekeeping worker group (or `run all`) on the
+  `--business-metrics-interval` cadence, so read it with `max()`, like the
+  business gauges. A failed collection keeps the last values and increments
+  `inventario_jobs_dead_letter_collect_errors_total`.
+
+---
+
+## 11. Managing tenants (#1037)
+
+A back-office operator with `role=platform_admin` manages tenants in the
+back office: **New tenant** on the Tenants page; **Edit** and **Suspend**
+or **Reactivate** on a tenant's page; **Delete tenant** in the Danger zone
+at the bottom of it. A `support_agent` sees the tenant pages without these
+actions, and the API refuses it with `403` and `admin.role_required`. The
+endpoints and `inventario tenants` share one set of rules, in
+`go/services/admin`.
+
+| Action     | Endpoint                                             | Body or query |
+| ---------- | ---------------------------------------------------- | ------------- |
+| Create     | `POST /api/v1/admin/tenants`                         | `name`, optional `slug`, `domain`, `status` |
+| Edit       | `PATCH /api/v1/admin/tenants/{id}`                   | any of `name`, `slug`, `domain`, `status` |
+| Suspend    | `POST /api/v1/admin/tenants/{id}/suspend`            | `reason` |
+| Reactivate | `POST /api/v1/admin/tenants/{id}/reactivate`         | `reason` |
+| Delete     | `DELETE /api/v1/admin/tenants/{id}?confirm_slug=…`   | the tenant's slug |
+
+Create and edit:
+
+- The name is 1 to 100 characters. An empty slug on create is generated
+  from the name, as `inventario tenants create` does: lowercase, every run
+  of other characters becomes a hyphen, at most 50 characters. A new
+  tenant is active unless `status` says otherwise, and its registration is
+  closed.
+- Slugs and domains are unique: one another tenant has is refused with
+  `409` and `tenant.slug_taken` or `tenant.domain_taken`. A domain is a
+  bare lowercase hostname; an empty `domain` on edit removes it, as
+  `inventario tenants update <slug> --domain=` does. A unique index on
+  `tenants.domain` holds the rule in the database, so two creates or
+  edits that give one domain to two tenants at the same time cannot both
+  succeed: the second gets the same `409`.
+- Tenants written before the index existed (#2948) can share a domain.
+  `inventario db migrate up` checks for that before it applies anything,
+  and stops with the shared domains and the slugs of their tenants:
+  `tenants share a domain, so tenants.domain cannot be made unique:
+  "acme.com" (tenants acme, acme-old)`. Leave each domain with one tenant,
+  then run the migrations again. `db migrate up --dry-run` runs the same
+  check, so it can be run before the upgrade.
+- With a tenant base domain (`--tenant-base-domain`), where
+  `<slug>.<base domain>` is a tenant's address, a custom domain that is the
+  base domain or a host under it is refused with `422` and
+  `tenant.domain_reserved`. Hosts are matched against custom domains first,
+  so such a domain would take over another tenant's slug address. The CLI
+  does not know the base domain and does not apply this check.
+- An edit changes only the fields whose value differs from the stored one;
+  an edit that changes nothing writes no row and no audit entry. A status
+  change away from active ends the tenant's sessions, as a suspension does.
+
+Suspend and reactivate:
+
+- Both take a reason of 1 to 500 characters, which the audit row keeps.
+- A suspension ends every session of every user of the tenant, the same
+  teardown a user block runs: refresh tokens and personal API tokens are
+  revoked, and access tokens issued before the suspension are refused.
+- While a tenant is not active, every request on its host is refused with
+  `403 Tenant suspended`. Its users get no further on another tenant's
+  host: a password or OAuth sign-in finds only users of the host's tenant,
+  an API token authenticates only on its own tenant's host, and the MFA
+  and magic-link sign-ins, token refresh and access tokens check the
+  user's own tenant. Impersonating one of its users is refused with `422`
+  and `tenant.not_active`.
+- While a tenant is not active, the background workers send its users no
+  email: no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. They write nothing for those rows either, so after reactivation a
+  reminder that is still due goes out on the next sweep (one email, for the
+  closest lead time reached), a storage warning goes out if the group is
+  still over the threshold, and a skipped weekly digest goes out if the
+  tenant is reactivated before the end of the week it was due in (the
+  worker sends from Monday at the send hour to Sunday, and no week is
+  claimed while the tenant is not active). A personal data export
+  requested before the suspension is still built and listed; only its
+  email is skipped. The workers that send no email (thumbnails, Trash
+  purge, orphan file cleanup) keep running.
+- When the tenant cannot be read (a database error), a reminder is retried
+  on the next sweep. The weekly digest of every member of the affected
+  group, and of a group whose members cannot be listed, waits for the next
+  sweep too, without claiming the week, so the digest that goes out covers
+  all of the member's groups. The export-ready email
+  is sent anyway: it goes out once and nothing retries it.
+- Reactivating makes the tenant active again. The sessions the suspension
+  ended stay ended, and the revoked API tokens stay revoked: users sign in
+  again and create new tokens.
+- A status change made with `inventario tenants update` revokes the
+  refresh and API tokens too, but the CLI cannot reach the running
+  server's access-token blacklist. An access token issued before such a
+  change is refused while the tenant is not active, and works again if the
+  tenant is reactivated within the token's 15-minute lifetime.
+- The blacklist that refuses access tokens issued before a suspension is
+  held in the API process unless `--token-blacklist-redis-url` is set. With
+  several replicas, or after the replica that ran the suspension restarts,
+  a replica without the entry accepts such a token again once the tenant is
+  reactivated within the token's 15 minutes. While the tenant is suspended
+  every replica refuses its users. Run more than one replica only with the
+  Redis URL set.
+- When some sessions cannot be ended, the status change is still saved and
+  the API answers `200`; the server logs `Tenant status saved, but ending
+  the sessions of some of its users failed` with the tenant, and the audit
+  row is a failure with the cause. The tenant's users are refused anyway
+  while it is not active. Suspending the tenant again retries the teardown.
+
+Delete:
+
+- The operator types the tenant's slug, the confirmation
+  `inventario tenants delete` asks for; the API compares `confirm_slug`
+  with the slug exactly and refuses anything else with `422` and
+  `admin.tenant.confirmation_mismatch`.
+- The request first suspends the tenant and ends its sessions, as Suspend
+  does, writes an `admin.tenant_delete` audit row with `phase: accepted`,
+  and answers `202` with the suspended tenant. The deletion then runs in
+  the background in the API process that took the request, detached from
+  the request and bounded at two hours, and writes a second
+  `admin.tenant_delete` row with `phase: finished`, a success or a failure
+  with the cause. The back office says the deletion has started; the
+  tenant shows as suspended until it is gone.
+- The order is the CLI's, with a check in front: a dry run of the row
+  purge in a transaction that is rolled back, so a foreign key the purge
+  does not know stops the deletion before anything is removed; then the
+  stored files, while the file rows that tell which files are the tenant's
+  are still there; then the users, groups, items and every other row; then
+  the tenant itself. It cannot be undone.
+- Every step can run again, so a failed deletion, or one cut short when
+  the process stopped or restarted, leaves a suspended tenant with part of
+  its files and none or all of its rows, and sending the same delete again
+  continues it. A delete sent while that process is still deleting the
+  tenant answers `202` and starts nothing. The check is per process: a
+  delete that reaches another replica starts a second run, and every step
+  is safe to repeat, so the run that finds the tenant gone records a
+  failure.
+- The tenant's audit rows go with it, except the rows of the back office
+  (action `admin.*`) and the rows written while an operator impersonated
+  one of its users: they record what the operators did, and stay.
+
+The tenant that serves the request's host keeps that host: the API refuses
+with `422` and `admin.tenant.serves_this_host` to delete it or to set its
+status away from active, because either would lock the back office out.
+With a tenant base domain it also refuses to change the domain when the
+request came through that domain, and the slug when the request came
+through `<slug>.<base domain>` or the catch-all tenant. In single-tenant
+mode no host is resolved by a slug, and a host whose domain no tenant has
+falls back to the default tenant, so the slug and domain can change there;
+the tenant serving the back office is suspended or deleted only with the
+CLI, which does not refuse it.
 
 ---
 

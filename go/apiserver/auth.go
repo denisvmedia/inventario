@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -24,6 +23,7 @@ import (
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/notifications"
 	"go.5x5.cz/inventario/services/oauth"
 )
 
@@ -94,6 +94,8 @@ type AuthAPI struct {
 	groupMembershipRegistry registry.GroupMembershipRegistry
 	loginEventRegistry      registry.LoginEventRegistry
 	mfaRegistry             registry.UserMFASecretRegistry
+	// tenantRegistry backs the check that the user's tenant is active.
+	tenantRegistry registry.TenantRegistry
 	// systemAdminGrantRegistry resolves the is_system_admin advisory
 	// claim baked into access tokens (#1784). The claim is FE-only —
 	// authorization happens server-side in RequireBackofficeAuth /
@@ -133,18 +135,25 @@ type AuthAPI struct {
 	fileSigningService *services.FileSigningService
 	// apiTokens revokes personal API tokens alongside sessions. May be nil.
 	apiTokens *services.APITokenService
+	// emailPrefs reads the recipient's UI language for the account emails.
+	// Nil sends them in English.
+	emailPrefs *notifications.Service
 }
 
-func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
+func (api *AuthAPI) sendPasswordChangedNotification(r *http.Request, user *models.User) {
 	if api.emailService == nil || user == nil {
 		return
 	}
 
+	// Keep the request's values (the request ID among them) but not its
+	// cancelation: the notice must go out after the response is written.
+	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
-			slog.Error("Failed to send password-changed notification email",
+			slog.ErrorContext(ctx, "Failed to send password-changed notification email",
 				"user_id", user.ID,
 				"error", err,
 			)
@@ -242,7 +251,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// are scoped to the correct tenant — even when we don't know the user.
 	tenantID := TenantIDFromContext(r.Context())
 	if tenantID == "" {
-		slog.Error("Login attempted without tenant context in request")
+		slog.ErrorContext(r.Context(), "Login attempted without tenant context in request")
 		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
 		return
 	}
@@ -252,7 +261,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		locked, resetAt, err := api.rateLimiter.IsAccountLocked(r.Context(), req.Email)
 		if err != nil {
 			// Fail-open: do not make auth unavailable due to limiter backend outages.
-			slog.Error("Failed to check account lockout", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to check account lockout", "error", err)
 		} else if locked {
 			retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
@@ -269,7 +278,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		// second one would have run bcrypt. Spend the same work here so the
 		// pair stays indistinguishable in time as well as in body (#2246).
 		models.EqualizePasswordTiming(req.Password)
-		slog.Warn("Failed login attempt: user not found", "email", req.Email, "error", err)
+		slog.WarnContext(r.Context(), "Failed login attempt: user not found", "email", req.Email, "error", err)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "user not found"
 		api.logAuth(r.Context(), "login", nil, nil, false, r, &errMsg)
@@ -279,7 +288,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !user.CheckPassword(req.Password) {
-		slog.Warn("Failed login attempt: invalid password", "email", req.Email, "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Failed login attempt: invalid password", "email", req.Email, "user_id", user.ID)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		errMsg := "invalid password"
 		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
@@ -290,7 +299,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !user.IsActive {
-		slog.Warn("Failed login attempt: user account disabled", "email", req.Email, "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Failed login attempt: user account disabled", "email", req.Email, "user_id", user.ID)
 		errMsg := "account disabled"
 		api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, false, r, &errMsg)
 		userID := user.ID
@@ -302,7 +311,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// Successful authentication: clear any prior failed-login counters.
 	if api.rateLimiter != nil {
 		if err := api.rateLimiter.ClearFailedLogins(r.Context(), req.Email); err != nil {
-			slog.Error("Failed to clear failed login counters", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to clear failed login counters", "error", err)
 		}
 	}
 
@@ -325,7 +334,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// session avoidance).
 	rti, rawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("Failed to issue refresh token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to issue refresh token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
@@ -336,7 +345,7 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// requiring explicit removal of any existing blacklist entry in typical cases.
 	accessTokenString, _, err := api.issueAccessToken(r.Context(), user, rti)
 	if err != nil {
-		slog.Error("Failed to generate access token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to generate access token", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, rti)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
@@ -349,10 +358,10 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	user.LastLoginAt = &now
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("Failed to update user last login time", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update user last login time", "user_id", user.ID, "error", err)
 	}
 
-	slog.Info("Successful user login", "email", user.Email, "user_id", user.ID)
+	slog.InfoContext(r.Context(), "Successful user login", "email", user.Email, "user_id", user.ID)
 	api.logAuth(r.Context(), "login", &user.ID, &user.TenantID, true, r, nil)
 	userID := user.ID
 	api.recordLoginEvent(r.Context(), tenantID, user.Email, &userID, models.LoginOutcomeOK, r)
@@ -362,25 +371,25 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	// Reuse the already-computed claim from the freshly issued access token
 	// instead of performing a second best-effort admin-grant lookup here.
-	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
+	populateUserSystemAdminFlagFromAccessToken(r.Context(), accessTokenString, user)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
-func populateUserSystemAdminFlagFromAccessToken(accessTokenString string, user *models.User) {
+func populateUserSystemAdminFlagFromAccessToken(ctx context.Context, accessTokenString string, user *models.User) {
 	if user == nil || accessTokenString == "" {
 		return
 	}
 
 	token, _, err := new(jwt.Parser).ParseUnverified(accessTokenString, jwt.MapClaims{})
 	if err != nil {
-		slog.Warn("Failed to parse access token for user is_system_admin flag", "user_id", user.ID, "error", err)
+		slog.WarnContext(ctx, "Failed to parse access token for user is_system_admin flag", "user_id", user.ID, "error", err)
 		return
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		slog.Warn("Failed to read access token claims for user is_system_admin flag", "user_id", user.ID)
+		slog.WarnContext(ctx, "Failed to read access token claims for user is_system_admin flag", "user_id", user.ID)
 		return
 	}
 
@@ -429,7 +438,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	//     fresh *admin* access token mid-impersonation — ending the session
 	//     outside /admin/impersonation/end and orphaning the return slot.
 	if api.accessTokenIsImpersonation(r.Header.Get("Authorization")) || refreshCookieIsImpersonation(r) {
-		slog.Warn("Refresh rejected: impersonation session cannot be refreshed")
+		slog.WarnContext(r.Context(), "Refresh rejected: impersonation session cannot be refreshed")
 		http.Error(w, ErrImpersonationTokenCannotRefresh.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -445,7 +454,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken, err := api.refreshTokenRegistry.GetByTokenHash(r.Context(), tokenHash)
 	if err != nil {
-		slog.Warn("Refresh token not found", "error", err)
+		slog.WarnContext(r.Context(), "Refresh token not found", "error", err)
 		clearRefreshCookie(w, r)
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
@@ -465,13 +474,12 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// branch below so the response is opaque to the attacker.
 	if refreshToken.RevokedAt != nil {
 		if err := api.refreshTokenRegistry.RevokeByUserID(r.Context(), refreshToken.UserID); err != nil {
-			slog.Error("Failed to revoke all sessions on refresh-token reuse", "user_id", refreshToken.UserID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to revoke all sessions on refresh-token reuse", "user_id", refreshToken.UserID, "error", err)
 		}
-		slog.Warn("Refresh token reuse detected",
+		slog.WarnContext(r.Context(), "Refresh token reuse detected",
 			"user_id", refreshToken.UserID,
 			"token_id", refreshToken.ID,
-			"ip", clientIPTruncated(r),
-			"request_id", middleware.GetReqID(r.Context()))
+			"ip", clientIPTruncated(r))
 		uid := refreshToken.UserID
 		tid := refreshToken.TenantID
 		api.logAuth(r.Context(), "refresh_token_reuse_detected", &uid, &tid, false, r, nil)
@@ -481,7 +489,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	} else if !refreshToken.IsValid() {
 		// Genuinely expired (RevokedAt == nil, past ExpiresAt): no theft, no
 		// cascade — keep the original behaviour and just clear the cookie.
-		slog.Warn("Expired or revoked refresh token", "token_id", refreshToken.ID)
+		slog.WarnContext(r.Context(), "Expired or revoked refresh token", "token_id", refreshToken.ID)
 		clearRefreshCookie(w, r)
 		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
 		return
@@ -489,9 +497,22 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 
 	user, err := api.userRegistry.Get(r.Context(), refreshToken.UserID)
 	if err != nil || !user.IsActive {
-		slog.Warn("Refresh token for invalid/inactive user", "user_id", refreshToken.UserID)
+		slog.WarnContext(r.Context(), "Refresh token for invalid/inactive user", "user_id", refreshToken.UserID)
 		clearRefreshCookie(w, r)
 		http.Error(w, "User not found or inactive", http.StatusUnauthorized)
+		return
+	}
+
+	// A suspended tenant's sessions end (#1037). Suspending revokes the
+	// refresh tokens too; this refuses one that the revocation missed.
+	if active, tenantErr := userTenantIsActive(r.Context(), api.tenantRegistry, user); tenantErr != nil {
+		slog.ErrorContext(r.Context(), "Failed to check the tenant status on refresh", "user_id", user.ID, "error", tenantErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if !active {
+		slog.WarnContext(r.Context(), "Refresh refused: the user's tenant is not active", "user_id", user.ID, "tenant_id", user.TenantID)
+		clearRefreshCookie(w, r)
+		http.Error(w, tenantSuspendedMessage, http.StatusForbidden)
 		return
 	}
 
@@ -502,9 +523,9 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		if blErr != nil {
 			// Fail-open: consistent with checkTokenBlacklist in jwt_middleware.go.
 			// A Redis outage should not lock users out of the refresh flow.
-			slog.Error("Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
+			slog.ErrorContext(r.Context(), "Failed to check user blacklist on refresh", "user_id", user.ID, "error", blErr)
 		} else if blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix() {
-			slog.Warn("Blacklisted user attempted token refresh with pre-change refresh token", "user_id", user.ID)
+			slog.WarnContext(r.Context(), "Blacklisted user attempted token refresh with pre-change refresh token", "user_id", user.ID)
 			clearRefreshCookie(w, r)
 			http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 			return
@@ -526,7 +547,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	//      replay of it trips the theft cascade.
 	newRTI, newRawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("Failed to issue rotated refresh token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to issue rotated refresh token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to rotate session", http.StatusInternalServerError)
 		return
 	}
@@ -538,7 +559,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// revokeAllOtherSessions nuke the caller's own session.
 	accessTokenString, _, err := api.issueAccessToken(r.Context(), user, newRTI)
 	if err != nil {
-		slog.Error("Failed to generate access token on refresh", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to generate access token on refresh", "user_id", user.ID, "error", err)
 		// Roll back the freshly-persisted row so a failed mint doesn't leave
 		// an orphaned valid refresh row with no cookie ever handed out.
 		api.rollbackRefreshToken(r.Context(), user.ID, newRTI)
@@ -554,7 +575,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// nil on a fresh row too, so a freshly-rotated session reads the same as
 	// a freshly-logged-in one.
 	if err := api.refreshTokenRegistry.RevokeByID(r.Context(), user.ID, refreshToken.ID); err != nil {
-		slog.Error("Failed to revoke consumed refresh token (rotation partially completed)",
+		slog.ErrorContext(r.Context(), "Failed to revoke consumed refresh token (rotation partially completed)",
 			"old_token_id", refreshToken.ID, "new_token_id", newRTI, "user_id", user.ID, "error", err)
 	}
 
@@ -571,7 +592,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// Reuse the freshly-minted access-token claim instead of doing a
 	// second SystemAdminGrantRegistry.Exists lookup on the hot refresh
 	// path.
-	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
+	populateUserSystemAdminFlagFromAccessToken(r.Context(), accessTokenString, user)
 
 	// Login, logout, MFA and reuse detection each leave a row; a successful
 	// rotation did not, so a session kept alive for weeks through rotation had
@@ -753,7 +774,7 @@ func (api *AuthAPI) blacklistAccessToken(ctx context.Context, authHeader string)
 		expiresAt = maxExpiry
 	}
 	if err := api.blacklistService.BlacklistToken(ctx, jti, expiresAt); err != nil {
-		slog.Error("Failed to blacklist access token", "error", err)
+		slog.ErrorContext(ctx, "Failed to blacklist access token", "error", err)
 	}
 }
 
@@ -777,7 +798,7 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 	now := time.Now()
 	rt.RevokedAt = &now
 	if _, err := api.refreshTokenRegistry.Update(ctx, *rt); err != nil {
-		slog.Error("Failed to revoke refresh token", "token_id", rt.ID, "error", err)
+		slog.ErrorContext(ctx, "Failed to revoke refresh token", "token_id", rt.ID, "error", err)
 	}
 }
 
@@ -792,11 +813,11 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 // shape under the new model) don't double-revoke a non-existent
 // refresh-token row. Returns true when the cookie is the legacy
 // marker shape so the caller skips its plain revoke path.
-func (api *AuthAPI) revokeImpersonationRefreshTokenIfMarker(cookieValue string) bool {
+func (api *AuthAPI) revokeImpersonationRefreshTokenIfMarker(ctx context.Context, cookieValue string) bool {
 	if !strings.HasPrefix(cookieValue, impersonationRefreshCookieMarker) {
 		return false
 	}
-	slog.Warn("Logout: ignoring legacy imp: marker cookie — cross-plane impersonation no longer plants it")
+	slog.WarnContext(ctx, "Logout: ignoring legacy imp: marker cookie — cross-plane impersonation no longer plants it")
 	return true
 }
 
@@ -835,7 +856,7 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	// being hashed against the refresh-token registry — the marker is
 	// not a real token and would never resolve to a row.
 	if cookie, err := r.Cookie(refreshTokenCookieName); err == nil {
-		if !api.revokeImpersonationRefreshTokenIfMarker(cookie.Value) {
+		if !api.revokeImpersonationRefreshTokenIfMarker(r.Context(), cookie.Value) {
 			api.revokeRefreshToken(r.Context(), cookie.Value)
 		}
 	}
@@ -847,7 +868,7 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	if userID != "" && api.csrfService != nil {
 		if csrfToken := r.Header.Get(csrfHeaderName); csrfToken != "" {
 			if err := api.csrfService.RevokeToken(r.Context(), userID, csrfToken); err != nil {
-				slog.Error("Failed to revoke CSRF token on logout", "user_id", userID, "error", err)
+				slog.ErrorContext(r.Context(), "Failed to revoke CSRF token on logout", "user_id", userID, "error", err)
 			}
 		}
 	}
@@ -932,7 +953,7 @@ func generateCSRFToken(ctx context.Context, csrfService csrf.Service, userID str
 	}
 	token, err := csrfService.GenerateToken(ctx, userID)
 	if err != nil {
-		slog.Error("Failed to generate CSRF token", "user_id", userID, "error", err)
+		slog.ErrorContext(ctx, "Failed to generate CSRF token", "user_id", userID, "error", err)
 		// Non-fatal: the middleware fails-open on storage errors.
 	}
 	return token
@@ -946,14 +967,14 @@ func (api *AuthAPI) writeCSRFHeader(w http.ResponseWriter, ctx context.Context, 
 	}
 	token, err := api.csrfService.GetToken(ctx, userID)
 	if err != nil {
-		slog.Error("Failed to get CSRF token for /auth/me", "user_id", userID, "error", err)
+		slog.ErrorContext(ctx, "Failed to get CSRF token for /auth/me", "user_id", userID, "error", err)
 		return
 	}
 	if token == "" {
 		// Token has expired or was lost — regenerate it.
 		token, err = api.csrfService.GenerateToken(ctx, userID)
 		if err != nil {
-			slog.Error("Failed to regenerate CSRF token for /auth/me", "user_id", userID, "error", err)
+			slog.ErrorContext(ctx, "Failed to regenerate CSRF token for /auth/me", "user_id", userID, "error", err)
 			return
 		}
 	}
@@ -980,6 +1001,11 @@ type AuthParams struct {
 	GroupMembershipRegistry registry.GroupMembershipRegistry
 	LoginEventRegistry      registry.LoginEventRegistry
 	MFARegistry             registry.UserMFASecretRegistry
+	// TenantRegistry lets the MFA and magic-link sign-ins, refresh and the
+	// authenticated /auth routes refuse a user whose tenant is not active
+	// (#1037). Nil skips the check where the request did not resolve to
+	// the user's tenant.
+	TenantRegistry registry.TenantRegistry
 	// SystemAdminGrantRegistry resolves the is_system_admin advisory
 	// FE claim baked into access tokens (#1784). May be nil — tokens
 	// then carry is_system_admin=false (FE renders the non-admin
@@ -1020,6 +1046,11 @@ type AuthParams struct {
 	// APITokenService revokes the user's personal API tokens on a password
 	// change and when MFA is disabled (#2808). Nil skips that step.
 	APITokenService *services.APITokenService
+
+	// SettingsRegistryFactory reads the recipient's UI language, so the
+	// password-changed and magic-link emails go out in it. Nil sends them in
+	// English.
+	SettingsRegistryFactory registry.SettingsRegistryFactory
 }
 
 // Auth sets up the authentication API routes.
@@ -1030,6 +1061,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		groupMembershipRegistry:  params.GroupMembershipRegistry,
 		loginEventRegistry:       params.LoginEventRegistry,
 		mfaRegistry:              params.MFARegistry,
+		tenantRegistry:           params.TenantRegistry,
 		systemAdminGrantRegistry: params.SystemAdminGrantRegistry,
 		blacklistService:         params.BlacklistService,
 		rateLimiter:              params.RateLimiter,
@@ -1045,9 +1077,14 @@ func Auth(params AuthParams) func(r chi.Router) {
 		accountDeletionService:   params.AccountDeletionService,
 		fileSigningService:       params.FileSigningService,
 		apiTokens:                params.APITokenService,
+		emailPrefs:               newAccountEmailPrefs(params.SettingsRegistryFactory),
 	}
 
-	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
+	jwtAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
+	activeTenant := requireActiveUserTenant(params.TenantRegistry)
+	requireAuth := func(next http.Handler) http.Handler {
+		return jwtAuth(activeTenant(next))
+	}
 	return func(r chi.Router) {
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login", api.login)
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login/mfa", api.loginMFA)
@@ -1107,10 +1144,12 @@ func Auth(params AuthParams) func(r chi.Router) {
 // handleUpdateCurrentUser allows an authenticated user to update their own profile.
 // Only safe fields (name, default_group_id) may be changed; email, role, tenant_id,
 // and is_active are always sourced from the authenticated session and cannot be
-// changed by this endpoint.
+// changed by this endpoint. A field left out of the body keeps its stored value.
 // @Summary Update current user profile
-// @Description Update the authenticated user's profile. The name field is required;
-// @Description default_group_id (#1263, #1592) is optional — send a group UUID the
+// @Description Update the authenticated user's profile. Both fields are optional and
+// @Description a field left out keeps its stored value. name, when sent, must not be
+// @Description blank (at most 100 characters).
+// @Description default_group_id (#1263, #1592): send a group UUID the
 // @Description user is a member of to set, or null to clear (only allowed when the
 // @Description user has zero memberships; otherwise rejected with 400). Email, role,
 // @Description tenant_id, and is_active are ignored even if submitted.
@@ -1135,8 +1174,11 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Only update the allowed field; all security-sensitive fields are preserved.
-	user.Name = req.Name
+	// Only the allowed fields are updated, and only when the body names them;
+	// all security-sensitive fields are preserved.
+	if req.NameSet {
+		user.Name = req.Name
+	}
 
 	if req.DefaultGroupIDSet {
 		if !api.applyDefaultGroupUpdate(w, r, user, &req) {
@@ -1146,7 +1188,7 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 
 	updated, err := api.userRegistry.Update(r.Context(), *user)
 	if err != nil {
-		slog.Error("Failed to update user profile", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update user profile", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
 		return
 	}
@@ -1172,7 +1214,7 @@ func (api *AuthAPI) handleUpdateCurrentUser(w http.ResponseWriter, r *http.Reque
 // Extracted from handleUpdateCurrentUser to stay under the nestif complexity budget.
 func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Request, user *models.User, req *jsonapi.UpdateProfileRequest) bool {
 	if api.groupMembershipRegistry == nil {
-		slog.Error("Default group preference requested but group membership registry is not configured",
+		slog.ErrorContext(r.Context(), "Default group preference requested but group membership registry is not configured",
 			"user_id", user.ID)
 		http.Error(w, "Group preferences are not available", http.StatusServiceUnavailable)
 		return false
@@ -1184,13 +1226,13 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		// fall back into the old "first group" tiebreaker.
 		memberships, err := api.groupMembershipRegistry.ListByUser(r.Context(), user.TenantID, user.ID)
 		if err != nil {
-			slog.Error("Failed to list memberships while clearing default_group_id",
+			slog.ErrorContext(r.Context(), "Failed to list memberships while clearing default_group_id",
 				"user_id", user.ID, "error", err)
 			http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
 			return false
 		}
 		if len(memberships) > 0 {
-			slog.Warn("User tried to clear default_group_id while having memberships",
+			slog.WarnContext(r.Context(), "User tried to clear default_group_id while having memberships",
 				"user_id", user.ID, "membership_count", len(memberships))
 			http.Error(w, "default_group_id cannot be cleared while you belong to at least one group", http.StatusBadRequest)
 			return false
@@ -1210,7 +1252,7 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 	case errors.Is(err, registry.ErrNotFound):
 		// Not a member of this group — the only genuinely "your request was
 		// wrong" path. Anything else below is an infrastructure failure.
-		slog.Warn("User tried to set default_group_id for a group they do not belong to",
+		slog.WarnContext(r.Context(), "User tried to set default_group_id for a group they do not belong to",
 			"user_id", user.ID, "group_id", *req.DefaultGroupID)
 		http.Error(w, "default_group_id must reference a group you belong to", http.StatusBadRequest)
 		return false
@@ -1218,7 +1260,7 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		// DB outage, RLS misconfiguration, etc. Returning 400 here would mask
 		// the outage and let the client report "you can't pick this group"
 		// when the real problem is server-side.
-		slog.Error("Failed to verify group membership for default_group_id update",
+		slog.ErrorContext(r.Context(), "Failed to verify group membership for default_group_id update",
 			"user_id", user.ID, "group_id", *req.DefaultGroupID, "error", err)
 		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
 		return false
@@ -1226,7 +1268,7 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		// Belt-and-braces: registries are expected to return ErrNotFound or a
 		// non-nil membership. A nil-nil pair would indicate a bug, not user
 		// error — bubble it up as 500 so it gets noticed.
-		slog.Error("Group membership lookup returned nil membership without an error",
+		slog.ErrorContext(r.Context(), "Group membership lookup returned nil membership without an error",
 			"user_id", user.ID, "group_id", *req.DefaultGroupID)
 		http.Error(w, "Failed to verify group membership", http.StatusInternalServerError)
 		return false
@@ -1235,7 +1277,7 @@ func (api *AuthAPI) applyDefaultGroupUpdate(w http.ResponseWriter, r *http.Reque
 		// exactly like "not a member": the user has no legitimate way to know a
 		// foreign tenant's group id, and a leaked/duplicated membership row must
 		// not become a cross-tenant write of default_group_id (#2112).
-		slog.Warn("User tried to set default_group_id for a group in another tenant",
+		slog.WarnContext(r.Context(), "User tried to set default_group_id for a group in another tenant",
 			"user_id", user.ID, "group_id", *req.DefaultGroupID,
 			"user_tenant_id", user.TenantID, "membership_tenant_id", membership.TenantID)
 		http.Error(w, "default_group_id must reference a group you belong to", http.StatusBadRequest)
@@ -1303,7 +1345,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 		// A wrong current password is a validation error, not an authentication failure —
 		// the user IS authenticated; they simply provided incorrect input.
 		if !user.CheckPassword(req.CurrentPassword) {
-			slog.Warn("Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
+			slog.WarnContext(r.Context(), "Password change failed: incorrect current password", "user_id", user.ID, "email", user.Email)
 			errMsg := "incorrect current password"
 			api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 			http.Error(w, "Current password is incorrect", http.StatusUnprocessableEntity)
@@ -1333,14 +1375,14 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 
 	// Apply the new password hash.
 	if err := user.SetPassword(req.NewPassword); err != nil {
-		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to hash new password", "user_id", user.ID, "error", err)
 		errMsg := "failed to hash new password"
 		api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Failed to process new password", http.StatusInternalServerError)
 		return
 	}
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("Failed to update user password", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update user password", "user_id", user.ID, "error", err)
 		errMsg := "failed to update user password"
 		api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, false, r, &errMsg)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
@@ -1351,7 +1393,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	// Revoke all refresh tokens for the user so existing sessions are invalidated.
 	if api.refreshTokenRegistry != nil {
 		if err := api.refreshTokenRegistry.RevokeByUserID(r.Context(), user.ID); err != nil {
-			slog.Error("Failed to revoke refresh tokens after password change", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to revoke refresh tokens after password change", "user_id", user.ID, "error", err)
 		}
 	}
 
@@ -1361,12 +1403,12 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}
 	if api.blacklistService != nil {
 		if err := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 2*accessTokenExpiration); err != nil {
-			slog.Error("Failed to blacklist user tokens after password change", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to blacklist user tokens after password change", "user_id", user.ID, "error", err)
 		}
 	}
-	slog.Info("Password changed successfully", "user_id", user.ID, "email", user.Email, "initial", initialSet)
+	slog.InfoContext(r.Context(), "Password changed successfully", "user_id", user.ID, "email", user.Email, "initial", initialSet)
 	api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, true, r, nil)
-	api.sendPasswordChangedNotification(user)
+	api.sendPasswordChangedNotification(r, user)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -1417,7 +1459,7 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if !user.CheckPassword(req.Password) {
-			slog.Warn("Account deletion failed: incorrect password", "user_id", user.ID, "tenant_id", user.TenantID)
+			slog.WarnContext(r.Context(), "Account deletion failed: incorrect password", "user_id", user.ID, "tenant_id", user.TenantID)
 			errMsg := "incorrect password"
 			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
 			_ = codedUnprocessableEntityError(w, r, ErrInvalidAccountDeletionPassword, "auth.delete.invalid_password")
@@ -1426,7 +1468,7 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 	}
 
 	if api.accountDeletionService == nil {
-		slog.Error("Account deletion service not configured", "user_id", user.ID)
+		slog.ErrorContext(r.Context(), "Account deletion service not configured", "user_id", user.ID)
 		http.Error(w, "Account deletion is not available", http.StatusInternalServerError)
 		return
 	}
@@ -1441,7 +1483,7 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
 			_ = renderEntityError(w, r, err)
 		default:
-			slog.Error("Account deletion failed", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Account deletion failed", "user_id", user.ID, "error", err)
 			errMsg := "account deletion failed"
 			api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, false, r, &errMsg)
 			http.Error(w, "Failed to delete account", http.StatusInternalServerError)
@@ -1453,7 +1495,7 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 	// access token cannot outlive the account — mirrors handleChangePassword.
 	if api.refreshTokenRegistry != nil {
 		if err := api.refreshTokenRegistry.RevokeByUserID(r.Context(), user.ID); err != nil {
-			slog.Error("Failed to revoke refresh tokens after account deletion", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to revoke refresh tokens after account deletion", "user_id", user.ID, "error", err)
 		}
 	}
 	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
@@ -1461,11 +1503,11 @@ func (api *AuthAPI) handleDeleteCurrentUser(w http.ResponseWriter, r *http.Reque
 	}
 	if api.blacklistService != nil {
 		if err := api.blacklistService.BlacklistUserTokens(r.Context(), user.ID, 2*accessTokenExpiration); err != nil {
-			slog.Error("Failed to blacklist user tokens after account deletion", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to blacklist user tokens after account deletion", "user_id", user.ID, "error", err)
 		}
 	}
 
-	slog.Info("Account deleted", "user_id", user.ID, "tenant_id", user.TenantID)
+	slog.InfoContext(r.Context(), "Account deleted", "user_id", user.ID, "tenant_id", user.TenantID)
 	api.logAuth(r.Context(), "account_deletion", &user.ID, &user.TenantID, true, r, nil)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1509,7 +1551,7 @@ func (api *AuthAPI) maybeIssueMFAChallenge(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	if err != nil {
-		slog.Error("MFA gate: failed to load user_mfa_secrets", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "MFA gate: failed to load user_mfa_secrets", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify MFA state", http.StatusInternalServerError)
 		return true
 	}
@@ -1519,7 +1561,7 @@ func (api *AuthAPI) maybeIssueMFAChallenge(w http.ResponseWriter, r *http.Reques
 
 	mfaToken, _, terr := api.issueMFAToken(user, method)
 	if terr != nil {
-		slog.Error("Failed to issue MFA challenge token", "user_id", user.ID, "error", terr)
+		slog.ErrorContext(r.Context(), "Failed to issue MFA challenge token", "user_id", user.ID, "error", terr)
 		http.Error(w, "Failed to start MFA challenge", http.StatusInternalServerError)
 		return true
 	}
@@ -1544,7 +1586,7 @@ func (api *AuthAPI) maybeRecordFailedLogin(ctx context.Context, email string) {
 		return
 	}
 	if _, _, err := api.rateLimiter.RecordFailedLogin(ctx, email); err != nil {
-		slog.Error("Failed to record failed login", "error", err)
+		slog.ErrorContext(ctx, "Failed to record failed login", "error", err)
 	}
 }
 
@@ -1599,7 +1641,7 @@ func (api *AuthAPI) recordLoginEventWithMethod(ctx context.Context, tenantID, em
 		// The tenant resolver always runs upstream — an empty tenant here
 		// is a bug, not a normal branch. Log and skip rather than write
 		// a row that violates the FK.
-		slog.Warn("Skipping login_event with empty tenant_id", "email", email, "outcome", outcome)
+		slog.WarnContext(ctx, "Skipping login_event with empty tenant_id", "email", email, "outcome", outcome)
 		return
 	}
 	event := models.LoginEvent{
@@ -1615,7 +1657,7 @@ func (api *AuthAPI) recordLoginEventWithMethod(ctx context.Context, tenantID, em
 		// Use Warn rather than Error — a missing audit row is bad for
 		// forensics but not for the user experience, and we don't want a
 		// noisy login flow on a momentary DB blip.
-		slog.Warn("Failed to record login event", "email", email, "outcome", outcome, "error", err)
+		slog.WarnContext(ctx, "Failed to record login event", "email", email, "outcome", outcome, "error", err)
 	}
 }
 
@@ -1647,7 +1689,7 @@ func (api *AuthAPI) issueAccessToken(ctx context.Context, user *models.User, rti
 	if api.systemAdminGrantRegistry != nil {
 		ok, err := api.systemAdminGrantRegistry.Exists(ctx, user.ID)
 		if err != nil {
-			slog.Warn("issueAccessToken: grant lookup failed; minting non-admin claim",
+			slog.WarnContext(ctx, "issueAccessToken: grant lookup failed; minting non-admin claim",
 				"user_id", user.ID, "error", err)
 		} else {
 			isAdmin = ok
@@ -1853,7 +1895,7 @@ func (api *AuthAPI) userFromBrowserSession(r *http.Request) (*models.User, error
 
 	// 1) Authorization: Bearer fast path.
 	if user, ok := api.userFromBearerHeader(r); ok {
-		return user, nil
+		return api.userWithActiveTenant(r, user)
 	}
 
 	// 2) Refresh-cookie path — the real browser navigation.
@@ -1884,10 +1926,23 @@ func (api *AuthAPI) userFromBrowserSession(r *http.Request) (*models.User, error
 		since, blacklisted, blErr := api.blacklistService.UserBlacklistedSince(r.Context(), user.ID)
 		switch {
 		case blErr != nil:
-			slog.Error("link-start: user blacklist check failed", "user_id", user.ID, "error", blErr)
+			slog.ErrorContext(r.Context(), "link-start: user blacklist check failed", "user_id", user.ID, "error", blErr)
 		case blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix():
 			return nil, errors.New("refresh token predates user blacklist cutoff")
 		}
+	}
+	return api.userWithActiveTenant(r, user)
+}
+
+// userWithActiveTenant returns the user when their tenant is active and an
+// error otherwise.
+func (api *AuthAPI) userWithActiveTenant(r *http.Request, user *models.User) (*models.User, error) {
+	active, err := userTenantIsActive(r.Context(), api.tenantRegistry, user)
+	if err != nil {
+		return nil, err
+	}
+	if !active {
+		return nil, errors.New("the user's tenant is not active")
 	}
 	return user, nil
 }
@@ -1902,8 +1957,8 @@ func (api *AuthAPI) rollbackRefreshToken(ctx context.Context, userID, rowID stri
 		return
 	}
 	if err := api.refreshTokenRegistry.RevokeByID(ctx, userID, rowID); err != nil {
-		slog.Error("Failed to roll back refresh token after access mint failure",
-			"user_id", userID, "row_id", rowID, "error", err)
+		slog.ErrorContext(ctx, "Failed to roll back refresh token after access mint failure",
+			"user_id", userID, "token_id", rowID, "error", err)
 	}
 }
 
@@ -1947,7 +2002,7 @@ func populateUserSystemAdminFlag(ctx context.Context, grants registry.SystemAdmi
 	}
 	ok, err := grants.Exists(ctx, user.ID)
 	if err != nil {
-		slog.Warn("populateUserSystemAdminFlag: grant lookup failed; emitting is_system_admin=false",
+		slog.WarnContext(ctx, "populateUserSystemAdminFlag: grant lookup failed; emitting is_system_admin=false",
 			"user_id", user.ID, "error", err)
 		user.IsSystemAdmin = false
 		return

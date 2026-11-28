@@ -73,6 +73,74 @@ definitions:
     required:
     - reason
     type: object
+  apiserver.AdminFailedJobBulkDiscardMeta:
+    properties:
+      by_type:
+        additionalProperties:
+          type: integer
+        description: ByType counts per job type; a type with none is left out.
+        type: object
+      discarded:
+        example: 12
+        type: integer
+      dry_run:
+        type: boolean
+    type: object
+  apiserver.AdminFailedJobBulkDiscardResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/apiserver.AdminFailedJobBulkDiscardMeta'
+    type: object
+  apiserver.AdminFailedJobListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/apiserver.AdminFailedJobResource'
+        type: array
+      meta:
+        $ref: '#/definitions/apiserver.FailedJobListMeta'
+    type: object
+  apiserver.AdminFailedJobResource:
+    properties:
+      attributes:
+        $ref: '#/definitions/apiserver.AdminFailedJobView'
+      id:
+        type: string
+      type:
+        example: failed_jobs
+        type: string
+    type: object
+  apiserver.AdminFailedJobView:
+    properties:
+      attempts:
+        example: 3
+        type: integer
+      created_at:
+        type: string
+      error:
+        type: string
+      failed_at:
+        type: string
+      group_id:
+        type: string
+      group_name:
+        type: string
+      group_slug:
+        type: string
+      job_type:
+        example: export
+        type: string
+      retryable:
+        type: boolean
+      tenant_id:
+        type: string
+      tenant_name:
+        type: string
+      title:
+        type: string
+      user_id:
+        type: string
+    type: object
   apiserver.AdminMemberEnvelope:
     properties:
       data:
@@ -117,6 +185,54 @@ definitions:
         type: string
     required:
     - reason
+    type: object
+  apiserver.AdminTenantCreateRequest:
+    properties:
+      domain:
+        description: Domain is an optional custom domain the tenant is reached on.
+        type: string
+      name:
+        description: Name is the tenant's display name (1 to 100 characters).
+        type: string
+      slug:
+        description: |-
+          Slug is generated from the name when empty: lowercase letters, digits
+          and hyphens, at most 50 characters.
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.TenantStatus'
+        description: Status defaults to active.
+        enum:
+        - active
+        - suspended
+        - inactive
+    type: object
+  apiserver.AdminTenantStatusRequest:
+    properties:
+      reason:
+        description: Reason is the operator's justification (1 to 500 characters).
+        type: string
+    type: object
+  apiserver.AdminTenantUpdateRequest:
+    properties:
+      domain:
+        description: Domain set to an empty string removes the custom domain.
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.TenantStatus'
+        description: |-
+          Status away from active ends the sessions of the tenant's users, as
+          POST /admin/tenants/{tenantID}/suspend does.
+        enum:
+        - active
+        - suspended
+        - inactive
     type: object
   apiserver.AdminUnblockRequest:
     properties:
@@ -313,6 +429,78 @@ definitions:
       password:
         type: string
     type: object
+  apiserver.FailedJobListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/apiserver.FailedJobResource'
+        type: array
+      meta:
+        $ref: '#/definitions/apiserver.FailedJobListMeta'
+    type: object
+  apiserver.FailedJobListMeta:
+    properties:
+      job_types:
+        items:
+          $ref: '#/definitions/apiserver.FailedJobTypeInfo'
+        type: array
+      page:
+        example: 1
+        type: integer
+      per_page:
+        example: 50
+        type: integer
+      total:
+        example: 3
+        type: integer
+      total_pages:
+        example: 1
+        type: integer
+    type: object
+  apiserver.FailedJobResource:
+    properties:
+      attributes:
+        $ref: '#/definitions/apiserver.FailedJobView'
+      id:
+        type: string
+      type:
+        example: failed_jobs
+        type: string
+    type: object
+  apiserver.FailedJobTypeInfo:
+    properties:
+      retryable:
+        type: boolean
+      type:
+        example: export
+        type: string
+    type: object
+  apiserver.FailedJobView:
+    properties:
+      attempts:
+        example: 3
+        type: integer
+      created_at:
+        type: string
+      error:
+        description: Error is the last error the job recorded.
+        type: string
+      failed_at:
+        type: string
+      job_type:
+        description: JobType is the worker type that ran the job.
+        example: export
+        type: string
+      retryable:
+        description: Retryable is false for a type whose jobs can only be discarded.
+        type: boolean
+      title:
+        description: 'Title names the job: an export''s description, a file''s title.'
+        type: string
+      user_id:
+        description: UserID is the member who started the job.
+        type: string
+    type: object
   apiserver.FeatureFlags:
     properties:
       currency_migration:
@@ -329,6 +517,14 @@ definitions:
           page), so it is exposed here on the public /feature-flags surface
           rather than the auth-gated /system endpoint. When false the FE hides
           the affordance and the /auth/magic-link routes return 404.
+        type: boolean
+      plans:
+        description: |-
+          Plans mirrors Params.PlansEnabled (#1389). The plans feature is
+          frozen, so the flag is off by default. When false the FE hides every
+          plan surface (plan badge, Upgrade links, the /plans page, the plan
+          part of the group settings card and the plan in the admin tenant
+          pages) and GET /g/{groupSlug}/plan reports the unlimited plan.
         type: boolean
       public_scan:
         description: |-
@@ -584,6 +780,62 @@ definitions:
       value:
         description: Value is the setting value to apply and is required when using
           the object envelope.
+    type: object
+  apiserver.PersonalDataExportDownloadURLResponse:
+    properties:
+      expires_at:
+        type: string
+      url:
+        description: |-
+          URL is relative to the server root and needs no bearer token. It is
+          bound to the session that asked for it.
+        type: string
+    type: object
+  apiserver.PersonalDataExportView:
+    properties:
+      completed_at:
+        description: CompletedAt is when the archive was finished; absent until then.
+        type: string
+      created_at:
+        description: CreatedAt is when the user requested it.
+        type: string
+      expires_at:
+        description: ExpiresAt is when the archive and this entry are deleted.
+        type: string
+      file_count:
+        type: integer
+      group_count:
+        type: integer
+      id:
+        type: string
+      item_count:
+        type: integer
+      size_bytes:
+        description: SizeBytes is the archive's size, 0 until it is finished.
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/models.PersonalDataExportStatus'
+        enum:
+        - pending
+        - in_progress
+        - completed
+        - failed
+    type: object
+  apiserver.PersonalDataExportsListResponse:
+    properties:
+      exports:
+        items:
+          $ref: '#/definitions/apiserver.PersonalDataExportView'
+        type: array
+      next_request_at:
+        description: |-
+          NextRequestAt is when the user may request a new export; absent when
+          they may now.
+        type: string
+      retention_days:
+        description: RetentionDays is how long a finished archive is kept.
+        type: integer
     type: object
   apiserver.RegisterRequest:
     properties:
@@ -890,6 +1142,12 @@ definitions:
     type: object
   jsonapi.AdminGroupMemberUser:
     properties:
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the member's profile photo, valid for the
+          operator and session that requested the list. Absent when the member
+          has none.
+        type: string
       email:
         type: string
       id:
@@ -992,6 +1250,11 @@ definitions:
     properties:
       active_session_count:
         type: integer
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the user's profile photo, valid for the
+          operator and session that requested it. Absent when the user has none.
+        type: string
       created_at:
         type: string
       email:
@@ -1035,6 +1298,12 @@ definitions:
     type: object
   jsonapi.AdminUserListItem:
     properties:
+      avatar_url:
+        description: |-
+          AvatarURL is a signed URL of the user's profile photo, valid for the
+          operator and session that requested the list. Absent when the user has
+          none.
+        type: string
       created_at:
         type: string
       email:
@@ -1424,6 +1693,8 @@ definitions:
         - lost
         - disposed
         - written_off
+        - donated
+        - stolen
         example: disposed
         type: string
     type: object
@@ -2166,7 +2437,19 @@ definitions:
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        description: |-
+          Fields are the values read, keyed by field name. Its document_type
+          classifies the scan as a whole; files is the per-file source, and
+          document_type is derived from it when the model gives none.
         type: object
+      files:
+        description: |-
+          Files holds one suggestion per input file the model said something
+          usable about, ordered by index; a file without one has no entry.
+          Absent when there are none.
+        items:
+          $ref: '#/definitions/jsonapi.CommodityScanFileGuess'
+        type: array
       items:
         description: |-
           Items is present only when the source described more than one
@@ -2184,6 +2467,22 @@ definitions:
           $ref: '#/definitions/jsonapi.CommodityScanWarning'
         type: array
     type: object
+  jsonapi.CommodityScanDocumentTypeGuess:
+    properties:
+      confidence:
+        example: 0.9
+        type: number
+      value:
+        enum:
+        - invoice
+        - receipt
+        - manual
+        - warranty
+        - photo
+        - other
+        example: invoice
+        type: string
+    type: object
   jsonapi.CommodityScanFieldGuess:
     properties:
       confidence:
@@ -2191,6 +2490,21 @@ definitions:
       value:
         description: Value is polymorphic — see the type-level doc comment.
         type: object
+    type: object
+  jsonapi.CommodityScanFileGuess:
+    properties:
+      document_type:
+        $ref: '#/definitions/jsonapi.CommodityScanDocumentTypeGuess'
+      index:
+        description: |-
+          Index is the file's position among the photos parts of the request,
+          counted from 0. An empty part the server skipped still counts.
+        example: 0
+        type: integer
+      title:
+        $ref: '#/definitions/jsonapi.CommodityScanTitleGuess'
+    required:
+    - index
     type: object
   jsonapi.CommodityScanItem:
     properties:
@@ -2217,6 +2531,16 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.CommodityScanResource'
+    type: object
+  jsonapi.CommodityScanTitleGuess:
+    properties:
+      confidence:
+        example: 0.8
+        type: number
+      value:
+        example: Bosch invoice, March 2024
+        maxLength: 120
+        type: string
     type: object
   jsonapi.CommodityScanWarning:
     properties:
@@ -2253,10 +2577,10 @@ definitions:
         type: string
       cost_amount:
         description: |-
-          CostAmount is the optional repair bill. Bare decimal.Decimal —
-          zero means "no cost recorded" (per the codebase's existing
-          price-field convention). Pair-validated with CostCurrency:
-          either both unset or both set.
+          CostAmount is the optional repair bill. Bare decimal.Decimal:
+          CostCurrency, not the amount, says whether a cost is recorded, so
+          0 with a currency is a free repair and 0 without one is no cost.
+          A non-zero amount needs a currency.
         type: number
       cost_currency:
         description: |-
@@ -2718,6 +3042,13 @@ definitions:
     properties:
       created_at:
         type: string
+      draft_count:
+        description: |-
+          DraftCount is the number of unfinished drafts with a value of the
+          field. Deleting the field takes the value out of them too.
+        example: 0
+        format: int64
+        type: integer
       item_count:
         description: |-
           ItemCount and TrashedItemCount are the items with a value of the
@@ -3099,12 +3430,52 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.FilesMeta'
     type: object
+  jsonapi.GroupCreateItemSetOutcome:
+    properties:
+      added:
+        example: true
+        type: boolean
+      created_custom_fields:
+        example: 8
+        format: int64
+        type: integer
+      created_item_types:
+        example: 7
+        format: int64
+        type: integer
+    type: object
   jsonapi.GroupDeleteRequest:
     properties:
       confirm_word:
         type: string
       password:
         type: string
+    type: object
+  jsonapi.GroupHiddenSectionsAttributes:
+    properties:
+      hidden_sections:
+        description: |-
+          HiddenSections is the full list of sections to hide: warranties,
+          maintenance, loans, upcoming. An empty list shows every section.
+          Unknown sections are refused and duplicates dropped.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
+    type: object
+  jsonapi.GroupHiddenSectionsData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.GroupHiddenSectionsAttributes'
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.GroupHiddenSectionsRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupHiddenSectionsData'
     type: object
   jsonapi.GroupInviteCreateAttrs:
     properties:
@@ -3368,6 +3739,13 @@ definitions:
     type: object
   jsonapi.IntakeCandidateReviewAttrs:
     properties:
+      accepted_custom_fields:
+        description: |-
+          AcceptedCustomFields are the IDs of the custom fields whose scanned
+          value goes into the draft; each must be one the scan read a value for.
+        items:
+          type: string
+        type: array
       accepted_fields:
         items:
           type: string
@@ -3836,6 +4214,268 @@ definitions:
       data:
         $ref: '#/definitions/jsonapi.InviteInfoData'
     type: object
+  jsonapi.ItemSetFieldView:
+    properties:
+      custom_field_id:
+        description: |-
+          CustomFieldID is the ID of the group's field; absent while missing or
+          taken.
+        example: 5d2e...
+        type: string
+      draft_count:
+        description: |-
+          DraftCount is the number of unfinished drafts with a value of the
+          field.
+        example: 0
+        format: int64
+        type: integer
+      field_type:
+        description: |-
+          FieldType is the type of the group's field, or the set's type for a
+          missing one.
+        example: select
+        type: string
+      item_count:
+        description: |-
+          ItemCount and TrashedItemCount count the items with a value of the
+          field, outside Trash and in it.
+        example: 0
+        format: int64
+        type: integer
+      keep_reason:
+        description: |-
+          KeepReason says why removing the set keeps a field the group has:
+          own or in_use (items or drafts have a value of it). Absent when the
+          field is removable or missing.
+        enum:
+        - own
+        - in_use
+        example: in_use
+        type: string
+      key:
+        description: Key identifies the field within the set.
+        example: condition
+        type: string
+      missing_templates:
+        description: |-
+          MissingTemplates counts the set's types in the group that do not offer
+          the field. Adding the set offers it on them; until then the set is
+          not complete.
+        example: 0
+        format: int64
+        type: integer
+      name:
+        description: |-
+          Name is the name of the group's field, which a member may have
+          changed, or the set's name for a field the group does not have.
+        example: Condition
+        type: string
+      removable:
+        description: Removable is true when removing the set deletes the field.
+        example: true
+        type: boolean
+      state:
+        description: State is missing, added, own or taken, as for an item type.
+        enum:
+        - missing
+        - added
+        - own
+        - taken
+        example: added
+        type: string
+      taken_by:
+        description: |-
+          TakenBy is the key of the set's field that has this field's name, for
+          a taken field.
+        example: signed
+        type: string
+      trashed_item_count:
+        example: 0
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemSetItemTypeView:
+    properties:
+      draft_count:
+        description: DraftCount is the number of unfinished drafts that have the type.
+        example: 0
+        format: int64
+        type: integer
+      icon:
+        example: coins
+        type: string
+      item_count:
+        example: 0
+        format: int64
+        type: integer
+      item_type_id:
+        description: |-
+          ItemTypeID is the ID of the group's type; absent while missing or
+          taken.
+        example: 8f1c...
+        type: string
+      keep_reason:
+        description: |-
+          KeepReason says why removing the set keeps a type the group has:
+          own (a member made it), in_use (items, in Trash or not, or drafts have
+          it) or last_type (a group keeps at least one type). Absent when the
+          type is removable or missing.
+        enum:
+        - own
+        - in_use
+        - last_type
+        example: in_use
+        type: string
+      key:
+        description: Key identifies the type within the set.
+        example: coins
+        type: string
+      name:
+        description: |-
+          Name is the name of the group's type, which a member may have changed,
+          or the set's name for a type the group does not have.
+        example: Coins
+        type: string
+      removable:
+        description: Removable is true when removing the set deletes the type.
+        example: true
+        type: boolean
+      state:
+        description: |-
+          State is missing when the group has no such type and adding the set
+          creates it, added when the set created the type, own when it is a
+          member's type of the same name, which the set uses and never deletes,
+          and taken when another type of the set was renamed to its name, so
+          adding cannot create it.
+        enum:
+        - missing
+        - added
+        - own
+        - taken
+        example: added
+        type: string
+      taken_by:
+        description: |-
+          TakenBy is the key of the set's type that has this type's name, for a
+          taken type.
+        example: coins
+        type: string
+      trashed_item_count:
+        example: 0
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemSetMeta:
+    properties:
+      added_templates:
+        description: |-
+          AddedTemplates counts the fields the add put on a type's template,
+          besides those of the fields it created.
+        example: 0
+        format: int64
+        type: integer
+      created_custom_fields:
+        example: 8
+        format: int64
+        type: integer
+      created_item_types:
+        example: 7
+        format: int64
+        type: integer
+      deleted_custom_fields:
+        items:
+          type: string
+        type: array
+      deleted_item_types:
+        description: DeletedItemTypes and DeletedCustomFields name what a remove deleted.
+        items:
+          type: string
+        type: array
+      kept_custom_fields:
+        items:
+          type: string
+        type: array
+      kept_item_types:
+        description: |-
+          KeptItemTypes and KeptCustomFields name what the remove request
+          listed but kept: an item started to use it since the confirmation,
+          or it became the group's last type.
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.ItemSetRemoveAttributes:
+    properties:
+      custom_field_ids:
+        items:
+          type: string
+        type: array
+      item_type_ids:
+        description: |-
+          ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,
+          by ID. It deletes those that are removable when it runs; one that
+          stopped being removable stays and is listed in meta, and an ID that
+          names no type or field of the set is ignored. Either list may be
+          empty.
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.ItemSetRemoveData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemSetRemoveAttributes'
+      type:
+        enum:
+        - item_sets
+        example: item_sets
+        type: string
+    type: object
+  jsonapi.ItemSetRemoveRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemSetRemoveData'
+    type: object
+  jsonapi.ItemSetResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemSetResponseData'
+      meta:
+        $ref: '#/definitions/jsonapi.ItemSetMeta'
+    type: object
+  jsonapi.ItemSetResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemSetView'
+      id:
+        example: collection
+        type: string
+      type:
+        enum:
+        - item_sets
+        example: item_sets
+        type: string
+    type: object
+  jsonapi.ItemSetView:
+    properties:
+      complete:
+        description: |-
+          Complete is true when adding the set has nothing left to do: the group
+          has every type and field of the set but those taken, and each of those
+          fields is offered on each of those types.
+        example: true
+        type: boolean
+      custom_fields:
+        items:
+          $ref: '#/definitions/jsonapi.ItemSetFieldView'
+        type: array
+      item_types:
+        description: ItemTypes and CustomFields list the set's entries in the set's
+          order.
+        items:
+          $ref: '#/definitions/jsonapi.ItemSetItemTypeView'
+        type: array
+    type: object
   jsonapi.ItemTypeDeleteMeta:
     properties:
       reassigned_items:
@@ -3922,6 +4562,13 @@ definitions:
         type: boolean
       created_at:
         type: string
+      draft_count:
+        description: |-
+          DraftCount is the number of unfinished drafts with this type.
+          Deleting the type moves them along with the items.
+        example: 0
+        format: int64
+        type: integer
       icon:
         example: laptop
         type: string
@@ -4022,6 +4669,14 @@ definitions:
     type: object
   jsonapi.LocationGroupAttributes:
     properties:
+      collection_set:
+        description: |-
+          CollectionSet, on create, adds the Collection set to the new group
+          (#1607): its item types and custom fields, as POST
+          /groups/{groupID}/collection-set does. It is not stored; the response
+          meta says whether the set was added. Create only: an update with the
+          attribute, true or false, is refused.
+        type: boolean
       description:
         description: |-
           Description is the free-form one-line subtitle surfaced on the
@@ -4036,10 +4691,29 @@ definitions:
           when nil. On update the handler rejects a change with 422 — a
           reprice-aware currency migration is tracked under #202.
         type: string
+      hidden_sections:
+        description: |-
+          HiddenSections lists the sections the group hides for all its
+          members: warranties, maintenance, loans, upcoming. Optional. On
+          create, absent means the group hides nothing; on update, absent
+          leaves the list as it is and a list replaces it. Unknown sections
+          are refused and duplicates dropped.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
       icon:
         type: string
       name:
         type: string
+    type: object
+  jsonapi.LocationGroupCreateMeta:
+    properties:
+      collection_set:
+        allOf:
+        - $ref: '#/definitions/jsonapi.GroupCreateItemSetOutcome'
+        description: |-
+          CollectionSet reports on adding the Collection set, when the request
+          had collection_set.
     type: object
   jsonapi.LocationGroupData:
     properties:
@@ -4062,6 +4736,12 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.LocationGroupResponseData'
+      meta:
+        allOf:
+        - $ref: '#/definitions/jsonapi.LocationGroupCreateMeta'
+        description: |-
+          Meta is set on a create that asked for extras such as the Collection
+          set.
     type: object
   jsonapi.LocationGroupResponseData:
     properties:
@@ -5641,6 +6321,17 @@ definitions:
         x-nullable: "true"
       registered_date:
         type: string
+      revision:
+        description: |-
+          Revision counts the writes to the item: a new item has revision 1, and
+          every registry write of a column an edit form sends back adds one (an
+          edit, a bulk change, the draft mark, a tag rename or delete, an item
+          type delete that moves the item, a currency migration). An edit form
+          sends the revision it was opened at with its save, and the save is
+          refused when the item was written since (registry.WithExpectedRevision),
+          so it cannot undo a change it never showed. Server-managed: Create and
+          Update ignore the caller's value.
+        type: integer
       sale_price:
         description: |-
           SalePrice is the realised proceeds for a `sold` transition. NULL
@@ -5823,10 +6514,10 @@ definitions:
         type: string
       cost_amount:
         description: |-
-          CostAmount is the optional repair bill. Bare decimal.Decimal —
-          zero means "no cost recorded" (per the codebase's existing
-          price-field convention). Pair-validated with CostCurrency:
-          either both unset or both set.
+          CostAmount is the optional repair bill. Bare decimal.Decimal:
+          CostCurrency, not the amount, says whether a cost is recorded, so
+          0 with a currency is a free repair and 0 without one is no cost.
+          A non-zero amount needs a currency.
         type: number
       cost_currency:
         description: |-
@@ -5892,6 +6583,8 @@ definitions:
     - lost
     - disposed
     - written_off
+    - donated
+    - stolen
     type: string
     x-enum-varnames:
     - CommodityStatusInUse
@@ -5899,6 +6592,8 @@ definitions:
     - CommodityStatusLost
     - CommodityStatusDisposed
     - CommodityStatusWrittenOff
+    - CommodityStatusDonated
+    - CommodityStatusStolen
   models.CurrencyMigration:
     properties:
       commodity_count:
@@ -6361,14 +7056,39 @@ definitions:
     - GroupRoleUser
     - GroupRoleAdmin
     - GroupRoleOwner
+  models.GroupSection:
+    enum:
+    - warranties
+    - maintenance
+    - loans
+    - upcoming
+    type: string
+    x-enum-varnames:
+    - GroupSectionWarranties
+    - GroupSectionMaintenance
+    - GroupSectionLoans
+    - GroupSectionUpcoming
   models.IntakeCandidate:
     properties:
+      accepted_custom_fields:
+        description: |-
+          AcceptedCustomFields are the IDs of the custom fields whose scanned
+          value goes into the draft.
+        items:
+          type: string
+        type: array
       accepted_fields:
         items:
           type: string
         type: array
       created_at:
         type: string
+      custom_fields:
+        allOf:
+        - $ref: '#/definitions/models.IntakeFields'
+        description: |-
+          CustomFields is what the scan read for the group's custom fields, by
+          field ID, a select field's value as its option ID.
       draft_id:
         description: |-
           DraftID is the draft made for the candidate. The draft can be
@@ -6583,6 +7303,15 @@ definitions:
           groups valued in different currencies. Admins change it via the group's
           update endpoint; changing it triggers a reprice of the group's commodities.
         type: string
+      hidden_sections:
+        description: |-
+          HiddenSections lists the sections the group hides for all its members
+          (see GroupSection). Empty for a group that hides nothing. Admins change
+          it through the group's update endpoints; every member reads it with the
+          group.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
       icon:
         description: |-
           Icon is an optional emoji from the curated set in
@@ -6725,6 +7454,18 @@ definitions:
       uuid:
         type: string
     type: object
+  models.PersonalDataExportStatus:
+    enum:
+    - pending
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - PersonalDataExportStatusPending
+    - PersonalDataExportStatusInProgress
+    - PersonalDataExportStatusCompleted
+    - PersonalDataExportStatusFailed
   models.Plan:
     properties:
       allows_api_access:
@@ -6936,6 +7677,13 @@ definitions:
         type: boolean
       theme:
         type: string
+      whatsNewLastSeenVersion:
+        description: |-
+          WhatsNewLastSeenVersion is the newest release the user has seen on the
+          What's new page. The app shows an unread dot while the build carries a
+          newer release, and writes the build's newest release here when the
+          page opens. Kept on the server so it follows the user across devices.
+        type: string
     type: object
   models.SupplyLink:
     properties:
@@ -7051,10 +7799,12 @@ definitions:
           AvatarPath is the blob key of the user's profile photo, or nil when they
           have none and the UI falls back to their initials (#1382).
 
-          The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
-          bust browser caches: replacing a photo writes a new key rather than
-          overwriting one, so nothing has to reason about cache headers to make the
-          new picture show up.
+          The key lives under the user's tenant and ends in a revision number and a
+          random suffix (`t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg`; a photo
+          with a flat `avatars/<user>/...` key works the same). Replacing a
+          photo writes a new key rather than overwriting one, so nothing has to
+          reason about cache headers to make the new picture show up, and a tenant
+          move copies the photo to a new key under the new tenant.
 
           Not user input: it is set by the avatar endpoints, which decide the key
           after validating and re-encoding what was uploaded. A client that could
@@ -7284,6 +8034,245 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Get debug information
+      tags:
+      - admin
+  /admin/failed-jobs:
+    get:
+      description: |-
+        Returns the background jobs that failed for good and were neither
+        retried nor discarded, across every tenant, newest failure first
+        (#1307). Each job is read from its type's own table; `id` is the row
+        id there. ?type limits the list to one job type, ?tenantID to one
+        tenant and ?failed_before to the jobs that failed before a time (a
+        job without a failure time counts from its creation), the jobs a bulk
+        discard with the same filter takes. `meta.job_types` lists the job
+        types with whether each can be retried. A personal data export
+        belongs to a user, not to a group; its title is the user's email
+        address.
+        An unknown ?type returns 400 with `failed_job.unknown_type`, a
+        ?failed_before that is not a date or an RFC 3339 time 400 with
+        `failed_job.invalid_failed_before`.
+      parameters:
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        - personal-data-export
+        in: query
+        name: type
+        type: string
+      - description: Tenant ID
+        in: query
+        name: tenantID
+        type: string
+      - description: 'Only jobs that failed before this time: a date (midnight UTC)
+          or an RFC 3339 time'
+        example: "2026-11-01"
+        in: query
+        name: failed_before
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminFailedJobListEnvelope'
+        "400":
+          description: Bad Request - unknown job type or unreadable failed_before
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List failed background jobs (admin)
+      tags:
+      - admin
+  /admin/failed-jobs/{jobType}/{jobID}/discard:
+    post:
+      description: |-
+        Marks the failed job discarded (#1307). It leaves the failed list and
+        the depth gauge but keeps its row and its error until the normal
+        cleanup removes it. Every job type can be discarded. Needs the
+        platform_admin role: a support_agent gets 403 `admin.role_required`.
+        404 `failed_job.unknown_type` for an unknown type, 404
+        `failed_job.not_found` when the job is not failed or was already
+        retried or discarded.
+      parameters:
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        - personal-data-export
+        in: path
+        name: jobType
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - account disabled, or not a platform_admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown type or no such failed job
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Discard a failed background job (admin)
+      tags:
+      - admin
+  /admin/failed-jobs/{jobType}/{jobID}/retry:
+    post:
+      description: |-
+        Puts the failed job back in its queue the way its type runs it again
+        (#1307): an export or import runs from the start, a thumbnail gets a
+        fresh set of attempts, an intake scan is due again at once, a personal
+        data export is built again from the start and kept until 7 days after
+        the build finishes; it does not count as a new request. A restore
+        and a currency migration cannot be retried (409
+        `failed_job.not_retryable`); discard them instead. 404
+        `failed_job.unknown_type` for an unknown type, 404
+        `failed_job.not_found` when the job is not failed or was already
+        retried or discarded.
+      parameters:
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        - personal-data-export
+        in: path
+        name: jobType
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown type or no such failed job
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - this type of job cannot be retried
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Retry a failed background job (admin)
+      tags:
+      - admin
+  /admin/failed-jobs/bulk-discard:
+    post:
+      description: |-
+        Marks discarded every failed job that failed before ?failed_before
+        (#2946), as the single discard does: the jobs leave the failed list
+        and the depth gauge and keep their rows and errors. A job without a
+        failure time counts from its creation. The filter is the list's:
+        ?type limits the discard to one job type and ?tenantID to one tenant,
+        and GET /admin/failed-jobs with the same query lists the jobs it
+        takes. ?dry_run=true only counts them. `meta.discarded` is how many
+        jobs were discarded; a job someone retried or discarded in the
+        meantime is not among them.
+        A discard writes one audit row that names the filter and the counts,
+        also when it is refused; a dry run writes none. Needs the
+        platform_admin role: a support_agent gets 403 `admin.role_required`.
+        A missing, unreadable or future ?failed_before returns 400
+        `failed_job.invalid_failed_before`, an unknown ?type 400
+        `failed_job.unknown_type`.
+      parameters:
+      - description: 'Discard the jobs that failed before this time: a date (midnight
+          UTC) or an RFC 3339 time, not in the future'
+        example: "2026-11-01"
+        in: query
+        name: failed_before
+        required: true
+        type: string
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        - personal-data-export
+        in: query
+        name: type
+        type: string
+      - description: Tenant ID
+        in: query
+        name: tenantID
+        type: string
+      - description: Count the jobs and discard nothing
+        in: query
+        name: dry_run
+        type: boolean
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminFailedJobBulkDiscardResponse'
+        "400":
+          description: Bad Request - missing, unreadable or future failed_before,
+            or unknown job type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - account disabled, or not a platform_admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Discard failed background jobs in bulk (admin)
       tags:
       - admin
   /admin/groups:
@@ -7684,7 +8673,99 @@ paths:
       summary: List tenants (admin)
       tags:
       - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.
+        A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+        A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the slug or the domain is taken
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid fields, or a reserved domain
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a tenant (admin)
+      tags:
+      - admin
   /admin/tenants/{tenantID}:
+    delete:
+      description: |-
+        Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.
+        It then deletes the tenant, its users, groups, items and files in the background with the rules of `inventario tenants delete`.
+        The stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.
+        A failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.
+        `confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.
+        Deleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: The tenant's slug, typed to confirm
+        in: query
+        name: confirm_slug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "202":
+          description: Accepted - the tenant is suspended and its deletion is running
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - the confirmation does not match, or
+            the tenant serves this host
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a tenant (admin)
+      tags:
+      - admin
     get:
       description: Returns the tenant row with computed user_count and group_count.
         No nested users or groups list — those live behind GET /admin/tenants/{tenantID}/users
@@ -7715,6 +8796,167 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Get tenant (admin)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Changes the fields the body sets to a value other than the stored one, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain. A body that changes nothing writes nothing.
+        A status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.
+        A change that takes the tenant serving this request off the request's host is refused with 422 `admin.tenant.serves_this_host`: a status away from active and,
+        with a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.
+        A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+        A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the slug or the domain is taken
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid fields, a reserved domain, or
+            the tenant serves this host
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a tenant (admin)
+      tags:
+      - admin
+  /admin/tenants/{tenantID}/reactivate:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Sets the tenant's status back to active. Sessions that the suspension ended stay ended: the users sign in again. Reactivating an active tenant returns 200 and changes nothing.
+        A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: Reason
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantStatusRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid reason
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Reactivate a tenant (admin)
+      tags:
+      - admin
+  /admin/tenants/{tenantID}/suspend:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Sets the tenant's status to suspended and ends the sessions of every user in it, the same teardown blocking a user runs: refresh tokens and personal API tokens are revoked and access tokens are refused.
+        While suspended, the tenant's users cannot sign in by any method and every request on the tenant's host is refused. Suspending a suspended tenant ends the sessions again and returns 200.
+        Suspending the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+        A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: Reason
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantStatusRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid reason, or the tenant serves
+            this host
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Suspend a tenant (admin)
       tags:
       - admin
   /admin/tenants/{tenantID}/users:
@@ -7852,6 +9094,10 @@ paths:
           description: Not Found - unknown user
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the user moved to another tenant meanwhile (user.tenant_changed)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Unprocessable Entity - self-block or admin-on-admin without
             force
@@ -7870,7 +9116,8 @@ paths:
         `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
         `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
         Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
-        `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+        `admin.impersonate.target_blocked` when the target account is blocked, `tenant.not_active` when the target's
+        tenant is suspended or inactive, and `admin.impersonate.nested`
         when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
         per-operator start rate limit (10/hour) is exceeded.
       parameters:
@@ -7908,8 +9155,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Unprocessable Entity - target is admin / blocked / nested impersonation
-            / reason too long
+          description: Unprocessable Entity - target is admin / blocked / in a tenant
+            that is not active / nested impersonation / reason too long
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
@@ -8012,6 +9259,10 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
           description: Not Found - unknown user
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the user moved to another tenant meanwhile (user.tenant_changed)
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -8318,6 +9569,10 @@ paths:
           description: Too Many Requests - account locked
           schema:
             type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
       summary: Verify a magic-link sign-in
       tags:
       - auth
@@ -8378,8 +9633,10 @@ paths:
       consumes:
       - application/json
       description: |-
-        Update the authenticated user's profile. The name field is required;
-        default_group_id (#1263, #1592) is optional — send a group UUID the
+        Update the authenticated user's profile. Both fields are optional and
+        a field left out keeps its stored value. name, when sent, must not be
+        blank (at most 100 characters).
+        default_group_id (#1263, #1592): send a group UUID the
         user is a member of to set, or null to clear (only allowed when the
         user has zero memberships; otherwise rejected with 400). Email, role,
         tenant_id, and is_active are ignored even if submitted.
@@ -8809,8 +10066,9 @@ paths:
   /avatars/{userID}:
     get:
       description: |-
-        Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+        Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
         they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+        A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
       parameters:
       - description: The user whose photo it is
         in: path
@@ -8825,7 +10083,10 @@ paths:
       - description: The user the URL was issued to
         in: query
         name: uid
-        required: true
+        type: string
+      - description: The back-office operator the URL was issued to
+        in: query
+        name: op
         type: string
       - description: The group the two users share
         in: query
@@ -9030,6 +10291,58 @@ paths:
       summary: Get supported currencies
       tags:
       - currencies
+  /data-exports/{id}:
+    get:
+      description: |-
+        Streams the tar.gz archive a signed URL from POST /users/me/data-exports/{id}/download-url points at. The URL is bound
+        to the session that asked for it and expires; an impersonation session is refused. Every download is recorded in the audit log.
+      parameters:
+      - description: Personal data export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The user the URL was issued to
+        in: query
+        name: uid
+        required: true
+        type: string
+      - description: Expiry, Unix seconds
+        in: query
+        name: exp
+        required: true
+        type: integer
+      - description: Signature
+        in: query
+        name: sig
+        required: true
+        type: string
+      produces:
+      - application/gzip
+      responses:
+        "200":
+          description: The archive
+          schema:
+            type: file
+        "401":
+          description: Invalid or expired URL
+          schema:
+            type: string
+        "403":
+          description: Impersonation session, or the user's tenant is not active
+          schema:
+            type: string
+        "404":
+          description: No such export, or it expired
+          schema:
+            type: string
+        "409":
+          description: The export is not finished
+          schema:
+            type: string
+      summary: Download a personal data export
+      tags:
+      - users-me
   /feature-flags:
     get:
       description: Returns the deployment-scoped feature-flag state. Public (no auth)
@@ -9284,6 +10597,11 @@ paths:
           description: Area not found
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: with strategy=unlink, an item
+            of the area was written meanwhile and kept changing on every retry'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Non-empty area (no strategy) or unknown strategy
           schema:
@@ -9382,8 +10700,8 @@ paths:
         name: type
         type: array
       - collectionFormat: multi
-        description: Filter by status (in_use, sold, lost, disposed, written_off);
-          repeat to OR
+        description: Filter by status (in_use, sold, lost, disposed, written_off,
+          donated, stolen); repeat to OR
         in: query
         items:
           type: string
@@ -9397,6 +10715,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: Only commodities in an area of this location; cannot be combined
+          with unassigned
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: Filter by seller ID; repeat for several (OR)
         in: query
@@ -9595,7 +10918,13 @@ paths:
     put:
       consumes:
       - application/vnd.api+json
-      description: Update a commodity
+      description: |-
+        Replace the item with the values sent. attributes.revision is the revision
+        the values were based on, as the client read it: when the item has been written
+        since (an edit, a bulk change, a tag rename), the save is refused with 409
+        commodity.revision_conflict and nothing is written, so it cannot undo that
+        write. Without it, or with 0, the save is not checked. The response carries
+        the item's new revision.
       parameters:
       - description: Group slug
         in: path
@@ -9622,6 +10951,11 @@ paths:
             $ref: '#/definitions/jsonapi.CommodityResponse'
         "404":
           description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item was written after the
+            revision sent'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -9666,6 +11000,11 @@ paths:
             $ref: '#/definitions/jsonapi.CommodityResponse'
         "404":
           description: Commodity or file not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item was written meanwhile
+            and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -10743,6 +12082,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: Only commodities in an area of this location; cannot be combined
+          with unassigned
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: Filter by seller ID; repeat for several (OR)
         in: query
@@ -11006,7 +12350,7 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+        The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;
         each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
       parameters:
       - description: Group slug
@@ -11066,8 +12410,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
-        unless delete_values=true; then its values are deleted with it, in the same transaction.
+        Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,
+        unless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.
       parameters:
       - description: Group slug
         in: path
@@ -11083,9 +12427,9 @@ paths:
         in: query
         name: delete_values
         type: boolean
-      - description: 'With delete_values=true: how many items the member confirmed
-          to lose a value. When another number of items has one, the delete is refused
-          with 409 custom_field.in_use and the counts in meta'
+      - description: 'With delete_values=true: how many items and drafts together
+          the member confirmed to lose a value. When another number has one, the delete
+          is refused with 409 custom_field.in_use and the counts'
         in: query
         name: expected_values
         type: integer
@@ -11093,7 +12437,8 @@ paths:
       - application/vnd.api+json
       responses:
         "200":
-          description: Deleted; meta.deleted_values counts the values removed
+          description: Deleted; meta.deleted_values counts the values removed, those
+            of drafts included
           schema:
             $ref: '#/definitions/jsonapi.CustomFieldDeleteResponse'
         "404":
@@ -11101,8 +12446,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "409":
-          description: Items have a value of the field and delete_values was not true,
-            or expected_values is not how many items have one
+          description: Items or drafts have a value of the field and delete_values
+            was not true, or expected_values is not how many have one
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -11788,6 +13133,114 @@ paths:
       summary: Import backup archive
       tags:
       - exports
+  /g/{groupSlug}/failed-jobs:
+    get:
+      description: |-
+        Returns the group's background jobs that failed for good and were
+        neither retried nor discarded, newest failure first (#1307). Group
+        admins only. ?type limits the list to one job type; an unknown type
+        returns 400 with `failed_job.unknown_type`. `meta.job_types` lists the
+        job types with whether each can be retried.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: query
+        name: type
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.FailedJobListEnvelope'
+        "400":
+          description: Bad Request - unknown job type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - group admins only
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List the group's failed background jobs
+      tags:
+      - failed-jobs
+  /g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry:
+    post:
+      description: |-
+        Puts the group's failed job back in its queue (#1307). Group admins
+        only. A restore and a currency migration cannot be retried (409
+        `failed_job.not_retryable`). 404 `failed_job.unknown_type` for an
+        unknown type, 404 `failed_job.not_found` when the group has no such
+        failed job, also one of another group.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: path
+        name: jobType
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - group admins only
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown type or no such failed job
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - this type of job cannot be retried
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Retry one of the group's failed background jobs
+      tags:
+      - failed-jobs
   /g/{groupSlug}/files:
     get:
       consumes:
@@ -11902,6 +13355,14 @@ paths:
         Move the file to Trash. It keeps its links, so restoring it
         puts it back where it was. An export bundle is deleted for
         good.
+
+        With unless_linked=true the file goes to Trash only when
+        nothing holds it: no link, or only links to items in Trash
+        (it then goes with the item linked first). The links are
+        checked and the file trashed in one transaction. A file that a
+        link holds, an export bundle included, stays and the answer is
+        409 file.linked; a file that is gone or in Trash already is a
+        404.
       parameters:
       - description: Group slug
         in: path
@@ -11913,13 +13374,26 @@ paths:
         name: fileID
         required: true
         type: string
+      - description: Keep the file when a link holds it
+        in: query
+        name: unless_linked
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:
         "204":
           description: No Content
         "404":
-          description: File not found
+          description: File not found, or in Trash already
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'file.linked: with unless_linked=true, a link holds the file,
+            so it stays'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: unless_linked is not a boolean
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a file
@@ -12116,6 +13590,11 @@ paths:
             $ref: '#/definitions/jsonapi.FileResponse'
         "404":
           description: File or link not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: the item that has the file as
+            its cover was written meanwhile and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -12853,7 +14332,7 @@ paths:
       - application/vnd.api+json
       description: |-
         The item types of the group: the built-in ones first in their fixed order, then the others by name.
-        Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+        Each carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.
       parameters:
       - description: Group slug
         in: path
@@ -12913,8 +14392,9 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
-        then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+        Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta
+        unless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,
+        and each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).
       parameters:
       - description: Group slug
         in: path
@@ -12942,8 +14422,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "409":
-          description: The type is in use and no reassign_to was given, or it is the
-            group's last type
+          description: Items or drafts have the type and no reassign_to was given,
+            or it is the group's last type
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -13190,6 +14670,11 @@ paths:
           description: No content
         "404":
           description: Location not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'commodity.revision_conflict: with strategy=unlink, an item
+            of the location was written meanwhile and kept changing on every retry'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -13473,9 +14958,9 @@ paths:
       - groups
   /g/{groupSlug}/plan:
     get:
-      description: 'Tenant plan (caps + gates) + current group usage (items, locations,
-        storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited.
-        Powers the GroupSettings Plan card (#1389 / #1537).'
+      description: Tenant plan (caps + gates) + current group usage (items, locations,
+        storage). Plan resolved from tenants.plan_id; unknown ids give unlimited,
+        as does any id while the plans feature flag is off (#1389).
       parameters:
       - description: Group slug
         in: path
@@ -13887,7 +15372,7 @@ paths:
         type: array
       - collectionFormat: multi
         description: 'Commodities only: filter by status (in_use, sold, lost, disposed,
-          written_off); repeat to OR'
+          written_off, donated, stolen); repeat to OR'
         in: query
         items:
           type: string
@@ -13902,6 +15387,11 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - description: 'Commodities only: only items in an area of this location; cannot
+          be combined with unassigned'
+        in: query
+        name: location_id
+        type: string
       - collectionFormat: multi
         description: 'Commodities only: filter by seller ID; repeat for several (OR)'
         in: query
@@ -14279,8 +15769,9 @@ paths:
       - settings
   /g/{groupSlug}/storage-usage:
     get:
-      description: Returns the per-group blob byte total with a per-category breakdown
-        and the active quota. Used by the Settings → Data & storage card.
+      description: |-
+        Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+        Each file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.
       parameters:
       - description: Group slug
         in: path
@@ -14437,6 +15928,10 @@ paths:
           description: Tag is in use; pass force=true to strip references
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a tag
       tags:
       - tags
@@ -14507,6 +16002,11 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: A new slug for an item tag, while a currency migration runs
+            in the group
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a tag
@@ -15075,7 +16575,9 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Upload a signed `.inb` backup file to be used for a restore operation.
+      description: |-
+        Upload a signed `.inb` backup file to be used for a restore operation.
+        A personal data export (see POST /users/me/data-exports) answers 422 restore.personal_data_export: it cannot be restored.
       parameters:
       - description: Group slug
         in: path
@@ -15132,8 +16634,9 @@ paths:
     post:
       consumes:
       - application/vnd.api+json
-      description: Creates a new location group with a random non-guessable slug.
-        The creator becomes the group admin.
+      description: |-
+        Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
+        collection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.
       parameters:
       - description: Group data
         in: body
@@ -15229,9 +16732,9 @@ paths:
     patch:
       consumes:
       - application/vnd.api+json
-      description: 'Updates a location group''s name, icon, and description. The group_currency
-        field is set once at creation and cannot be changed here — see issue #202
-        for the currency-migration tool. Requires group admin role.'
+      description: |-
+        Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+        The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
       parameters:
       - description: Group ID
         in: path
@@ -15264,6 +16767,165 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update group
+      tags:
+      - groups
+  /groups/{groupID}/collection-set:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+        A listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.
+        Types and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.
+        meta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: The item types and custom fields to delete, by ID
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ItemSetRemoveRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemSetResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: The body is missing or invalid, or the group is being deleted
+            (group.not_active)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Remove the Collection set from the group
+      tags:
+      - groups
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Lists the item types and custom fields of the Collection set (#1607) and, for each, whether the group has it:
+        missing (adding the set creates it), added (the set created it) or own (a member's type or field of the same name, which the set uses and never deletes).
+        Each one the group has carries its item counts and whether removing the set deletes it, or why it stays. Requires group membership.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemSetResponse'
+        "403":
+          description: Forbidden - not a group member
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get the group's Collection set
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Creates the item types Art, Books, Coins, Stamps, Records, Watches and Cards and the custom fields Condition, Catalog reference, Edition or variant, Signed, Provenance,
+        Certificate of authenticity, Appraised value and Appraisal date, and puts every field on the template of every one of those types.
+        A type or field the group already has under that name, ignoring case, is used instead of a new one. Adding again creates only what is missing, so a failed add is finished by repeating it.
+        The names are English; members rename them like any other. meta counts what the request created. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemSetResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The group has 100 item types (item_type.limit), or its types
+            or fields changed during the add twice (item_set.changed)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: The group is being deleted (group.not_active), or has 200 custom
+            fields (custom_field.limit_reached)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Add the Collection set to the group
+      tags:
+      - groups
+  /groups/{groupID}/hidden-sections:
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+        An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+        Unknown sections are refused; duplicates are dropped. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Hidden sections
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.GroupHiddenSectionsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Set the group's hidden sections
       tags:
       - groups
   /groups/{groupID}/invites:
@@ -15693,6 +17355,12 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/apiserver.RegisterRequest'
+      - description: The UI language the account registers in. The first of en, cs
+          or ru it names becomes the new account's language setting, which the verification
+          and welcome emails use.
+        in: header
+        name: Accept-Language
+        type: string
       produces:
       - application/json
       responses:
@@ -15922,6 +17590,94 @@ paths:
           schema:
             type: string
       summary: Revoke a personal API token
+      tags:
+      - users-me
+  /users/me/data-exports:
+    get:
+      description: |-
+        Returns the authenticated user's personal data exports (GDPR Art. 20), newest first, until each expires.
+        `next_request_at` is when a new export may be requested; it is absent when one may be requested now.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.PersonalDataExportsListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: List personal data exports
+      tags:
+      - users-me
+    post:
+      description: |-
+        Starts building a copy of the authenticated user's data: profile, settings, group memberships, and what they created in each group,
+        with the files they uploaded. The archive is a tar.gz with JSON documents; it is not a group backup and cannot be restored.
+        The export runs in the background and an email says when it is ready. One request is allowed per day: an earlier one answers 429
+        data_export.rate_limited with `retry_at` in the error meta and a Retry-After header. An impersonation session answers 403
+        data_export.impersonation_forbidden.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Requested
+          schema:
+            $ref: '#/definitions/apiserver.PersonalDataExportView'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Request a personal data export
+      tags:
+      - users-me
+  /users/me/data-exports/{id}/download-url:
+    post:
+      description: |-
+        Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only
+        for a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one
+        409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works
+        only with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403
+        data_export.session_required.
+      parameters:
+      - description: Personal data export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.PersonalDataExportDownloadURLResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a download URL for a personal data export
       tags:
       - users-me
   /users/me/login-history:

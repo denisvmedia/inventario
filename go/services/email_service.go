@@ -102,6 +102,13 @@ type EmailService interface {
 	// link.
 	SendItemReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, daysLeft int) error
 
+	// SendPersonalDataExportReadyEmail tells a user their personal data
+	// export is ready (#2177). settingsURL links to Account settings, where
+	// the download is; the email never links the archive itself, so a
+	// forwarded or leaked email does not hand it out. expiresAt is when the
+	// archive is deleted.
+	SendPersonalDataExportReadyEmail(ctx context.Context, to, name, settingsURL string, expiresAt time.Time) error
+
 	// SendFeedbackEmail requests delivery of an in-app feedback /
 	// support submission (#1387) to the configured support address.
 	// `to` is the operator-configured support inbox; `fromEmail` /
@@ -259,7 +266,10 @@ func (c *EmailConfig) normalize() {
 // and tests.
 //
 // SECURITY: By default, StubEmailService redacts sensitive tokens from URLs
-// before logging them. Full URL logging must be explicitly enabled.
+// before logging them. Full URL logging must be explicitly enabled. It logs
+// the recipient's address only for the sign-in, registration and recovery
+// emails, and never a name or an item's text (devdocs/logging.md, What never
+// goes into a log).
 type StubEmailService struct {
 	logEmailURLs bool
 }
@@ -289,50 +299,38 @@ func WithLogEmailURLs(enabled bool) StubEmailServiceOption {
 }
 
 // SendVerificationEmail logs a safe version of the verification URL instead of sending an email.
-func (s *StubEmailService) SendVerificationEmail(_ context.Context, to, name, verificationURL string) error {
-	attrs := []any{
-		"to", to,
-		"name", name,
-	}
+func (s *StubEmailService) SendVerificationEmail(ctx context.Context, to, _, verificationURL string) error {
+	attrs := []any{"email", to}
 	if s.logEmailURLs {
 		attrs = append(attrs, "url", verificationURL)
 	} else {
 		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(verificationURL))
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: verification link", attrs...)
+	slog.InfoContext(ctx, "STUB email: verification link", attrs...)
 	return nil
 }
 
 // SendPasswordResetEmail logs a safe version of the reset URL instead of sending an email.
-func (s *StubEmailService) SendPasswordResetEmail(_ context.Context, to, name, resetURL string) error {
-	attrs := []any{
-		"to", to,
-		"name", name,
-	}
+func (s *StubEmailService) SendPasswordResetEmail(ctx context.Context, to, _, resetURL string) error {
+	attrs := []any{"email", to}
 	if s.logEmailURLs {
 		attrs = append(attrs, "url", resetURL)
 	} else {
 		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(resetURL))
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: password-reset link", attrs...)
+	slog.InfoContext(ctx, "STUB email: password-reset link", attrs...)
 	return nil
 }
 
 // SendMagicLinkEmail logs a safe version of the sign-in URL instead of sending an email.
-func (s *StubEmailService) SendMagicLinkEmail(_ context.Context, to, name, signInURL string) error {
-	attrs := []any{
-		"to", to,
-		"name", name,
-	}
+func (s *StubEmailService) SendMagicLinkEmail(ctx context.Context, to, _, signInURL string) error {
+	attrs := []any{"email", to}
 	if s.logEmailURLs {
 		attrs = append(attrs, "url", signInURL)
 	} else {
 		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(signInURL))
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: magic-link sign-in link", attrs...)
+	slog.InfoContext(ctx, "STUB email: magic-link sign-in link", attrs...)
 	return nil
 }
 
@@ -351,36 +349,33 @@ func redactTokenFromURLForLogs(raw string) string {
 }
 
 // SendPasswordChangedEmail logs the password-changed notification event.
-func (s *StubEmailService) SendPasswordChangedEmail(_ context.Context, to, name string, changedAt time.Time) error {
-	slog.Info("STUB email: password changed notification",
-		"to", to,
-		"name", name,
+func (s *StubEmailService) SendPasswordChangedEmail(ctx context.Context, to, _ string, changedAt time.Time) error {
+	slog.InfoContext(ctx, "STUB email: password changed notification",
+		"email", to,
 		"changed_at", changedAt.UTC().Format(time.RFC3339),
 	)
 	return nil
 }
 
 // SendWelcomeEmail logs the welcome email event.
-func (s *StubEmailService) SendWelcomeEmail(_ context.Context, to, name string) error {
-	slog.Info("STUB email: welcome message",
-		"to", to,
-		"name", name,
-	)
+func (s *StubEmailService) SendWelcomeEmail(ctx context.Context, to, _ string) error {
+	slog.InfoContext(ctx, "STUB email: welcome message", "email", to)
 	return nil
 }
 
 // SendWarrantyReminderEmail logs the warranty reminder event without
 // dispatching anything externally — useful in tests and the
-// "stub" provider profile.
-func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name, commodityName, expiryDate, commodityURL string, thresholdDays int) error {
-	slog.Info("STUB email: warranty reminder",
-		"to", to,
-		"name", name,
-		"commodity_name", commodityName,
+// "stub" provider profile. The link is logged only when LogEmailURLs is
+// enabled, as for the other reminders.
+func (s *StubEmailService) SendWarrantyReminderEmail(ctx context.Context, _, _, _, expiryDate, commodityURL string, thresholdDays int) error {
+	attrs := []any{
 		"expiry_date", expiryDate,
-		"commodity_url", commodityURL,
 		"threshold_days", thresholdDays,
-	)
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "commodity_url", commodityURL)
+	}
+	slog.InfoContext(ctx, "STUB email: warranty reminder", attrs...)
 	return nil
 }
 
@@ -391,12 +386,8 @@ func (s *StubEmailService) SendWarrantyReminderEmail(_ context.Context, to, name
 // redacted form lands in the log (the URL itself carries no tokens,
 // but the convention is "internal paths stay off shared logs by
 // default" — matches the storage-quota stub).
-func (s *StubEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
+func (s *StubEmailService) SendLoanReminderEmail(ctx context.Context, _, _, _, _, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
 	attrs := []any{
-		"to", to,
-		"name", name,
-		"commodity_name", commodityName,
-		"borrower_name", borrowerName,
 		"lent_at", lentAt,
 		"due_back_at", dueBackAt,
 		"kind", kind,
@@ -407,15 +398,13 @@ func (s *StubEmailService) SendLoanReminderEmail(_ context.Context, to, name, co
 	} else {
 		attrs = append(attrs, "commodity_url_redacted", redactTokenFromURLForLogs(commodityURL))
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: loan reminder", attrs...)
+	slog.InfoContext(ctx, "STUB email: loan reminder", attrs...)
 	return nil
 }
 
 // SendWeeklyDigestEmail logs the weekly digest without sending anything.
-func (s *StubEmailService) SendWeeklyDigestEmail(_ context.Context, to, name string, digest WeeklyDigestEmail) error {
-	slog.Info("Stub email service: weekly digest",
-		"to", to, "name", name,
+func (s *StubEmailService) SendWeeklyDigestEmail(ctx context.Context, _, _ string, digest WeeklyDigestEmail) error {
+	slog.InfoContext(ctx, "STUB email: weekly digest",
 		"week_start", digest.WeekStart, "week_end", digest.WeekEnd,
 		"groups", len(digest.Groups), "upcoming", len(digest.Upcoming))
 	return nil
@@ -424,11 +413,8 @@ func (s *StubEmailService) SendWeeklyDigestEmail(_ context.Context, to, name str
 // SendStorageQuotaWarningEmail logs the storage quota warning event
 // without dispatching anything externally — useful in tests and the
 // "stub" provider profile.
-func (s *StubEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, name, groupName string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error {
+func (s *StubEmailService) SendStorageQuotaWarningEmail(ctx context.Context, _, _, _ string, thresholdPercent, usagePercent int, usedHuman, quotaHuman string, breakdownLines []string, filesURL, settingsURL string) error {
 	attrs := []any{
-		"to", to,
-		"name", name,
-		"group_name", groupName,
 		"threshold_percent", thresholdPercent,
 		"usage_percent", usagePercent,
 		"used", usedHuman,
@@ -438,47 +424,49 @@ func (s *StubEmailService) SendStorageQuotaWarningEmail(_ context.Context, to, n
 	if s.logEmailURLs {
 		attrs = append(attrs, "files_url", filesURL, "settings_url", settingsURL)
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: storage quota warning", attrs...)
+	slog.InfoContext(ctx, "STUB email: storage quota warning", attrs...)
 	return nil
 }
 
 // SendMaintenanceReminderEmail logs the maintenance reminder event
 // without dispatching anything externally — useful in tests and the
 // "stub" provider profile.
-func (s *StubEmailService) SendMaintenanceReminderEmail(_ context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error {
+func (s *StubEmailService) SendMaintenanceReminderEmail(ctx context.Context, _, _, _, _, dueDate, commodityURL string, thresholdDays int) error {
 	attrs := []any{
-		"to", to,
-		"name", name,
-		"commodity_name", commodityName,
-		"title", title,
 		"due_date", dueDate,
 		"threshold_days", thresholdDays,
 	}
 	if s.logEmailURLs {
 		attrs = append(attrs, "commodity_url", commodityURL)
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: maintenance reminder", attrs...)
+	slog.InfoContext(ctx, "STUB email: maintenance reminder", attrs...)
 	return nil
 }
 
 // SendItemReminderEmail logs the item reminder event without dispatching
 // anything externally.
-func (s *StubEmailService) SendItemReminderEmail(_ context.Context, to, name, commodityName, title, dueDate, commodityURL string, daysLeft int) error {
+func (s *StubEmailService) SendItemReminderEmail(ctx context.Context, _, _, _, _, dueDate, commodityURL string, daysLeft int) error {
 	attrs := []any{
-		"to", to,
-		"name", name,
-		"commodity_name", commodityName,
-		"title", title,
 		"due_date", dueDate,
 		"days_left", daysLeft,
 	}
 	if s.logEmailURLs {
 		attrs = append(attrs, "commodity_url", commodityURL)
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: item reminder", attrs...)
+	slog.InfoContext(ctx, "STUB email: item reminder", attrs...)
+	return nil
+}
+
+// SendPersonalDataExportReadyEmail logs the export-ready event without
+// dispatching anything externally.
+func (s *StubEmailService) SendPersonalDataExportReadyEmail(ctx context.Context, _, _, settingsURL string, expiresAt time.Time) error {
+	attrs := []any{
+		"expires_at", expiresAt.UTC().Format(time.RFC3339),
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "settings_url", settingsURL)
+	}
+	slog.InfoContext(ctx, "STUB email: personal data export ready", attrs...)
 	return nil
 }
 
@@ -490,9 +478,8 @@ func (s *StubEmailService) SendItemReminderEmail(_ context.Context, to, name, co
 // retaining when the stub is just a no-op sender. The handler still
 // logs the structured user_id at INFO when the request is accepted —
 // the audit trail lives there, not here.
-func (s *StubEmailService) SendFeedbackEmail(_ context.Context, to, _, _, _, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
-	slog.Info("STUB email: feedback submission",
-		"to", to,
+func (s *StubEmailService) SendFeedbackEmail(ctx context.Context, _, _, _, _, feedbackType, message, replyToEmail string, diagnosticsLines []string) error {
+	slog.InfoContext(ctx, "STUB email: feedback submission",
 		"feedback_type", feedbackType,
 		"has_reply_to", strings.TrimSpace(replyToEmail) != "",
 		"message_chars", len(message),
@@ -503,11 +490,8 @@ func (s *StubEmailService) SendFeedbackEmail(_ context.Context, to, _, _, _, fee
 
 // SendGroupInviteEmail logs the group-invite event without dispatching
 // anything externally.
-func (s *StubEmailService) SendGroupInviteEmail(_ context.Context, to, inviterName, groupName, role, inviteURL string, expiresAt time.Time) error {
+func (s *StubEmailService) SendGroupInviteEmail(ctx context.Context, _, _, _, role, inviteURL string, expiresAt time.Time) error {
 	attrs := []any{
-		"to", to,
-		"inviter_name", inviterName,
-		"group_name", groupName,
 		"role", role,
 		"expires_at", expiresAt.UTC().Format(time.RFC3339),
 	}
@@ -516,7 +500,6 @@ func (s *StubEmailService) SendGroupInviteEmail(_ context.Context, to, inviterNa
 	} else {
 		attrs = append(attrs, "url_redacted", redactTokenFromURLForLogs(inviteURL))
 	}
-	//nolint:sloglint // structured fields are constructed dynamically.
-	slog.Info("STUB email: group invite", attrs...)
+	slog.InfoContext(ctx, "STUB email: group invite", attrs...)
 	return nil
 }

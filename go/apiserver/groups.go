@@ -54,6 +54,9 @@ type groupsAPI struct {
 	// fileSigningService signs the avatar_url each member carries in the
 	// members list. Nil leaves it out and the UI shows initials.
 	fileSigningService *services.FileSigningService
+	// factorySet builds the group-scoped item type and custom field
+	// registries the Collection set writes through (#1607).
+	factorySet *registry.FactorySet
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -92,7 +95,7 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 					http.Error(w, "Group not found", http.StatusNotFound)
 					return
 				}
-				slog.Error("GroupSlugResolverMiddleware: GetGroupBySlug failed", "slug", slug, "tenant_id", user.TenantID, "error", err)
+				slog.ErrorContext(r.Context(), "GroupSlugResolverMiddleware: GetGroupBySlug failed", "group_slug", slug, "tenant_id", user.TenantID, "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
@@ -114,7 +117,7 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 
 			isMember, err := groupService.CheckGroupMembership(r.Context(), group.ID, user.ID)
 			if err != nil {
-				slog.Error("GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
+				slog.ErrorContext(r.Context(), "GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
@@ -251,7 +254,7 @@ func requireGroupRole(groupService *services.GroupService, minRole models.GroupR
 				// Treat infrastructure failures as 500 — same posture as
 				// GroupSlugResolverMiddleware. Masking a DB outage as a
 				// 403 hides incidents and confuses oncall debugging.
-				slog.Error("requireGroupRole: role lookup failed",
+				slog.ErrorContext(r.Context(), "requireGroupRole: role lookup failed",
 					"group_id", group.ID,
 					"user_id", user.ID,
 					"min_role", minRole,
@@ -316,6 +319,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 		publicBaseURL:      strings.TrimSpace(params.PublicURL),
 		avatarService:      services.NewAvatarService(params.FactorySet, params.UploadLocation),
 		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
+		factorySet:         params.FactorySet,
 	}
 	return func(r chi.Router) {
 		r.Use(apiTokenAllowlist(groupsAPITokenRoutes()))
@@ -329,6 +333,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 
 			r.Get("/", api.getGroup)
 			r.Get("/members", api.listMembers)
+			r.Get("/collection-set", api.getCollectionSet)
 			// A member's photo is readable by anyone in the group, which is the
 			// check this subtree already applies. Mounted here rather than under
 			// a bare user id so the authorization rule has somewhere to live.
@@ -344,6 +349,9 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 			r.Group(func(r chi.Router) {
 				r.Use(requireGroupAdmin(groupService))
 				r.Patch("/", api.updateGroup)
+				r.Put("/hidden-sections", api.setHiddenSections)
+				r.Post("/collection-set", api.addCollectionSet)
+				r.Delete("/collection-set", api.removeCollectionSet)
 				r.Delete("/members/{memberUserID}", api.removeMember)
 				r.Patch("/members/{memberUserID}", api.updateMemberRole)
 				r.Post("/invites", api.createInvite)
@@ -363,10 +371,11 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 }
 
 // groupsAPITokenRoutes lists the /groups routes a personal API token may use:
-// the group list, one group, its members and a member's photo, all GET. The
-// rest of /groups refuses tokens, the admin subtree in particular, because it
-// returns invite links that any account in the tenant can redeem. The
-// handlers here are never called; only the patterns are matched.
+// the group list, one group, its members, a member's photo and the group's
+// Collection set, all GET. The rest of /groups refuses tokens, the admin
+// subtree in particular, because it returns invite links that any account in
+// the tenant can redeem. The handlers here are never called; only the
+// patterns are matched.
 func groupsAPITokenRoutes() chi.Routes {
 	allowed := chi.NewRouter()
 	never := func(http.ResponseWriter, *http.Request) {}
@@ -374,6 +383,7 @@ func groupsAPITokenRoutes() chi.Routes {
 	allowed.Get("/{groupID}", never)
 	allowed.Get("/{groupID}/members", never)
 	allowed.Get("/{groupID}/members/{memberUserID}/avatar", never)
+	allowed.Get("/{groupID}/collection-set", never)
 	return allowed
 }
 
@@ -444,7 +454,8 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 
 // createGroup creates a new location group.
 // @Summary Create a group
-// @Description Creates a new location group with a random non-guessable slug. The creator becomes the group admin.
+// @Description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
+// @Description collection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -476,13 +487,16 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 		groupCurrency = *attrs.GroupCurrency
 	}
 
-	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, attrs.Description, groupCurrency)
+	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, attrs.Description, groupCurrency, groupOptions(attrs)...)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
 	}
 
 	resp := jsonapi.NewLocationGroupResponse(group).WithStatusCode(http.StatusCreated)
+	if attrs.CollectionSet != nil && *attrs.CollectionSet {
+		resp.Meta = &jsonapi.LocationGroupCreateMeta{CollectionSet: api.addCollectionSetToNewGroup(r, group)}
+	}
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -537,7 +551,8 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 
 // updateGroup updates a group's metadata.
 // @Summary Update group
-// @Description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+// @Description Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+// @Description The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -572,7 +587,58 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon, attrs.Description)
+	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon, attrs.Description, groupOptions(attrs)...)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	resp := jsonapi.NewLocationGroupResponse(updated)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// groupOptions turns the optional settings of a create or update request
+// into service options. A setting the request leaves out is not touched.
+func groupOptions(attrs *jsonapi.LocationGroupAttributes) []services.GroupOption {
+	var opts []services.GroupOption
+	if attrs.HiddenSections != nil {
+		opts = append(opts, services.WithHiddenSections(*attrs.HiddenSections...))
+	}
+	return opts
+}
+
+// setHiddenSections replaces the sections a group hides for its members.
+// @Summary Set the group's hidden sections
+// @Description Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+// @Description An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+// @Description Unknown sections are refused; duplicates are dropped. Requires group admin role.
+// @Tags groups
+// @Accept json-api
+// @Produce json-api
+// @Param groupID path string true "Group ID"
+// @Param data body jsonapi.GroupHiddenSectionsRequest true "Hidden sections"
+// @Success 200 {object} jsonapi.LocationGroupResponse "OK"
+// @Failure 403 {string} string "Forbidden - not a group admin"
+// @Failure 404 {object} jsonapi.Errors "Group not found"
+// @Failure 422 {object} jsonapi.Errors "Validation error"
+// @Router /groups/{groupID}/hidden-sections [put].
+func (api *groupsAPI) setHiddenSections(w http.ResponseWriter, r *http.Request) {
+	group := groupFromContext(r.Context())
+	if group == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	var input jsonapi.GroupHiddenSectionsRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	updated, err := api.groupService.SetHiddenSections(r.Context(), group.ID, input.Data.Attributes.HiddenSections...)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -986,10 +1052,9 @@ func (api *groupsAPI) buildInviteURL(r *http.Request, token string) string {
 		if err == nil {
 			return built
 		}
-		// buildPublicURL already logs the misconfiguration. Fall
-		// through to the request-derived path so a bad operator config
-		// doesn't break the feature outright.
-		slog.Warn("Falling back to request-derived invite URL due to invalid public_url",
+		// Fall through to the request-derived path so a bad operator
+		// config doesn't break the feature outright.
+		slog.WarnContext(r.Context(), "Falling back to request-derived invite URL due to invalid public_url",
 			"public_url", api.publicBaseURL,
 			"error", err,
 		)
@@ -1037,10 +1102,9 @@ func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *mod
 		inviteURL,
 		invite.ExpiresAt,
 	); err != nil {
-		slog.Warn("Failed to enqueue group invite email",
+		slog.WarnContext(ctx, "Failed to enqueue group invite email",
 			"invite_id", invite.ID,
 			"group_id", group.ID,
-			"to", to,
 			"error", err,
 		)
 	}

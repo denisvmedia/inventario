@@ -55,17 +55,17 @@ func (s *GroupPurgeService) PurgeOnce(ctx context.Context) (purged, failed int, 
 		}
 		if err := s.purgeGroup(ctx, g); err != nil {
 			failed++
-			slog.Error("group purge failed",
+			slog.ErrorContext(ctx, "group purge failed",
 				"group_id", g.ID,
 				"tenant_id", g.TenantID,
 				"error", err)
 			continue
 		}
 		purged++
-		slog.Info("group purged",
+		slog.InfoContext(ctx, "group purged",
 			"group_id", g.ID,
 			"tenant_id", g.TenantID,
-			"slug", g.Slug)
+			"group_slug", g.Slug)
 	}
 	return purged, failed, nil
 }
@@ -134,7 +134,7 @@ func (s *GroupPurgeService) collectAffectedDefaultGroupUsers(ctx context.Context
 	}
 	members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, g.ID)
 	if err != nil {
-		slog.Warn("group purge: failed to list members for default-group recovery",
+		slog.WarnContext(ctx, "group purge: failed to list members for default-group recovery",
 			"group_id", g.ID, "error", err)
 		return nil
 	}
@@ -170,7 +170,7 @@ func (s *GroupPurgeService) repromoteDefaultGroupForUsers(ctx context.Context, u
 	}
 	for _, id := range userIDs {
 		if err := EnsureUserDefaultGroup(ctx, s.factorySet.UserRegistry, s.factorySet.GroupMembershipRegistry, id); err != nil {
-			slog.Warn("group purge: failed to re-promote default group",
+			slog.WarnContext(ctx, "group purge: failed to re-promote default group",
 				"user_id", id, "error", err)
 		}
 	}

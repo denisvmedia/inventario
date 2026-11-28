@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -18,6 +17,7 @@ import (
 	"ptah.run/dbschema"
 	"ptah.run/migration/migrator"
 
+	"go.5x5.cz/inventario/internal/urlerr"
 	"go.5x5.cz/inventario/schema/dsnutil"
 	"go.5x5.cz/inventario/schema/migrations"
 )
@@ -53,6 +53,12 @@ var ErrMissingExtension = errx.NewSentinel("required PostgreSQL extension is not
 // Ptah to discard that revision so the next attempt re-runs the migration.
 var ErrDirtyMigration = errx.NewSentinel("migration is recorded as dirty and cannot be retried automatically")
 
+// ErrDuplicateTenantDomains is returned by MigrateUp when two or more tenants
+// share a domain. The migration that makes tenants.domain unique (#2948)
+// cannot be applied to such a database, so MigrateUp stops before it applies
+// anything and names every shared domain with the slugs of its tenants.
+var ErrDuplicateTenantDomains = errx.NewSentinel("tenants share a domain")
+
 // requiredExtensions are the extensions the migration chain cannot run without.
 // pg_trgm supplies gin_trgm_ops for the trigram indexes on commodities, files and tags.
 var requiredExtensions = []string{"pg_trgm"}
@@ -63,6 +69,8 @@ type Args struct {
 
 // Migrator provides a simple interface to Ptah's migration capabilities
 type Migrator struct {
+	// dbURL is the DSN as given. The check and the log lines take it as it
+	// is; connURL gives the form the drivers get.
 	dbURL  string
 	logger *slog.Logger
 	migFS  fs.FS
@@ -74,7 +82,7 @@ type Migrator struct {
 //   - dbURL:    PostgreSQL database connection string
 func New(dbURL string, migFS fs.FS) *Migrator {
 	return &Migrator{
-		dbURL:  dsnutil.StripPGXPoolParams(dbURL),
+		dbURL:  dbURL,
 		logger: slog.Default(),
 		migFS:  migFS,
 	}
@@ -98,16 +106,21 @@ func (m *Migrator) SetLogger(logger *slog.Logger) *Migrator {
 
 // MigrateUp applies migrations using embedded migrations or file-based migrations
 func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
-	m.logger.Info("Applying migrations up", "db_url", m.dbURL, "dry_run", args.DryRun)
+	dsn, err := m.connURL()
+	if err != nil {
+		return err
+	}
+
+	m.logger.InfoContext(ctx, "Applying migrations up", "db_url", dsnutil.Redact(m.dbURL), "dry_run", args.DryRun)
 
 	if args.DryRun {
-		m.logger.Info("Dry run mode enabled - no actual changes will be made")
+		m.logger.InfoContext(ctx, "Dry run mode enabled - no actual changes will be made")
 	}
 
 	// Connect to database using standard ptah approach
 	// When using a shared pool, we still create a separate connection for migrations
 	// but the pool limits will prevent connection exhaustion
-	conn, err := dbschema.ConnectToDatabase(ctx, m.dbURL)
+	conn, err := dbschema.ConnectToDatabase(ctx, dsn)
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -116,6 +129,13 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	// A missing extension is a setup problem. Reporting it here names the extension
 	// rather than failing later on whatever operator class it supplied.
 	if err := m.verifyExtensions(ctx); err != nil {
+		return err
+	}
+
+	// Rows written before tenants.domain was unique can share a domain, and
+	// the unique index cannot be built over them. Reporting them here names
+	// the tenants to fix rather than failing on the index.
+	if err := m.verifyTenantDomainsUnique(ctx); err != nil {
 		return err
 	}
 
@@ -129,7 +149,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	fmt.Println("Using file-based migrations...")
 
 	if args.DryRun {
-		m.logger.Info("Dry run completed successfully")
+		m.logger.InfoContext(ctx, "Dry run completed successfully")
 		return nil
 	}
 
@@ -174,7 +194,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 		return errxtrace.Wrap("post-migrate schema verification failed", err)
 	}
 
-	m.logger.Info("Migrations completed successfully")
+	m.logger.InfoContext(ctx, "Migrations completed successfully")
 	return nil
 }
 
@@ -182,7 +202,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 // database does not have, as ErrMissingExtension. It reads pg_extension rather
 // than probing an operator class so the error names the thing to install.
 func (m *Migrator) verifyExtensions(ctx context.Context) error {
-	db, err := sql.Open("postgres", m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -205,7 +225,7 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 		return nil
 	}
 
-	m.logger.Error("required PostgreSQL extension is missing — bootstrap has not run against this database",
+	m.logger.ErrorContext(ctx, "required PostgreSQL extension is missing — bootstrap has not run against this database",
 		"missing", strings.Join(missing, ", "),
 	)
 
@@ -217,6 +237,66 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 	)
 }
 
+// verifyTenantDomainsUnique reports the domains that more than one tenant has,
+// as ErrDuplicateTenantDomains. A database without a tenants table has none.
+// The check runs on every MigrateUp: once the unique index exists it finds
+// nothing, and reading the tenants table costs little.
+func (m *Migrator) verifyTenantDomainsUnique(ctx context.Context) error {
+	db, err := m.open()
+	if err != nil {
+		return errxtrace.Wrap("failed to connect to database", err)
+	}
+	defer db.Close()
+
+	var hasTenants bool
+	if err := db.QueryRowContext(ctx, "SELECT to_regclass('tenants') IS NOT NULL").Scan(&hasTenants); err != nil {
+		return errxtrace.Wrap("failed to look for the tenants table", err)
+	}
+	if !hasTenants {
+		return nil
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT domain, string_agg(slug, ', ' ORDER BY slug)
+		FROM tenants
+		WHERE domain IS NOT NULL
+		GROUP BY domain
+		HAVING count(*) > 1
+		ORDER BY domain`)
+	if err != nil {
+		return errxtrace.Wrap("failed to look for tenants that share a domain", err)
+	}
+	defer rows.Close()
+
+	var shared []string
+	for rows.Next() {
+		var domain, slugs string
+		if err := rows.Scan(&domain, &slugs); err != nil {
+			return errxtrace.Wrap("failed to read a shared tenant domain", err)
+		}
+		shared = append(shared, fmt.Sprintf("%q (tenants %s)", domain, slugs))
+	}
+	if err := rows.Err(); err != nil {
+		return errxtrace.Wrap("failed to look for tenants that share a domain", err)
+	}
+	if len(shared) == 0 {
+		return nil
+	}
+
+	m.logger.ErrorContext(ctx, "tenants share a domain, so tenants.domain cannot be made unique",
+		"domains", strings.Join(shared, "; "),
+	)
+
+	return errxtrace.ClassifyNew(
+		fmt.Sprintf("tenants share a domain, so tenants.domain cannot be made unique: %s. "+
+			"Leave each domain with one tenant: give the others another domain or none, "+
+			"with `inventario tenants update <slug> --domain=<domain>` (`--domain=` removes it) "+
+			"or on the tenant's page in the back office, then run the migrations again",
+			strings.Join(shared, "; ")),
+		ErrDuplicateTenantDomains,
+	)
+}
+
 // VerifySchemaUpToDate opens its own connection to compare the binary's
 // embedded migrations against schema_migrations.version in the database.
 // It returns ErrSchemaLagsBinary when the DB is behind. Designed to be
@@ -224,7 +304,7 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 // docker-compose migrate container can't quietly leave the app running
 // against a half-migrated schema (#1655).
 func (m *Migrator) VerifySchemaUpToDate(ctx context.Context) error {
-	db, err := sql.Open("postgres", m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to open database", err)
 	}
@@ -395,7 +475,7 @@ func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) er
 	}
 
 	// Create direct database connection for drop operations
-	db, err := sql.Open("postgres", m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -469,7 +549,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 		return errxtrace.Wrap("failed to parse database DSN", err)
 	}
 
-	m.logger.Info("Preparing to drop database", "database", dbName, "dry_run", dryRun)
+	m.logger.InfoContext(ctx, "Preparing to drop database", "database", dbName, "dry_run", dryRun)
 
 	fmt.Printf("Target database: %s\n", dbName)
 	fmt.Println()
@@ -497,7 +577,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 	}
 
 	// Connect to the postgres database (not the target database) to perform the drop
-	db, err := sql.Open("postgres", adminDSN)
+	db, err := openDB(adminDSN)
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to PostgreSQL admin database", err)
 	}
@@ -633,7 +713,11 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 // parsePostgreSQLDSN parses a PostgreSQL DSN and returns the database name and an admin DSN
 // that connects to the 'postgres' database for administrative operations
 func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err error) {
-	parsed, err := url.Parse(m.dbURL)
+	dsn, err := m.connURL()
+	if err != nil {
+		return "", "", err
+	}
+	parsed, err := urlerr.Parse(dsn)
 	if err != nil {
 		return "", "", errxtrace.Wrap("failed to parse database URL", err)
 	}
@@ -655,4 +739,35 @@ func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err err
 	adminDSN = adminURL.String()
 
 	return dbName, adminDSN, nil
+}
+
+// connURL checks the DSN as given and returns it without the pgxpool query
+// parameters, which lib/pq and pgx.Connect would send to the server. The
+// check comes first: stripping re-encodes the query, and an "@" a password
+// spilled into it reads as %40 afterward.
+func (m *Migrator) connURL() (string, error) {
+	if err := urlerr.CheckDatabaseURL(m.dbURL); err != nil {
+		return "", err
+	}
+	return dsnutil.StripPGXPoolParams(m.dbURL), nil
+}
+
+// open opens the database at connURL with lib/pq.
+func (m *Migrator) open() (*sql.DB, error) {
+	dsn, err := m.connURL()
+	if err != nil {
+		return nil, err
+	}
+	return openDB(dsn)
+}
+
+// openDB opens dsn with lib/pq. lib/pq parses a URL DSN on first use and
+// returns the error of url.Parse, which quotes the DSN, password included.
+// Checking it here first returns that error without the DSN, and refuses a
+// DSN whose password spilled past the host (urlerr.CheckDatabaseURL).
+func openDB(dsn string) (*sql.DB, error) {
+	if err := urlerr.CheckDatabaseURL(dsn); err != nil {
+		return nil, err
+	}
+	return sql.Open("postgres", dsn)
 }

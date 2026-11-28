@@ -34,7 +34,8 @@ process.
 
 For the full architecture and developer guidance, read [AGENTS.md](AGENTS.md).
 Before touching anything under `frontend/src/`, also read
-[`devdocs/frontend/README.md`](devdocs/frontend/README.md).
+[`devdocs/frontend/README.md`](devdocs/frontend/README.md). Before adding or
+changing a log line in `go/`, read [`devdocs/logging.md`](devdocs/logging.md).
 
 ## Prerequisites
 
@@ -189,17 +190,20 @@ branch with no protection rule that set is empty, so `--auto` merges the moment
 it is enabled — before a single workflow reports. A patch bump that breaks the
 build would land unreviewed and untested (#1819).
 
-So today the workflow posts a notice and leaves bot pull requests for a human.
-To turn auto-merge back on, configure required checks on `master`; the workflow
-picks that up on its own, with no change here.
+`master` is guarded by a repository ruleset, not by classic branch protection.
+The gate (`.github/scripts/required-checks-configured.sh`) counts required
+checks from both, so patch updates auto-merge once the required checks pass.
+If a branch has no required checks, the workflow posts a notice and leaves the
+pull request for a human.
 
-`./scripts/set-branch-protection.sh` applies the set, and `--show` / `--remove`
-read it back and undo it. Choosing the contexts is the part that needs care, so
-the reasoning lives in the script next to the list rather than in someone's
-shell history: a job skipped by its `if:` reports `skipped` and passes, but a
-workflow skipped by a workflow-level `paths:` filter creates no check run at
-all, and requiring one of those blocks every unrelated pull request forever.
-See #2569 for how the eleven contexts were verified.
+`./scripts/set-branch-protection.sh` writes the required-check set into that
+ruleset, and `--show` prints the checks `master` requires. Choosing the
+contexts is the part that needs care, so the reasoning lives in the script next
+to the list rather than in someone's shell history: a job skipped by its `if:`
+reports `skipped` and passes, but a workflow skipped by a workflow-level
+`paths:` filter creates no check run at all, and requiring one of those blocks
+every unrelated pull request forever. See #2569 for how the twelve contexts
+were verified.
 
 ## GitHub Actions are pinned to commit SHAs
 
@@ -262,6 +266,16 @@ Skip it for refactors, test-only changes, CI plumbing and dependency bumps —
 they are in the git history, and a changelog nobody can skim is a changelog
 nobody reads. Write for the person who hits the problem, not for the reviewer:
 say what was wrong, not which function changed. Link the issue.
+
+The entries also render in the app, on the What's new page, which reads the
+file when the frontend is built. The heading must be spelled exactly
+`### Operators`, because that spelling decides that only system administrators
+see the section. The page renders inline code, bold, `[text](url)` links and
+list items that start with `-`, with indented continuation lines. Code fences,
+tables, nested lists, italics and reference-style links show as plain text. Relative links
+resolve against the repository's `blob/master`. A test in
+`frontend/src/lib/__tests__/changelog.test.ts` fails on a release heading or a
+section heading the page cannot read.
 
 ### Cutting a release
 

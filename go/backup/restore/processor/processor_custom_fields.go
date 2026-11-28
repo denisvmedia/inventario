@@ -153,6 +153,9 @@ func (w *inbWalker) restoreCustomField(reg registry.CustomFieldRegistry, index *
 	}
 
 	def := models.CustomFieldDefinition{Name: a.Name, Type: models.CustomFieldType(a.Type)}
+	if entry := models.ItemSetEntry(a.SetEntry); entry.IsValid() {
+		def.SetEntry = entry
+	}
 	for _, o := range a.Options {
 		def.Options = append(def.Options, models.CustomFieldOption{ID: o.ID, Label: o.Label})
 	}

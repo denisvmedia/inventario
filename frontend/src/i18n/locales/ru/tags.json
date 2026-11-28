@@ -32,7 +32,7 @@
     "cancel": "Отмена",
     "color": "Цвет",
     "create": "Создать тег",
-    "createError": "Не удалось создать тег: {{error}}",
+    "createError": "Не удалось создать тег.",
     "createSuccess": "Тег создан.",
     "createTitle": "Создание тега",
     "editTitle": "Редактирование тега",
@@ -43,7 +43,7 @@
     "slug": "Слаг",
     "slugHint": "Строчные буквы и цифры на любом языке, разделённые дефисами. Заполняется по названию; по нему тег привязан к предметам и файлам.",
     "slugPlaceholder": "кухня",
-    "updateError": "Не удалось обновить тег: {{error}}",
+    "updateError": "Не удалось обновить тег.",
     "updateSuccess": "Тег обновлён."
   },
   "inlineCreate": {
@@ -82,7 +82,7 @@
     "confirmAction": "Удалить",
     "confirmDescription": "Удалить тег «{{label}}» из этой группы. Это действие нельзя отменить.",
     "confirmTitle": "Удалить тег?",
-    "deleteError": "Не удалось удалить тег: {{error}}",
+    "deleteError": "Не удалось удалить тег.",
     "deleteSuccess": "Тег удалён.",
     "forceAction": "Удалить принудительно",
     "forceCancel": "Отмена",

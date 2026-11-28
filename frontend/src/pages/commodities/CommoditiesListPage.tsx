@@ -121,8 +121,10 @@ import {
 import { useCommoditySelection } from "@/features/commodities/selection"
 import { COMMODITIES_VIEW_MODE_KEY } from "@/features/commodities/viewMode"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
+import { addItemSlot } from "@/features/commodities/draft"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import type { IntakeSessionDetail } from "@/features/intake/api"
 import { useIntakeLimits } from "@/features/intake/hooks"
 import { useFileDrop } from "@/features/intake/useFileDrop"
@@ -171,6 +173,7 @@ export function CommoditiesListPage() {
   const { currentGroup } = useCurrentGroup()
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
+  const userId = useOptionalAuth()?.user?.id
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -192,6 +195,7 @@ export function CommoditiesListPage() {
   const types = query.types
   const statuses = query.statuses as CommodityStatusValue[]
   const areaId = query.areaId
+  const locationId = query.locationId
   const warrantyFilter = query.warrantyStatuses as CommodityWarrantyStatus[]
   const lentOutOnly = query.lentOut
   const unassignedOnly = query.unassigned
@@ -312,8 +316,7 @@ export function CommoditiesListPage() {
   // ---- Batch intake (#2810) ----------------------------------------------
   // Files dropped on the page, or picked with "Add from files", go to the
   // intake dialog, which uploads them and queues them for the AI scan.
-  const role = useMyGroupRole()
-  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const canWrite = useGroupPermissions().canEditContent
   const intakeLimits = useIntakeLimits(enabled && canWrite)
   const intakeEnabled = canWrite && !migrationLock.locked && !!intakeLimits.data?.enabled
   const [intakeOpen, setIntakeOpen] = useState(false)
@@ -342,6 +345,17 @@ export function CommoditiesListPage() {
 
   // ---- Dialogs -----------------------------------------------------------
   const [createOpen, setCreateOpen] = useState(false)
+  // Counts the openings of the create dialog: it moves on every open, close
+  // and unmount. An item made after its dialog closed (browser Back while
+  // the promotion runs) leaves the user where they went.
+  const createOpeningRef = useRef(0)
+  useEffect(() => {
+    const opening = createOpeningRef.current + 1
+    createOpeningRef.current = opening
+    return () => {
+      createOpeningRef.current = opening + 1
+    }
+  }, [createOpen])
   // /g/:slug/commodities/new mounts this same list page and is
   // expected to auto-open the create dialog (router comment, AppSidebar
   // Add-item entry, Dashboard mobile CTA all point here). Detect the
@@ -426,6 +440,16 @@ export function CommoditiesListPage() {
   function setAreaFilter(id: string) {
     updateQuery({ areaId: id })
   }
+  // A location keeps an area of that location and drops one elsewhere, and
+  // ends "No location": an item without an area is in no location.
+  function setLocationFilter(id: string) {
+    const area = areas.data?.find((a) => a.id === areaId)
+    updateQuery({
+      locationId: id,
+      areaId: id && area && area.location_id !== id ? "" : areaId,
+      unassigned: id ? false : unassignedOnly,
+    })
+  }
   function toggleSeller(id: string) {
     updateQuery({ sellerIds: toggled(query.sellerIds, id) })
   }
@@ -468,7 +492,10 @@ export function CommoditiesListPage() {
     updateQuery({ [key]: !query[key] })
   }
   function toggleUnassigned() {
-    updateQuery({ unassigned: !unassignedOnly })
+    updateQuery({
+      unassigned: !unassignedOnly,
+      locationId: unassignedOnly ? locationId : "",
+    })
   }
   function setViewMode(mode: ViewMode) {
     setStoredView(mode)
@@ -568,14 +595,16 @@ export function CommoditiesListPage() {
   // the just-created item front-and-centre so the user can immediately
   // attach files / fix typos. The list page is one back-button away.
   async function handleCreate(values: CreateCommodityRequest, draft?: DraftRef) {
+    const opening = createOpeningRef.current
     const created = await create.submit(values, draft)
     toast.success(t("commodities:toast.created"))
+    if (createOpeningRef.current !== opening) return created
     setCreateOpen(false)
     if (slug && created?.id) {
       navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`)
     }
-    // Return so the dialog can use the new id to upload + link any
-    // attachments collected on the Files step.
+    // The draft brought the Files step's attachments along. The dialog
+    // uses the returned id only when it has no draft (edit mode).
     return created
   }
 
@@ -626,18 +655,20 @@ export function CommoditiesListPage() {
                   {t("commodities:intake.addFromFiles")}
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                data-testid="commodities-add-button"
-                className="gap-2"
-                disabled={migrationLock.locked}
-                title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-                aria-disabled={migrationLock.locked || undefined}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                {t("commodities:list.addItem")}
-              </Button>
+              {canWrite ? (
+                <Button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  data-testid="commodities-add-button"
+                  className="gap-2"
+                  disabled={migrationLock.locked}
+                  title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+                  aria-disabled={migrationLock.locked || undefined}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {t("commodities:list.addItem")}
+                </Button>
+              ) : null}
             </div>
           }
         />
@@ -653,6 +684,8 @@ export function CommoditiesListPage() {
           typeOptions={typeOptions}
           statuses={statuses}
           areaId={areaId}
+          locationId={locationId}
+          locations={locationsQuery.data ?? []}
           warrantyFilter={warrantyFilter}
           lentOutOnly={lentOutOnly}
           unassignedOnly={unassignedOnly}
@@ -667,6 +700,7 @@ export function CommoditiesListPage() {
           onToggleType={toggleType}
           onToggleStatus={toggleStatus}
           onSetArea={setAreaFilter}
+          onSetLocation={setLocationFilter}
           onToggleSeller={toggleSeller}
           onToggleWarranty={toggleWarranty}
           onToggleLentOut={toggleLentOut}
@@ -712,6 +746,7 @@ export function CommoditiesListPage() {
           areas={areas.data ?? []}
           listContext={listContext}
           locked={migrationLock.locked}
+          canEdit={canWrite}
         />
 
         {openedView.broken ? (
@@ -743,7 +778,7 @@ export function CommoditiesListPage() {
           <EmptyState
             hasFilters={hasFilters}
             onClear={clearFilters}
-            onAdd={() => setCreateOpen(true)}
+            onAdd={canWrite ? () => setCreateOpen(true) : undefined}
           />
         ) : viewMode !== "list" ? (
           <CommoditiesGrid
@@ -806,7 +841,7 @@ export function CommoditiesListPage() {
 
       <CommodityFormDialog
         key={resumeDraftId ?? "new"}
-        open={createOpen}
+        open={canWrite && createOpen}
         onOpenChange={handleCreateOpenChange}
         mode="create"
         areas={areas.data ?? []}
@@ -814,7 +849,7 @@ export function CommoditiesListPage() {
         defaultCurrency={currentGroup?.group_currency ?? "USD"}
         onSubmit={handleCreate}
         isPending={create.isPending}
-        draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
+        draftKey={slug && userId ? addItemSlot(userId, slug) : undefined}
         serverDrafts
         resumeDraftId={resumeDraftId}
       />
@@ -855,6 +890,7 @@ interface ToolbarProps {
   typeOptions: ItemTypeDisplay[]
   statuses: CommodityStatusValue[]
   areaId: string
+  locationId: string
   warrantyFilter: CommodityWarrantyStatus[]
   lentOutOnly: boolean
   unassignedOnly: boolean
@@ -862,13 +898,15 @@ interface ToolbarProps {
   sort: CommoditySortOption
   sortDesc: boolean
   viewMode: ViewMode
-  areas: { id?: string; name?: string }[]
+  areas: { id?: string; name?: string; location_id?: string }[]
+  locations: { id?: string; name?: string }[]
   sellerIds: string[]
   sellers: Seller[]
   hasFilters: boolean
   onToggleType: (t: string) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
+  onSetLocation: (id: string) => void
   onToggleSeller: (id: string) => void
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onToggleLentOut: () => void
@@ -959,6 +997,11 @@ function MissingFilterMenu({
 function Toolbar(props: ToolbarProps) {
   const { t } = useTranslation()
   const sortableFields = (props.customFields ?? []).filter(isSortableField)
+  // With a location picked, the area filter offers that location's areas,
+  // and the area picked before, so it can be cleared.
+  const areaOptions = props.locationId
+    ? props.areas.filter((a) => a.location_id === props.locationId || a.id === props.areaId)
+    : props.areas
   // A sort by a field the group no longer has falls back to name on the
   // server; the menu says which field it was.
   const sortFieldLabel = props.customFieldSort
@@ -1055,6 +1098,39 @@ function Toolbar(props: ToolbarProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            variant={props.locationId ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            data-testid="commodities-filter-location"
+          >
+            <ListFilter className="size-3.5" aria-hidden="true" />
+            {t("commodities:filter.location")}
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>{t("commodities:filter.location")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup value={props.locationId} onValueChange={props.onSetLocation}>
+            <DropdownMenuRadioItem value="">
+              {t("commodities:filter.locationAll")}
+            </DropdownMenuRadioItem>
+            {props.locations.map((l) => (
+              <DropdownMenuRadioItem
+                key={l.id}
+                value={l.id ?? ""}
+                data-testid={`commodities-filter-location-${l.id}`}
+              >
+                {l.name}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
             variant={props.areaId ? "default" : "outline"}
             size="sm"
             className="gap-1.5"
@@ -1072,7 +1148,7 @@ function Toolbar(props: ToolbarProps) {
             <DropdownMenuRadioItem value="">
               {t("commodities:filter.areaAll")}
             </DropdownMenuRadioItem>
-            {props.areas.map((a) => (
+            {areaOptions.map((a) => (
               <DropdownMenuRadioItem key={a.id} value={a.id ?? ""}>
                 {a.name}
               </DropdownMenuRadioItem>
@@ -1390,7 +1466,8 @@ function ListLoading({ viewMode }: { viewMode: ViewMode }) {
 interface EmptyStateProps {
   hasFilters: boolean
   onClear: () => void
-  onAdd: () => void
+  // Absent for a member who may not add items; the card then has no button.
+  onAdd?: () => void
 }
 
 function EmptyState({ hasFilters, onClear, onAdd }: EmptyStateProps) {
@@ -1416,12 +1493,14 @@ function EmptyState({ hasFilters, onClear, onAdd }: EmptyStateProps) {
         <CardTitle>{t("commodities:list.emptyTitle")}</CardTitle>
         <CardDescription>{t("commodities:list.emptyDescription")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button onClick={onAdd} className="gap-2">
-          <Plus className="size-4" aria-hidden="true" />
-          {t("commodities:list.addItem")}
-        </Button>
-      </CardContent>
+      {onAdd ? (
+        <CardContent>
+          <Button onClick={onAdd} className="gap-2">
+            <Plus className="size-4" aria-hidden="true" />
+            {t("commodities:list.addItem")}
+          </Button>
+        </CardContent>
+      ) : null}
     </Card>
   )
 }

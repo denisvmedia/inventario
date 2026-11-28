@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { AlertCircle, CheckCircle2, FileText, Loader2, Plus, X } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,6 +26,10 @@ import {
   type IntakeUploadTarget,
 } from "@/features/intake/api"
 import { useInvalidateIntake } from "@/features/intake/hooks"
+import { trashUnlinkedFile } from "@/features/files/api"
+import { fileKeys } from "@/features/files/keys"
+import { storageKeys } from "@/features/storage/keys"
+import { trashKeys } from "@/features/trash/keys"
 import { formatBytes, formatList } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
@@ -102,15 +107,32 @@ export interface IntakeUploadDialogProps {
 // IntakeUploadDialog sends dropped files to batch intake (#2810): it uploads
 // each file, then queues the batch for the background scan. Each file is a
 // purchase of its own unless the member says that all files show one item.
+// The form lives in the dialog content, which mounts on open and unmounts
+// once the close animation ends, so every open starts with the files just
+// dropped. It is keyed on the opening, so a dialog opened again during the
+// close animation starts a new form too.
 export function IntakeUploadDialog(props: IntakeUploadDialogProps) {
+  const [opening, setOpening] = useState(0)
+  const [wasOpen, setWasOpen] = useState(props.open)
+  if (props.open !== wasOpen) {
+    setWasOpen(props.open)
+    if (props.open) setOpening((n) => n + 1)
+  }
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      {props.open ? <IntakeUploadForm {...props} /> : null}
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="intake-upload-dialog"
+      >
+        <IntakeUploadForm key={opening} {...props} />
+      </DialogContent>
     </Dialog>
   )
 }
 
 function IntakeUploadForm({
+  open,
   onOpenChange,
   limits,
   initialFiles,
@@ -118,6 +140,7 @@ function IntakeUploadForm({
 }: IntakeUploadDialogProps) {
   const { t } = useTranslation()
   const invalidate = useInvalidateIntake()
+  const queryClient = useQueryClient()
   const [files, setFiles] = useState<StagedFile[]>(() => stage(initialFiles))
   const [oneItem, setOneItem] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -128,13 +151,27 @@ function IntakeUploadForm({
   const clientKey = useRef(newKey("intake"))
   // The group the batch goes to, read when the first upload starts.
   const target = useRef<IntakeUploadTarget | null>(null)
+  // The files this dialog uploaded that no batch holds yet, and the upload
+  // run in flight (#1626). Closing the dialog before the batch is queued
+  // moves those files to Trash once the run has stopped.
+  const unqueued = useRef(new Set<string>())
+  const running = useRef<Promise<void> | null>(null)
+  // False once the dialog has closed. The form stays mounted through the
+  // close animation, so closing, not the unmount, is what stops the run.
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
+    const leftovers = unqueued.current
     return () => {
       mounted.current = false
+      void (running.current ?? Promise.resolve()).finally(() =>
+        trashUploads(queryClient, target.current, [...leftovers]).then(() => leftovers.clear())
+      )
     }
-  }, [])
+  }, [queryClient])
+  useEffect(() => {
+    if (!open) mounted.current = false
+  }, [open])
 
   const accepted = new Set(limits.acceptedMimeTypes)
   const maxFiles = oneItem
@@ -181,6 +218,14 @@ function IntakeUploadForm({
 
   async function submit() {
     if (busy || sendable.length === 0 || queueFull) return
+    const run = send()
+    running.current = run
+    await run
+  }
+
+  // send uploads the files and queues the batch. Once the dialog is closed
+  // it stops: it sends nothing more and queues nothing.
+  async function send() {
     setBusy(true)
     setError(null)
     target.current ??= intakeUploadTarget()
@@ -189,6 +234,7 @@ function IntakeUploadForm({
     let failed = false
     // One upload at a time keeps within the per-user upload slots.
     for (const f of sendable) {
+      if (!mounted.current) return
       if (f.fileId) {
         ids.push(f.fileId)
         continue
@@ -196,6 +242,7 @@ function IntakeUploadForm({
       setStatus(f.key, { status: "uploading" })
       try {
         const id = await uploadIntakeFile(dest, f.file)
+        unqueued.current.add(id)
         ids.push(id)
         setStatus(f.key, { status: "uploaded", fileId: id })
       } catch (err) {
@@ -205,7 +252,7 @@ function IntakeUploadForm({
           setError(parseServerError(err, t("commodities:intake.upload.uploadFailed")))
       }
     }
-    if (failed) {
+    if (failed || !mounted.current) {
       if (mounted.current) setBusy(false)
       return
     }
@@ -214,8 +261,18 @@ function IntakeUploadForm({
         ? [{ fileIds: ids, oneItem: true }]
         : ids.map((id) => ({ fileIds: [id], oneItem: false }))
       const session = await createIntakeSession(dest, clientKey.current, sources)
+      // The batch holds the files the server names. A retry after a lost
+      // answer gets the batch the first attempt queued, without a file
+      // added since; that file, and one uploaded for a file left out since
+      // (the one-item switch takes fewer files), are not needed.
+      for (const src of session.sources) {
+        for (const file of src.files) unqueued.current.delete(file.id)
+      }
+      const spare = [...unqueued.current]
+      unqueued.current.clear()
+      void trashUploads(queryClient, dest, spare)
       await invalidate()
-      onQueued(session)
+      if (mounted.current) onQueued(session)
     } catch (err) {
       if (!mounted.current) return
       setError(
@@ -246,7 +303,7 @@ function IntakeUploadForm({
   }
 
   return (
-    <DialogContent className="sm:max-w-lg" data-testid="intake-upload-dialog">
+    <>
       <DialogHeader>
         <DialogTitle>{t("commodities:intake.upload.title")}</DialogTitle>
         <DialogDescription>{t("commodities:intake.upload.description")}</DialogDescription>
@@ -262,7 +319,7 @@ function IntakeUploadForm({
 
       {files.length > 0 ? (
         <ul
-          className="flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border"
+          className="flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border max-sm:max-h-none"
           data-testid="intake-upload-files"
         >
           {files.map((f) => {
@@ -409,8 +466,28 @@ function IntakeUploadForm({
               : t("commodities:intake.upload.submit", { count: sendable.length })}
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </>
   )
+}
+
+// trashUploads moves files the dialog uploaded but no batch holds to Trash.
+// A file the batch holds after all (a queue request whose answer was lost)
+// is linked to it and stays. The target's group is known by its paths only,
+// so the Trash, files and storage of every group are read again.
+async function trashUploads(
+  queryClient: QueryClient,
+  target: IntakeUploadTarget | null,
+  ids: string[]
+): Promise<void> {
+  if (!target || ids.length === 0) return
+  const results = await Promise.allSettled(
+    ids.map((id) => trashUnlinkedFile(id, { filesPath: target.filesPath }))
+  )
+  const failed = results.filter((r) => r.status === "rejected").length
+  if (failed > 0) console.warn(`[intake] ${failed} uploaded files could not be moved to Trash`)
+  void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+  void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+  void queryClient.invalidateQueries({ queryKey: storageKeys.all })
 }
 
 function FileStatusIcon({ status, rejected }: { status: StagedFile["status"]; rejected: boolean }) {

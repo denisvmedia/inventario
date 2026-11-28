@@ -23,7 +23,10 @@ You can create as many groups as you need.
    - **Group name** — for example "Main residence".
    - **Icon** — optional; pick something to make the group easier to recognise in the sidebar.
    - **Group currency** — the currency this inventory's prices are tracked in (see [The group currency](#the-group-currency)).
+   - **What is the group for?** — **Household items** (the default) or **Collection**. A **Collection** group starts with the [Collection set](#add-the-collection-set) of item types and custom fields and with the **Warranties** section [hidden](#hide-sections-the-group-doesnt-use). You can change both later in the group settings.
 4. Click **Create group**. The new group opens straight away and becomes your active group. If it is your first group, the [product tour](../getting-started/) starts and shows you around the sidebar.
+
+If the group is created but the Collection set could not be added, a message says so. The group is there; open **Group settings → Sections** and click **Add the set**, or **Add what is missing** if part of it is there, to finish it.
 
 ## The group currency
 
@@ -33,18 +36,102 @@ Every group has one **group currency** — the currency all of its item prices a
 The group currency is fixed when you create the group. To change it later you'd use the currency-migration tool in **Group settings → Info**, which reprices every item in the group at an exchange rate you provide. That tool is only available if your server operator has enabled it; if it's switched off you'll see a note saying so.
 :::
 
+While a migration runs, the group's items can't be changed. Adding, editing or deleting an item, restoring one from Trash, changing the slug of an item tag or deleting one, and starting a restore all show **Locked while a currency migration is running.** Try again once the migration has finished. An item tag's label and color can still be changed, and file tags and files are not affected.
+
+Once a currency migration of the group has started, **Group settings → Info** has a link to the group's migrations: the latest ten, newest first, each with its currencies, rate and status. A migration drops off that list 90 days after it ended, unless your server operator set another period.
+
 ## Switch the active group
 
 The active group decides what the whole app shows you.
 
-1. Open the group selector at the top of the sidebar.
+1. Open the group selector at the top of the sidebar, or the one with the group's name in the top bar.
 2. Pick the group you want from the list. A check mark shows which one is currently active.
 
-The app switches to that group immediately.
+The app switches to that group immediately, and the group becomes your default group: the next time you sign in, on any device, you land in it. You can also pick a default group on your [profile](../settings-and-account/#your-profile).
+
+Next to the top bar selector, a badge shows your role in the active group (Viewer, User, Administrator or Owner), the same badge the **Members** page shows. [Members and roles](#members-and-roles) explains what each role can do.
 
 :::tip
 You can keep two browser tabs open on two different groups — they stay independent of each other. The same dropdown also has shortcuts to **Group settings** (for the current group) and **Create new group**.
 :::
+
+## Hide sections the group doesn't use
+
+Not every inventory needs every part of Inventario: a group for a book collection has no warranties to watch, for example. An administrator or owner can hide these sections for everyone in the group:
+
+| Section | What hiding it removes |
+| --- | --- |
+| **Warranties** | The **Warranties** page, the warranty cards on the Dashboard, the warranty counts on area and location pages, the **Warranty** step of the item form, and warranty reminder emails. |
+| **Maintenance and repairs** | The **Maintenance** and **In service** pages, adding a schedule or sending an item for service, and maintenance reminder emails. |
+| **Loans** | The **Lent out** page, lending an item out, and loan reminder emails. |
+| **Upcoming** | The **Upcoming** page. |
+
+To hide a section or show it again:
+
+1. Open the group selector and choose **Group settings**, then open the **Sections** section.
+2. Switch a section off to hide it, or on to show it. The change applies at once, for every member.
+
+Members with the **User** or **Viewer** role see the same switches but can't change them.
+
+Hiding a section keeps its data. An item that already has a warranty date, a loan, or a maintenance schedule still shows it on its page, and the item form keeps the **Warranty** step for an item that has a warranty. You can still mark a loan returned or a task done; you can't start a new loan, schedule, or service visit until the section shows again. While a section is hidden, its reminder emails stop and the [weekly digest](../settings-and-account/#weekly-digest) leaves its lines out. When you show it again, reminders pick up from the dates as they are then, as described in [Reminder emails](../warranties-loans-maintenance/#reminder-emails).
+
+A link or a bookmark to a hidden page opens a notice that the section is hidden, with a link to the group settings.
+
+## Add the Collection set
+
+The **Collection set** fits a group that keeps a collection. Adding it creates these [item types](../item-types/):
+
+**Art**, **Books**, **Coins**, **Stamps**, **Records**, **Watches**, and **Cards**
+
+and these [custom fields](../custom-fields/), each offered on every one of those types:
+
+| Field | Type |
+| --- | --- |
+| **Condition** | Select: Mint, Very good, Good, Fair, Poor |
+| **Catalog reference** | Text, for a Krause, Scott, Discogs, or ISBN number and the like |
+| **Edition or variant** | Text |
+| **Signed** | Yes/no |
+| **Provenance** | Long text |
+| **Certificate of authenticity** | Yes/no |
+| **Appraised value** | Money |
+| **Appraisal date** | Date |
+
+The item's own **Serial number** stays as it is. The types and fields are created with English names; rename them, change their icons, or add options like any type or field you made yourself.
+
+To add the set:
+
+1. Open the group selector and choose **Group settings**, then open the **Sections** section.
+2. On the **Collection set** card, click **Add the set**.
+
+If the group already has a type or field with one of these names, in any mix of upper- and lowercase, the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it. While the group is still at that limit, **Add what is missing** cannot create what is missing either: delete types or fields the group no longer needs to make room first. The card also shows **Partly added** while one of the set's fields is not offered on every one of its types, for example when the group already had all of them under these names; **Add what is missing** then offers each field on each type.
+
+The card names the state of each type and field: added by the set, the group's own, or not in the group. If you renamed one of the set's types or fields to the name of another one, for example **Coins** to **Stamps** after deleting **Stamps**, the card shows that name as not added: the renamed type or field stands for it, and adding the set does not create a second one of that name.
+
+To remove the set, click **Remove the set** on the same card. The confirmation checks the group again when it opens, then lists what will be deleted and what stays, with the reason:
+
+- a type or field the group had before the set, which the set never deletes;
+- a type that items or [drafts](../items/#save-as-draft) have, or a field that items or drafts have a value of, counting items in the [Trash](../trash/);
+- the group's last item type, as a group always keeps one.
+
+Removing deletes only what the confirmation listed and leaves every item as it is. If something on the list comes into use before you confirm, for example because another member gives an item or a draft that type, it stays, and the message after removing names it. You can remove the set again later: it then deletes what has stopped being used since.
+
+A type or field the group had before the set keeps what the set linked to it. Such a type still offers the set's fields that stay, and such a field is still offered on the set's types that stay and on the group's own types the set linked it to. To undo a link, untick the type under **Item types** in the field's dialog (see [Custom fields](../custom-fields/#offer-a-field-on-item-types)). While the set's types are in the group, the card then shows **Partly added**, and **Add what is missing** would put the link back.
+
+Only an **Owner** or **Administrator** can add or remove the set. Other members see the card without the buttons. Each add and remove is recorded in the audit log of the server, with what it created or deleted. The people who run the server can read that log; group members don't see it.
+
+## Failed background jobs
+
+Some work runs in the background after you start it: an export or a restore, a thumbnail for an uploaded photo, a scan of the photos and files you [add from files](../items/#add-items-from-files) (the batches in the [Inbox](../inbox/)) or of a [document sent from another system](../documents-from-other-systems/), a currency migration. Thumbnails and scans are tried a few times on their own. When a job fails for good, it stops and waits for someone to look at it. Owners and administrators find these jobs in the group settings:
+
+1. Open the group selector and choose **Group settings**, then open the **Data & storage** section.
+2. The **Failed background jobs** card lists the jobs that stopped, newest first, each with its kind, its name, when it failed, how many attempts it made, and why it failed.
+3. Click **Retry** to put a job back in its queue. It leaves the list; if it fails again, it comes back. Retrying a scan from its batch in the Inbox (**Retry unfinished**) does the same.
+
+A restore and a currency migration can't be retried: a restore may have written part of the backup already, and a migration ran at the exchange rate you confirmed then. Their row tells you to start a new [restore](../backup-and-restore/) or currency migration instead, and that your server operator can remove the failed one from the list. A failed currency migration leaves the list on its own 90 days after it failed, unless your server operator set another period. A job that fails again and again usually needs your server operator, who sees the failed jobs of every group.
+
+A photo whose thumbnail failed for good keeps its placeholder: opening it again does not start another try while the job is on the list. Thumbnail jobs are cleaned up after a day; after that, the next time the photo is shown it is tried again.
+
+Members with the **User** or **Viewer** role don't see the card.
 
 ## Invite people by email
 
@@ -70,6 +157,8 @@ Each member of a group has one **role** that controls what they can do. The **Me
 | **Administrator** | Can manage members, group info, locations and areas. |
 | **User** | Can add and remove items (not locations or areas). |
 | **Viewer** | Can view all items, but cannot make any changes. |
+
+Besides items, a **User** can manage the group's files, tags, sellers, item types, and custom fields. Inventario hides the actions a role cannot use. A viewer sees no buttons that add, change, or delete items, files, locations, areas, tags, sellers, item types, or custom fields (printing labels still works). On an item page, a viewer sees the item's loans, services, supply links, maintenance schedules, and reminders without the buttons that record or change them; the **Open** link of a supply link still works. A user sees no buttons that add, change, or delete locations and areas.
 
 A group can have more than one owner. The **Members** page also shows quick stats at the top: total **Members**, **Admins & Owners**, and **Pending invites**.
 
@@ -111,6 +200,8 @@ If you no longer want to be part of a group, you can leave it.
 2. In the **Leave group** panel, click **Leave group**.
 
 You'll lose access to all of that group's data, but you can be re-invited later.
+See [What a member leaves behind](#what-a-member-leaves-behind) for what
+happens to your views, reminders and drafts there.
 
 :::caution[Last owner can't leave]
 You can't leave a group if you're its **last owner** — that would strand the group with no one able to manage it. Promote another member to owner first, or delete the group. If you're the only member at all, delete the group instead of leaving.
@@ -126,6 +217,31 @@ Owners and administrators can remove other people from a group.
 
 The person loses access to the group's data immediately, and you can re-invite them later. You can't remove the **last owner** (promote someone else first), and the menu doesn't offer a remove action on your own row — use [Leave a group](#leave-a-group) for that.
 
+### What a member leaves behind
+
+When a member leaves or is removed, what was personal to them in the group is
+deleted at the same moment, and does not come back if they are invited again:
+
+- their personal [saved views](../items/#saved-views), and where they showed
+  views in the sidebar and on the Dashboard;
+- their notification settings for the group;
+- the [item reminders](../warranties-loans-maintenance/#item-reminders) they
+  set;
+- the [drafts of new items](../items/#drafts-of-a-new-item) they started. The
+  files saved with a draft stay in the group as standalone files;
+- the batches they sent to [Add items from files](../items/#add-items-from-files),
+  with their review pages. The drafts they made from a batch go with their
+  other drafts, and the files stay as standalone files;
+- the invites they sent that nobody accepted yet.
+
+Their [API tokens](../api-tokens/) limited to the group stop working; tokens
+for all their groups keep working for the other groups.
+
+What the rest of the group uses stays: the items, files, places, tags,
+sellers, loans, history entries and other records the member added, the views
+they shared with the group (and where other members show them), and the drafts
+made for [documents other systems sent](../documents-from-other-systems/).
+
 ## Delete a group
 
 Deleting a group is permanent and removes **all** of its locations, items, files, and exports. Only an **Owner** can do it.
@@ -137,6 +253,8 @@ Deleting a group is permanent and removes **all** of its locations, items, files
 3. In the confirmation dialog, type the **group name** and your **current password**, then click **Delete permanently**.
 
 The group name guards against an accidental click; your password protects against someone using a hijacked session.
+
+Deletion starts as soon as you confirm. If another member saves the group settings at the same moment, their change is refused and the deletion goes ahead.
 
 :::caution[No undo]
 There's no way to recover a deleted group. If you might want the data later, create a [backup](../backup-and-restore/) first.

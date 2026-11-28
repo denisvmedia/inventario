@@ -88,6 +88,10 @@ func (*recordingMaintenanceEmailService) SendItemReminderEmail(_ context.Context
 	return nil
 }
 
+func (*recordingMaintenanceEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (r *recordingMaintenanceEmailService) snapshot() []recordedMaintenanceEmail {
 	r.mu.Lock()
 	defer r.mu.Unlock()

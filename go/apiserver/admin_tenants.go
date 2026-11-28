@@ -3,6 +3,7 @@ package apiserver
 import (
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -11,16 +12,27 @@ import (
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	adminservice "go.5x5.cz/inventario/services/admin"
 )
 
-// adminTenantsAPI backs GET /admin/tenants and GET
-// /admin/tenants/{tenantID}. Holds the FactorySet directly (not the
-// per-request user-aware Set) because the admin surface intentionally
-// crosses tenants — using the user-aware registries would limit the
-// admin to their own tenant, defeating the surface.
+// adminTenantsAPI backs /admin/tenants. Holds the FactorySet directly
+// (not the per-request user-aware Set) because the admin surface
+// intentionally crosses tenants — using the user-aware registries would
+// limit the admin to their own tenant, defeating the surface.
+//
+// The writes (#1037) go through the admin service the `inventario
+// tenants` commands use, so the back office and the CLI apply one set of
+// rules.
 type adminTenantsAPI struct {
 	factorySet   *registry.FactorySet
 	auditService services.AuditLogger
+	service      *adminservice.Service
+	// baseDomain is the normalized tenant base domain, "" in single-tenant
+	// mode.
+	baseDomain string
+	// deletions holds the IDs of the tenants this process is deleting, so a
+	// repeated delete request does not start a second run.
+	deletions sync.Map
 }
 
 // listTenants returns a paginated, filtered, sorted listing of every

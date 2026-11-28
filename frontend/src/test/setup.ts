@@ -6,7 +6,7 @@ import { toHaveNoViolations } from "jest-axe"
 import { resetGlobalMockSpies } from "./global-mocks"
 import { installNodeFormDataFetch } from "./node-form-data"
 import { server } from "./server"
-import { initI18n } from "@/i18n"
+import { I18N_NAMESPACES, i18next, initI18n } from "@/i18n"
 import { markBootRefreshAttemptedForTests } from "@/features/auth/bootRefresh"
 
 expect.extend(toHaveNoViolations)
@@ -148,6 +148,45 @@ if (!Element.prototype.releasePointerCapture) {
   Element.prototype.releasePointerCapture = function releasePointerCapture() {}
 }
 
+// jsdom moves focus off an element that stops being focusable on its next
+// rendering update, and it runs those updates, animation frames included, on
+// one interval it starts through the global setInterval. Under fake timers
+// that is the fake one: vi.useRealTimers() drops it while jsdom still holds
+// its handle, so jsdom never starts another interval and no animation frame
+// runs again in that environment. The shared-env project shares it with every
+// later file in the worker. Vitest fakes requestAnimationFrame itself, so the
+// focus fixup is the only way onto the fake clock, and it is skipped there.
+// test/__tests__/fake-timers.test.ts fails if this hook stops being called.
+type FocusFixup = (() => void) & { skipsFakeTimers?: true }
+const jsdomWindow = (globalThis as { jsdom?: { window: { _requestFocusFixup?: FocusFixup } } })
+  .jsdom?.window
+const requestFocusFixup = jsdomWindow?._requestFocusFixup
+if (jsdomWindow && requestFocusFixup && !requestFocusFixup.skipsFakeTimers) {
+  jsdomWindow._requestFocusFixup = Object.assign(
+    () => {
+      if (!vi.isFakeTimers()) requestFocusFixup()
+    },
+    { skipsFakeTimers: true as const }
+  )
+}
+
+// The i18n instance is shared by every file in a worker. A namespace taken
+// out of options.ns (removeResourceBundle does that) is never loaded again in
+// any language, so a later file reads the en fallback. Put it back and fail in
+// the file that took it out: a test's own teardown runs after afterEach, so
+// the check runs again once the file is done.
+function expectI18nNamespacesIntact() {
+  const namespaces = i18next.options.ns
+  if (!Array.isArray(namespaces)) return
+  const lost = I18N_NAMESPACES.filter((ns) => !namespaces.includes(ns))
+  if (lost.length === 0) return
+  namespaces.push(...lost)
+  throw new Error(
+    `A test in this file took ${lost.join(", ")} out of i18next.options.ns. ` +
+      `Change the language with i18next.changeLanguage() and leave the shared bundles alone.`
+  )
+}
+
 // Boot i18n once for the whole suite. The en bundle is already in memory
 // (statically imported by i18next.config.ts), so this resolves in a single
 // microtask and every useTranslation() in test render returns real strings
@@ -189,8 +228,10 @@ afterEach(() => {
   document.documentElement.classList.remove("light", "dark")
   document.documentElement.removeAttribute("data-density")
   window.localStorage.clear()
+  expectI18nNamespacesIntact()
 })
 afterAll(() => {
   restoreFetch()
   server.close()
+  expectI18nNamespacesIntact()
 })

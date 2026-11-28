@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"go.5x5.cz/inventario/internal/redisurl"
 )
 
 // GlobalRateLimiter enforces API-wide per-IP request limits.
@@ -77,7 +79,7 @@ func NewRedisGlobalRateLimiter(client *redis.Client, limit int, window time.Dura
 }
 
 func NewRedisGlobalRateLimiterFromURL(redisURL string, limit int, window time.Duration) (*RedisGlobalRateLimiter, error) {
-	opts, err := redis.ParseURL(redisURL)
+	opts, err := redisurl.Parse(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
 	}

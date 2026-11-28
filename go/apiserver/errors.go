@@ -225,7 +225,14 @@ func NewTooManyRequestsError(err error) jsonapi.Error {
 }
 
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
-	slog.Error("internal server error", "error", err)
+	slog.ErrorContext(r.Context(), "internal server error", "error", err)
+	return renderInternalServerError(w, r, err)
+}
+
+// renderInternalServerError renders a 500 without logging, for a handler that
+// has already logged err with its own message and attributes. An error is
+// logged once (devdocs/logging.md, Levels).
+func renderInternalServerError(w http.ResponseWriter, r *http.Request, err error) error {
 	// Report the unexpected 5xx to Sentry (#844). No-op when Sentry is disabled.
 	sentry.CaptureError(r.Context(), err, map[string]string{"component": "apiserver"})
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))
@@ -459,11 +466,30 @@ func groupStateSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	}, true
 }
 
+// groupSettingsSentinelJSONAPIError maps a refused group setting to 422.
+// The request binders already refuse an unknown section, so this is the
+// answer for a service caller that passes one.
+func groupSettingsSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	if !errors.Is(err, services.ErrInvalidGroupSection) {
+		return jsonapi.Error{}, false
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           "group.invalid_section",
+	}, true
+}
+
 func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := adminSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
 	if jsErr, ok := groupStateSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
+	if jsErr, ok := groupSettingsSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
 	if jsErr, ok := accountDeletionSentinelJSONAPIError(err); ok {
@@ -475,9 +501,86 @@ func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := customFieldSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
+	if jsErr, ok := userTenantSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
+	if errors.Is(err, registry.ErrRevisionConflict) {
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusConflict,
+			StatusText:     http.StatusText(http.StatusConflict),
+			Code:           CommodityRevisionConflictCode,
+		}, true
+	}
 	return jsonapi.Error{}, false
 }
 
+// CommodityRevisionConflictCode: an item save named a revision the item no
+// longer has, because it was written after the client loaded it (#2981).
+// Nothing was written; the client loads the item again.
+const CommodityRevisionConflictCode = "commodity.revision_conflict"
+
+// JSON:API codes of the user tenant guards (#2179).
+const (
+	// userTenantMoveBlockedCode: the user still belongs to a group or owns
+	// content in their tenant, so they cannot move to another one. meta
+	// carries "owned", the readable list, and one count per kind of row.
+	userTenantMoveBlockedCode = "user.tenant_move_blocked"
+	// userTenantChangedCode: the write named another tenant than the user is
+	// in, either because it tried to move the user or because the user moved
+	// since the copy it was built from was read.
+	userTenantChangedCode = "user.tenant_changed"
+	// userChangedDuringMoveCode: the user's profile photo changed while they
+	// were being moved; reading them again and retrying is safe.
+	userChangedDuringMoveCode = "user.changed_during_move"
+	// tenantNotActiveCode: the tenant a user would move into is suspended or
+	// inactive.
+	tenantNotActiveCode = "tenant.not_active"
+)
+
+// userTenantSentinelJSONAPIError maps the user tenant guards (#2179): a move
+// into a tenant that is not active is 422, the others are 409.
+func userTenantSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	var code string
+	var meta map[string]any
+	switch {
+	case errors.Is(err, registry.ErrUserTenantMoveBlocked):
+		code = userTenantMoveBlockedCode
+		if blocked, ok := errors.AsType[*registry.UserTenantMoveBlockedError](err); ok {
+			meta = map[string]any{"owned": blocked.Owned.String()}
+			for _, entry := range blocked.Owned {
+				meta[string(entry.Kind)] = entry.Count
+			}
+		}
+	case errors.Is(err, registry.ErrUserTenantChanged):
+		code = userTenantChangedCode
+	case errors.Is(err, registry.ErrUserChangedDuringMove):
+		code = userChangedDuringMoveCode
+	case errors.Is(err, registry.ErrTenantNotActive):
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     http.StatusText(http.StatusUnprocessableEntity),
+			Code:           tenantNotActiveCode,
+		}, true
+	default:
+		return jsonapi.Error{}, false
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusConflict,
+		StatusText:     http.StatusText(http.StatusConflict),
+		Code:           code,
+		Meta:           meta,
+	}, true
+}
+
+// toJSONAPIError maps err to the JSON:API error the API answers it with. An
+// error it does not recognise maps to a 500, the only 5xx it returns, and
+// renderEntityError logs that one.
 func toJSONAPIError(err error) jsonapi.Error {
 	// Sentinel families extracted into early-return helpers so this switch
 	// stays under the gocyclo budget (admin guards #1745/#1747/#1750,
@@ -591,13 +694,39 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, ErrInvalidUploadSlot):
 		return NewBadRequestError(err)
 	default:
-		slog.Error("internal server error", "error", err)
 		return NewInternalServerError(err)
 	}
 }
 
 func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error {
 	jsErr := toJSONAPIError(err)
+	if jsErr.HTTPStatusCode >= http.StatusInternalServerError {
+		slog.ErrorContext(r.Context(), "internal server error", "error", err)
+	}
+	return renderMappedEntityError(w, r, err, jsErr)
+}
+
+// renderLoggedEntityError renders err as renderEntityError does, without
+// logging, for a handler that has already logged err with its own message and
+// attributes at errorLogLevel(err). An error is logged once
+// (devdocs/logging.md, Levels).
+func renderLoggedEntityError(w http.ResponseWriter, r *http.Request, err error) error {
+	return renderMappedEntityError(w, r, err, toJSONAPIError(err))
+}
+
+// errorLogLevel is the level for a line that logs err: Warn when the API
+// answers err with a 4xx, such as a missing row or a refused change, and Error
+// when it answers with a 500 (devdocs/logging.md, Levels: a request that ends
+// in a 4xx is Warn at most). A handler that answers with a fixed 4xx whatever
+// the error uses it too, so a failed lookup is not logged as a refusal.
+func errorLogLevel(err error) slog.Level {
+	if toJSONAPIError(err).HTTPStatusCode >= http.StatusInternalServerError {
+		return slog.LevelError
+	}
+	return slog.LevelWarn
+}
+
+func renderMappedEntityError(w http.ResponseWriter, r *http.Request, err error, jsErr jsonapi.Error) error {
 	// The default arm of toJSONAPIError maps any unrecognised error to a 500;
 	// report those (and any explicit 5xx) to Sentry (#844). Mapped 4xx — the
 	// common case — are expected business outcomes and are not captured. No-op
@@ -675,6 +804,19 @@ func codedNotFoundError(w http.ResponseWriter, r *http.Request, err error, code 
 		UserError:      errormarshal.Marshal(err),
 		HTTPStatusCode: http.StatusNotFound,
 		StatusText:     "Not Found",
+		Code:           code,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
+// codedBadRequestError renders a 400 with a JSON:API error code, for a
+// query filter the FE can branch on, such as an unknown failed-job type.
+func codedBadRequestError(w http.ResponseWriter, r *http.Request, err error, code string) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusBadRequest,
+		StatusText:     "Bad Request",
 		Code:           code,
 	}
 	return render.Render(w, r, jsonapi.NewErrors(jsErr))

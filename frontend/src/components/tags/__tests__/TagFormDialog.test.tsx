@@ -21,6 +21,18 @@ describe("<TagFormDialog />", () => {
     expect(slugInput.value).toBe("kitchen-stuff")
   })
 
+  it("marks an empty label invalid and describes it by its message", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<TagFormDialog open mode="create" onSubmit={onSubmit} onOpenChange={vi.fn()} />)
+    await user.click(screen.getByTestId("tag-form-submit"))
+    expect(await screen.findByTestId("tag-form-label-error")).toBeInTheDocument()
+    const label = screen.getByTestId("tag-form-label")
+    expect(label).toHaveAttribute("aria-invalid", "true")
+    expect(label).toHaveAccessibleDescription("Label is required.")
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it("submits with the typed values when valid", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)

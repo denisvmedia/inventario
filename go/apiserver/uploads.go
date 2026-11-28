@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,6 +24,7 @@ import (
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/internal/filekit"
+	"go.5x5.cz/inventario/internal/inb"
 	"go.5x5.cz/inventario/internal/mimekit"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
@@ -187,7 +189,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID, binding)
 	if err != nil {
 		// Log error but don't fail the upload - signed URLs are optional
-		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		slog.WarnContext(r.Context(), "Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
 		// Return response without signed URLs
 		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
 		if err := render.Render(w, r, resp); err != nil {
@@ -217,6 +219,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 // handleRestoreUpload handles signed .inb backup file upload for restore operations.
 // @Summary Upload restore file
 // @Description Upload a signed `.inb` backup file to be used for a restore operation.
+// @Description A personal data export (see POST /users/me/data-exports) answers 422 restore.personal_data_export: it cannot be restored.
 // @Tags uploads
 // @Accept multipart/form-data
 // @Produce json-api
@@ -248,6 +251,10 @@ func (api *uploadsAPI) handleRestoreUpload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 }
+
+// personalDataExportRestoreCode is the 422 code of a personal data export
+// uploaded as a backup to restore.
+const personalDataExportRestoreCode = "restore.personal_data_export"
 
 // uploadKind selects the per-tenant subfolder that the upload middleware
 // writes to. Restore uploads land under `restores/` so the importer can
@@ -291,6 +298,8 @@ func (api *uploadsAPI) uploadFiles(kind uploadKind, allowedContentTypes ...strin
 type uploadHTTPError struct {
 	status int
 	err    error
+	// code is the JSON:API error code of a 422, when it has one.
+	code string
 }
 
 func (e *uploadHTTPError) Error() string { return e.err.Error() }
@@ -308,6 +317,10 @@ func renderUploadError(w http.ResponseWriter, r *http.Request, err error) {
 	if ue, ok := errors.AsType[*uploadHTTPError](err); ok {
 		switch ue.status {
 		case http.StatusUnprocessableEntity:
+			if ue.code != "" {
+				codedUnprocessableEntityError(w, r, ue.err, ue.code)
+				return
+			}
 			unprocessableEntityError(w, r, ue.err)
 		case http.StatusRequestEntityTooLarge:
 			// #2101: the streamed file exceeded the configured per-file
@@ -387,6 +400,17 @@ func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename
 	var blobKey string
 	switch kind {
 	case uploadKindRestore:
+		// A personal data export is a gzip file a user may well mistake for a
+		// backup. Say what it is instead of "unsupported content type".
+		br := bufio.NewReaderSize(part, inb.SniffHeadSize)
+		if head, _ := br.Peek(inb.SniffHeadSize); inb.IsPersonalDataExport(head) {
+			return uploadedFile{}, &uploadHTTPError{
+				status: http.StatusUnprocessableEntity,
+				err:    errxtrace.Classify(inb.ErrPersonalDataExport, errx.NewDisplayable(inb.PersonalDataExportRestoreMessage)),
+				code:   personalDataExportRestoreCode,
+			}
+		}
+		part = br
 		blobKey = blobkeys.BuildRestoreUploadKey(tenantID, blobID, basename)
 	default:
 		blobKey = blobkeys.BuildFileBlobKey(tenantID, blobID, filekit.Extension(basename))
@@ -456,7 +480,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 		// upload error the caller is about to render.
 		if delErr := b.Delete(ctx, filename); delErr != nil {
 			slog.WarnContext(ctx, "failed to delete partial upload blob after rejected upload (best-effort)",
-				"filename", filename, "error", delErr.Error())
+				"blob_key", filename, "error", delErr.Error())
 		}
 	}()
 	defer func() {
@@ -549,14 +573,14 @@ func (api *uploadsAPI) generateThumbnailInline(ctx context.Context, file *models
 	err := api.fileService.GenerateThumbnails(ctx, file)
 	if err != nil {
 		// Log error but don't fail the upload - thumbnails are optional
-		slog.Error("Failed to generate thumbnail inline",
+		slog.WarnContext(ctx, "Failed to generate thumbnail inline",
 			"error", err.Error(),
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID,
 			"user_id", userID)
 	} else {
-		slog.Info("Thumbnail generated inline successfully",
+		slog.InfoContext(ctx, "Thumbnail generated inline successfully",
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID)

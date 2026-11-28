@@ -1,13 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { http } from "msw"
 
 import { CommodityCreateModalRoute } from "@/pages/commodities/CommodityCreateModal"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers, locationHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  areaHandlers,
+  commodityHandlers,
+  groupHandlers,
+  locationHandlers,
+  memberHandlers,
+} from "@/test/handlers"
+import { toastSpies } from "@/test/global-mocks"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -34,8 +44,11 @@ const locationFixture = [{ id: "l1", type: "locations", attributes: { id: "l1", 
 // wizard walk-through inside this test would just exercise
 // the dialog twice and re-trip the same Radix-Select-in-JSDOM
 // gap tracked in #1629.
-vi.mock("@/components/items/CommodityFormDialog", () => ({
-  CommodityFormDialog: ({
+// "Back" leaves the route as the browser's Back button does, without the
+// dialog closing itself first.
+vi.mock("@/components/items/CommodityFormDialog", async () => {
+  const { useNavigate } = await import("react-router-dom")
+  function MockDialog({
     open,
     onOpenChange,
     onSubmit,
@@ -43,11 +56,15 @@ vi.mock("@/components/items/CommodityFormDialog", () => ({
     open: boolean
     onOpenChange: (open: boolean) => void
     onSubmit: (values: Record<string, unknown>) => Promise<unknown> | unknown
-  }) =>
-    open ? (
+  }) {
+    const navigate = useNavigate()
+    return open ? (
       <div data-testid="mock-dialog">
         <button data-testid="mock-cancel" type="button" onClick={() => onOpenChange(false)}>
           Cancel
+        </button>
+        <button data-testid="mock-back" type="button" onClick={() => navigate(-1)}>
+          Back
         </button>
         <button
           data-testid="mock-submit"
@@ -66,8 +83,10 @@ vi.mock("@/components/items/CommodityFormDialog", () => ({
           Submit
         </button>
       </div>
-    ) : null,
-}))
+    ) : null
+  }
+  return { CommodityFormDialog: MockDialog }
+})
 
 function renderModal() {
   setAccessToken("good-token")
@@ -76,6 +95,7 @@ function renderModal() {
     return <div data-testid="loc">{loc.pathname}</div>
   }
   return renderWithProviders({
+    withAuth: true,
     // Two entries so `navigate(-1)` has a previous history slot to
     // pop back to (matches the production setup where the sidebar /
     // dashboard CTA pushes the modal route on top of the list page).
@@ -93,7 +113,11 @@ function renderModal() {
           path="/g/:groupSlug/commodities/new"
           element={
             <GroupProvider>
-              <CommodityCreateModalRoute />
+              {/* Mounted once the caller's role is known; the probe says it is. */}
+              <WhenRoleKnown>
+                <CommodityCreateModalRoute />
+                <span data-testid="role-known" />
+              </WhenRoleKnown>
             </GroupProvider>
           }
         />
@@ -112,6 +136,9 @@ beforeEach(() => {
   // `shouldAdvanceTime: true` keeps MSW + react-query happy by letting
   // their internal microtasks run on the host scheduler.
   vi.useFakeTimers({ shouldAdvanceTime: true })
+  // The form is offered by role; every test runs as the group's owner
+  // unless it registers another role.
+  server.use(...memberHandlers.asRole("g1", "owner"))
 })
 
 afterEach(() => {
@@ -119,6 +146,18 @@ afterEach(() => {
 })
 
 describe("<CommodityCreateModalRoute />", () => {
+  it("opens no form for a viewer, whom the server refuses items (#2886)", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, locationFixture)
+    )
+    renderModal()
+    expect(await screen.findByTestId("role-known")).toBeInTheDocument()
+    expect(screen.queryByTestId("mock-dialog")).not.toBeInTheDocument()
+  })
+
   it("renders the form dialog when mounted as the modal route", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -196,5 +235,42 @@ describe("<CommodityCreateModalRoute />", () => {
     // unmount should NOT throw / log a "navigate after unmount" error.
     utils.unmount()
     expect(() => vi.advanceTimersByTime(500)).not.toThrow()
+  })
+
+  it("stays where the user went when the item is made after the route is gone", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, locationFixture),
+      ...commodityHandlers.create(SLUG, {
+        id: "c-new",
+        type: "commodities",
+        attributes: { id: "c-new", name: "Test item", short_name: "Test", type: "other" },
+      })
+    )
+    // The create request answers once the test lets it go.
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/commodities`), async () => {
+        await held
+        return undefined
+      })
+    )
+    renderModal()
+    await screen.findByTestId("mock-dialog")
+    await user.click(screen.getByTestId("mock-submit"))
+    await user.click(screen.getByTestId("mock-back"))
+    await waitFor(() => expect(screen.getByTestId("loc").textContent).toBe(BACKDROP_PATH))
+
+    release()
+    await waitFor(() => expect(toastSpies.success).toHaveBeenCalled())
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(screen.getByTestId("loc").textContent).toBe(BACKDROP_PATH)
   })
 })

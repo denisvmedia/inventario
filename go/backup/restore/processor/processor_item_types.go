@@ -78,6 +78,9 @@ func (r *itemTypeResolver) importArchived(ctx context.Context, archived []types.
 			continue
 		}
 		t := models.ItemType{Name: a.Name, Icon: a.Icon}
+		if entry := models.ItemSetEntry(a.SetEntry); entry.IsValid() {
+			t.SetEntry = entry
+		}
 		if slug.IsValid() {
 			t.Slug = slug
 		}

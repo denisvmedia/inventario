@@ -1,8 +1,9 @@
 # Motion
 
-`tw-animate-css` only. Durations short, easings native. Reduced-motion
-is a first-class consumer; the Tailwind utilities respect it
-automatically.
+`tw-animate-css` only. Durations short, easings native. Reduced motion
+is a first-class consumer: under `prefers-reduced-motion: reduce` every
+enter and exit animation fades in place and does not zoom or slide (see
+[Reduced motion](#reduced-motion)).
 
 ## Library: `tw-animate-css`
 
@@ -69,17 +70,44 @@ The defaults are correct.
 | Dialog close | `fade-out-0 zoom-out-95` | 300ms ease-in |
 | Sheet open (right) | `slide-in-from-right` | 300ms ease-out |
 | Sheet close (right) | `slide-out-to-right` | 300ms ease-in |
+| Full-screen dialog open, below `sm` | `slide-in-from-bottom` (no fade, no zoom); a fade under reduced motion | 300ms ease-out |
+| Full-screen dialog close, below `sm` | `slide-out-to-bottom`; a fade under reduced motion | 300ms ease-in |
 | Sonner toast in | `slide-in-from-bottom` | 300ms ease-out |
 | Reveal-on-hover (kebab in row) | `transition-opacity` | 150ms |
 | Skeleton shimmer | `animate-pulse` | infinite |
-| Wizard step swap (container resize) | `transition-[height]` 200ms ease-out | 200ms |
+| Wizard step swap (container resize), from `sm` up | `transition-[height]` 200ms ease-out | 200ms |
 | List row enter (URL `+ Add`, file attached, reveal-on-click section) | `animate-in fade-in slide-in-from-top-1` | 150ms ease-out |
 | List row exit (URL × button) | `animate-out fade-out slide-out-to-top-1 fill-mode-forwards` | 150ms ease-in |
 | Page transition between routes | none | — |
 
+Under reduced motion the zoom and slide in these rows are dropped and
+the fades stay; see [Reduced motion](#reduced-motion).
+
 **No page transitions** — switching between routes is instant. Adding a
 fade between pages adds latency the user doesn't want and breaks
 keyboard / back-button rhythm.
+
+## Full-screen dialogs on phones
+
+`<DialogContent variant="fullscreen-mobile">` (long forms, #1627) is the
+centered card from `sm` up, with the card's fade and zoom. Below `sm` it
+fills the screen and slides up from the bottom edge on open and back down
+on close, without fading or zooming, like a native full-screen sheet. The
+slide is applied under `motion-safe:` only; with
+`prefers-reduced-motion: reduce` the dialog fades in and out instead.
+
+Inside it, a wizard swaps steps without the container-resize animation
+below: the dialog's height is the screen's, so there is no box to
+resize, and `StepResizeWrapper` applies its pixel height from `sm` up.
+
+The close animation needs something to animate. Keep the body mounted
+until Radix finishes the exit: render the form inside `DialogContent`
+without an `open ? … : null` guard (the content unmounts it after the
+exit, so the next open still starts fresh), and keep `DialogContent`
+itself out of such a guard. When the parent clears the record the dialog
+shows in the same update that closes it, read it through
+`useValueWhileOpen` so the dialog does not turn into an empty create form
+while it slides away.
 
 ## Smoothness — no abrupt jerks
 
@@ -145,8 +173,9 @@ Reference implementation: `StepResizeWrapper` inside
 
 ### List row enter / exit
 
-Use the `tw-animate-css` utilities — they're
-`prefers-reduced-motion`-gated for free.
+Use the `tw-animate-css` utilities. Under reduced motion the row fades
+in place without sliding (see [Reduced motion](#reduced-motion)), so the
+row needs no gate of its own.
 
 **Enter** (e.g. clicking "+ Add" on a URL list, revealing a
 `ChipInput` after `+ Item has additional serial numbers`):
@@ -209,12 +238,31 @@ churn; a row's reveal-on-click affordance → toggle reveal pattern.
 
 ## Reduced motion
 
-`prefers-reduced-motion: reduce` disables `tw-animate-css` utilities
-automatically (they're gated on
-`@media (prefers-reduced-motion: no-preference)`).
+`tw-animate-css` (1.4.0) has no reduced-motion rule of its own. One rule
+at the end of `frontend/src/index.css` covers every `animate-in` and
+`animate-out` use. The library's enter and exit keyframes read their start
+and end values from `--tw-enter-*` and `--tw-exit-*` properties; under
+`prefers-reduced-motion: reduce` the rule sets the ones that move (scale,
+translate, rotate) back to rest with `!important`. A dialog, menu,
+popover, tooltip or list row then fades in place and does not zoom or
+slide. A sheet panel, which slides without a fade, appears at once while
+its backdrop fades. The opacity and blur properties stay: a fade is not
+motion (the WCAG 2.3.3 Understanding document does not count changes of
+color, blur or opacity as motion animation).
 
-For your own transitions, gate explicitly with the `motion-reduce:`
-prefix:
+A new `zoom-*`, `slide-*` or `spin-*` use needs no gate of its own.
+`frontend/src/__tests__/reduced-motion-css.test.ts` reads the library's
+stylesheet and fails when it gains a movement property the rule does not
+reset, and `e2e/tests/reduced-motion.spec.ts` checks a dialog and a menu
+in a browser with and without the preference. The full-screen dialog's
+phone slide is under `motion-safe:` as well, so with reduced motion it
+fades instead. Sonner toasts have a reduced-motion rule of their own.
+
+The rule covers only the enter and exit utilities. CSS transitions
+(`transition-transform`, `transition-[height]`, the sidebar's width
+transition) and other keyframes (`animate-spin`, `animate-pulse`, your
+own `@keyframes`) are not covered; gate the ones you write with the
+`motion-reduce:` prefix:
 
 ```tsx
 <div className="transition-colors motion-reduce:transition-none">…</div>
@@ -227,9 +275,10 @@ reduced. Use it for non-essential animations:
 <div className="motion-safe:animate-pulse">…</div>
 ```
 
-The Lighthouse `accessibility` audit doesn't currently flag missing
-`motion-reduce:` gating, but the WCAG 2.2 AA bar ([14-accessibility.md](14-accessibility.md))
-asks for it. Treat it as required.
+The Lighthouse `accessibility` audit does not flag a missing
+`motion-reduce:` gate, and WCAG puts it at AAA (2.3.3 Animation from
+Interactions), above the AA bar of [14-accessibility.md](14-accessibility.md).
+Treat it as required anyway.
 
 ## Skeletons over spinners
 
@@ -256,6 +305,8 @@ site stays terse.
 Sonner ships in/out animations tuned to its drawer:
 
 - Slide-in from bottom-right.
+- Over a full-screen dialog below `sm` they sit above its footer and the
+  on-screen keyboard, not over its buttons.
 - Auto-dismiss at 4s for `info` / `success`, 6s for `warning`,
   manual-dismiss for `error`.
 - `useAppToast()` is the wrapper that enforces the role + duration
@@ -269,8 +320,9 @@ Sonner ships in/out animations tuned to its drawer:
    primitives need.
 2. **No page transitions.** Routes swap instantly.
 3. **Durations from the table.** `duration-[473ms]` is a smell.
-4. **Reduced-motion respect.** Always use `motion-reduce:` /
-   `motion-safe:` or rely on `tw-animate-css`'s built-in gate.
+4. **Reduced-motion respect.** `animate-in` / `animate-out` are covered
+   by the rule in `index.css`; gate every other transition or keyframe
+   that moves with `motion-reduce:` / `motion-safe:`.
 5. **Skeletons, not spinners.** A spinner is a fallback for genuinely
    indefinite waits (e.g. an export that's running on the server);
    in-flight data goes to a shape skeleton.

@@ -1,4 +1,66 @@
 {
+  "failedJobs": {
+    "bulk": {
+      "action": "Discard older…",
+      "body": "Every failed job of the job type and tenant below that failed before the day you pick leaves the list of failed jobs and the failed-jobs gauge. The records and errors stay until the normal cleanup removes them. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm_one": "Discard {{count}} job",
+      "confirm_other": "Discard {{count}} jobs",
+      "confirmIdle": "Discard",
+      "count_one": "{{count}} failed job will be discarded.",
+      "count_other": "{{count}} failed jobs will be discarded.",
+      "countError": "Could not count the failed jobs. Try again later.",
+      "counting": "Counting the failed jobs…",
+      "dateHint": "Jobs that failed before 00:00 UTC on this day. A job without a failure time counts from when it was created.",
+      "dateLabel": "Failed before",
+      "discarded_one": "{{count}} failed job is discarded.",
+      "discarded_other": "{{count}} failed jobs are discarded.",
+      "error": "Could not discard the jobs. Try again later.",
+      "future": "The day must not be later than today.",
+      "none": "No failed job of these filters failed before this day.",
+      "pickDate": "Pick a day to see how many jobs this discards.",
+      "scopeTenant": "Tenant",
+      "scopeType": "Job type",
+      "title": "Discard older failed jobs"
+    },
+    "discard": "Discard",
+    "discardDialog": {
+      "body": "The job leaves the list of failed jobs and the failed-jobs gauge. Its record and its error stay until the normal cleanup removes them. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Discard",
+      "title": "Discard this failed job?"
+    },
+    "discarded": "The job is discarded.",
+    "discardError": "Could not discard the job. Try again later.",
+    "discardLabel": "Discard {{title}}",
+    "empty": "No failed jobs.",
+    "emptyFiltered": "No failed jobs match these filters.",
+    "filter": {
+      "allTenants": "All tenants",
+      "allTypes": "All job types",
+      "tenantLabel": "Filter by tenant",
+      "typeLabel": "Filter by job type"
+    },
+    "gone": "This job is no longer failed. The list is up to date now.",
+    "loadError": "Could not load the failed jobs. Try again later.",
+    "loading": "Loading failed jobs…",
+    "notRetryable": "This kind of job cannot be retried. Discard it instead.",
+    "retried": "The job is back in the queue.",
+    "retry": "Retry",
+    "retryError": "Could not retry the job. Try again later.",
+    "retryLabel": "Retry {{title}}",
+    "roleRequired": "Only a platform admin can discard a failed job.",
+    "subtitle": "Background jobs of every tenant that failed for good and that nobody retried or discarded, newest first.",
+    "table": {
+      "actions": "Actions",
+      "attempts": "Attempts",
+      "error": "Error",
+      "failed": "Failed",
+      "job": "Job",
+      "tenant": "Tenant / group"
+    },
+    "title": "Failed jobs"
+  },
   "groupDetail": {
     "back": "Back to groups",
     "danger": {
@@ -110,6 +172,7 @@
     "breadcrumbRoot": "Admin"
   },
   "nav": {
+    "failedJobs": "Failed jobs",
     "groups": "Groups",
     "section": "Admin",
     "tenants": "Tenants"
@@ -120,6 +183,65 @@
     "previous": "Previous page",
     "previousLabel": "Previous",
     "showing": "Showing {{from}}–{{to}} of {{total}}"
+  },
+  "tenantActions": {
+    "cancel": "Cancel",
+    "create": {
+      "action": "New tenant",
+      "body": "The tenant starts active, with registration closed.",
+      "submit": "Create tenant",
+      "success": "Tenant {{name}} created.",
+      "title": "New tenant"
+    },
+    "danger": {
+      "button": "Delete tenant",
+      "description": "Delete this tenant with its users, groups, items and files. This cannot be undone.",
+      "title": "Danger zone"
+    },
+    "delete": {
+      "body": "This suspends the tenant and ends its users' sessions, then permanently deletes the tenant and everything in it: its users, groups, items and files. It cannot be undone.",
+      "confirmLabel": "To confirm, type the tenant's slug:",
+      "submit": "Delete tenant",
+      "success": "Deleting {{name}}. The tenant stays suspended until the deletion finishes.",
+      "title": "Delete {{name}}?"
+    },
+    "edit": {
+      "action": "Edit",
+      "body": "Change the name, slug or custom domain of {{name}}.",
+      "submit": "Save changes",
+      "success": "Tenant {{name}} updated.",
+      "title": "Edit tenant"
+    },
+    "errors": {
+      "confirmationMismatch": "The slug you typed does not match the tenant's slug.",
+      "domainReserved": "This domain is under the tenant base domain, where each subdomain is a tenant's address. Use a domain outside it.",
+      "domainTaken": "Another tenant already uses this domain.",
+      "generic": "Something went wrong. Please try again.",
+      "reasonRequired": "A reason is required.",
+      "reasonTooLong": "The reason is too long. Keep it under 500 characters.",
+      "roleRequired": "Only a platform admin can change tenants.",
+      "servesThisHost": "The back office is open on this tenant's address, so this change would lock the back office out. Use the inventario tenants CLI instead.",
+      "slugTaken": "Another tenant already uses this slug."
+    },
+    "reactivate": {
+      "action": "Reactivate",
+      "body": "The tenant's users can sign in again. The sessions the suspension ended stay ended, so everyone signs in anew.",
+      "submit": "Reactivate tenant",
+      "success": "Tenant {{name}} reactivated.",
+      "title": "Reactivate {{name}}?"
+    },
+    "reason": {
+      "counter": "{{current}}/{{max}}",
+      "label": "Reason",
+      "placeholder": "Why is this action being taken?"
+    },
+    "suspend": {
+      "action": "Suspend",
+      "body": "Every user of this tenant is signed out at once and cannot sign in or use an API token until the tenant is reactivated. The tenant's data is kept.",
+      "submit": "Suspend tenant",
+      "success": "Tenant {{name}} suspended.",
+      "title": "Suspend {{name}}?"
+    }
   },
   "tenantDetail": {
     "back": "Back to tenants",
@@ -186,6 +308,29 @@
       }
     }
   },
+  "tenantForm": {
+    "domain": {
+      "hint": "Optional. A bare hostname, without a scheme or a port.",
+      "label": "Custom domain"
+    },
+    "name": {
+      "label": "Name"
+    },
+    "slug": {
+      "hintCreate": "Optional. Left empty, it is generated from the name.",
+      "hintEdit": "Lowercase letters, digits and hyphens, up to 50 characters.",
+      "label": "Slug"
+    },
+    "validation": {
+      "domainFormat": "Enter a bare lowercase hostname, such as inventory.example.com.",
+      "domainTooLong": "The domain can be at most 255 characters.",
+      "nameRequired": "A name is required.",
+      "nameTooLong": "The name can be at most 100 characters.",
+      "slugFormat": "Use lowercase letters, digits and hyphens only.",
+      "slugRequired": "A slug is required.",
+      "slugTooLong": "The slug can be at most 50 characters."
+    }
+  },
   "tenants": {
     "empty": "No tenants match your search.",
     "loadError": "Could not load tenants. Please try again.",
@@ -234,7 +379,8 @@
       "reasonTooLong": "The reason is too long. Keep it under 500 characters.",
       "selfBlocked": "You cannot block your own account.",
       "targetBlocked": "This account is blocked. Unblock the user before impersonating them.",
-      "targetIsAdmin": "System administrators cannot be impersonated."
+      "targetIsAdmin": "System administrators cannot be impersonated.",
+      "tenantNotActive": "This user's tenant is not active, so the user cannot be impersonated."
     },
     "fallbackName": "User",
     "groups": {

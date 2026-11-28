@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   ArrowRight,
   ArrowRightLeft,
@@ -12,6 +12,7 @@ import {
   Download,
   History,
   Info,
+  LayoutList,
   LogOut,
   ShieldAlert,
   Trash2,
@@ -19,10 +20,13 @@ import {
 } from "lucide-react"
 
 import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
+import { FailedJobsCard } from "@/components/groups/FailedJobsCard"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
 import { NotificationsCard } from "@/components/groups/NotificationsCard"
 import { PlanCard } from "@/components/groups/PlanCard"
+import { CollectionSetCard } from "@/components/groups/CollectionSetCard"
+import { SectionsCard } from "@/components/groups/SectionsCard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -60,14 +64,16 @@ import {
   type DeleteGroupInput,
   type UpdateGroupInput,
 } from "@/features/group/schemas"
+import { isSectionHidden } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
-type SectionId = "info" | "members" | "notifications" | "data" | "management"
+type SectionId = "info" | "sections" | "members" | "notifications" | "data" | "management"
 
 interface SectionMeta {
   id: SectionId
@@ -76,6 +82,7 @@ interface SectionMeta {
 
 const SECTIONS: SectionMeta[] = [
   { id: "info", icon: Info },
+  { id: "sections", icon: LayoutList },
   { id: "members", icon: Users },
   { id: "notifications", icon: Bell },
   { id: "data", icon: Database },
@@ -86,8 +93,12 @@ const SECTIONS: SectionMeta[] = [
 // sub-sections behind a left rail (mirrors the user Preferences pattern
 // at /settings):
 //   - Info           identity (name, icon, slug, currency + migrate)
-//                    + Plan & quota card (#1887: moved out of the
-//                    page header so it no longer renders everywhere)
+//                    + Plan & quota card, "Usage" when plans are off
+//                    (#1389; #1887: moved out of the page header so it
+//                    no longer renders everywhere)
+//   - Sections       the sections the group hides for all members, and
+//                    the Collection set of item types and fields
+//                    (#1607); admins change them, others read them
 //   - Members        members link + leave-group panel
 //   - Notifications  per-group notification preference toggles
 //                    (#1887: pulled out of the page header into its
@@ -109,7 +120,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const { user } = useAuth()
   const groupQuery = useGroup(groupId)
   const membersQuery = useMembers(groupId)
-  const [active, setActive] = useState<SectionId>("info")
+  // `?section=` opens a sub-section directly; the notice on a hidden
+  // section's page links to `?section=sections`.
+  const [searchParams] = useSearchParams()
+  const [active, setActive] = useState<SectionId>(() => parseSectionId(searchParams.get("section")))
 
   const myMembership = useMemo(
     () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
@@ -187,6 +201,14 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
                 ownerName={ownerName}
               />
             ) : null}
+            {active === "sections" ? (
+              <div className="space-y-6" data-testid="group-section-sections">
+                <SectionsCard group={group} isAdmin={isAdmin} />
+                {/* Keyed by the route's group, so moving to another group's
+                    settings drops an open removal confirmation. */}
+                <CollectionSetCard key={groupId} group={group} isAdmin={isAdmin} />
+              </div>
+            ) : null}
             {active === "members" ? (
               <MembersSection
                 groupId={groupId}
@@ -196,9 +218,14 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
               />
             ) : null}
             {active === "notifications" ? (
-              <NotificationsSection groupSlug={group.slug ?? null} />
+              <NotificationsSection
+                groupSlug={group.slug ?? null}
+                hideWarrantyAlerts={isSectionHidden(group, "warranties")}
+              />
             ) : null}
-            {active === "data" ? <DataSection groupSlug={group.slug ?? null} /> : null}
+            {active === "data" ? (
+              <DataSection groupSlug={group.slug ?? null} isAdmin={isAdmin} />
+            ) : null}
             {active === "management" ? (
               <ManagementSection groupId={groupId} groupName={group.name ?? ""} isAdmin={isAdmin} />
             ) : null}
@@ -207,6 +234,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
       </Page>
     </>
   )
+}
+
+function parseSectionId(raw: string | null): SectionId {
+  return SECTIONS.find((s) => s.id === raw)?.id ?? "info"
 }
 
 function GroupSettingsNav({
@@ -358,8 +389,9 @@ function InfoSection({
     return (
       <div className="space-y-6" data-testid="group-section-info">
         <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
-        {/* Plan & quota lives in Info (#1887). It's read-only identity,
-            not an admin-gated action, so non-admins see it too. */}
+        {/* Plan & quota lives in Info (#1887); with plans off it is the
+            Usage card (#1389). It's read-only, not an admin-gated action,
+            so non-admins see it too. */}
         <PlanCard groupSlug={groupSlug} ownerName={ownerName} />
         <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
           {t("members:adminOnlyHelp")}
@@ -372,8 +404,9 @@ function InfoSection({
     <div className="space-y-6" data-testid="group-section-info">
       <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
 
-      {/* Plan & quota (#1389). Lives at the top of Info (#1887) so it
-          no longer renders on every settings sub-page. */}
+      {/* Plan & quota (#1389), the Usage card when plans are off. Lives
+          at the top of Info (#1887) so it no longer renders on every
+          settings sub-page. */}
       <PlanCard groupSlug={groupSlug} ownerName={ownerName} />
 
       <form
@@ -385,17 +418,19 @@ function InfoSection({
           <Label htmlFor="settings-group-name">{t("groups:settings.nameLabel")}</Label>
           <Input
             id="settings-group-name"
-            maxLength={100}
             disabled={updateMutation.isPending}
             aria-invalid={!!form.formState.errors.name}
             data-testid="settings-name-input"
+            aria-describedby={
+              form.formState.errors.name?.message ? "settings-group-name-error" : undefined
+            }
             {...form.register("name")}
           />
-          {form.formState.errors.name ? (
-            <p className="text-xs text-destructive" data-testid="settings-name-error">
-              {t(form.formState.errors.name.message ?? "")}
-            </p>
-          ) : null}
+          <FieldError
+            id="settings-group-name-error"
+            testId="settings-name-error"
+            message={form.formState.errors.name?.message}
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -409,14 +444,18 @@ function InfoSection({
                 onChange={field.onChange}
                 disabled={updateMutation.isPending}
                 testId="group-settings-icon-picker"
+                invalid={!!form.formState.errors.icon}
+                describedBy={
+                  form.formState.errors.icon?.message ? "settings-group-icon-error" : undefined
+                }
               />
             )}
           />
-          {form.formState.errors.icon ? (
-            <p className="text-xs text-destructive" data-testid="settings-icon-error">
-              {t(form.formState.errors.icon.message ?? "")}
-            </p>
-          ) : null}
+          <FieldError
+            id="settings-group-icon-error"
+            testId="settings-icon-error"
+            message={form.formState.errors.icon?.message}
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -656,10 +695,16 @@ function MembersSection({
 // toggles when they navigate here. The card already carries its own
 // title + subtitle, so we drop the SectionTitle to avoid double
 // headings.
-function NotificationsSection({ groupSlug }: { groupSlug: string | null }) {
+function NotificationsSection({
+  groupSlug,
+  hideWarrantyAlerts,
+}: {
+  groupSlug: string | null
+  hideWarrantyAlerts: boolean
+}) {
   return (
     <div className="space-y-6" data-testid="group-section-notifications">
-      <NotificationsCard groupSlug={groupSlug} />
+      <NotificationsCard groupSlug={groupSlug} hideWarrantyAlerts={hideWarrantyAlerts} />
     </div>
   )
 }
@@ -667,8 +712,9 @@ function NotificationsSection({ groupSlug }: { groupSlug: string | null }) {
 // DataSection — per-group storage usage panel + exports shortcut.
 // Moved here from /settings (user Preferences), where these were
 // rendered against an implicit "active group" fallback. Both are
-// strictly group-scoped, so they belong on the group page.
-function DataSection({ groupSlug }: { groupSlug: string | null }) {
+// strictly group-scoped, so they belong on the group page. Admins also
+// get the group's failed background jobs (#1307).
+function DataSection({ groupSlug, isAdmin }: { groupSlug: string | null; isAdmin: boolean }) {
   const { t } = useTranslation()
 
   return (
@@ -701,6 +747,8 @@ function DataSection({ groupSlug }: { groupSlug: string | null }) {
       )}
 
       <StorageCard />
+
+      {isAdmin && groupSlug ? <FailedJobsCard groupSlug={groupSlug} /> : null}
     </div>
   )
 }
@@ -846,13 +894,16 @@ function DeleteGroupDialog({
               disabled={deleteMutation.isPending}
               aria-invalid={!!form.formState.errors.confirmWord}
               data-testid="delete-confirm-word"
+              aria-describedby={
+                form.formState.errors.confirmWord?.message ? "delete-group-name-error" : undefined
+              }
               {...form.register("confirmWord")}
             />
-            {form.formState.errors.confirmWord ? (
-              <p className="text-xs text-destructive" data-testid="delete-confirm-word-error">
-                {t(form.formState.errors.confirmWord.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="delete-group-name-error"
+              testId="delete-confirm-word-error"
+              message={form.formState.errors.confirmWord?.message}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="delete-group-password">
@@ -865,13 +916,16 @@ function DeleteGroupDialog({
               disabled={deleteMutation.isPending}
               aria-invalid={!!form.formState.errors.password}
               data-testid="delete-password"
+              aria-describedby={
+                form.formState.errors.password?.message ? "delete-group-password-error" : undefined
+              }
               {...form.register("password")}
             />
-            {form.formState.errors.password ? (
-              <p className="text-xs text-destructive" data-testid="delete-password-error">
-                {t(form.formState.errors.password.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="delete-group-password-error"
+              testId="delete-password-error"
+              message={form.formState.errors.password?.message}
+            />
           </div>
           {serverError ? (
             <Alert variant="destructive" data-testid="delete-server-error">

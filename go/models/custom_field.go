@@ -142,6 +142,12 @@ type CustomFieldDefinition struct {
 	//ptah:schema:field name="options" type="JSONB"
 	Options ValuerSlice[CustomFieldOption] `json:"options" db:"options"`
 
+	// SetEntry is the entry of the item set that created the field
+	// (#1607), or empty for a field a member added. The registries keep the
+	// stored value on every update; it is not part of the API.
+	//ptah:schema:field name="set_entry" type="TEXT" not_null="true" default=""
+	SetEntry ItemSetEntry `json:"-" db:"set_entry" userinput:"false"`
+
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 

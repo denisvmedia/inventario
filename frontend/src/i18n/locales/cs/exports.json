@@ -10,6 +10,7 @@
   "detail": {
     "binaryDataSize": "Velikost příloh",
     "completedAt": "Dokončeno",
+    "failedAt": "Selhalo",
     "counts": {
       "areas_one": "{{count}} oblast",
       "areas_few": "{{count}} oblasti",
@@ -51,6 +52,7 @@
     "importFailed": "Zálohu se nepodařilo naimportovat: {{error}}",
     "invalidFileType": "Vyberte soubor zálohy (.inb).",
     "loadFailed": "Exporty se nepodařilo načíst: {{error}}",
+    "personalDataExport": "Toto je export osobních dat, kopie dat jednoho člověka. Nelze ho obnovit. Vyberte zálohu skupiny (soubor .inb).",
     "restoreCreateFailed": "Obnovu se nepodařilo spustit: {{error}}",
     "uploadFailed": "Soubor se nepodařilo nahrát: {{error}}"
   },

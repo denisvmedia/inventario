@@ -36,6 +36,10 @@ func NewFactorySet() *registry.FactorySet {
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
+	// The drafts name item types and hold custom field values; the two
+	// factories count them and rewrite them on a delete.
+	itemTypeFactory.SetDraftFactory(commodityDraftFactory)
+	customFieldFactory.SetDraftFactory(commodityDraftFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -104,6 +108,8 @@ func NewFactorySet() *registry.FactorySet {
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 	apiTokenReg := NewAPITokenRegistry()
 	fs.APITokenRegistry = apiTokenReg
+	personalDataExportReg := NewPersonalDataExportRegistry()
+	fs.PersonalDataExportRegistry = personalDataExportReg
 	fs.LoginEventRegistry = NewLoginEventRegistry()
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
@@ -153,7 +159,20 @@ func NewFactorySet() *registry.FactorySet {
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry()
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
-	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
+	currencyMigrationFactory := NewCurrencyMigrationRegistryFactory()
+	currencyMigrationFactory.SetLocationGroupRegistry(groupReg)
+	fs.CurrencyMigrationRegistryFactory = currencyMigrationFactory
+	// Failed jobs (#1307) read the job rows of these stores directly.
+	fs.FailedJobRegistry = NewFailedJobRegistry(FailedJobStores{
+		Exports:             exportFactory,
+		Restores:            restoreOperationFactory,
+		Thumbnails:          thumbnailGenerationJobFactory,
+		Files:               fileFactory,
+		Intake:              intakeFactory,
+		CurrencyMigrations:  currencyMigrationFactory,
+		PersonalDataExports: personalDataExportReg,
+		Users:               userReg,
+	})
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	groupPurger := NewGroupPurger(
 		locationFactory,
@@ -211,6 +230,7 @@ func NewFactorySet() *registry.FactorySet {
 	userPurger.SetItemTypeFactory(itemTypeFactory)
 	userPurger.SetIntakeDocumentFactory(intakeDocumentFactory)
 	userPurger.SetCustomFieldFactory(customFieldFactory)
+	userPurger.SetPersonalDataExportRegistry(personalDataExportReg)
 	fs.UserPurger = userPurger
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request
@@ -233,6 +253,23 @@ func NewFactorySet() *registry.FactorySet {
 	// UserContentOwnershipChecker (#2147) likewise reads several content
 	// registries off the FactorySet, so it is wired after every fs.* field too.
 	fs.UserContentOwnershipChecker = NewUserContentOwnershipChecker(fs)
+
+	// UserTenantMover (#2179) counts with the same stores, so it is wired
+	// after every fs.* field too.
+	fs.UserTenantMover = NewUserTenantMover(fs, userReg, membershipReg, userPurger)
+
+	// The group rows the user purge hands over live in stores read off the
+	// FactorySet, so they are wired after every fs.* field too.
+	userPurger.setGroupRowStores(groupRowStores(fs))
+	if invites, ok := fs.GroupInviteRegistry.(*GroupInviteRegistry); ok {
+		userPurger.setGroupInviteRegistry(invites)
+	}
+	userPurger.setAuditLogRegistry(fs.AuditLogRegistry)
+
+	// What a member leaves behind in a group lives in stores read off the
+	// FactorySet, so it is wired after every fs.* field too.
+	membershipReg.setMemberDeparture(newMemberDeparture(fs, apiTokenReg))
+	apiTokenReg.setMemberships(membershipReg)
 
 	return fs
 }

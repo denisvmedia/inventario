@@ -295,8 +295,8 @@ func (api *apiTokensAPI) reauthenticate(w http.ResponseWriter, r *http.Request, 
 		return "", true
 	}
 	if err != nil {
-		slog.Error("API token create: MFA lookup failed", "user_id", user.ID, "error", err)
-		_ = internalServerError(w, r, err)
+		slog.ErrorContext(r.Context(), "API token create: MFA lookup failed", "user_id", user.ID, "error", err)
+		_ = renderInternalServerError(w, r, err)
 		return "", false
 	}
 	if !consumeMFACode(r.Context(), api.mfaService, api.mfaRegistry, user, row, req.TOTPCode, req.BackupCode) {
@@ -349,7 +349,7 @@ func (api *apiTokensAPI) credentialsChanged(r *http.Request, user *models.User, 
 			// JWTMiddleware lets a request through when this lookup fails;
 			// do the same. The password and MFA checks above do not depend
 			// on it.
-			slog.Error("API token create: session revocation lookup failed", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "API token create: session revocation lookup failed", "user_id", user.ID, "error", err)
 		case revoked && claims != nil && checkUserBlacklistIat(claims, since) != nil:
 			return true, nil
 		}
@@ -363,11 +363,11 @@ func (api *apiTokensAPI) credentialsChanged(r *http.Request, user *models.User, 
 // cap.
 func (api *apiTokensAPI) discardMintedToken(w http.ResponseWriter, r *http.Request, user *models.User, tokenID string, checkErr error) {
 	if _, err := api.service.Revoke(r.Context(), user.ID, tokenID); err != nil {
-		slog.Error("API token create: failed to revoke a discarded token", "user_id", user.ID, "token_id", tokenID, "error", err)
+		slog.ErrorContext(r.Context(), "API token create: failed to revoke a discarded token", "user_id", user.ID, "token_id", tokenID, "error", err)
 	}
 	if checkErr != nil {
-		slog.Error("API token create: credential re-check failed", "user_id", user.ID, "error", checkErr)
-		_ = internalServerError(w, r, checkErr)
+		slog.ErrorContext(r.Context(), "API token create: credential re-check failed", "user_id", user.ID, "error", checkErr)
+		_ = renderInternalServerError(w, r, checkErr)
 		return
 	}
 	api.logTokenEvent(r, "api_token_create", user, tokenID, false, new("account credentials changed during creation"))
@@ -427,7 +427,7 @@ func revokeAllAPITokens(r *http.Request, svc *services.APITokenService, audit se
 	}
 	n, err := svc.RevokeAllForUser(r.Context(), userID)
 	if err != nil {
-		slog.Error("Failed to revoke API tokens", "user_id", userID, "reason", reason, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to revoke API tokens", "user_id", userID, "reason", reason, "error", err)
 		return err
 	}
 	// The row shares its request_id with the row of the event that caused

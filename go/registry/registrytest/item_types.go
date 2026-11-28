@@ -22,6 +22,7 @@ type ItemTypeEnv struct {
 	TypesA, TypesB             registry.ItemTypeRegistry
 	ServiceTypes               registry.ItemTypeRegistry
 	CommoditiesA, CommoditiesB registry.CommodityRegistry
+	DraftsA                    registry.CommodityDraftRegistry
 	AreaA, AreaB               string
 	GroupA, GroupB             string
 }
@@ -307,6 +308,50 @@ func runItemTypeDeleteContract(t *testing.T, newEnv func(t *testing.T) ItemTypeE
 		c.Check(moved, qt.Equals, 0)
 	})
 
+	t.Run("open drafts that name a type keep it in use and move with it", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		vehicle, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Vehicle"})
+		c.Assert(err, qt.IsNil)
+		van := mustDraft(c, env.DraftsA, env.CtxA, "type-van", models.CommodityDraftValues{"name": "Van", "type": string(vehicle.Slug)})
+		gone := mustDraft(c, env.DraftsA, env.CtxA, "type-gone", models.CommodityDraftValues{"type": string(vehicle.Slug)})
+		_, err = env.DraftsA.MarkDiscarding(env.CtxA, gone.ID)
+		c.Assert(err, qt.IsNil)
+		mustDraft(c, env.DraftsA, env.CtxA, "type-none", models.CommodityDraftValues{"name": "Box"})
+
+		counts, err := env.TypesA.ItemCounts(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(counts[vehicle.Slug], qt.Equals, registry.ItemTypeUsage{Drafts: 1},
+			qt.Commentf("the draft being discarded is not counted"))
+		countsB, err := env.TypesB.ItemCounts(env.CtxB)
+		c.Assert(err, qt.IsNil)
+		c.Check(countsB, qt.HasLen, 0)
+
+		err = env.TypesA.Delete(env.CtxA, vehicle.ID)
+		c.Check(err, qt.ErrorIs, registry.ErrItemTypeInUse, qt.Commentf("a draft alone keeps the type in use"))
+
+		other := mustTypeBySlug(c, env.TypesA, env.CtxA, models.CommodityTypeOther)
+		moved, err := env.TypesA.DeleteReassigning(env.CtxA, vehicle.ID, other.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(moved, qt.Equals, 0, qt.Commentf("the count is of items"))
+
+		got, err := env.DraftsA.Get(env.CtxA, van.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Values["type"], qt.Equals, string(other.Slug))
+		c.Check(got.Values["name"], qt.Equals, "Van")
+		c.Check(got.Revision, qt.Equals, van.Revision+1)
+		_, err = env.DraftsA.SaveValues(env.CtxA, van.ID, van.Revision, models.CommodityDraftValues{"type": string(vehicle.Slug)})
+		c.Check(err, qt.ErrorIs, registry.ErrDraftRevisionConflict,
+			qt.Commentf("a tab that loaded the draft before the move cannot put the old type back"))
+
+		counts, err = env.TypesA.ItemCounts(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(counts[other.Slug], qt.Equals, registry.ItemTypeUsage{Drafts: 1})
+		_, left := counts[vehicle.Slug]
+		c.Check(left, qt.IsFalse)
+	})
+
 	t.Run("an update that keeps a type deleted meanwhile is refused", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -404,6 +449,15 @@ func mustTypeBySlug(c *qt.C, reg registry.ItemTypeRegistry, ctx context.Context,
 	t, err := reg.GetBySlug(ctx, slug)
 	c.Assert(err, qt.IsNil)
 	return t
+}
+
+// mustDraft creates an open draft with values under clientKey.
+func mustDraft(c *qt.C, reg registry.CommodityDraftRegistry, ctx context.Context, clientKey string, values models.CommodityDraftValues) *models.CommodityDraft {
+	c.Helper()
+	d, created, err := reg.CreateOrGet(ctx, models.CommodityDraft{ClientKey: clientKey, Values: values})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+	return d
 }
 
 func itemTypeSlugs(types []*models.ItemType) []models.CommodityType {

@@ -10,7 +10,7 @@ import { RouteTitleProvider } from "@/components/routing/RouteTitle"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
-import { clearRecent, getRecent, pushRecent } from "@/features/search/recent"
+import { clearAllRecent, getRecent, pushRecent, recentScope } from "@/features/search/recent"
 import { authHandlers, groupHandlers, memberHandlers, tagHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -110,7 +110,7 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  clearRecent("household")
+  clearAllRecent()
 })
 
 describe("<CommandPalette /> from the TopBar", () => {
@@ -230,6 +230,47 @@ describe("<CommandPalette /> from the TopBar", () => {
     expect(screen.queryByTestId("command-palette")).not.toBeInTheDocument()
   })
 
+  it("offers the items of a location (#2897)", async () => {
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    await typeQuery(user, palette, "garage")
+
+    const locationItems = await within(palette).findByTestId("palette-location-items-l1")
+    expect(locationItems).toHaveAccessibleName("Show items in Garage")
+    await user.click(locationItems)
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/g/household/commodities?location=l1"
+      )
+    )
+    expect(getRecent(recentScope("u1", "household"))).toEqual([])
+  })
+
+  // jsdom has no layout, so this guards the classes that keep a result
+  // title readable at 360 px (#2897): below sm the subtitle wraps under the
+  // title and the second action shows its icon only, named by aria-label.
+  it("keeps the title's width on a narrow screen", async () => {
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    await typeQuery(user, palette, "garage")
+
+    const row = await within(palette).findByTestId("palette-result-area-a1")
+    const title = within(row).getByText("Garage shelf")
+    expect(title.parentElement).toHaveClass("flex-col", "sm:flex-row")
+    expect(within(palette).getByTestId("palette-area-items-a1-label")).toHaveClass(
+      "hidden",
+      "sm:inline"
+    )
+    expect(within(palette).getByTestId("palette-area-items-a1")).toHaveAttribute(
+      "title",
+      "Show items in Garage shelf"
+    )
+  })
+
   it("offers the items of an area and of a tag", async () => {
     useHandlers()
     const user = userEvent.setup()
@@ -253,7 +294,7 @@ describe("<CommandPalette /> from the TopBar", () => {
       )
     )
     // Showing a list is not opening a result: nothing is remembered.
-    expect(getRecent("household")).toEqual([])
+    expect(getRecent(recentScope("u1", "household"))).toEqual([])
   })
 
   it("hands the query to the search page and to the items list", async () => {
@@ -282,7 +323,7 @@ describe("<CommandPalette /> from the TopBar", () => {
   })
 
   it("remembers an opened result and lists it in the empty palette", async () => {
-    pushRecent("household", {
+    pushRecent(recentScope("u1", "household"), {
       type: "area",
       id: "a9",
       title: "Attic",
@@ -306,6 +347,25 @@ describe("<CommandPalette /> from the TopBar", () => {
     expect(rows.map((row) => row.textContent)).toEqual(["Hedge trimmerItem", "AtticArea"])
   })
 
+  // #3023: someone else who signed in on this browser before, in the same
+  // group, keeps what they opened to themselves.
+  it("keeps another user's recent items to that user", async () => {
+    const other = recentScope("u2", "household")
+    pushRecent(other, { type: "area", id: "a9", title: "Attic", url: "/g/household/areas/a9" })
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    expect(within(palette).queryByTestId("palette-recent-area-a9")).not.toBeInTheDocument()
+
+    await typeQuery(user, palette, "garage")
+    await user.click(await within(palette).findByTestId("palette-result-commodity-c1"))
+    await waitFor(() =>
+      expect(getRecent(recentScope("u1", "household")).map((e) => e.id)).toEqual(["c1"])
+    )
+    expect(getRecent(other).map((e) => e.id)).toEqual(["a9"])
+  })
+
   it("says when nothing matches", async () => {
     useHandlers()
     const user = userEvent.setup()
@@ -325,5 +385,37 @@ describe("<CommandPalette /> from the TopBar", () => {
     await typeQuery(user, palette, "garage")
     await within(palette).findByTestId("palette-result-tag-t1")
     expect(await axe(palette)).toHaveNoViolations()
+  })
+})
+
+describe("<CommandPalette /> in a group that hides sections (#1607)", () => {
+  function navigationOptions(palette: HTMLElement): string[] {
+    return within(palette)
+      .getAllByRole("option")
+      .map((option) => option.textContent ?? "")
+  }
+
+  it("offers Warranties while the group shows them", async () => {
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    expect(navigationOptions(palette)).toContain("Warranties")
+  })
+
+  it("leaves Warranties out while the group hides them", async () => {
+    useHandlers()
+    server.use(
+      ...groupHandlers.list([
+        { id: "g1", slug: "household", name: "Household", hidden_sections: ["warranties"] },
+        { id: "g2", slug: "office", name: "Office" },
+      ])
+    )
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    const options = navigationOptions(palette)
+    expect(options).toContain("Tags")
+    expect(options).not.toContain("Warranties")
   })
 })

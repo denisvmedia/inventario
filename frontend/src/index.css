@@ -46,6 +46,14 @@
   --color-status-expired: var(--status-expired);
   --color-status-none: var(--status-none);
 
+  --color-item-status-in-use: var(--item-status-in-use);
+  --color-item-status-sold: var(--item-status-sold);
+  --color-item-status-lost: var(--item-status-lost);
+  --color-item-status-disposed: var(--item-status-disposed);
+  --color-item-status-written-off: var(--item-status-written-off);
+  --color-item-status-donated: var(--item-status-donated);
+  --color-item-status-stolen: var(--item-status-stolen);
+
   --color-tag-amber: var(--tag-amber);
   --color-tag-green: var(--tag-green);
   --color-tag-blue: var(--tag-blue);
@@ -105,6 +113,23 @@
   --status-expiring: oklch(0.78 0.18 75);
   --status-expired: oklch(0.65 0.22 25);
   --status-none: oklch(0.6 0 0);
+
+  /*
+    Item status palette (#2926) — the label of a status pill, on a `/10`
+    tint of the same color (COMMODITY_STATUS_TONES), and of a Change Status
+    button. Each one reaches 4.5:1 against its tint over
+    the card and over the page background, stays inside sRGB, and keeps a
+    hue of its own; src/__tests__/item-status-contrast.test.ts measures all
+    three. The hues follow the mock's status colors (green, amber, gray,
+    red); Sold is teal, to differ from In use, Donated blue, Stolen pink.
+  */
+  --item-status-in-use: oklch(0.5 0.13 150);
+  --item-status-sold: oklch(0.5 0.085 205);
+  --item-status-lost: oklch(0.52 0.105 75);
+  --item-status-disposed: oklch(0.48 0 0);
+  --item-status-written-off: oklch(0.52 0.17 27);
+  --item-status-donated: oklch(0.51 0.16 258);
+  --item-status-stolen: oklch(0.52 0.17 350);
 
   /*
     Tag palette — six tones used as foreground + tinted background on
@@ -171,6 +196,14 @@
   --status-expiring: oklch(0.72 0.18 75);
   --status-expired: oklch(0.62 0.22 25);
   --status-none: oklch(0.5 0 0);
+
+  --item-status-in-use: oklch(0.76 0.15 150);
+  --item-status-sold: oklch(0.76 0.11 205);
+  --item-status-lost: oklch(0.78 0.13 75);
+  --item-status-disposed: oklch(0.74 0 0);
+  --item-status-written-off: oklch(0.74 0.15 27);
+  --item-status-donated: oklch(0.74 0.12 258);
+  --item-status-stolen: oklch(0.74 0.15 350);
 
   --tag-amber: oklch(0.78 0.13 80);
   --tag-green: oklch(0.75 0.14 145);
@@ -266,5 +299,27 @@
 @media (prefers-reduced-motion: reduce) {
   .ai-scan-bar {
     animation: none;
+  }
+}
+
+/* Under prefers-reduced-motion: reduce nothing moves when it enters or
+   leaves. The enter and exit keyframes of tw-animate-css read their start
+   and end values from these properties, so with them at rest a dialog,
+   menu, popover, sheet or list row keeps its fade but does not zoom, slide
+   or turn. tw-animate-css has no reduced-motion rule of its own; this one
+   covers every animate-in and animate-out use, a new one included. The
+   opacity and blur properties stay, since a fade is not movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    --tw-enter-scale: 1 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-exit-rotate: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
   }
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { FileDetailSheet } from "@/components/files/FileDetailSheet"
@@ -20,7 +20,7 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
 
-function renderSheet(fileId: string | null = "f1", onEdit = vi.fn()) {
+function renderSheet(fileId: string | null = "f1", onEdit = vi.fn(), canEdit = true) {
   setAccessToken("good-token")
   return renderWithProviders({
     initialPath: `/g/${SLUG}/files`,
@@ -35,6 +35,7 @@ function renderSheet(fileId: string | null = "f1", onEdit = vi.fn()) {
                 open={!!fileId}
                 onOpenChange={() => {}}
                 onEdit={onEdit}
+                canEdit={canEdit}
               />
             </ConfirmProvider>
           </GroupProvider>
@@ -140,6 +141,16 @@ describe("<FileDetailSheet />", () => {
         "href",
         `/g/${SLUG}/locations/loc1`
       )
+    })
+
+    it("offers no Edit, Delete or Remove attachment to a role that cannot change files (#2886)", async () => {
+      server.use(...groupHandlers.list(groupFixture), ...fileHandlers.detail(SLUG, "f1", receipt))
+      renderSheet("f1", vi.fn(), false)
+      const list = await screen.findByTestId("file-links")
+      expect(within(list).getByRole("link", { name: "Lens" })).toBeInTheDocument()
+      expect(within(list).queryByRole("button")).not.toBeInTheDocument()
+      expect(screen.queryByTestId("file-detail-edit")).not.toBeInTheDocument()
+      expect(screen.queryByTestId("file-detail-delete")).not.toBeInTheDocument()
     })
 
     it("says so when the file is attached to nothing", async () => {
@@ -272,6 +283,14 @@ describe("<FileDetailSheet />", () => {
     renderSheet("f1")
     await waitFor(() => expect(screen.getByTestId("file-detail-delete")).toBeInTheDocument())
     expect(screen.getByTestId("file-detail-delete")).not.toBeDisabled()
+    // The footer's delete is the red outline trigger; the solid red button
+    // is the confirmation's (#2914).
+    expect(screen.getByTestId("file-detail-delete")).toHaveAttribute("data-variant", "outline")
+    expect(screen.getByTestId("file-detail-delete")).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("renders the dash fallback when path is an empty string (regression #1483)", async () => {

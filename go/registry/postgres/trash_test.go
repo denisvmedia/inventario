@@ -159,7 +159,10 @@ func TestTrash_Postgres_PurgeKeepsSharedDocument(t *testing.T) {
 
 	_, err := fx.trash.TrashCommodity(fx.ctx, drill.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(fx.trash.PurgeCommodity(fx.ctx, drill.ID), qt.IsNil)
+	purged, err := fx.trash.PurgeCommodity(fx.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+	// The receipt the saw still uses is kept and not reported.
+	c.Assert(purged, qt.DeepEquals, services.TrashOutcome{ItemIDs: []string{drill.ID}, FileIDs: []string{manual.ID}})
 
 	_, err = fx.set.CommodityRegistry.GetTrashed(fx.ctx, drill.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -192,10 +195,13 @@ func TestTrash_Postgres_PurgeExpiredAcrossGroups(t *testing.T) {
 	_, err = fx.trash.TrashCommodity(fx.ctx, fresh.ID)
 	c.Assert(err, qt.IsNil)
 
-	items, files, err := fx.trash.PurgeExpired(fx.ctx, now.Add(-services.DefaultTrashRetention), 100)
+	purged, err := fx.trash.PurgeExpired(fx.ctx, now.Add(-services.DefaultTrashRetention), 100)
 	c.Assert(err, qt.IsNil)
-	c.Assert(items, qt.Equals, 1)
-	c.Assert(files, qt.Equals, 1)
+	c.Assert(purged, qt.DeepEquals, []services.GroupTrashOutcome{{
+		TenantID:     expired.TenantID,
+		GroupID:      expired.GroupID,
+		TrashOutcome: services.TrashOutcome{ItemIDs: []string{expired.ID}, FileIDs: []string{manual.ID, loose.ID}},
+	}})
 
 	_, err = fx.set.CommodityRegistry.GetTrashed(fx.ctx, expired.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -210,10 +216,9 @@ func TestTrash_Postgres_PurgeExpiredAcrossGroups(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Nothing left that expired: a repeat is a no-op.
-	items, files, err = fx.trash.PurgeExpired(fx.ctx, now.Add(-services.DefaultTrashRetention), 100)
+	purged, err = fx.trash.PurgeExpired(fx.ctx, now.Add(-services.DefaultTrashRetention), 100)
 	c.Assert(err, qt.IsNil)
-	c.Assert(items, qt.Equals, 0)
-	c.Assert(files, qt.Equals, 0)
+	c.Assert(purged, qt.HasLen, 0)
 }
 
 func TestTrash_Postgres_LoanRemindersSkipTrashedItems(t *testing.T) {
@@ -423,4 +428,34 @@ func TestTrash_Postgres_AreaDeleteWaitsForACurrencyMigration(t *testing.T) {
 		c.Assert(got.DeletedFromAreaID, qt.IsNotNil)
 		c.Assert(*got.DeletedFromAreaID, qt.Equals, fx.area.ID)
 	}
+}
+
+// TrashFileUnlessLinked trashes a file nothing links to, keeps one a link made
+// after the caller last read it holds, and reports a file in Trash as gone
+// (#2930).
+func TestTrash_Postgres_TrashFileUnlessLinked(t *testing.T) {
+	c := qt.New(t)
+	fx := newTrashPGFixture(t)
+
+	unused := fx.blobFile(c, "unused-upload", 100)
+	c.Assert(fx.trash.TrashFileUnlessLinked(fx.ctx, unused.ID), qt.IsNil)
+	_, err := fx.set.FileRegistry.GetTrashed(fx.ctx, unused.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fx.trash.TrashFileUnlessLinked(fx.ctx, unused.ID), qt.ErrorIs, registry.ErrNotFound)
+
+	// Read without links, then linked by another request before the trash.
+	raced := fx.blobFile(c, "raced-upload", 100)
+	read, err := fx.set.FileRegistry.Get(fx.ctx, raced.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(read.Links, qt.HasLen, 0)
+	drill := fx.item(c, "Drill")
+	_, _, err = fx.set.FileRegistry.AddLink(fx.ctx, models.FileLink{
+		FileID: raced.ID, EntityType: models.FileLinkCommodity, EntityID: drill.ID, Meta: models.FileLinkMetaImages,
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(fx.trash.TrashFileUnlessLinked(fx.ctx, raced.ID), qt.ErrorIs, services.ErrFileLinked)
+	kept, err := fx.set.FileRegistry.Get(fx.ctx, raced.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(pgLinkKeys(kept), qt.DeepEquals, []string{"commodity/" + drill.ID + "/images"})
 }

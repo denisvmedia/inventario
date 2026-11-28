@@ -246,6 +246,7 @@ type FactorySet struct {
 	UserRegistry                          UserRegistry                  // UserRegistry doesn't need factory as it's not user-aware
 	RefreshTokenRegistry                  RefreshTokenRegistry          // RefreshTokenRegistry doesn't need factory as it's not user-aware
 	APITokenRegistry                      APITokenRegistry              // Personal API tokens (#2808); service-mode (looked up by digest before a user context exists)
+	PersonalDataExportRegistry            PersonalDataExportRegistry    // Personal data exports (#2177); service-mode (the export worker serves every user)
 	LoginEventRegistry                    LoginEventRegistry            // LoginEventRegistry runs under the background-worker role (write path) + app-level user_id filter (read path)
 	UserMFASecretRegistry                 UserMFASecretRegistry         // Per-user TOTP secrets (#1645); service-mode (called pre-RLS in login)
 	AuditLogRegistry                      AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware
@@ -261,6 +262,8 @@ type FactorySet struct {
 	TenantPurger                          TenantPurger                  // TenantPurger hard-deletes every tenant-scoped dependent row during admin tenant hard-delete (#2115)
 	UserPurger                            UserPurger                    // UserPurger hard-deletes a user's auth/identity rows during admin user hard-delete (#2116)
 	UserContentOwnershipChecker           UserContentOwnershipChecker   // UserContentOwnershipChecker is the read-only pre-check for self-service account deletion (#2147)
+	UserTenantMover                       UserTenantMover               // UserTenantMover moves a user who owns nothing to another tenant (#2179)
+	FailedJobRegistry                     FailedJobRegistry             // FailedJobRegistry lists, retries and discards failed background jobs over each job type's table (#1307)
 	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	WeeklyDigestSendRegistry              WeeklyDigestSendRegistry      // WeeklyDigestSendRegistry is the weekly digest worker idempotency store; service-mode only (#1391)

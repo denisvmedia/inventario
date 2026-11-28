@@ -11,9 +11,10 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { CustomFieldsListPage } from "@/pages/customFields/CustomFieldsListPage"
 import { capture } from "@/test/capture"
-import { customFieldHandlers, groupHandlers } from "@/test/handlers"
+import { customFieldHandlers, groupHandlers, memberHandlers } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -52,6 +53,7 @@ beforeEach(() => {
 
 function renderPage(path = `/g/${SLUG}/custom-fields`) {
   return renderWithProviders({
+    withAuth: true,
     initialPath: path,
     routes: (
       <Route
@@ -59,7 +61,9 @@ function renderPage(path = `/g/${SLUG}/custom-fields`) {
         element={
           <GroupProvider>
             <main>
-              <CustomFieldsListPage />
+              <WhenRoleKnown>
+                <CustomFieldsListPage />
+              </WhenRoleKnown>
             </main>
           </GroupProvider>
         }
@@ -67,6 +71,13 @@ function renderPage(path = `/g/${SLUG}/custom-fields`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 function seed(list = fields) {
   server.use(...groupHandlers.list(groupFixture), ...customFieldHandlers.list(SLUG, list))
@@ -345,10 +356,66 @@ describe("<CustomFieldsListPage />", () => {
     expect(calls).toEqual([""])
   })
 
+  it("counts the drafts with a value in what the member confirms", async () => {
+    const calls: string[] = []
+    seed([{ ...plate, item_count: 3, trashed_item_count: 1, draft_count: 2 }])
+    server.use(
+      ...customFieldHandlers.remove(SLUG, "cf-plate", calls, { live: 3, trashed: 1, drafts: 2 })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("custom-field-row-cf-plate-delete"))
+    const dialog = await screen.findByTestId("custom-field-delete-dialog")
+    expect(within(dialog).getByTestId("custom-field-delete-description")).toHaveTextContent(
+      "4 items have a value for this field. Deleting the field deletes their values. This includes 1 item in Trash. 2 drafts have a value too; it is taken out of them."
+    )
+    await user.click(within(dialog).getByTestId("custom-field-delete-values"))
+    await user.click(within(dialog).getByTestId("custom-field-delete-confirm"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("custom-field-delete-dialog")).not.toBeInTheDocument()
+    )
+    expect(calls).toEqual(["delete_values=true&expected_values=6"])
+  })
+
+  it("asks to confirm a field that only drafts have a value of", async () => {
+    const calls: string[] = []
+    seed([{ ...plate, item_count: 0, trashed_item_count: 0, draft_count: 1 }])
+    server.use(
+      ...customFieldHandlers.remove(SLUG, "cf-plate", calls, { live: 0, trashed: 0, drafts: 1 })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("custom-field-row-cf-plate-delete"))
+    const dialog = await screen.findByTestId("custom-field-delete-dialog")
+    expect(within(dialog).getByTestId("custom-field-delete-description")).toHaveTextContent(
+      "No item has a value for this field, but 1 draft does. Deleting the field takes the value out of the draft."
+    )
+    expect(within(dialog).getByTestId("custom-field-delete-confirm")).toBeDisabled()
+    await user.click(within(dialog).getByTestId("custom-field-delete-values"))
+    await user.click(within(dialog).getByTestId("custom-field-delete-confirm"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("custom-field-delete-dialog")).not.toBeInTheDocument()
+    )
+    expect(calls).toEqual(["delete_values=true&expected_values=1"])
+  })
+
   it("has no axe violations", async () => {
     seed()
     const { container } = renderPage()
     await screen.findByTestId("custom-field-row-cf-plate")
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<CustomFieldsListPage /> as a viewer (#2886)", () => {
+  // The server takes custom field writes from users, admins and owners only.
+  it("offers no create, edit or delete", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seed()
+    renderPage()
+    expect(await screen.findByTestId("custom-field-row-cf-plate")).toBeVisible()
+    expect(screen.queryByTestId("custom-fields-create-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("custom-field-row-cf-plate-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("custom-field-row-cf-plate-delete")).not.toBeInTheDocument()
   })
 })

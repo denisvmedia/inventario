@@ -5,16 +5,14 @@ import {
   Clock,
   Copy,
   Crown,
-  Eye,
   Mail,
   MoreHorizontal,
-  Shield,
   Trash2,
-  User as UserIcon,
   UserPlus,
   Users,
 } from "lucide-react"
 
+import { RoleBadge, ROLE_ICON } from "@/components/RoleBadge"
 import { UserAvatar } from "@/components/UserAvatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -63,27 +61,10 @@ import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
 
-// Role configuration mirrors design-mocks/src/views/MembersView.tsx
-// (ROLE_CONFIG / ROLE_ORDER). The label / description text comes from
-// i18n; the icon + badge color stays here because they're visual
-// constants of the role taxonomy, not user-tweakable copy.
+// Role order mirrors design-mocks/src/views/MembersView.tsx (ROLE_ORDER).
+// The icon and badge per role live in @/components/RoleBadge; the label and
+// description text come from i18n.
 const ROLE_ORDER: GroupRole[] = ["viewer", "user", "admin", "owner"]
-const ROLE_ICON: Record<GroupRole, ElementType> = {
-  viewer: Eye,
-  user: UserIcon,
-  admin: Shield,
-  owner: Crown,
-}
-// Subtle tinting per role — viewer / user stay neutral / cool; admin
-// uses the primary brand color; owner uses the amber accent. Kept as
-// Tailwind utility strings so the values flow through the design-token
-// system rather than being raw hex codes.
-const ROLE_BADGE_CLASS: Record<GroupRole, string> = {
-  viewer: "bg-muted text-muted-foreground border-0",
-  user: "bg-chart-3/10 text-chart-3 border-0",
-  admin: "bg-primary/10 text-primary border-0",
-  owner: "bg-accent text-accent-foreground border-0",
-}
 
 // Roles offered in the Invite dialog. Owner is intentionally absent —
 // owner is a transfer-of-ownership action, not an invite role. The BE
@@ -309,21 +290,6 @@ function RoleLegend() {
         )
       })}
     </div>
-  )
-}
-
-function RoleBadge({ role }: { role: GroupRole }) {
-  const { t } = useTranslation()
-  const Icon = ROLE_ICON[role]
-  return (
-    <Badge
-      variant="secondary"
-      className={cn("gap-1 h-5 text-[10px]", ROLE_BADGE_CLASS[role])}
-      data-testid={`role-badge-${role}`}
-    >
-      <Icon className="size-3" aria-hidden="true" />
-      {t(`members:roles.${role}`)}
-    </Badge>
   )
 }
 

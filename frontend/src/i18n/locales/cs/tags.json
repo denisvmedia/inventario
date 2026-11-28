@@ -32,7 +32,7 @@
     "cancel": "Zrušit",
     "color": "Barva",
     "create": "Vytvořit štítek",
-    "createError": "Štítek se nepodařilo vytvořit: {{error}}",
+    "createError": "Štítek se nepodařilo vytvořit.",
     "createSuccess": "Štítek byl vytvořen.",
     "createTitle": "Vytvořit štítek",
     "editTitle": "Upravit štítek",
@@ -43,7 +43,7 @@
     "slug": "Slug",
     "slugHint": "Malá písmena a číslice v libovolném jazyce oddělené pomlčkami. Vyplní se podle názvu; identifikuje štítek u položek a souborů.",
     "slugPlaceholder": "kuchyně",
-    "updateError": "Štítek se nepodařilo aktualizovat: {{error}}",
+    "updateError": "Štítek se nepodařilo aktualizovat.",
     "updateSuccess": "Štítek byl aktualizován."
   },
   "inlineCreate": {
@@ -82,7 +82,7 @@
     "confirmAction": "Smazat",
     "confirmDescription": "Odebrat štítek „{{label}}“ z této skupiny. Tuto akci nelze vrátit zpět.",
     "confirmTitle": "Smazat štítek?",
-    "deleteError": "Štítek se nepodařilo smazat: {{error}}",
+    "deleteError": "Štítek se nepodařilo smazat.",
     "deleteSuccess": "Štítek byl smazán.",
     "forceAction": "Vynutit smazání",
     "forceCancel": "Zrušit",

@@ -3,12 +3,20 @@ package registry
 import (
 	"maps"
 	"net/url"
+
+	"go.5x5.cz/inventario/internal/urlerr"
 )
 
 type Config string
 
+// Parse parses the DSN. Its error leaves the DSN out: url.Parse would quote
+// it, password included. A postgres:// DSN with an "@" after the host is
+// refused (urlerr.CheckDatabaseURL).
 func (c Config) Parse() (*url.URL, error) {
-	return url.Parse(string(c))
+	if err := urlerr.CheckDatabaseURL(string(c)); err != nil {
+		return nil, err
+	}
+	return urlerr.Parse(string(c))
 }
 
 type SetFunc func(Config) (*FactorySet, error)

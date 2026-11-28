@@ -8,6 +8,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -29,11 +30,12 @@ var (
 	ErrAccountSoleOwnerOfSharedGroup = errx.NewSentinel("cannot delete account: you are the sole owner of a shared group — transfer ownership first")
 
 	// ErrAccountStillOwnsContent is returned by DeleteAccount when the user still
-	// owns content (commodities/files/areas/locations/exports/tags) authored in a
-	// RETAINED group, or created a location_group that is not being purged. Those
-	// rows carry a NOT NULL created_by_user_id (or created_by) FK to users(id)
-	// that cannot be orphaned without a schema change, so the account cannot be
-	// erased unilaterally. It is raised up-front by the read-only pre-check
+	// owns content (items, files, file links, places, exports) authored in a
+	// RETAINED group. Those rows carry a NOT NULL created_by_user_id FK to
+	// users(id) and are the user's own, so they are neither purged nor handed
+	// over, and the account cannot be erased unilaterally. A row that is
+	// handed over (a group the user created, tags, item history, …) counts too
+	// when its retained group has no other member to take it. It is raised up-front by the read-only pre-check
 	// (abort-before-mutate) and, as a TOCTOU backstop, by the final users-row
 	// delete's foreign-key violation. Surfaces as 422 auth.delete.owns_content.
 	//
@@ -56,13 +58,16 @@ var (
 //     - otherwise (co-owner ≥2 owners, or non-owner)      -> leave untouched;
 //     the membership row is removed by UserPurger in step 3.
 //     1.5. PRE-CHECK content ownership (read-only). If the user authored content in
-//     a RETAINED group, or created a location_group that is NOT being purged,
-//     abort with ErrAccountStillOwnsContent — mutating nothing.
+//     a RETAINED group, or a row to hand over in a RETAINED group with no other
+//     member, abort with ErrAccountStillOwnsContent — mutating nothing.
 //  2. For each PRIVATE group, run GroupPurgeService.purgeGroup (blobs ->
 //     GroupPurger -> invites -> location_groups row).
-//  3. UserPurger.PurgeUserDependents (auth/identity + memberships + per-user rows
-//     + the user's group_invites_audit references + the item reminders the
-//     user created, which email only their author).
+//  3. UserPurger.PurgeUserDependents: deletes the user's auth/identity and
+//     personal rows (memberships, invites, item reminders, drafts, saved
+//     views, ...) and hands the group rows they created in retained groups
+//     (the groups themselves, item history, loans, service records,
+//     maintenance, item types, ...) to another member. Every other row that
+//     references the user is one the pre-check in step 1.5 refused on.
 //  4. UserRegistry.Delete. A foreign-key violation here (SQLSTATE 23503) means a
 //     concurrent request re-created user-owned content after the pre-check (a
 //     TOCTOU race) -> ErrAccountStillOwnsContent. Any other error -> 500.
@@ -110,8 +115,8 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	// 1.5) Up-front content-ownership pre-check (abort BEFORE mutating). The
 	// private groups in privateGroupIDs are purged wholesale below, so content
 	// there does not block deletion. But any content the user authored in a
-	// RETAINED group — or any location_group the user created that is NOT being
-	// purged — carries a NOT NULL FK to users(id) that cannot be orphaned. If any
+	// RETAINED group — or a row to hand over in a RETAINED group that has no
+	// other member — carries a NOT NULL FK to users(id) that cannot be orphaned. If any
 	// such row exists, refuse the delete now, mutating nothing, rather than
 	// discovering it at the final DELETE FROM users (which would leave a
 	// half-erased account). This mirrors the abort-before-mutate contract of the
@@ -130,6 +135,12 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	user, err := s.factorySet.UserRegistry.Get(ctx, userID)
 	if err != nil {
 		return errxtrace.Wrap("failed to load the user", err)
+	}
+	// The same goes for the personal data export archives: their rows go in
+	// step 3, their blobs after step 4.
+	exportKeys, err := s.personalDataExportKeys(ctx, userID)
+	if err != nil {
+		return err
 	}
 
 	// 2) Purge each PRIVATE group via the existing per-group sequence.
@@ -163,7 +174,7 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	// leak the schema/constraint name.
 	if err := s.factorySet.UserRegistry.Delete(ctx, userID); err != nil {
 		if isForeignKeyViolation(err) {
-			slog.Warn("account deletion: users-row delete rejected by FK (still owns content)",
+			slog.WarnContext(ctx, "account deletion: users-row delete rejected by FK (still owns content)",
 				"user_id", userID, "tenant_id", tenantID, "error", err)
 			return errxtrace.Classify(ErrAccountStillOwnsContent)
 		}
@@ -175,8 +186,42 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	if s.avatars != nil && user.AvatarPath != nil {
 		s.avatars.DeleteStored(ctx, *user.AvatarPath)
 	}
+	s.deletePersonalDataExportArchives(ctx, userID, exportKeys)
 
 	return nil
+}
+
+// deletePersonalDataExportArchives deletes the archives of a deleted
+// account: a copy of the user's data outlives the account no longer than
+// this. Best effort; the export worker's hourly sweep removes any archive a
+// failure here leaves behind.
+func (s *AccountDeletionService) deletePersonalDataExportArchives(ctx context.Context, userID string, keys []string) {
+	for _, key := range keys {
+		if err := s.purger.fileService.DeletePhysicalFile(ctx, key); err != nil {
+			slog.WarnContext(ctx, "account deletion: failed to delete a personal data export archive",
+				"user_id", userID, "error", err)
+		}
+	}
+}
+
+// personalDataExportKeys returns the blob keys of the user's personal data
+// export archives (#2177), the deterministic key of every export whatever its
+// status: one being built when the account goes still writes there.
+func (s *AccountDeletionService) personalDataExportKeys(ctx context.Context, userID string) ([]string, error) {
+	if s.factorySet.PersonalDataExportRegistry == nil || s.purger.fileService == nil {
+		return nil, nil
+	}
+	exports, err := s.factorySet.PersonalDataExportRegistry.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list personal data exports", err)
+	}
+	keys := make([]string, 0, len(exports))
+	for _, e := range exports {
+		// The export's own tenant, not the caller's: a user moved to another
+		// tenant may still have an export from before the move.
+		keys = append(keys, blobkeys.BuildPersonalDataExportBlobKey(e.TenantID, e.ID))
+	}
+	return keys, nil
 }
 
 // isForeignKeyViolation reports whether err is a Postgres foreign-key violation
@@ -201,20 +246,45 @@ func isForeignKeyViolation(err error) bool {
 // returns ErrAccountSoleOwnerOfSharedGroup — before collecting anything — when
 // the user is the only owner of a group that still has other members.
 func (s *AccountDeletionService) classifyGroups(ctx context.Context, tenantID, userID string) ([]string, error) {
-	memberships, err := s.factorySet.GroupMembershipRegistry.ListByUser(ctx, tenantID, userID)
+	privateGroupIDs, soleOwnedGroupID, err := classifyMemberships(ctx, s.factorySet.GroupMembershipRegistry, tenantID, userID)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to list user memberships", err)
+		return nil, err
+	}
+	if soleOwnedGroupID != "" {
+		return nil, errxtrace.Classify(ErrAccountSoleOwnerOfSharedGroup)
+	}
+	return privateGroupIDs, nil
+}
+
+// SoleOwnedSharedGroup returns the ID of a group in which userID is the only
+// owner while other members remain, or "" when there is none. Deleting such a
+// user would leave the group with members and no owner, so self-service
+// account deletion (ErrAccountSoleOwnerOfSharedGroup) and an operator's user
+// delete both refuse it. The rule is the one classifyGroups applies.
+func SoleOwnedSharedGroup(ctx context.Context, memberships registry.GroupMembershipRegistry, tenantID, userID string) (string, error) {
+	_, soleOwnedGroupID, err := classifyMemberships(ctx, memberships, tenantID, userID)
+	return soleOwnedGroupID, err
+}
+
+// classifyMemberships walks every group userID is a member of. It returns the
+// groups where the user is the only member, and stops at the first group
+// where the user is the only owner while other members remain, returning its
+// ID as soleOwnedGroupID.
+func classifyMemberships(ctx context.Context, memberships registry.GroupMembershipRegistry, tenantID, userID string) (privateGroupIDs []string, soleOwnedGroupID string, err error) {
+	userMemberships, err := memberships.ListByUser(ctx, tenantID, userID)
+	if err != nil {
+		return nil, "", errxtrace.Wrap("failed to list user memberships", err)
 	}
 
-	privateGroupIDs := make([]string, 0, len(memberships))
-	for _, m := range memberships {
+	privateGroupIDs = make([]string, 0, len(userMemberships))
+	for _, m := range userMemberships {
 		if m == nil || m.GroupID == "" {
 			continue
 		}
 
-		groupMembers, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, m.GroupID)
+		groupMembers, err := memberships.ListByGroup(ctx, m.GroupID)
 		if err != nil {
-			return nil, errxtrace.Wrap("failed to list group members", err)
+			return nil, "", errxtrace.Wrap("failed to list group members", err)
 		}
 
 		// Re-validate the user's membership against the freshly-listed members:
@@ -240,11 +310,11 @@ func (s *AccountDeletionService) classifyGroups(ctx context.Context, tenantID, u
 			continue
 		}
 		if countOwners(groupMembers) <= 1 {
-			return nil, errxtrace.Classify(ErrAccountSoleOwnerOfSharedGroup)
+			return nil, m.GroupID, nil
 		}
 	}
 
-	return privateGroupIDs, nil
+	return privateGroupIDs, "", nil
 }
 
 // membershipForUser returns the membership in members naming userID as the

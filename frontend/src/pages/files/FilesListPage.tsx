@@ -15,6 +15,7 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -43,7 +44,9 @@ import {
 } from "@/features/files/hooks"
 import { useFilesViewMode, type FilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatBytes } from "@/lib/intl"
 import { listContextFromLocation } from "@/lib/list-context"
@@ -61,6 +64,9 @@ const VIEW_MODE_KEY = "files:viewMode"
 // via localStorage and is also URL-syncable for shareable links.
 export function FilesListPage() {
   const { t } = useTranslation()
+  // Viewers browse, open and download; uploading, selecting for the bulk
+  // actions and the sheet's Edit and Delete take a role that writes files.
+  const canEdit = useGroupPermissions().canEditContent
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
@@ -290,8 +296,8 @@ export function FilesListPage() {
       } else {
         toast.success(t("files:bulk.tagsUpdated", { count: result.succeeded.length }))
       }
-    } catch {
-      toast.error(t("files:bulk.tagsError"))
+    } catch (err) {
+      toastMutationError(err, t("files:bulk.tagsError"))
     }
   }
 
@@ -349,15 +355,17 @@ export function FilesListPage() {
         subtitle={t("files:subtitle")}
         subtitleClassName="max-w-prose"
         actions={
-          <Button
-            size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={() => setUploadOpen(true)}
-            data-testid="files-upload-cta"
-          >
-            <Upload className="size-4" aria-hidden="true" />
-            {t("files:uploadCta")}
-          </Button>
+          canEdit ? (
+            <Button
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => setUploadOpen(true)}
+              data-testid="files-upload-cta"
+            >
+              <Upload className="size-4" aria-hidden="true" />
+              {t("files:uploadCta")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -480,7 +488,7 @@ export function FilesListPage() {
         </div>
       </div>
 
-      {selected.size > 0 ? (
+      {canEdit && selected.size > 0 ? (
         <BulkActionBar
           label={t("files:bulk.selected", { count: selected.size })}
           selectAll={{
@@ -494,9 +502,9 @@ export function FilesListPage() {
           <Label htmlFor="files-bulk-move" className="sr-only">
             {t("files:bulk.move")}
           </Label>
-          {/* eslint-disable-next-line no-restricted-syntax -- bulk "move to category" utility selector (context-mode bulk bar); native <select> retained, covered by native-select unit/e2e */}
-          <select
+          <NativeSelect
             id="files-bulk-move"
+            size="sm"
             data-testid="files-bulk-move"
             defaultValue=""
             disabled={bulkReclassify.isPending}
@@ -506,7 +514,6 @@ export function FilesListPage() {
               if (!target) return
               await onBulkMove(target)
             }}
-            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
           >
             <option value="" disabled>
               {t("files:bulk.move")}
@@ -514,7 +521,7 @@ export function FilesListPage() {
             <option value="images">{t("files:categoryImages")}</option>
             <option value="documents">{t("files:categoryDocuments")}</option>
             <option value="other">{t("files:categoryOther")}</option>
-          </select>
+          </NativeSelect>
           <Button
             variant="outline"
             size="sm"
@@ -580,7 +587,7 @@ export function FilesListPage() {
           <p className="max-w-sm text-sm text-muted-foreground">
             {hasFilters ? t("files:empty.filteredSubtitle") : t("files:empty.subtitle")}
           </p>
-          {!hasFilters ? (
+          {!hasFilters && canEdit ? (
             <Button onClick={() => setUploadOpen(true)}>
               <Upload className="mr-2 size-4" aria-hidden="true" />
               {t("files:empty.uploadCta")}
@@ -592,10 +599,10 @@ export function FilesListPage() {
           items={items}
           viewMode={viewMode}
           onOpen={(id) => navigate(inList(filesUrl(groupSlug, id)))}
-          selectedIds={selected}
-          onToggleSelect={toggleOne}
+          selectedIds={canEdit ? selected : undefined}
+          onToggleSelect={canEdit ? toggleOne : undefined}
           allSelectedOnPage={allSelectedOnPage}
-          onToggleAll={toggleAllOnPage}
+          onToggleAll={canEdit ? toggleAllOnPage : undefined}
           showListHeader
         />
       )}
@@ -675,11 +682,12 @@ export function FilesListPage() {
             )
           )
         }
+        canEdit={canEdit}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => navigate(inList(filesUrl(groupSlug, id)))}
       />
 
-      <UploadFilesDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      <UploadFilesDialog open={canEdit && uploadOpen} onOpenChange={setUploadOpen} />
     </Page>
   )
 }

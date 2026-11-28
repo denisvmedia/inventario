@@ -47,7 +47,9 @@ newest first. A long inbox is split into pages of 50 rows.
   else the step after the last one the draft has values on. The steps before it are one click away on
   the step bar or with **Back**. Add the item to finish it; the draft leaves
   the inbox. Close the dialog to come back to the inbox with the draft
-  unchanged.
+  unchanged. The draft's files are on the **Files** step, where you can
+  change their titles and tags, such as the ones a scan gave them (see
+  [Files](../items/#files)).
 - **Discard** deletes the draft after you confirm. Its files that nothing else
   uses go to the [Trash](../trash/).
 
@@ -90,8 +92,8 @@ the list, for example "Item 1 of 4 to review":
 Edit the item on its page as usual in between: the fields of the **Details**
 tab, or **Edit** for the whole form. **Mark as reviewed** waits while a field
 of the **Details** tab is open or being saved; save or cancel it first. If you
-open a field, a dialog or a confirmation on the item before the next item
-opens, you stay on the item. Marking an item as reviewed changes nothing else
+open a field, a dialog or a confirmation on the item, in any of its tabs,
+before the next item opens, you stay on the item. Marking an item as reviewed changes nothing else
 on it. **Previous** and **Next** at the top, and **Save and next** in the edit
 form, move through the same list (see
 [Go through a list one item at a time](../items/#go-through-a-list-one-item-at-a-time)).

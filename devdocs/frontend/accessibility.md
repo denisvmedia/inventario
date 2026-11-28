@@ -79,6 +79,25 @@ Rules:
   you have a reason (an unsaved-changes guard, e.g.).
 - **No `window.confirm()` / `alert()`.** Use `useConfirm()`. Native
   dialogs aren't styleable, aren't translatable, and break in tests.
+- **Full-screen dialogs on phones.** Below `sm` a
+  `<DialogContent variant="fullscreen-mobile">` follows
+  `window.visualViewport`: while the on-screen keyboard is open the
+  dialog fills the part of the screen above it, so the footer stays in
+  sight. A step back in the browser history (the Android back gesture,
+  the iOS edge swipe) closes it through a hidden `DialogClose`, the same
+  path as its close button, so an unsaved-changes question still asks;
+  for that the dialog pushes a history entry with the same URL while it
+  is open, and takes it off when it closes another way. While that entry
+  is the current one, `history.pushState` replaces it instead, so a page
+  the app opens as the dialog closes takes the entry's place and leaves
+  no extra step back; `history.replaceState` keeps the entry and hands
+  its URL to the entry below when the dialog closes. A push that comes
+  while the dialog steps back over its entry is pushed once the step
+  lands; until then the entry being left shows the new URL. Toasts
+  shown while it is open sit above its footer. The call site does
+  nothing for any of this; the hooks live in
+  `src/components/ui/dialog-phone.ts`. From `sm` up the card behaves as
+  a default dialog: Back leaves the page.
 
 ## Color and contrast
 
@@ -89,6 +108,9 @@ The OKLCH tokens are tuned for WCAG AA contrast (4.5:1 for body text,
 - `text-muted-foreground` on `bg-card` — secondary text. Verified at
   light + dark.
 - `text-destructive` on `bg-card` — error text.
+- `text-item-status-*` on `bg-item-status-*/10` — item status pills.
+  `src/__tests__/item-status-contrast.test.ts` measures each status in
+  both modes, over the card and the page background.
 
 Hard rules:
 
@@ -109,17 +131,21 @@ Hard rules:
 
 ## Reduced motion
 
-The user's `prefers-reduced-motion: reduce` preference disables the
-animations that ship with `tw-animate-css` (it gates them on
-`@media (prefers-reduced-motion: no-preference)` automatically).
-When you write a new transition:
+`tw-animate-css` has no reduced-motion rule of its own. Under
+`prefers-reduced-motion: reduce`, a rule in `src/index.css` sets the
+scale, translate and rotate of every `animate-in` / `animate-out` use
+back to rest, so dialogs, menus and list rows fade without zooming or
+sliding. A new use of these utilities (`animate-in`, `fade-in-0`,
+`zoom-in-95`, `slide-in-from-*`) is covered without a gate of its own.
+
+Anything else that moves, such as a `transition-transform` or your own
+`@keyframes`, needs its own gate:
 
 ```tsx
 <div className="transition-colors motion-reduce:transition-none">…</div>
 ```
 
-— or just lean on `tw-animate-css` utilities (`animate-in`, `fade-in-0`,
-`zoom-in-95`), which already respect the preference.
+See [design/05-motion.md](design/05-motion.md#reduced-motion).
 
 Don't fall back to JS-driven animations (Framer Motion, react-spring) —
 none of them are in the bundle, and Tailwind v4 + `tw-animate-css`

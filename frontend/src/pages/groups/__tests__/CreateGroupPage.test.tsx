@@ -1,10 +1,11 @@
 import { lazy, Suspense } from "react"
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Outlet, Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import { toast } from "sonner"
 
 import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { GroupProvider, useCurrentGroup } from "@/features/group/GroupContext"
@@ -48,6 +49,27 @@ function renderCreate() {
       </>
     ),
   })
+}
+
+// A POST /groups handler that records the request and answers with a
+// created group, plus meta when given.
+function createHandler(meta?: Record<string, unknown>) {
+  const captured = capture<{ data?: { attributes?: Record<string, unknown> } }>()
+  const handler = msw.post(api("/groups"), async ({ request }) => {
+    captured.value = (await request.json()) as typeof captured.value
+    return HttpResponse.json(
+      {
+        data: {
+          id: "g1",
+          type: "groups",
+          attributes: { id: "g1", slug: "coins", name: "Coins", group_currency: "USD" },
+        },
+        ...(meta ? { meta } : {}),
+      },
+      { status: 201 }
+    )
+  })
+  return { captured, handler }
 }
 
 beforeEach(() => {
@@ -205,6 +227,69 @@ describe("<CreateGroupPage />", () => {
     )
     expect(screen.getByTestId("loc").getAttribute("data-search")).toBe("")
     expect(screen.queryByTestId("create-group-page")).not.toBeInTheDocument()
+  })
+
+  it("creates a household group by default, without the Collection set", async () => {
+    const { captured, handler } = createHandler()
+    server.use(handler)
+    const user = userEvent.setup()
+    renderCreate()
+
+    expect(screen.getByTestId("group-kind-household")).toBeChecked()
+    expect(screen.getByTestId("group-kind-collection")).not.toBeChecked()
+    expect(screen.getByText("You can change this later in the group settings.")).toBeInTheDocument()
+
+    await user.type(screen.getByTestId("group-name-input"), "Home")
+    await user.click(screen.getByTestId("create-group-submit"))
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/coins")
+    )
+    expect(captured.value?.data?.attributes).not.toHaveProperty("collection_set")
+    expect(captured.value?.data?.attributes).not.toHaveProperty("hidden_sections")
+  })
+
+  it("creates a Collection group with the set added and Warranties hidden (#1607)", async () => {
+    const { captured, handler } = createHandler({
+      collection_set: { added: true, created_item_types: 7, created_custom_fields: 8 },
+    })
+    server.use(handler)
+    const user = userEvent.setup()
+    renderCreate()
+
+    await user.type(screen.getByTestId("group-name-input"), "Coins")
+    await user.click(screen.getByTestId("group-kind-collection"))
+    expect(screen.getByTestId("group-kind-collection")).toBeChecked()
+    await user.click(screen.getByTestId("create-group-submit"))
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/coins")
+    )
+    expect(captured.value?.data?.attributes).toMatchObject({
+      name: "Coins",
+      collection_set: true,
+      hidden_sections: ["warranties"],
+    })
+    expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toBe("Group created.")
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it("says so when the group was created but the Collection set was not added", async () => {
+    const { handler } = createHandler({
+      collection_set: { added: false, created_item_types: 3, created_custom_fields: 0 },
+    })
+    server.use(handler)
+    const user = userEvent.setup()
+    renderCreate()
+
+    await user.type(screen.getByTestId("group-name-input"), "Coins")
+    await user.click(screen.getByTestId("group-kind-collection"))
+    await user.click(screen.getByTestId("create-group-submit"))
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/coins")
+    )
+    expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe(
+      "The group was created, but the Collection set was not added. Add it from Sections in the group settings."
+    )
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it("surfaces server errors inline on 422", async () => {

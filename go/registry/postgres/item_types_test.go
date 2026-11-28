@@ -24,6 +24,7 @@ func TestItemTypeContract_Postgres(t *testing.T) {
 			TypesB:       fx.groupBSet.ItemTypeRegistry,
 			ServiceTypes: fx.factorySet.ItemTypeRegistryFactory.CreateServiceRegistry(),
 			CommoditiesA: fx.groupASet.CommodityRegistry,
+			DraftsA:      fx.groupASet.CommodityDraftRegistry,
 			CommoditiesB: fx.groupBSet.CommodityRegistry,
 			AreaA:        fx.areaAID,
 			AreaB:        fx.areaBID,

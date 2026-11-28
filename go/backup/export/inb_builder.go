@@ -17,7 +17,6 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
-	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
@@ -105,6 +104,12 @@ type inbBuilder struct {
 	// emitted in the dedicated files member, never nested under a commodity.
 	entityFiles     []*entityCandidateFile
 	standaloneFiles []*entityCandidateFile
+	// recordsByCommodityID maps an item's DB id to its loans, service
+	// records, maintenance schedules, supply links and reminders, and
+	// authorUUIDByID maps the DB id of a member who recorded one to the
+	// member's UUID (see loadItemRecords).
+	recordsByCommodityID map[string]*itemRecords
+	authorUUIDByID       map[string]string
 
 	// sizeByFileID caches the resolved size of every file probed so far, so a
 	// file attached to several entities is probed once.
@@ -350,6 +355,12 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 	}
 
 	if err := b.loadSellers(); err != nil {
+		return err
+	}
+
+	// After the items: a record of an item created later is left out with
+	// its item, and one of an item deleted since stays out of the plan.
+	if err := b.loadItemRecords(); err != nil {
 		return err
 	}
 
@@ -620,7 +631,7 @@ func (b *inbBuilder) manifestItemTypes(scope *inbScope) []INBItemType {
 		if !scope.wholeClass && !b.usedItemTypes[t.Slug] {
 			continue
 		}
-		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon})
+		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon, SetEntry: string(t.SetEntry)})
 	}
 	return out
 }
@@ -771,7 +782,7 @@ func (b *inbBuilder) manifestCustomFields(scope *inbScope) []INBCustomField {
 		if !scope.wholeClass && !b.usedCustomFields[d.ID] {
 			continue
 		}
-		f := INBCustomField{ID: d.UUID, Name: d.Name, Type: string(d.Type)}
+		f := INBCustomField{ID: d.UUID, Name: d.Name, Type: string(d.Type), SetEntry: string(d.SetEntry)}
 		for _, o := range d.Options {
 			f.Options = append(f.Options, INBCustomFieldOption{ID: o.ID, Label: o.Label})
 		}
@@ -1431,6 +1442,8 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 		}
 	}
 
+	b.archiveItemRecords(com, &inbCom)
+
 	pending := b.planCommodityFiles(locSlug, com, &inbCom)
 	return inbCom, pending
 }
@@ -1719,16 +1732,6 @@ func incBucketStat(stats *types.ExportStats, bucket string, tags []string) {
 	}
 }
 
-// fileMemberName returns the basename to use for a file inside the archive:
-// its Path (user-facing name without extension) plus its extension.
-func fileMemberName(file *models.FileEntity) string {
-	name := file.Path
-	if name == "" {
-		name = file.UUID
-	}
-	return name + file.Ext
-}
-
 // fileSizeHint returns the size to declare in the file member's tar header. The
 // tar header needs an exact size, so we trust the recorded SizeBytes; rows with
 // a zero/unknown size fall back to a probe via the bucket attributes.
@@ -1737,31 +1740,4 @@ func fileSizeHint(file *models.FileEntity) int64 {
 		return file.SizeBytes
 	}
 	return 0
-}
-
-// ptrDecimalString renders a nullable decimal (the three prices, SalePrice,
-// AcquisitionPrice). It preserves a legitimate zero value: the meaningful
-// distinction for these columns is nil (unknown) vs set, so a non-nil pointer
-// holding 0 is emitted as "0" and only a nil pointer yields "" (the omitempty
-// JSON field then disappears). The restore side mirrors this: empty → nil, any
-// non-empty value → a set pointer.
-func ptrDecimalString(d *decimal.Decimal) string {
-	if d == nil {
-		return ""
-	}
-	return d.String()
-}
-
-// urlStrings flattens a slice of *URL to their string forms.
-func urlStrings(urls models.ValuerSlice[*models.URL]) []string {
-	if len(urls) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(urls))
-	for _, u := range urls {
-		if u != nil {
-			out = append(out, u.String())
-		}
-	}
-	return out
 }

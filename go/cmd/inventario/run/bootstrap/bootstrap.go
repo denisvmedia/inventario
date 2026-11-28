@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-extras/go-kit/must"
-
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/internal/observability/sentry"
@@ -70,7 +68,9 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 	dsn := dbConfig.DBDSN
 
 	logInventarioEnv()
-	logStartupInfo(mode, cfg.Addr, dsn)
+	if err := logStartupInfo(mode, cfg.Addr, dsn); err != nil {
+		return nil, err
+	}
 
 	if err := verifySchemaMatchesBinary(dsn); err != nil {
 		return nil, err
@@ -119,16 +119,20 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 	// vars (no INVENTARIO_RUN_ prefix — see the sentry package doc). A malformed
 	// DSN fails fast here; an unset DSN leaves Sentry disabled with a no-op
 	// flush. Done last so it covers the serving lifetime of every run mode;
-	// startup failures above are fatal and already logged to stderr.
+	// startup failures above are fatal and logged where they happen.
 	sentryCfg, err := sentry.LoadConfig()
 	if err != nil {
 		serverSetup.closeReadinessRedisPinger()
-		return nil, fmt.Errorf("loading sentry config: %w", err)
+		err = fmt.Errorf("loading sentry config: %w", err)
+		slog.Error("Invalid Sentry configuration", "error", err)
+		return nil, err
 	}
 	sentryFlush, err := sentry.Init(sentryCfg)
 	if err != nil {
 		serverSetup.closeReadinessRedisPinger()
-		return nil, fmt.Errorf("initialising sentry: %w", err)
+		err = fmt.Errorf("initialising sentry: %w", err)
+		slog.Error("Failed to initialize Sentry", "error", err)
+		return nil, err
 	}
 
 	// The Trash list shows when each entry expires, so the API server needs
@@ -153,6 +157,9 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 			factorySet.WorkerControlRegistry,
 			workerpause.WithRefreshInterval(durations.WorkerControlRefreshInterval),
 		)
+		// The processes that run workers are the ones that dead-letter jobs
+		// (#1307), so they export a zero series per type from the start.
+		initJobMetrics()
 	}
 
 	return rs, nil
@@ -171,20 +178,31 @@ func logInventarioEnv() {
 }
 
 // logStartupInfo prints a mode-specific startup banner with the DSN credentials
-// masked. ModeWorkers omits --addr since no HTTP listener is opened.
-func logStartupInfo(mode Mode, addr, dsn string) {
-	parsedDSN := must.Must(registry.Config(dsn).Parse())
-	if parsedDSN.User != nil {
-		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
+// masked: whatever shared.RedactDSN masks in the DSN as given, such as the
+// password and a password query parameter, and then the user name.
+// ModeWorkers omits --addr since no HTTP listener is opened. A DSN that does
+// not parse is an error rather than a panic, and the error leaves the DSN
+// out, since it carries the password.
+func logStartupInfo(mode Mode, addr, dsn string) error {
+	if _, err := registry.Config(dsn).Parse(); err != nil {
+		err = fmt.Errorf("invalid --db-dsn: %w", err)
+		slog.Error("Invalid database DSN", "error", err)
+		return err
+	}
+	maskedDSN := shared.RedactDSN(dsn)
+	if masked, err := url.Parse(maskedDSN); err == nil && masked.User != nil {
+		masked.User = url.UserPassword("xxxxxx", "xxxxxx")
+		maskedDSN = masked.String()
 	}
 	switch mode {
 	case ModeAPIServer:
-		slog.Info("Starting API server", "addr", addr, "db_dsn", parsedDSN.String())
+		slog.Info("Starting API server", "addr", addr, "db_dsn", maskedDSN)
 	case ModeWorkers:
-		slog.Info("Starting workers", "db_dsn", parsedDSN.String())
+		slog.Info("Starting workers", "db_dsn", maskedDSN)
 	default:
-		slog.Info("Starting server", "addr", addr, "db_dsn", parsedDSN.String())
+		slog.Info("Starting server", "addr", addr, "db_dsn", maskedDSN)
 	}
+	return nil
 }
 
 // verifySchemaMatchesBinary refuses to start the app when the database has
@@ -212,10 +230,11 @@ func verifySchemaMatchesBinary(dsn string) error {
 
 	m := migrator.NewWithFallback(dsn, "")
 	if err := m.VerifySchemaUpToDate(ctx); err != nil {
-		if errors.Is(err, migrator.ErrSchemaLagsBinary) {
-			slog.Error("refusing to start: database schema lags the binary's embedded migrations — re-run migrate from the current image (see #1655)",
-				"error", err,
-			)
+		// A schema behind the binary is logged by the migrator, with both
+		// versions; anything else, such as a database that cannot be
+		// reached, is logged here. Either way the failure is logged once.
+		if !errors.Is(err, migrator.ErrSchemaLagsBinary) {
+			slog.ErrorContext(ctx, "Refusing to start: could not check the database schema", "error", err)
 		}
 		return err
 	}

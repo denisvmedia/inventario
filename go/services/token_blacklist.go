@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"go.5x5.cz/inventario/internal/redisurl"
 )
 
 // TokenBlacklister defines the interface for token blacklisting operations.
@@ -61,7 +63,7 @@ func NewRedisTokenBlacklister(client *redis.Client) *RedisTokenBlacklister {
 // the error is logged as a warning but the blacklister is still returned — consistent with
 // the fail-open design where a Redis outage must not take the API offline.
 func NewRedisTokenBlacklisterFromURL(redisURL string) (*RedisTokenBlacklister, error) {
-	opts, err := redis.ParseURL(redisURL)
+	opts, err := redisurl.Parse(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis URL: %w", err)
 	}

@@ -24,7 +24,21 @@ func Register() (cleanup func() error) {
 	return cleanup
 }
 
+// NewFactorySet builds every PostgreSQL registry on dbx.
+//
+// The registries scan rows that carry columns this binary does not know: the
+// queries select `*`, and during a rolling upgrade the pods of the previous
+// version serve traffic against the schema the new version has migrated. A
+// plain sqlx handle refuses such a row ("missing destination name"), so the
+// registries use an unsafe one, which skips a column the struct does not map.
+// Writes are not affected: every INSERT and UPDATE names its columns, so a
+// column added with a default keeps that default or its current value.
+//
+// A column the struct means to map but names differently is not caught here
+// any more; models.TestPtahFieldNameIsTheDBTag guards that instead.
 func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
+	dbx = dbx.Unsafe()
+
 	// Create factory instances that will create context-aware registries
 	restoreStepFactory := NewRestoreStepRegistry(dbx)
 
@@ -55,6 +69,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.UserRegistry = NewUserRegistry(dbx)
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry(dbx)
 	fs.APITokenRegistry = NewAPITokenRegistry(dbx)
+	fs.PersonalDataExportRegistry = NewPersonalDataExportRegistry(dbx)
 	fs.LoginEventRegistry = NewLoginEventRegistry(dbx)
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry(dbx)
 	fs.AuditLogRegistry = NewAuditLogRegistry(dbx)
@@ -83,6 +98,8 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.TenantPurger = NewTenantPurger(dbx)
 	fs.UserPurger = NewUserPurger(dbx)
 	fs.UserContentOwnershipChecker = NewUserContentOwnershipChecker(dbx)
+	fs.UserTenantMover = NewUserTenantMover(dbx)
+	fs.FailedJobRegistry = NewFailedJobRegistry(dbx)
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry(dbx)
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry(dbx)
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry(dbx)

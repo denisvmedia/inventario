@@ -93,6 +93,76 @@ func TestRedact(t *testing.T) {
 			input:    "postgres://user:s3cr3t@localhost/db\x7f",
 			expected: "<redacted>",
 		},
+		{
+			name:     "masks a password query parameter",
+			input:    "postgres://db/inventario?user=app&password=s3cr3t&sslmode=disable",
+			expected: "postgres://db/inventario?password=xxxxxx&sslmode=disable&user=app",
+		},
+		{
+			name:     "masks sslpassword and the userinfo password together",
+			input:    "postgres://app:s3cr3t@db/inventario?sslpassword=s3cr3t",
+			expected: "postgres://app:xxxxxx@db/inventario?sslpassword=xxxxxx",
+		},
+		{
+			name:     "masks the password of a keyword DSN",
+			input:    "host=db user=app password=s3cr3t dbname=inventario",
+			expected: "host=db user=app password=xxxxxx dbname=inventario",
+		},
+		{
+			name:     "masks a quoted keyword password with spaces and escapes",
+			input:    `host=db password = 's3 cr\'3t' dbname=inventario`,
+			expected: "host=db password=xxxxxx dbname=inventario",
+		},
+		{
+			name:     "a keyword DSN without a password is returned unchanged",
+			input:    "host=db user=app dbname=inventario",
+			expected: "host=db user=app dbname=inventario",
+		},
+		{
+			// The "/" ends the host, so the userinfo is gone and the rest of
+			// the password is in the path.
+			name:     "a / in the password never echoes the rest of it",
+			input:    "postgres://app:12/s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a # in the password never echoes the rest of it",
+			input:    "postgres://app:12#s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a ? in the password never echoes the rest of it",
+			input:    "postgres://app:12?s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a URL without a scheme never echoes its userinfo",
+			input:    "//app:s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a URL with an opaque part never echoes it",
+			input:    "postgres:app:s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			// Query() drops a pair it cannot decode, password included.
+			name:     "a query that does not decode never echoes the password",
+			input:    "postgres://db/inventario?password=s3cr3t%zz",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a ; in a query password never echoes it",
+			input:    "postgres://app:s3cr3t@db/inventario?password=s3;cr3t",
+			expected: "<redacted>",
+		},
+		{
+			// The "#" ends the query, and the rest of the password is the
+			// fragment.
+			name:     "a # in a query password never echoes the rest of it",
+			input:    "postgres://db/inventario?password=s3#cr3t",
+			expected: "<redacted>",
+		},
 	}
 
 	for _, tt := range tests {

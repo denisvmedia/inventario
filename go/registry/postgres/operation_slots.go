@@ -35,9 +35,9 @@ type OperationSlotRegistry struct {
 }
 
 // NewOperationSlotRegistry creates a new PostgreSQL operation slot registry
-func NewOperationSlotRegistry(db *sql.DB, tableNames store.TableNames, service bool, userID, tenantID string) *OperationSlotRegistry {
+func NewOperationSlotRegistry(dbx *sqlx.DB, tableNames store.TableNames, service bool, userID, tenantID string) *OperationSlotRegistry {
 	return &OperationSlotRegistry{
-		dbx:        sqlx.NewDb(db, "postgres"),
+		dbx:        dbx,
 		tableNames: tableNames,
 		userID:     userID,
 		tenantID:   tenantID,
@@ -406,7 +406,7 @@ func (f *OperationSlotRegistryFactory) CreateUserRegistry(ctx context.Context) (
 		return nil, errxtrace.Wrap("user context required", registry.ErrInvalidInput)
 	}
 
-	return NewOperationSlotRegistry(f.db.DB, f.tableNames, false, user.ID, user.TenantID), nil
+	return NewOperationSlotRegistry(f.db, f.tableNames, false, user.ID, user.TenantID), nil
 }
 
 // MustCreateUserRegistry creates a new registry with user context, panics on error
@@ -420,5 +420,5 @@ func (f *OperationSlotRegistryFactory) MustCreateUserRegistry(ctx context.Contex
 
 // CreateServiceRegistry creates a new registry with service account context
 func (f *OperationSlotRegistryFactory) CreateServiceRegistry() registry.OperationSlotRegistry {
-	return NewOperationSlotRegistry(f.db.DB, f.tableNames, true, "", "")
+	return NewOperationSlotRegistry(f.db, f.tableNames, true, "", "")
 }

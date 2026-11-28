@@ -10,6 +10,7 @@
   "detail": {
     "binaryDataSize": "Размер вложений",
     "completedAt": "Завершено",
+    "failedAt": "Сбой",
     "counts": {
       "areas_one": "{{count}} зона",
       "areas_few": "{{count}} зоны",
@@ -51,6 +52,7 @@
     "importFailed": "Не удалось импортировать резервную копию: {{error}}",
     "invalidFileType": "Выберите файл резервной копии (.inb).",
     "loadFailed": "Не удалось загрузить экспорты: {{error}}",
+    "personalDataExport": "Это выгрузка личных данных, копия данных одного человека. Её нельзя восстановить. Выберите резервную копию группы (файл .inb).",
     "restoreCreateFailed": "Не удалось начать восстановление: {{error}}",
     "uploadFailed": "Не удалось загрузить файл: {{error}}"
   },

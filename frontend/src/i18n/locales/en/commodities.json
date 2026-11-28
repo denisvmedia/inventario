@@ -203,8 +203,10 @@
       "dateLabel": "Date",
       "description": {
         "disposed": "Permanently remove this item from your inventory.",
+        "donated": "Record that you gave this item away.",
         "lost": "Mark this item as lost. You can still revert later.",
         "sold": "Record the sale of this item, including the proceeds.",
+        "stolen": "Record the theft of this item, for example for a police report or an insurance claim.",
         "written_off": "Write off this item — usually for insurance or accounting."
       },
       "errors": {
@@ -217,8 +219,10 @@
       "noteLabel": "Notes (optional)",
       "notePlaceholder": {
         "disposed": "Details…",
+        "donated": "Given to…",
         "lost": "Last seen at…",
         "sold": "Sold to…",
+        "stolen": "Taken from…",
         "written_off": "Details…"
       },
       "salePriceLabel": "Sale Price",
@@ -235,7 +239,7 @@
     },
     "terminalStatus": {
       "revert": "Revert to In Use",
-      "revertConfirmDescription": "This puts the item back into active use. You can mark it as sold, lost, disposed, or written off again later.",
+      "revertConfirmDescription": "This puts the item back into active use. You can change its status again later.",
       "revertConfirmTitle": "Revert to In Use?",
       "salePrice": "Sale price: {{value}}",
       "statusDate": "Date: {{date}}"
@@ -296,12 +300,15 @@
     "saveFailed": "The draft could not be saved.",
     "saveFailedTitle": "Draft not saved to the server",
     "saving": "Saving…",
-    "untitled": "Untitled draft"
+    "untitled": "Untitled draft",
+    "updateFileFailed": "The file's title and tags could not be saved."
   },
   "editForm": {
     "allFields": "All fields",
+    "changedSinceOpened": "This item changed since you opened it, so your changes were not saved. Reload it to see the item as it is now, then make your changes again.",
     "editing": "Editing",
     "hiddenFieldError": "A field this form does not show needs fixing. Open all fields to correct it.",
+    "reload": "Reload",
     "save": "Save changes",
     "saveAndNext": "Save and next",
     "sections": {
@@ -389,6 +396,8 @@
     "inactiveHidden": "Hide inactive",
     "inactiveShown": "Showing inactive",
     "lentOut": "Lent out",
+    "location": "Location",
+    "locationAll": "All locations",
     "missing": "Missing",
     "missingOptions": {
       "noPhoto": "No photo",
@@ -404,6 +413,9 @@
     "warranty": "Warranty"
   },
   "form": {
+    "addFailed": "The item could not be added.",
+    "addFailedTitle": "Item not added",
+    "addRetryHint": "Nothing is added until every file is uploaded. The uploaded files stay under Saved with this draft, where you can remove them, and Retry goes on from where it stopped.",
     "assignLocationBanner": {
       "cta": "Place in location",
       "dismiss": "Dismiss",
@@ -423,10 +435,20 @@
     },
     "continue": "Continue",
     "createTitle": "Add item",
+    "discardAlreadyAdded": "The item was already added to your inventory.",
+    "editFailed": "The changes could not be saved.",
+    "editFailedTitle": "Changes not saved",
+    "editRetryHint": "Your changes are saved once every new file is uploaded. The files that made it are on the item already, and Retry goes on from where it stopped.",
     "editTitle": "Edit item",
+    "filesNotUploaded": "Not uploaded: {{names}}",
     "fileUploadFailed": "Couldn't upload {{name}}. You can attach it later from the item's detail page.",
     "fillManually": "Fill manually",
+    "itemChanged": "This item changed since you opened it, so nothing was saved. Close this dialog and reload the item.",
+    "leftoverFilesFailed_one": "{{count}} uploaded file could not be moved to the trash. You can find it on the Files page.",
+    "leftoverFilesFailed_other": "{{count}} uploaded files could not be moved to the trash. You can find them on the Files page.",
     "serverError": "Something went wrong. Please try again.",
+    "statusChanged": "The item's status changed after you opened this form, so nothing was saved. Open the item again to see its status.",
+    "statusHelp": "To change the status, use Change Status on the item page. It also records the date and a note.",
     "step": {
       "ai": {
         "choose": {
@@ -486,8 +508,12 @@
           "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
           "filesAttached_one": "The file you scanned will be attached to this item — manage it on the Files step.",
           "filesAttached_other": "The {{count}} files you scanned will be attached to this item — manage them on the Files step.",
+          "fileSuggestions_one": "The scan suggests a tag or a title for {{count}} file. You can change them on the Files step.",
+          "fileSuggestions_other": "The scan suggests a tag or a title for {{count}} files. You can change them on the Files step.",
           "retake": "Start over",
+          "scanned": "Scan",
           "subtitle": "Untick anything that looks wrong before we prefill the form.",
+          "tagsMerge": "Ticked, these tags are added to yours.",
           "title": "Review extracted details",
           "useValues": "Use these values",
           "warning": {
@@ -496,7 +522,8 @@
             "lowConfidence": "Low confidence",
             "multipleItems": "This looks like more than one item — we pre-filled the most prominent one. Add the others separately after saving.",
             "unreadableSerial": "Serial number was hard to read"
-          }
+          },
+          "yours": "Yours"
         },
         "scanning": {
           "cancel": "Cancel",
@@ -519,8 +546,16 @@
         "dropzone": "Drop files here or click to browse",
         "hint": "We sort each file into Photos, Documents, or Other based on its type.",
         "intro": "Attach anything related to this item — photos, receipts, manuals. Files are optional and can be added later.",
+        "status": {
+          "failed": "Upload failed",
+          "uploaded": "uploaded",
+          "uploading": "uploading"
+        },
+        "suggestedTag": "suggested by the AI scan",
+        "suggestedTitle": "Title suggested by the AI scan",
         "tagsPlaceholder": "Enter comma-separated tags, e.g. invoice, warranty, manual…",
-        "title": "Files"
+        "title": "Files",
+        "titleLabel": "Title of {{name}}"
       },
       "purchase": {
         "title": "Purchase"
@@ -533,7 +568,8 @@
     "stepperLabel": "Form steps",
     "submitCreate": "Add item",
     "submitEdit": "Save changes",
-    "submitting": "Saving…"
+    "submitting": "Saving…",
+    "uploadingFiles": "Uploading {{done}} of {{total}}…"
   },
   "intake": {
     "addedAgo": "Added {{when}}",
@@ -763,6 +799,7 @@
     "conditions": {
       "ascending": "ascending",
       "deletedArea": "Deleted area",
+      "deletedLocation": "Deleted location",
       "deletedTag": "{{condition}} (deleted)",
       "deletedType": "{{type}} (deleted)",
       "descending": "descending",
@@ -869,6 +906,7 @@
       "customFields_one": "A custom field of this view was deleted.",
       "customFields_other": "{{count}} custom fields of this view were deleted.",
       "hint": "The marked conditions refer to something that was deleted. The view still applies them, so it shows what still matches.",
+      "location": "The location of this view was deleted.",
       "sellers_one": "A seller of this view was deleted.",
       "sellers_other": "{{count}} sellers of this view were deleted.",
       "tags_one": "Tag {{tags}} no longer exists.",
@@ -942,9 +980,11 @@
   },
   "status": {
     "disposed": "Disposed",
+    "donated": "Donated",
     "in_use": "In Use",
     "lost": "Lost",
     "sold": "Sold",
+    "stolen": "Stolen",
     "written_off": "Written Off"
   },
   "toast": {
@@ -969,6 +1009,7 @@
     "bulkUpdated_one": "{{count}} item updated.",
     "bulkUpdated_other": "{{count}} items updated.",
     "bulkUpdateError": "Couldn't update the selected items.",
+    "changedMeanwhile": "This item changed since the page loaded it, so your change was not saved. The page now shows the item as it is; try again.",
     "created": "Item added.",
     "deleted": "Item moved to the trash.",
     "deleteError": "Couldn't delete the item.",

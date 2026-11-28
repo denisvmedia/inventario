@@ -42,6 +42,9 @@ export const SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE = "appearance.number_format
 // cross-device source of truth for the interface language AND the language
 // the backend localizes transactional emails in (#2090).
 export const SETTING_APPEARANCE_LANGUAGE = "appearance.language"
+// The newest release the user has seen on the What's new page (#1386), as a
+// CHANGELOG.md version ("0.2.2"). Unset means the page was never opened.
+export const SETTING_WHATS_NEW_LAST_SEEN_VERSION = "whats_new.last_seen_version"
 
 export async function getSettings(signal?: AbortSignal): Promise<SettingsObject> {
   // The rewrite middleware in lib/http prepends `/g/{active-slug}` —

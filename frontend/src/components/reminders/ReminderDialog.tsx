@@ -24,7 +24,6 @@ import {
 import {
   REMINDER_MAX_INTERVAL,
   REMINDER_REPEAT_UNITS,
-  REMINDER_TITLE_MAX,
   type Reminder,
   type ReminderInput,
   type ReminderRepeatUnit,
@@ -35,6 +34,7 @@ import {
   type ReminderFormInput,
   type ReminderFormOutput,
 } from "@/features/reminders/schemas"
+import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 
 interface ReminderDialogProps {
@@ -46,8 +46,10 @@ interface ReminderDialogProps {
 }
 
 // ReminderDialog creates or edits an item reminder (#2805). The form lives
-// in a child keyed on the reminder id so every open starts from fresh
-// defaults, as in MaintenanceScheduleDialog.
+// in the dialog content, which mounts on open and unmounts once the close
+// animation ends, so every open starts from fresh defaults; the key starts
+// a new form when the reminder changes. While the dialog closes it keeps the
+// reminder it showed, as in MaintenanceScheduleDialog.
 export function ReminderDialog({
   open,
   onOpenChange,
@@ -55,18 +57,17 @@ export function ReminderDialog({
   onSubmit,
   submitting,
 }: ReminderDialogProps) {
+  const shown = useValueWhileOpen(open, initial)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        {open ? (
-          <ReminderForm
-            key={initial?.id ?? "create"}
-            initial={initial}
-            onOpenChange={onOpenChange}
-            onSubmit={onSubmit}
-            submitting={submitting}
-          />
-        ) : null}
+      <DialogContent variant="fullscreen-mobile">
+        <ReminderForm
+          key={shown?.id ?? "create"}
+          initial={shown}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -139,10 +140,9 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
         <Input
           id="reminder-title"
           placeholder={t("reminders:dialog.titlePlaceholder")}
-          maxLength={REMINDER_TITLE_MAX}
           data-testid="reminder-title-input"
           aria-invalid={!!errors.title}
-          aria-describedby={errors.title ? "reminder-title-error" : undefined}
+          aria-describedby={errors.title?.message ? "reminder-title-error" : undefined}
           {...register("title")}
         />
         <FieldError id="reminder-title-error" message={errors.title?.message} />
@@ -156,7 +156,7 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
             type="date"
             data-testid="reminder-date-input"
             aria-invalid={!!errors.due_on}
-            aria-describedby={errors.due_on ? "reminder-date-error" : undefined}
+            aria-describedby={errors.due_on?.message ? "reminder-date-error" : undefined}
             {...register("due_on")}
           />
           <FieldError id="reminder-date-error" message={errors.due_on?.message} />
@@ -169,7 +169,7 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
             data-testid="reminder-leads-input"
             aria-invalid={!!errors.remind_days_before}
             aria-describedby={
-              errors.remind_days_before ? "reminder-leads-error" : "reminder-leads-hint"
+              errors.remind_days_before?.message ? "reminder-leads-error" : "reminder-leads-hint"
             }
             {...register("remind_days_before")}
           />
@@ -225,7 +225,9 @@ function ReminderForm({ initial, onOpenChange, onSubmit, submitting }: ReminderF
               inputMode="numeric"
               data-testid="reminder-interval-input"
               aria-invalid={!!errors.repeat_interval}
-              aria-describedby={errors.repeat_interval ? "reminder-interval-error" : undefined}
+              aria-describedby={
+                errors.repeat_interval?.message ? "reminder-interval-error" : undefined
+              }
               {...register("repeat_interval")}
             />
             <FieldError id="reminder-interval-error" message={errors.repeat_interval?.message} />

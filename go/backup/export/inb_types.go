@@ -66,7 +66,19 @@ import "encoding/json"
 // (INBIntakeDocumentsName), so a restored group still knows them and a
 // repeated delivery makes no second draft. A 3.6 reader restores a 3.7
 // archive without them and counts an error for the member.
-const INBFormatVersion = "3.7"
+//
+// 3.8 adds the entry of the item set (#1607) that created an item type or a
+// custom field (INBItemType.SetEntry and INBCustomField.SetEntry), so a
+// restored group can still remove the set. A 3.7 reader restores a 3.8
+// archive without them, and the restored types and fields count as the
+// group's own.
+//
+// 3.9 adds an item's loans, service records, maintenance schedules, supply
+// links and reminders (INBCommodity.Loans, .ServiceRecords,
+// .MaintenanceSchedules, .SupplyLinks and .Reminders), each with the UUID of
+// the member who recorded it. They ride with their item, so a selection
+// carries them too. A 3.8 reader restores a 3.9 archive without them.
+const INBFormatVersion = "3.9"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -196,6 +208,9 @@ type INBCustomField struct {
 	Type      string                   `json:"type"`
 	Options   []INBCustomFieldOption   `json:"options,omitempty"`
 	Templates []INBCustomFieldTemplate `json:"templates,omitempty"`
+	// SetEntry is the entry of the item set that created the field, absent
+	// for a field a member added (format 3.8).
+	SetEntry string `json:"setEntry,omitempty"`
 }
 
 // INBCustomFieldOption is one choice of a select field.
@@ -217,6 +232,9 @@ type INBItemType struct {
 	Slug string `json:"slug"`
 	Name string `json:"name,omitempty"`
 	Icon string `json:"icon,omitempty"`
+	// SetEntry is the entry of the item set that created the type, absent
+	// for any other type (format 3.8).
+	SetEntry string `json:"setEntry,omitempty"`
 }
 
 // INBSeller is a seller keyed by its immutable UUID, which
@@ -352,6 +370,87 @@ type INBCommodity struct {
 
 	Images    []INBFileRef `json:"images,omitempty"`
 	Documents []INBFileRef `json:"documents,omitempty"`
+
+	// The item's records (format 3.9), oldest first, except the supply
+	// links, which keep their list order.
+	Loans                []INBLoan                `json:"loans,omitempty"`
+	ServiceRecords       []INBServiceRecord       `json:"serviceRecords,omitempty"`
+	MaintenanceSchedules []INBMaintenanceSchedule `json:"maintenanceSchedules,omitempty"`
+	SupplyLinks          []INBSupplyLink          `json:"supplyLinks,omitempty"`
+	Reminders            []INBReminder            `json:"reminders,omitempty"`
+}
+
+// INBLoan is an archived loan of an item (format 3.9). AuthorID is the UUID
+// of the member who recorded it, who gets its reminder emails; it is empty
+// when that account is gone. The reminder flags say which reminder emails
+// were sent, so a restore does not send them again. Mirrors
+// backup/restore/types.INBLoan.
+type INBLoan struct {
+	ID                  string `json:"id"`
+	AuthorID            string `json:"authorId,omitempty"`
+	BorrowerName        string `json:"borrowerName"`
+	BorrowerContact     string `json:"borrowerContact,omitempty"`
+	BorrowerNote        string `json:"borrowerNote,omitempty"`
+	LentAt              string `json:"lentAt"`
+	DueBackAt           string `json:"dueBackAt,omitempty"`
+	ReturnedAt          string `json:"returnedAt,omitempty"`
+	ReminderSentDueSoon bool   `json:"reminderSentDueSoon,omitempty"`
+	ReminderSentOverdue bool   `json:"reminderSentOverdue,omitempty"`
+}
+
+// INBServiceRecord is an archived service record of an item (format 3.9),
+// with AuthorID and the reminder flags as on INBLoan. CostAmount is a
+// decimal string, empty when no cost was recorded. Mirrors
+// backup/restore/types.INBServiceRecord.
+type INBServiceRecord struct {
+	ID                  string `json:"id"`
+	AuthorID            string `json:"authorId,omitempty"`
+	ProviderName        string `json:"providerName"`
+	ProviderContact     string `json:"providerContact,omitempty"`
+	Reason              string `json:"reason,omitempty"`
+	SentAt              string `json:"sentAt"`
+	ExpectedReturnAt    string `json:"expectedReturnAt,omitempty"`
+	ReturnedAt          string `json:"returnedAt,omitempty"`
+	CostAmount          string `json:"costAmount,omitempty"`
+	CostCurrency        string `json:"costCurrency,omitempty"`
+	ReminderSentDueSoon bool   `json:"reminderSentDueSoon,omitempty"`
+	ReminderSentOverdue bool   `json:"reminderSentOverdue,omitempty"`
+}
+
+// INBMaintenanceSchedule is an archived maintenance schedule of an item
+// (format 3.9). Mirrors backup/restore/types.INBMaintenanceSchedule.
+type INBMaintenanceSchedule struct {
+	ID           string `json:"id"`
+	AuthorID     string `json:"authorId,omitempty"`
+	Title        string `json:"title"`
+	IntervalDays int    `json:"intervalDays"`
+	NextDueAt    string `json:"nextDueAt"`
+	LastDoneAt   string `json:"lastDoneAt,omitempty"`
+	Notes        string `json:"notes,omitempty"`
+	Enabled      bool   `json:"enabled"`
+}
+
+// INBSupplyLink is an archived supply link of an item (format 3.9). Mirrors
+// backup/restore/types.INBSupplyLink.
+type INBSupplyLink struct {
+	ID        string `json:"id"`
+	AuthorID  string `json:"authorId,omitempty"`
+	Label     string `json:"label"`
+	URL       string `json:"url"`
+	Notes     string `json:"notes,omitempty"`
+	SortOrder int    `json:"sortOrder"`
+}
+
+// INBReminder is an archived reminder of an item (format 3.9). Its author is
+// the only one it emails. Mirrors backup/restore/types.INBReminder.
+type INBReminder struct {
+	ID               string `json:"id"`
+	AuthorID         string `json:"authorId,omitempty"`
+	Title            string `json:"title"`
+	DueOn            string `json:"dueOn"`
+	RemindDaysBefore []int  `json:"remindDaysBefore,omitempty"`
+	RepeatUnit       string `json:"repeatUnit"`
+	RepeatInterval   int    `json:"repeatInterval"`
 }
 
 // INBFileRef is a reference to a commodity-attached file. Path is the file's

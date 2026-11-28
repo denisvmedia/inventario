@@ -147,6 +147,9 @@ func (c *Command) run() error {
 	stopBusinessMetrics := bootstrap.StartBusinessMetricsWorker(ctx, rs, c.cfg)
 	defer stopBusinessMetrics()
 
+	stopFailedJobDepth := bootstrap.StartFailedJobDepthWorker(ctx, rs, c.cfg)
+	defer stopFailedJobDepth()
+
 	stopAssetNumberBackfill := bootstrap.StartAssetNumberBackfill(ctx, rs, c.cfg)
 	defer stopAssetNumberBackfill()
 
@@ -155,6 +158,9 @@ func (c *Command) run() error {
 
 	stopFileChecksumBackfill := bootstrap.StartFileChecksumBackfill(ctx, rs, c.cfg)
 	defer stopFileChecksumBackfill()
+
+	stopThumbnailOrientationBackfill := bootstrap.StartThumbnailOrientationBackfill(ctx, rs, c.cfg)
+	defer stopThumbnailOrientationBackfill()
 
 	// One-shot backfill of files.size_bytes for rows that pre-date #1388.
 	// Runs in a goroutine so a slow bucket walk can't delay readiness;

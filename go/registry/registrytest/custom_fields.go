@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ type CustomFieldEnv struct {
 	FieldsA, FieldsB           registry.CustomFieldRegistry
 	TypesA                     registry.ItemTypeRegistry
 	CommoditiesA, CommoditiesB registry.CommodityRegistry
+	DraftsA                    registry.CommodityDraftRegistry
 	AreaA, AreaB               string
 }
 
@@ -161,6 +163,33 @@ func runCustomFieldValueContract(t *testing.T, newEnv func(t *testing.T) CustomF
 		c.Assert(err, qt.IsNil)
 		c.Assert(page, qt.HasLen, 1)
 		c.Check(valueStrings(page[0].CustomFields), qt.DeepEquals, want, qt.Commentf("listed"))
+	})
+
+	t.Run("a URL value of the longest allowed length is stored in any script", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		link := mustField(c, env.FieldsA, env.CtxA, "Web", models.CustomFieldTypeURL)
+		// Two bytes per letter, and letters in no repeating order, so the
+		// value stays over 4000 bytes even compressed.
+		prefix := "https://example.com/"
+		long := prefix + cyrillicLetters(models.MaxCustomFieldURLRunes-len(prefix), 1)
+		item := mustCustomFieldItem(c, env, "Book", models.CustomFieldValues{link.ID: mustJSONString(c, long)})
+		got, err := env.CommoditiesA.Get(env.CtxA, item.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(string(got.CustomFields[link.ID]), qt.Equals, string(mustJSONString(c, long)))
+
+		other := prefix + cyrillicLetters(models.MaxCustomFieldURLRunes-len(prefix), 2)
+		got.CustomFields = models.CustomFieldValues{link.ID: mustJSONString(c, other)}
+		updated, err := env.CommoditiesA.Update(env.CtxA, *got)
+		c.Assert(err, qt.IsNil)
+		c.Check(string(updated.CustomFields[link.ID]), qt.Equals, string(mustJSONString(c, other)))
+
+		page, _, err := env.CommoditiesA.ListPaginated(env.CtxA, 0, 10, registry.CommodityListOptions{
+			CustomFields: []registry.CustomFieldFilter{{FieldID: link.ID, Type: models.CustomFieldTypeURL, Op: registry.CustomFieldOpEq, Text: other}},
+		})
+		c.Assert(err, qt.IsNil)
+		c.Check(page, qt.HasLen, 1, qt.Commentf("an equality filter finds the value"))
 	})
 
 	t.Run("a nil map keeps the values, a missing key keeps one, a null clears one", func(t *testing.T) {
@@ -350,6 +379,119 @@ func runCustomFieldDeleteContract(t *testing.T, newEnv func(t *testing.T) Custom
 		c.Assert(err, qt.IsNil)
 		c.Check(gotTrashed.CustomFields, qt.HasLen, 0)
 	})
+
+	t.Run("an open draft holds a value only when its entry is not empty", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		field := mustField(c, env.FieldsA, env.CtxA, "Serial", models.CustomFieldTypeText)
+
+		cases := []struct {
+			name  string
+			entry any
+			value bool
+		}{
+			{"form text", map[string]any{"value": "SN-1", "currency": ""}, true},
+			{"form blank text", map[string]any{"value": " \t ", "currency": ""}, false},
+			{"form empty money", map[string]any{"value": "", "currency": "USD"}, false},
+			{"form number", map[string]any{"value": 0.0}, true},
+			{"form null", map[string]any{"value": nil}, false},
+			{"stored text", "plain", true},
+			{"stored empty text", "", false},
+			{"stored number", 0.0, true},
+			{"stored no", false, true},
+			{"stored money", map[string]any{"amount": 12.5, "currency": "EUR"}, true},
+			{"money without amount", map[string]any{"amount": nil, "currency": "EUR"}, false},
+			{"null", nil, false},
+			{"list", []any{"x"}, false},
+			{"empty object", map[string]any{}, false},
+		}
+		for i, tc := range cases {
+			c.Run(tc.name, func(c *qt.C) {
+				c.Check(models.DraftCustomFieldHasValue(tc.entry), qt.Equals, tc.value, qt.Commentf("the model's rule"))
+				d := mustDraft(c, env.DraftsA, env.CtxA, fmt.Sprintf("value-%d", i),
+					models.CommodityDraftValues{"custom_fields": map[string]any{field.ID: tc.entry}})
+				usage, err := env.FieldsA.Usage(env.CtxA)
+				c.Assert(err, qt.IsNil)
+				want := 0
+				if tc.value {
+					want = 1
+				}
+				c.Check(usage[field.ID].Drafts, qt.Equals, want, qt.Commentf("the registry's count"))
+				_, err = env.DraftsA.MarkDiscarding(env.CtxA, d.ID)
+				c.Assert(err, qt.IsNil)
+			})
+		}
+		usage, err := env.FieldsA.Usage(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(usage[field.ID].Drafts, qt.Equals, 0, qt.Commentf("drafts being discarded are not counted"))
+	})
+
+	t.Run("open drafts with a value keep a field in use and lose the value with it", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		serial := mustField(c, env.FieldsA, env.CtxA, "Serial", models.CustomFieldTypeText)
+		note := mustField(c, env.FieldsA, env.CtxA, "Note", models.CustomFieldTypeText)
+		mustCustomFieldItem(c, env, "Live", models.CustomFieldValues{serial.ID: rawJSON(`"1"`)})
+		filled := mustDraft(c, env.DraftsA, env.CtxA, "filled", models.CommodityDraftValues{
+			"name": "Van",
+			"custom_fields": map[string]any{
+				serial.ID: map[string]any{"value": "SN-2", "currency": ""},
+				note.ID:   map[string]any{"value": "keep", "currency": ""},
+			},
+		})
+		empty := mustDraft(c, env.DraftsA, env.CtxA, "empty", models.CommodityDraftValues{
+			"custom_fields": map[string]any{serial.ID: map[string]any{"value": "", "currency": ""}},
+		})
+		other := mustDraft(c, env.DraftsA, env.CtxA, "other", models.CommodityDraftValues{
+			"custom_fields": map[string]any{note.ID: "only note"},
+		})
+
+		usage, err := env.FieldsA.Usage(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(usage[serial.ID].Live, qt.Equals, 1)
+		c.Check(usage[serial.ID].Drafts, qt.Equals, 1, qt.Commentf("the empty entry is no value"))
+		c.Check(usage[note.ID].Total(), qt.Equals, 0)
+		c.Check(usage[note.ID].Drafts, qt.Equals, 2)
+		c.Check(usage[note.ID].InUse(), qt.IsTrue)
+		usageB, err := env.FieldsB.Usage(env.CtxB)
+		c.Assert(err, qt.IsNil)
+		c.Check(usageB, qt.HasLen, 0)
+
+		err = env.FieldsA.Delete(env.CtxA, note.ID)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse, qt.Commentf("drafts alone keep the field in use"))
+		err = env.FieldsA.Delete(env.CtxA, serial.ID)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse)
+		_, err = env.FieldsA.DeleteWithValues(env.CtxA, serial.ID, 1)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse, qt.Commentf("the confirmed count leaves out the draft"))
+
+		n, err := env.FieldsA.DeleteWithValues(env.CtxA, serial.ID, 2)
+		c.Assert(err, qt.IsNil)
+		c.Check(n, qt.Equals, 2)
+
+		got, err := env.DraftsA.Get(env.CtxA, filled.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Values.DraftCustomFields(), qt.DeepEquals, map[string]any{note.ID: map[string]any{"value": "keep", "currency": ""}})
+		c.Check(got.Values["name"], qt.Equals, "Van")
+		c.Check(got.Revision, qt.Equals, filled.Revision+1)
+		_, err = env.DraftsA.SaveValues(env.CtxA, filled.ID, filled.Revision, filled.Values)
+		c.Check(err, qt.ErrorIs, registry.ErrDraftRevisionConflict,
+			qt.Commentf("a tab that loaded the draft before the delete cannot put the value back"))
+
+		// The item form keeps an empty entry for every field it shows; a
+		// member whose draft never used the field keeps editing it (#3023).
+		gotEmpty, err := env.DraftsA.Get(env.CtxA, empty.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(gotEmpty.Revision, qt.Equals, empty.Revision, qt.Commentf("a draft with an empty entry is left alone"))
+		c.Check(gotEmpty.Values.DraftCustomFields(), qt.DeepEquals, empty.Values.DraftCustomFields())
+		gotOther, err := env.DraftsA.Get(env.CtxA, other.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(gotOther.Revision, qt.Equals, other.Revision, qt.Commentf("a draft without the field is left alone"))
+
+		n, err = env.FieldsA.DeleteWithValues(env.CtxA, note.ID, 2)
+		c.Assert(err, qt.IsNil)
+		c.Check(n, qt.Equals, 2)
+	})
 }
 
 func runCustomFieldTemplateContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
@@ -512,6 +654,97 @@ func runCustomFieldTemplateContract(t *testing.T, newEnv func(t *testing.T) Cust
 		c.Check(got.Templates, qt.DeepEquals, []models.CustomFieldTemplate{{ItemTypeID: other.ID}},
 			qt.Commentf("deleting the item type drops its entry"))
 	})
+
+	t.Run("AddTemplates adds the missing entries and keeps the defaults", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		other := mustTypeBySlug(c, env.TypesA, env.CtxA, models.CommodityTypeOther)
+		vehicle, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Vehicle"})
+		c.Assert(err, qt.IsNil)
+		boat, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Boat"})
+		c.Assert(err, qt.IsNil)
+		field, err := env.FieldsA.Create(env.CtxA, models.CustomFieldDefinition{
+			Name: "Wheels", Type: models.CustomFieldTypeNumber,
+			Templates: []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"4"`)}},
+		})
+		c.Assert(err, qt.IsNil)
+
+		added, err := env.FieldsA.AddTemplates(env.CtxA, field.ID, []string{vehicle.ID, boat.ID, other.ID, boat.ID})
+		c.Assert(err, qt.IsNil)
+		c.Check(added, qt.Equals, 2)
+		got, err := env.FieldsA.Get(env.CtxA, field.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(templatesByType(got.Templates), qt.DeepEquals, map[string]string{
+			vehicle.ID: `"4"`, boat.ID: "", other.ID: "",
+		})
+
+		added, err = env.FieldsA.AddTemplates(env.CtxA, field.ID, []string{boat.ID, other.ID})
+		c.Assert(err, qt.IsNil)
+		c.Check(added, qt.Equals, 0, qt.Commentf("adding again adds nothing"))
+
+		plane, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Plane"})
+		c.Assert(err, qt.IsNil)
+		_, err = env.FieldsA.AddTemplates(env.CtxA, field.ID, []string{plane.ID, "no-such-type"})
+		c.Check(err, qt.ErrorIs, registry.ErrInvalidInput)
+		got, err = env.FieldsA.Get(env.CtxA, field.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Templates, qt.HasLen, 3, qt.Commentf("a refused call adds nothing"))
+
+		_, err = env.FieldsB.AddTemplates(env.CtxB, field.ID, []string{other.ID})
+		c.Check(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("another group's field"))
+	})
+
+	t.Run("the set entry is kept on every update", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		entry := models.NewItemSetEntry(models.ItemSetCollection, "condition")
+		field, err := env.FieldsA.Create(env.CtxA, models.CustomFieldDefinition{
+			Name: "Condition", Type: models.CustomFieldTypeText, SetEntry: entry,
+		})
+		c.Assert(err, qt.IsNil)
+		c.Check(field.SetEntry, qt.Equals, entry)
+
+		rename := *field
+		rename.Name = "State"
+		rename.SetEntry = ""
+		updated, err := env.FieldsA.Update(env.CtxA, rename)
+		c.Assert(err, qt.IsNil)
+		c.Check(updated.SetEntry, qt.Equals, entry)
+		got, err := env.FieldsA.Get(env.CtxA, field.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.SetEntry, qt.Equals, entry)
+
+		typeEntry := models.NewItemSetEntry(models.ItemSetCollection, "coins")
+		coins, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Coins", SetEntry: typeEntry})
+		c.Assert(err, qt.IsNil)
+		renamedType := *coins
+		renamedType.Name = "Numismatics"
+		renamedType.SetEntry = ""
+		_, err = env.TypesA.Update(env.CtxA, renamedType)
+		c.Assert(err, qt.IsNil)
+		gotType, err := env.TypesA.Get(env.CtxA, coins.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(gotType.Name, qt.Equals, "Numismatics")
+		c.Check(gotType.SetEntry, qt.Equals, typeEntry)
+	})
+
+	runItemSetContract(t, newEnv)
+}
+
+// templatesByType maps each template entry's item type to its default, ""
+// for none.
+func templatesByType(templates []models.CustomFieldTemplate) map[string]string {
+	out := make(map[string]string, len(templates))
+	for _, t := range templates {
+		v := ""
+		if !t.DefaultValue.IsNull() {
+			v = string(t.DefaultValue)
+		}
+		out[t.ItemTypeID] = v
+	}
+	return out
 }
 
 func runCustomFieldQueryContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
@@ -645,6 +878,29 @@ func mustSelectField(c *qt.C, env CustomFieldEnv, name string, labels ...string)
 
 func rawJSON(s string) json.RawMessage {
 	return json.RawMessage(s)
+}
+
+func mustJSONString(c *qt.C, s string) json.RawMessage {
+	c.Helper()
+	b, err := json.Marshal(s)
+	c.Assert(err, qt.IsNil)
+	return b
+}
+
+// cyrillicLetters returns n lowercase Cyrillic letters in an order a
+// xorshift generator started from seed picks, the same for every run.
+func cyrillicLetters(n int, seed uint64) string {
+	const alphabet = 32
+	letters := []rune("абвгдежзийклмнопрстуфхцчшщъыьэюя")
+	var b strings.Builder
+	x := seed*0x9E3779B97F4A7C15 + 1
+	for range n {
+		x ^= x << 13
+		x ^= x >> 7
+		x ^= x << 17
+		b.WriteRune(letters[x%alphabet])
+	}
+	return b.String()
 }
 
 func valueStrings(values models.CustomFieldValues) map[string]string {

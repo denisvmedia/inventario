@@ -100,9 +100,11 @@ Two things run against the restored data, and both are safe:
   backup is *part of what the drill is testing* — do not skip it.
 - **`migrate data`** creates the default tenant and the admin only when they
   are absent. On a restored database it finds them and leaves the password
-  alone; it only re-syncs the admin's `tenant_id`. So pass the same
+  alone. It never moves a user between tenants. When the configured default
+  tenant is not in the restored data and the admin email is in another
+  tenant, the job fails and names that tenant. So pass the same
   `setupJob.initData.*` values production uses — a *different* tenant id there
-  would move the admin into a tenant that holds none of the restored data.
+  stops the job instead of finding the restored admin.
 
 Leave `setupJob.initData.seedDatabase` at its default of `false`. Seeding demo
 data on top of a restore is how a rehearsal turns into a mess.
@@ -151,7 +153,7 @@ dropdb inventario_drill
 | Situation | Action |
 | --- | --- |
 | Bad release, no schema change | Roll the image back. Do not restore. |
-| Bad release with a migration | Roll the image back first — if you followed expand-contract the old image runs against the new schema. Restore only if that fails. |
+| Bad release with a migration | Roll the image back first — if you followed expand-contract the old image runs against the new schema. A v0.2.x image does not: it cannot read a table that gained a column. Restore only if that fails. |
 | Accidental deletion by a user | Restore a scratch copy, extract what was lost, put it back. Do **not** restore over production — you would undo everyone else's work since the backup. |
 | Database lost or corrupted | Full restore, below. |
 | Cluster lost | Velero restore of the namespace, then the database restore, then §4's verification. |

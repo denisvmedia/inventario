@@ -20,7 +20,26 @@
     "submitting": "Vytvářím…",
     "subtitle": "Nastavte si vlastní inventář a pozvěte do něj další.",
     "successToast": "Skupina vytvořena.",
-    "title": "Vytvořit novou skupinu"
+    "title": "Vytvořit novou skupinu",
+    "collectionSetFailed": "Skupina byla vytvořena, ale sada Sbírka nebyla přidána. Přidejte ji v nastavení skupiny v části Sekce.",
+    "kindHelp": "Později to můžete změnit v nastavení skupiny.",
+    "kindLabel": "K čemu skupina slouží?",
+    "kinds": {
+      "collection": {
+        "description": "Typy položek a pole pro umění, knihy, mince, známky, desky, hodinky a karty. Záruky jsou skryté.",
+        "label": "Sbírka"
+      },
+      "household": {
+        "description": "Spotřebiče, elektronika, nábytek a další věci, které patří do domácnosti.",
+        "label": "Domácnost"
+      }
+    }
+  },
+  "hiddenSection": {
+    "description": "Správce skupiny tuto sekci vypnul pro všechny členy. Její data zůstávají a správce ji může znovu zobrazit v nastavení skupiny.",
+    "goToDashboard": "Přejít na přehled",
+    "openSettings": "Otevřít nastavení skupiny",
+    "title": "Sekce {{section}} je v této skupině skrytá"
   },
   "migration": {
     "banner": "Probíhá migrace měny pro skupinu {{name}}.",
@@ -88,6 +107,28 @@
       "title": "Migrovat měnu"
     },
     "errorGeneric": "Skupinu se nepodařilo uložit. Zkuste to prosím znovu.",
+    "hiddenSections": {
+      "adminOnly": "Které sekce skupina zobrazuje, mohou měnit pouze správci a vlastníci.",
+      "loans": {
+        "description": "Stránka Zapůjčeno, půjčování položek a e-maily s připomínkami vrácení.",
+        "label": "Výpůjčky"
+      },
+      "maintenance": {
+        "description": "Stránky „Údržba“ a „V servisu“, přidávání plánů údržby, odesílání položek do servisu a e-maily s připomínkami údržby.",
+        "label": "Údržba a opravy"
+      },
+      "saveError": "Sekce se nepodařilo uložit. Zkuste to znovu.",
+      "subtitle": "Skryjte pro všechny členy části Inventaria, které tato skupina nepoužívá. Skrytím sekce se její data nemažou: položka, která už má záruku, výpůjčku nebo údržbu, je dál zobrazuje, a sekci můžete kdykoli znovu zobrazit.",
+      "title": "Sekce",
+      "upcoming": {
+        "description": "Stránka Nadcházející, která ukazuje blížící se termíny celé skupiny.",
+        "label": "Nadcházející"
+      },
+      "warranties": {
+        "description": "Stránka Záruky a její karty na přehledu, krok Záruka ve formuláři položky a e-maily s připomínkami záruky.",
+        "label": "Záruky"
+      }
+    },
     "iconLabel": "Ikona",
     "leaveCta": "Opustit skupinu",
     "leaveDescription": "Ztratíte přístup ke všem datům v této skupině.",
@@ -148,12 +189,116 @@
       "info": "Informace",
       "management": "Správa",
       "members": "Členové",
-      "notifications": "Oznámení"
+      "notifications": "Oznámení",
+      "sections": "Sekce"
     },
     "slugHelp": "Slugy se generují náhodně při vytvoření a nelze je změnit.",
     "slugLabel": "Slug adresy URL",
     "subtitle": "Spravujte profil, členy a životní cyklus své skupiny.",
-    "title": "Nastavení skupiny"
+    "title": "Nastavení skupiny",
+    "failedJobs": {
+      "title": "Neúspěšné úlohy na pozadí",
+      "subtitle": "Úlohy této skupiny, které se zastavily po posledním pokusu. Opakovat vrátí úlohu do fronty.",
+      "loading": "Načítání neúspěšných úloh…",
+      "loadError": "Neúspěšné úlohy se nepodařilo načíst. Zkuste to později.",
+      "empty": "V této skupině nejsou žádné neúspěšné úlohy.",
+      "more_one": "Další {{count}} neúspěšná úloha není zobrazena.",
+      "more_few": "Další {{count}} neúspěšné úlohy nejsou zobrazeny.",
+      "more_many": "Dalších {{count}} neúspěšné úlohy není zobrazeno.",
+      "more_other": "Dalších {{count}} neúspěšných úloh není zobrazeno.",
+      "failedAt": "Selhalo {{date}}",
+      "attempts_one": "{{count}} pokus",
+      "attempts_few": "{{count}} pokusy",
+      "attempts_many": "{{count}} pokusu",
+      "attempts_other": "{{count}} pokusů",
+      "retry": "Opakovat",
+      "retryLabel": "Opakovat {{title}}",
+      "cannotRetry": "Nelze opakovat. Spusťte místo toho novou.",
+      "insteadRestore": "Nelze opakovat. Spusťte místo toho novou obnovu ze zálohy. Tuto může operátor skrýt.",
+      "insteadCurrencyMigration": "Nelze opakovat. Spusťte místo toho novou změnu měny. Tuto může operátor skrýt.",
+      "retried": "Úloha je zpět ve frontě.",
+      "gone": "Tato úloha už není neúspěšná. Seznam je nyní aktuální.",
+      "notRetryable": "Tento druh úlohy nelze opakovat.",
+      "retryError": "Úlohu se nepodařilo zopakovat. Zkuste to později."
+    },
+    "usage": {
+      "errorGeneric": "Využití se nepodařilo načíst.",
+      "title": "Využití"
+    },
+    "collectionSet": {
+      "added": "Sada Sbírka přidána. Nové typy položek: {{types}}, nová vlastní pole: {{fields}}.",
+      "add": "Přidat sadu",
+      "addError": "Sadu se nepodařilo přidat. Zkuste to znovu: další přidání vytvoří jen to, co chybí.",
+      "addErrorFieldLimit": "Skupina má nejvíce vlastních polí, kolik může mít. Některá smažte a sadu přidejte znovu.",
+      "addErrorNotActive": "Skupina se právě maže.",
+      "addErrorTypeLimit": "Skupina má nejvíce typů položek, kolik může mít. Některé smažte nebo slučte a sadu přidejte znovu.",
+      "addMissing": "Přidat, co chybí",
+      "adding": "Přidávám…",
+      "adminOnly": "Sadu mohou přidat nebo odebrat jen správci a vlastníci.",
+      "customFields": "Vlastní pole",
+      "itemTypes": "Typy položek",
+      "loadError": "Sadu Sbírka se nepodařilo načíst.",
+      "note": "Sériové číslo zůstává samostatným polem. Typ nebo pole se stejným názvem, které skupina už má, se použije místo nového. Názvy jsou anglicky; přejmenujte je jako jakýkoli jiný typ nebo pole.",
+      "remove": "Odebrat sadu",
+      "removeError": "Sadu se nepodařilo odebrat. Zkuste to znovu.",
+      "removed": "Smazáno: {{names}}.",
+      "removal": {
+        "confirm": "Odebrat sadu",
+        "description": "Typy a pole, které sada vytvořila a nic je nepoužívá, se smažou. Ostatní zůstanou.",
+        "goes": "Smaže se ({{total}})",
+        "keepFieldInUse_few": "{{count}} položky mají hodnotu tohoto pole, včetně koše.",
+        "keepFieldInUse_many": "{{count}} položek má hodnotu tohoto pole, včetně koše.",
+        "keepFieldInUse_one": "{{count}} položka má hodnotu tohoto pole, včetně koše.",
+        "keepFieldInUse_other": "{{count}} položek má hodnotu tohoto pole, včetně koše.",
+        "keepLastType": "Poslední typ položek ve skupině. Skupina si vždy ponechá aspoň jeden.",
+        "keepOwnField": "Vlastní pole skupiny. Sada ho používá, ale nevytvořila ho.",
+        "keepOwnType": "Vlastní typ skupiny. Sada ho používá, ale nevytvořila ho.",
+        "keepTypeInUse_few": "{{count}} položky mají tento typ, včetně koše.",
+        "keepTypeInUse_many": "{{count}} položek má tento typ, včetně koše.",
+        "keepTypeInUse_one": "{{count}} položka má tento typ, včetně koše.",
+        "keepTypeInUse_other": "{{count}} položek má tento typ, včetně koše.",
+        "kindField": "Vlastní pole",
+        "kindType": "Typ položek",
+        "nothing": "Nic nelze smazat: všechny typy a pole sady, které skupina má, zůstanou z níže uvedených důvodů.",
+        "removing": "Odebírám…",
+        "stays": "Zůstane ({{total}})",
+        "title": "Odebrat sadu Sbírka?",
+        "checking": "Ověřuji, co položky používají…",
+        "checkFailed": "Nepodařilo se ověřit, co položky používají. Zavřete okno a zkuste to znovu.",
+        "keepTypeDrafts_one": "{{count}} koncept má tento typ.",
+        "keepTypeDrafts_few": "{{count}} koncepty mají tento typ.",
+        "keepTypeDrafts_many": "{{count}} konceptu má tento typ.",
+        "keepTypeDrafts_other": "{{count}} konceptů má tento typ.",
+        "keepFieldDrafts_one": "{{count}} koncept má hodnotu tohoto pole.",
+        "keepFieldDrafts_few": "{{count}} koncepty mají hodnotu tohoto pole.",
+        "keepFieldDrafts_many": "{{count}} konceptu má hodnotu tohoto pole.",
+        "keepFieldDrafts_other": "{{count}} konceptů má hodnotu tohoto pole."
+      },
+      "state": {
+        "complete": "Přidáno",
+        "none": "Nepřidáno",
+        "partial": "Přidáno zčásti"
+      },
+      "subtitle": "Typy položek a vlastní pole pro sbírky: umění, knihy, mince, známky, desky, hodinky a karty. Každé pole sady se zobrazuje u každého z těchto typů.",
+      "title": "Sada Sbírka",
+      "removedNothing": "Nic nebylo smazáno.",
+      "rowState": {
+        "missing": "Ve skupině chybí",
+        "added": "Přidáno sadou",
+        "own": "Vlastní ve skupině",
+        "takenType": "Nepřidáno: tento název má jiný typ sady",
+        "takenField": "Nepřidáno: tento název má jiné pole sady",
+        "notOnTypes_one": "nenabízí se u {{count}} typu sady",
+        "notOnTypes_few": "nenabízí se u {{count}} typů sady",
+        "notOnTypes_many": "nenabízí se u {{count}} typu sady",
+        "notOnTypes_other": "nenabízí se u {{count}} typů sady"
+      },
+      "removedKept_one": "Ponecháno: {{names}}. Od otevření potvrzení se změnilo.",
+      "removedKept_few": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
+      "removedKept_many": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
+      "removedKept_other": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
+      "linksMissing": "Některá pole sady se zatím nenabízejí u všech jejích typů."
+    }
   },
   "validation": {
     "confirmWordMismatch": "Název skupiny neodpovídá",

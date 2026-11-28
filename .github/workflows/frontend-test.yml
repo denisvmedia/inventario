@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -20,15 +20,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
+      changelog: ${{ steps.filter.outputs.changelog }}
       ci: ${{ steps.filter.outputs.ci }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Find the commit the pull request merges into
+        id: base
+        uses: ./.github/actions/pr-merge-base
       - name: Filter changed paths
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           filters: .github/filters.yml
+          # Diff with git: the pull request files API would spend the
+          # repository's hourly request budget (devdocs/ci/github-api-budget.md).
+          token: ''
+          base: ${{ steps.base.outputs.sha }}
 
   test:
     name: Test Frontend (React)
@@ -60,3 +68,37 @@ jobs:
 
       - name: Build production bundle
         run: npm run build
+
+  # The What's new page is built from CHANGELOG.md (#1386), and the guard in
+  # src/lib/__tests__/changelog.test.ts checks that the file still parses.
+  # The `test` job above runs it with the rest of the suite; this job runs
+  # just that file for a pull request whose only frontend input is
+  # CHANGELOG.md, which `test` skips.
+  changelog:
+    name: Check CHANGELOG.md
+    runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.changelog == 'true' &&
+      needs.changes.outputs.frontend != 'true' &&
+      needs.changes.outputs.ci != 'true'
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: mise.toml
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the CHANGELOG.md guard
+        run: npx vitest run src/lib/__tests__/changelog.test.ts

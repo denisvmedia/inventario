@@ -17,14 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { FieldError } from "@/components/FieldError"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
-import {
-  SELLER_CONTACT_MAX,
-  SELLER_NAME_MAX,
-  SELLER_NAME_TAKEN,
-  SELLER_NOTE_MAX,
-  SELLER_WEBSITE_MAX,
-  type Seller,
-} from "@/features/sellers/api"
+import { SELLER_NAME_TAKEN, type Seller } from "@/features/sellers/api"
 import {
   EMPTY_SELLER_FORM,
   sellerFormSchema,
@@ -141,6 +134,7 @@ export function SellerFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         className="sm:max-w-lg"
         onCloseAutoFocus={onCloseAutoFocus}
         data-testid="seller-form-dialog"
@@ -162,10 +156,9 @@ export function SellerFormDialog({
               id="seller-name"
               placeholder={t("sellers:dialog.namePlaceholder")}
               autoComplete="off"
-              maxLength={SELLER_NAME_MAX}
               disabled={isPending}
               aria-invalid={!!errors.name}
-              aria-describedby={errors.name ? "seller-name-error" : undefined}
+              aria-describedby={errors.name?.message ? "seller-name-error" : undefined}
               data-testid="seller-name-input"
               {...form.register("name")}
             />
@@ -199,10 +192,9 @@ export function SellerFormDialog({
               inputMode="url"
               placeholder="https://"
               autoComplete="off"
-              maxLength={SELLER_WEBSITE_MAX}
               disabled={isPending}
               aria-invalid={!!errors.website}
-              aria-describedby={errors.website ? "seller-website-error" : undefined}
+              aria-describedby={errors.website?.message ? "seller-website-error" : undefined}
               data-testid="seller-website-input"
               {...form.register("website")}
             />
@@ -219,10 +211,9 @@ export function SellerFormDialog({
               id="seller-contact"
               placeholder={t("sellers:dialog.contactPlaceholder")}
               autoComplete="off"
-              maxLength={SELLER_CONTACT_MAX}
               disabled={isPending}
               aria-invalid={!!errors.contact}
-              aria-describedby={errors.contact ? "seller-contact-error" : undefined}
+              aria-describedby={errors.contact?.message ? "seller-contact-error" : undefined}
               data-testid="seller-contact-input"
               {...form.register("contact")}
             />
@@ -239,10 +230,9 @@ export function SellerFormDialog({
               id="seller-note"
               placeholder={t("sellers:dialog.notePlaceholder")}
               rows={3}
-              maxLength={SELLER_NOTE_MAX}
               disabled={isPending}
               aria-invalid={!!errors.note}
-              aria-describedby={errors.note ? "seller-note-error" : undefined}
+              aria-describedby={errors.note?.message ? "seller-note-error" : undefined}
               data-testid="seller-note-input"
               className="resize-none"
               {...form.register("note")}

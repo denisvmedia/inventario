@@ -141,11 +141,9 @@ func TestValidateCommodityOwnershipInDB_ExistingShortCircuit(t *testing.T) {
 			fx.commodityUUID: {Name: "already known"},
 		},
 	}
-	stats := &types.RestoreStats{}
 
-	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.owner, existing, stats)
+	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.owner, existing)
 	c.Assert(err, qt.IsNil)
-	c.Assert(stats.ErrorCount, qt.Equals, 0)
 }
 
 // Case 2: the original ID matches a DB commodity owned by the current user → nil.
@@ -154,26 +152,21 @@ func TestValidateCommodityOwnershipInDB_OwnedByCurrentUser(t *testing.T) {
 	fx := newOwnershipFixture(t)
 	proc := newOwnershipProcessor(fx)
 
-	stats := &types.RestoreStats{}
-
-	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.owner, emptyExisting(), stats)
+	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.owner, emptyExisting())
 	c.Assert(err, qt.IsNil)
-	c.Assert(stats.ErrorCount, qt.Equals, 0)
 }
 
 // Case 3: the original ID matches a DB commodity owned by a DIFFERENT user →
-// ErrOwnershipViolation, with the error recorded on stats.
+// ErrOwnershipViolation, naming the item. The caller counts it; the check
+// records nothing itself, so the failure is counted once.
 func TestValidateCommodityOwnershipInDB_OwnedByDifferentUser(t *testing.T) {
 	c := qt.New(t)
 	fx := newOwnershipFixture(t)
 	proc := newOwnershipProcessor(fx)
 
-	stats := &types.RestoreStats{}
-
-	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.attacker, emptyExisting(), stats)
+	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.attacker, emptyExisting())
 	c.Assert(err, qt.ErrorIs, security.ErrOwnershipViolation)
-	c.Assert(stats.ErrorCount, qt.Equals, 1)
-	c.Assert(stats.Errors, qt.HasLen, 1)
+	c.Assert(err, qt.ErrorMatches, "security validation failed for commodity "+fx.commodityUUID+": commodity belongs to a different user")
 }
 
 // Case 4: the original ID matches no DB commodity → nil (treated as new).
@@ -182,11 +175,8 @@ func TestValidateCommodityOwnershipInDB_NoMatchingCommodity(t *testing.T) {
 	fx := newOwnershipFixture(t)
 	proc := newOwnershipProcessor(fx)
 
-	stats := &types.RestoreStats{}
-
-	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, "no-such-uuid", fx.owner, emptyExisting(), stats)
+	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, "no-such-uuid", fx.owner, emptyExisting())
 	c.Assert(err, qt.IsNil)
-	c.Assert(stats.ErrorCount, qt.Equals, 0)
 }
 
 // Case 5: the owner's commodity is in Trash. It keeps its UUID, so a restore
@@ -200,8 +190,6 @@ func TestValidateCommodityOwnershipInDB_TrashedOwnedByDifferentUser(t *testing.T
 	_, err := comReg.Trash(fx.ownerCtx, fx.commodityID, fx.owner.ID, time.Now())
 	c.Assert(err, qt.IsNil)
 
-	stats := &types.RestoreStats{}
-	err = proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.attacker, emptyExisting(), stats)
+	err = proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.attacker, emptyExisting())
 	c.Assert(err, qt.ErrorIs, security.ErrOwnershipViolation)
-	c.Assert(stats.ErrorCount, qt.Equals, 1)
 }

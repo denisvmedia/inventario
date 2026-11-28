@@ -21,6 +21,9 @@ var (
 	_ json.Unmarshaler                  = (*Tenant)(nil)
 )
 
+// MaxTenantNameRunes is the longest tenant name, in characters.
+const MaxTenantNameRunes = 100
+
 // TenantStatus represents the status of a tenant
 type TenantStatus string
 
@@ -117,8 +120,10 @@ type TenantIndexes struct {
 	//ptah:schema:index name="tenants_slug_idx" fields="slug" unique="true" table="tenants"
 	_ int
 
-	// Index for domain lookups
-	//ptah:schema:index name="tenants_domain_idx" fields="domain" table="tenants"
+	// A domain belongs to one tenant: requests are routed to a tenant by
+	// their host, so two tenants on one domain would make it ambiguous which
+	// one a request reaches. Also the index of the domain lookups.
+	//ptah:schema:index name="tenants_domain_unique_idx" fields="domain" unique="true" condition="domain IS NOT NULL" table="tenants"
 	_ int
 
 	// Index for status filtering
@@ -164,8 +169,11 @@ func (t *Tenant) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&t.Name, rules.NotEmpty, validation.Length(1, 100)),
-		validation.Field(&t.Slug, rules.NotEmpty, validation.Length(1, 50), validation.Match(slugPattern)),
+		// The name is free text, so its limit counts characters. The slug and
+		// the domain below are ASCII by their patterns, where bytes and
+		// characters are the same count.
+		validation.Field(&t.Name, rules.NotEmpty, validation.RuneLength(1, MaxTenantNameRunes)),
+		validation.Field(&t.Slug, rules.NotEmpty, validation.RuneLength(1, 50), validation.Match(slugPattern)),
 		validation.Field(&t.Status, validation.Required),
 	)
 
@@ -185,7 +193,7 @@ func (t *Tenant) ValidateWithContext(ctx context.Context) error {
 	// cannot be reached. Same reasoning as the slug pattern above.
 	if t.Domain != nil && *t.Domain != "" {
 		fields = append(fields, validation.Field(&t.Domain,
-			validation.Length(1, 255), validation.Match(domainPattern)))
+			validation.RuneLength(1, 255), validation.Match(domainPattern)))
 	}
 
 	return validation.ValidateStructWithContext(ctx, t, fields...)

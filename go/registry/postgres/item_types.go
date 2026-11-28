@@ -219,14 +219,15 @@ func (r *ItemTypeRegistry) assignSlugInTx(ctx context.Context, tx *sqlx.Tx, row 
 	return registry.ChooseItemTypeSlug(row, taken)
 }
 
-// Update writes the type's name and icon. The slug and the creation time stay
-// as stored.
+// Update writes the type's name and icon. The slug, the set entry and the
+// creation time stay as stored.
 func (r *ItemTypeRegistry) Update(ctx context.Context, itemType models.ItemType) (*models.ItemType, error) {
 	existing, err := r.Get(ctx, itemType.ID)
 	if err != nil {
 		return nil, err
 	}
 	itemType.Slug = existing.Slug
+	itemType.SetEntry = existing.SetEntry
 	itemType.Normalize()
 	itemType.CreatedAt = existing.CreatedAt
 	itemType.UpdatedAt = time.Now()
@@ -244,19 +245,22 @@ func (r *ItemTypeRegistry) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-// DeleteReassigning deletes a type, moving its items to reassignTo first.
+// DeleteReassigning deletes a type, moving its items and open drafts to
+// reassignTo first.
 //
-// Lock order: the group lock, then the deleted type's row (FOR UPDATE) and
-// the target's (FOR SHARE), then the items' rows. An item write locks the
-// item's row and then, when it changes the type, the new type's row FOR
-// SHARE; it never waits for the type it is leaving, so the two orders cannot
-// deadlock. A write that names the deleted type waits for this transaction
-// and then finds the type gone.
+// Lock order: the group lock, then the rows of the open drafts that name
+// the type, then the deleted type's row (FOR UPDATE) and the target's (FOR
+// SHARE), then the group's currency-migration lock, then the items' rows.
+// An item write locks the item's row and then, when it changes the type,
+// the new type's row FOR SHARE; it never waits for the type it is leaving,
+// so the two orders cannot deadlock. A promotion locks its draft's row
+// before the type's, as this does. A write that names the deleted type
+// waits for this transaction and then finds the type gone.
 func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error) {
 	types := r.tableNames.ItemTypes()
 	moved := 0
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		src, err := lockItemTypeForDelete(ctx, tx, types, id)
+		src, err := lockItemTypeForDelete(ctx, tx, r.tableNames, id)
 		if err != nil {
 			return err
 		}
@@ -264,8 +268,17 @@ func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo
 		if err != nil {
 			return err
 		}
-		if moved, err = moveItemsOfType(ctx, tx, r.tableNames.Commodities(), src, target); err != nil {
+		drafts, err := countDraftsOfTypeInTx(ctx, tx, r.tableNames.CommodityDrafts(), src.GroupID, src.Slug)
+		if err != nil {
 			return err
+		}
+		if moved, err = moveItemsOfType(ctx, tx, r.tableNames.Commodities(), src, target, drafts); err != nil {
+			return err
+		}
+		if drafts > 0 {
+			if err := moveDraftsOfTypeInTx(ctx, tx, r.tableNames.CommodityDrafts(), src.GroupID, src.Slug, target.Slug); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, types), id); err != nil {
 			return errxtrace.Wrap("failed to delete item type", err)
@@ -278,14 +291,21 @@ func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo
 	return moved, nil
 }
 
-// lockItemTypeForDelete takes the group lock and the type's row FOR UPDATE,
-// and refuses to delete the group's last type.
-func lockItemTypeForDelete(ctx context.Context, tx *sqlx.Tx, types store.TableName, id string) (*models.ItemType, error) {
+// lockItemTypeForDelete takes the group lock, the rows of the open drafts
+// that name the type and the type's row FOR UPDATE, and refuses to delete
+// the group's last type.
+func lockItemTypeForDelete(ctx context.Context, tx *sqlx.Tx, tables store.TableNames, id string) (*models.ItemType, error) {
+	types := tables.ItemTypes()
 	var src models.ItemType
 	if err := scanOne(ctx, tx, &src, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, types), id); err != nil {
 		return nil, errxtrace.Wrap("failed to get item type", err, errx.Attrs("item_type_id", id))
 	}
 	if err := lockGroupItemTypes(ctx, tx, src.GroupID); err != nil {
+		return nil, err
+	}
+	// The slug never changes, so the drafts that name it are the ones the
+	// unlocked read above found the slug for.
+	if err := lockDraftsOfTypeInTx(ctx, tx, tables.CommodityDrafts(), src.GroupID, src.Slug); err != nil {
 		return nil, err
 	}
 	if err := scanOne(ctx, tx, &src, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, types), id); err != nil {
@@ -324,23 +344,32 @@ func lockReassignTarget(
 
 // moveItemsOfType gives the items of src's group that have src, those in
 // Trash included, the type target, and returns how many it moved. With
-// items and no target it fails with ErrItemTypeInUse.
+// items or drafts (the open drafts that name src) and no target it fails
+// with ErrItemTypeInUse.
 func moveItemsOfType(
-	ctx context.Context, tx *sqlx.Tx, commodities store.TableName, src, target *models.ItemType,
+	ctx context.Context, tx *sqlx.Tx, commodities store.TableName, src, target *models.ItemType, drafts int,
 ) (int, error) {
 	var used int
 	usedQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE group_id = $1 AND type = $2`, commodities)
 	if err := tx.GetContext(ctx, &used, usedQuery, src.GroupID, string(src.Slug)); err != nil {
 		return 0, errxtrace.Wrap("failed to count items of the type", err)
 	}
-	if used == 0 {
+	if used == 0 && drafts == 0 {
 		return 0, nil
 	}
 	if target == nil {
-		return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", src.ID, "items", used))
+		return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", src.ID, "items", used, "drafts", drafts))
+	}
+	if used == 0 {
+		return 0, nil
+	}
+	// A running currency migration updates the group's items one by one
+	// under its lock; moving them all at once in another order waits for it.
+	if err := lockGroupCurrencyMigration(ctx, tx, src.GroupID); err != nil {
+		return 0, err
 	}
 	res, err := tx.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET type = $1 WHERE group_id = $2 AND type = $3`, commodities),
+		fmt.Sprintf(`UPDATE %s SET type = $1, revision = revision + 1 WHERE group_id = $2 AND type = $3`, commodities),
 		string(target.Slug), src.GroupID, string(src.Slug))
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to move items to another type", err)
@@ -373,7 +402,19 @@ func (r *ItemTypeRegistry) ItemCounts(ctx context.Context) (map[models.Commodity
 			}
 			counts[models.CommodityType(slug)] = usage
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		drafts, err := countDraftTypesInTx(ctx, tx, r.tableNames.CommodityDrafts())
+		if err != nil {
+			return err
+		}
+		for slug, n := range drafts {
+			usage := counts[slug]
+			usage.Drafts = n
+			counts[slug] = usage
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to count items per type", err)

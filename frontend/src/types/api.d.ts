@@ -107,6 +107,352 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/failed-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List failed background jobs (admin)
+         * @description Returns the background jobs that failed for good and were neither
+         *     retried nor discarded, across every tenant, newest failure first
+         *     (#1307). Each job is read from its type's own table; `id` is the row
+         *     id there. ?type limits the list to one job type, ?tenantID to one
+         *     tenant and ?failed_before to the jobs that failed before a time (a
+         *     job without a failure time counts from its creation), the jobs a bulk
+         *     discard with the same filter takes. `meta.job_types` lists the job
+         *     types with whether each can be retried. A personal data export
+         *     belongs to a user, not to a group; its title is the user's email
+         *     address.
+         *     An unknown ?type returns 400 with `failed_job.unknown_type`, a
+         *     ?failed_before that is not a date or an RFC 3339 time 400 with
+         *     `failed_job.invalid_failed_before`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
+                    /** @description Tenant ID */
+                    tenantID?: string;
+                    /**
+                     * @description Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time
+                     * @example 2026-11-01
+                     */
+                    failed_before?: string;
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobListEnvelope"];
+                    };
+                };
+                /** @description Bad Request - unknown job type or unreadable failed_before */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/failed-jobs/bulk-discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard failed background jobs in bulk (admin)
+         * @description Marks discarded every failed job that failed before ?failed_before
+         *     (#2946), as the single discard does: the jobs leave the failed list
+         *     and the depth gauge and keep their rows and errors. A job without a
+         *     failure time counts from its creation. The filter is the list's:
+         *     ?type limits the discard to one job type and ?tenantID to one tenant,
+         *     and GET /admin/failed-jobs with the same query lists the jobs it
+         *     takes. ?dry_run=true only counts them. `meta.discarded` is how many
+         *     jobs were discarded; a job someone retried or discarded in the
+         *     meantime is not among them.
+         *     A discard writes one audit row that names the filter and the counts,
+         *     also when it is refused; a dry run writes none. Needs the
+         *     platform_admin role: a support_agent gets 403 `admin.role_required`.
+         *     A missing, unreadable or future ?failed_before returns 400
+         *     `failed_job.invalid_failed_before`, an unknown ?type 400
+         *     `failed_job.unknown_type`.
+         */
+        post: {
+            parameters: {
+                query: {
+                    /**
+                     * @description Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future
+                     * @example 2026-11-01
+                     */
+                    failed_before: string;
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
+                    /** @description Tenant ID */
+                    tenantID?: string;
+                    /** @description Count the jobs and discard nothing */
+                    dry_run?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobBulkDiscardResponse"];
+                    };
+                };
+                /** @description Bad Request - missing, unreadable or future failed_before, or unknown job type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - account disabled, or not a platform_admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/failed-jobs/{jobType}/{jobID}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard a failed background job (admin)
+         * @description Marks the failed job discarded (#1307). It leaves the failed list and
+         *     the depth gauge but keeps its row and its error until the normal
+         *     cleanup removes it. Every job type can be discarded. Needs the
+         *     platform_admin role: a support_agent gets 403 `admin.role_required`.
+         *     404 `failed_job.unknown_type` for an unknown type, 404
+         *     `failed_job.not_found` when the job is not failed or was already
+         *     retried or discarded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Job type */
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
+                    /** @description Job ID */
+                    jobID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - account disabled, or not a platform_admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown type or no such failed job */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/failed-jobs/{jobType}/{jobID}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a failed background job (admin)
+         * @description Puts the failed job back in its queue the way its type runs it again
+         *     (#1307): an export or import runs from the start, a thumbnail gets a
+         *     fresh set of attempts, an intake scan is due again at once, a personal
+         *     data export is built again from the start and kept until 7 days after
+         *     the build finishes; it does not count as a new request. A restore
+         *     and a currency migration cannot be retried (409
+         *     `failed_job.not_retryable`); discard them instead. 404
+         *     `failed_job.unknown_type` for an unknown type, 404
+         *     `failed_job.not_found` when the job is not failed or was already
+         *     retried or discarded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Job type */
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
+                    /** @description Job ID */
+                    jobID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown type or no such failed job */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - this type of job cannot be retried */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/groups": {
         parameters: {
             query?: never;
@@ -789,7 +1135,83 @@ export type paths = {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Create a tenant (admin)
+         * @description Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.
+         *     A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+         *     A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
+         *     Requires the platform_admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Tenant */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminTenantCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the slug or the domain is taken */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid fields, or a reserved domain */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -859,6 +1281,348 @@ export type paths = {
         };
         put?: never;
         post?: never;
+        /**
+         * Delete a tenant (admin)
+         * @description Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.
+         *     It then deletes the tenant, its users, groups, items and files in the background with the rules of `inventario tenants delete`.
+         *     The stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.
+         *     A failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.
+         *     `confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.
+         *     Deleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+         *     Requires the platform_admin role.
+         */
+        delete: {
+            parameters: {
+                query: {
+                    /** @description The tenant's slug, typed to confirm */
+                    confirm_slug: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted - the tenant is suspended and its deletion is running */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - the confirmation does not match, or the tenant serves this host */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a tenant (admin)
+         * @description Changes the fields the body sets to a value other than the stored one, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain. A body that changes nothing writes nothing.
+         *     A status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.
+         *     A change that takes the tenant serving this request off the request's host is refused with 422 `admin.tenant.serves_this_host`: a status away from active and,
+         *     with a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.
+         *     A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+         *     A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
+         *     Requires the platform_admin role.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Fields to change */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminTenantUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the slug or the domain is taken */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid fields, a reserved domain, or the tenant serves this host */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/admin/tenants/{tenantID}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a tenant (admin)
+         * @description Sets the tenant's status back to active. Sessions that the suspension ended stay ended: the users sign in again. Reactivating an active tenant returns 200 and changes nothing.
+         *     A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+         *     Requires the platform_admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["apiserver.AdminTenantStatusRequest"];
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid reason */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantID}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend a tenant (admin)
+         * @description Sets the tenant's status to suspended and ends the sessions of every user in it, the same teardown blocking a user runs: refresh tokens and personal API tokens are revoked and access tokens are refused.
+         *     While suspended, the tenant's users cannot sign in by any method and every request on the tenant's host is refused. Suspending a suspended tenant ends the sessions again and returns 200.
+         *     Suspending the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+         *     A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+         *     Requires the platform_admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["apiserver.AdminTenantStatusRequest"];
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid reason, or the tenant serves this host */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1093,6 +1857,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Unprocessable Entity - self-block or admin-on-admin without force */
                 422: {
                     headers: {
@@ -1126,7 +1899,8 @@ export type paths = {
          *     `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
          *     `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
          *     Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
-         *     `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+         *     `admin.impersonate.target_blocked` when the target account is blocked, `tenant.not_active` when the target's
+         *     tenant is suspended or inactive, and `admin.impersonate.nested`
          *     when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
          *     per-operator start rate limit (10/hour) is exceeded.
          */
@@ -1192,7 +1966,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long */
+                /** @description Unprocessable Entity - target is admin / blocked / in a tenant that is not active / nested impersonation / reason too long */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -1382,6 +2156,15 @@ export type paths = {
                 };
                 /** @description Not Found - unknown user */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2016,6 +2799,15 @@ export type paths = {
                         "application/json": string;
                     };
                 };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
             };
         };
         delete?: never;
@@ -2066,8 +2858,10 @@ export type paths = {
         };
         /**
          * Update current user profile
-         * @description Update the authenticated user's profile. The name field is required;
-         *     default_group_id (#1263, #1592) is optional — send a group UUID the
+         * @description Update the authenticated user's profile. Both fields are optional and
+         *     a field left out keeps its stored value. name, when sent, must not be
+         *     blank (at most 100 characters).
+         *     default_group_id (#1263, #1592): send a group UUID the
          *     user is a member of to set, or null to clear (only allowed when the
          *     user has zero memberships; otherwise rejected with 400). Email, role,
          *     tenant_id, and is_active are ignored even if submitted.
@@ -3055,8 +3849,9 @@ export type paths = {
         };
         /**
          * Get a profile photo from a signed URL
-         * @description Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;
+         * @description Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;
          *     they are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.
+         *     A URL names either the user it was issued to (uid) or the back-office operator (op), never both.
          */
         get: {
             parameters: {
@@ -3064,7 +3859,9 @@ export type paths = {
                     /** @description Photo version */
                     v: string;
                     /** @description The user the URL was issued to */
-                    uid: string;
+                    uid?: string;
+                    /** @description The back-office operator the URL was issued to */
+                    op?: string;
                     /** @description The group the two users share */
                     gid?: string;
                     /** @description Expiry, Unix seconds */
@@ -3499,6 +4296,92 @@ export type paths = {
                     };
                     content: {
                         "application/json": string[];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/data-exports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a personal data export
+         * @description Streams the tar.gz archive a signed URL from POST /users/me/data-exports/{id}/download-url points at. The URL is bound
+         *     to the session that asked for it and expires; an impersonation session is refused. Every download is recorded in the audit log.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The user the URL was issued to */
+                    uid: string;
+                    /** @description Expiry, Unix seconds */
+                    exp: number;
+                    /** @description Signature */
+                    sig: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Personal data export ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The archive */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description Invalid or expired URL */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description Impersonation session, or the user's tenant is not active */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description No such export, or it expired */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description The export is not finished */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
                     };
                 };
             };
@@ -4030,6 +4913,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Non-empty area (no strategy) or unknown strategy */
                 422: {
                     headers: {
@@ -4066,12 +4958,14 @@ export type paths = {
                     per_page?: number;
                     /** @description Filter by commodity type; repeat to OR */
                     type?: string[];
-                    /** @description Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    /** @description Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR */
                     status?: string[];
                     /** @description Filter by exact area ID */
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
@@ -4614,6 +5508,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area */
                     unassigned?: boolean;
+                    /** @description Only commodities in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Include drafts and non-in_use commodities (default true) */
@@ -4766,7 +5662,12 @@ export type paths = {
         };
         /**
          * Update a commodity
-         * @description Update a commodity
+         * @description Replace the item with the values sent. attributes.revision is the revision
+         *     the values were based on, as the client read it: when the item has been written
+         *     since (an edit, a bulk change, a tag rename), the save is refused with 409
+         *     commodity.revision_conflict and nothing is written, so it cannot undo that
+         *     write. Without it, or with 0, the save is not checked. The response carries
+         *     the item's new revision.
          */
         put: {
             parameters: {
@@ -4793,6 +5694,15 @@ export type paths = {
                 };
                 /** @description Commodity not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: the item was written after the revision sent */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4905,6 +5815,15 @@ export type paths = {
                 };
                 /** @description Commodity or file not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: the item was written meanwhile and kept changing on every retry */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6288,7 +7207,7 @@ export type paths = {
         };
         /**
          * List custom fields
-         * @description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+         * @description The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash and the number of unfinished drafts with a value;
          *     each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
          */
         get: {
@@ -6418,15 +7337,15 @@ export type paths = {
         post?: never;
         /**
          * Delete a custom field
-         * @description Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
-         *     unless delete_values=true; then its values are deleted with it, in the same transaction.
+         * @description Deletes the field. A field that items, in Trash included, or unfinished drafts have a value of is refused with 409 custom_field.in_use and the counts in meta,
+         *     unless delete_values=true; then its values are deleted with it, in the same transaction, and the drafts lose their entry of the field, each with a new revision.
          */
         delete: {
             parameters: {
                 query?: {
                     /** @description Delete the field's values along with it */
                     delete_values?: boolean;
-                    /** @description With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta */
+                    /** @description With delete_values=true: how many items and drafts together the member confirmed to lose a value. When another number has one, the delete is refused with 409 custom_field.in_use and the counts */
                     expected_values?: number;
                 };
                 header?: never;
@@ -6440,7 +7359,7 @@ export type paths = {
             };
             requestBody?: never;
             responses: {
-                /** @description Deleted; meta.deleted_values counts the values removed */
+                /** @description Deleted; meta.deleted_values counts the values removed, those of drafts included */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -6458,7 +7377,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Items have a value of the field and delete_values was not true, or expected_values is not how many items have one */
+                /** @description Items or drafts have a value of the field and delete_values was not true, or expected_values is not how many have one */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -7459,6 +8378,170 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/failed-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the group's failed background jobs
+         * @description Returns the group's background jobs that failed for good and were
+         *     neither retried nor discarded, newest failure first (#1307). Group
+         *     admins only. ?type limits the list to one job type; an unknown type
+         *     returns 400 with `failed_job.unknown_type`. `meta.job_types` lists the
+         *     job types with whether each can be retried.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.FailedJobListEnvelope"];
+                    };
+                };
+                /** @description Bad Request - unknown job type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - group admins only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry one of the group's failed background jobs
+         * @description Puts the group's failed job back in its queue (#1307). Group admins
+         *     only. A restore and a currency migration cannot be retried (409
+         *     `failed_job.not_retryable`). 404 `failed_job.unknown_type` for an
+         *     unknown type, 404 `failed_job.not_found` when the group has no such
+         *     failed job, also one of another group.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Job type */
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Job ID */
+                    jobID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - group admins only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown type or no such failed job */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - this type of job cannot be retried */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/files": {
         parameters: {
             query?: never;
@@ -7847,10 +8930,21 @@ export type paths = {
          * @description Move the file to Trash. It keeps its links, so restoring it
          *     puts it back where it was. An export bundle is deleted for
          *     good.
+         *
+         *     With unless_linked=true the file goes to Trash only when
+         *     nothing holds it: no link, or only links to items in Trash
+         *     (it then goes with the item linked first). The links are
+         *     checked and the file trashed in one transaction. A file that a
+         *     link holds, an export bundle included, stays and the answer is
+         *     409 file.linked; a file that is gone or in Trash already is a
+         *     404.
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Keep the file when a link holds it */
+                    unless_linked?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -7869,8 +8963,26 @@ export type paths = {
                     };
                     content?: never;
                 };
-                /** @description File not found */
+                /** @description File not found, or in Trash already */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description file.linked: with unless_linked=true, a link holds the file, so it stays */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description unless_linked is not a boolean */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8076,6 +9188,15 @@ export type paths = {
                 };
                 /** @description File or link not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -9122,7 +10243,7 @@ export type paths = {
         /**
          * List item types
          * @description The item types of the group: the built-in ones first in their fixed order, then the others by name.
-         *     Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+         *     Each carries the number of items of that type and, separately, the number in Trash and the number of unfinished drafts. The first request seeds the built-in types into a group that has none.
          */
         get: {
             parameters: {
@@ -9252,8 +10373,9 @@ export type paths = {
         post?: never;
         /**
          * Delete an item type
-         * @description Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
-         *     then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+         * @description Deletes the type. A type that items still have, in Trash included, or that unfinished drafts have, is refused with 409 item_type.in_use and the counts in meta
+         *     unless reassign_to names another type of the group; then every item and draft of the deleted type gets that type first, in the same transaction,
+         *     and each moved draft gets a new revision. The group's last type cannot be deleted (409 item_type.last).
          */
         delete: {
             parameters: {
@@ -9290,7 +10412,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description The type is in use and no reassign_to was given, or it is the group's last type */
+                /** @description Items or drafts have the type and no reassign_to was given, or it is the group's last type */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -9681,6 +10803,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Non-empty location (no strategy) or unknown strategy */
                 422: {
                     headers: {
@@ -10035,7 +11166,7 @@ export type paths = {
         };
         /**
          * Get the active plan + per-group usage
-         * @description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).
+         * @description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids give unlimited, as does any id while the plans feature flag is off (#1389).
          */
         get: {
             parameters: {
@@ -10596,12 +11727,14 @@ export type paths = {
                     no_purchase_date?: boolean;
                     /** @description Commodities only: custom field condition, as for GET /commodities */
                     cf?: string[];
-                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR */
                     status?: string[];
                     /** @description Commodities only: filter by exact area ID */
                     area_id?: string;
                     /** @description Commodities only: only items with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Commodities only: only items in an area of this location; cannot be combined with unassigned */
+                    location_id?: string;
                     /** @description Commodities only: filter by seller ID; repeat for several (OR) */
                     seller_id?: string[];
                     /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */
@@ -11136,7 +12269,8 @@ export type paths = {
         };
         /**
          * Get storage usage for a group
-         * @description Returns the per-group blob byte total with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         * @description Returns the byte total of the group's uploaded files, with a per-category breakdown and the active quota. Used by the Settings → Data & storage card.
+         *     Each file counts at the size it was uploaded; the thumbnails rendered for images are stored apart and not counted.
          */
         get: {
             parameters: {
@@ -11486,6 +12620,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description An item tag, while a currency migration runs in the group */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
             };
         };
         options?: never;
@@ -11542,6 +12685,15 @@ export type paths = {
                 };
                 /** @description User-side request problem */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description A new slug for an item tag, while a currency migration runs in the group */
+                423: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -12462,6 +13614,7 @@ export type paths = {
         /**
          * Upload restore file
          * @description Upload a signed `.inb` backup file to be used for a restore operation.
+         *     A personal data export (see POST /users/me/data-exports) answers 422 restore.personal_data_export: it cannot be restored.
          */
         post: {
             parameters: {
@@ -12572,7 +13725,8 @@ export type paths = {
         put?: never;
         /**
          * Create a group
-         * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin.
+         * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
+         *     collection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.
          */
         post: {
             parameters: {
@@ -12733,7 +13887,8 @@ export type paths = {
         head?: never;
         /**
          * Update group
-         * @description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+         * @description Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+         *     The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
          */
         patch: {
             parameters: {
@@ -12785,6 +13940,270 @@ export type paths = {
                 };
             };
         };
+        trace?: never;
+    };
+    "/groups/{groupID}/collection-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the group's Collection set
+         * @description Lists the item types and custom fields of the Collection set (#1607) and, for each, whether the group has it:
+         *     missing (adding the set creates it), added (the set created it) or own (a member's type or field of the same name, which the set uses and never deletes).
+         *     Each one the group has carries its item counts and whether removing the set deletes it, or why it stays. Requires group membership.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group member */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Add the Collection set to the group
+         * @description Creates the item types Art, Books, Coins, Stamps, Records, Watches and Cards and the custom fields Condition, Catalog reference, Edition or variant, Signed, Provenance,
+         *     Certificate of authenticity, Appraised value and Appraisal date, and puts every field on the template of every one of those types.
+         *     A type or field the group already has under that name, ignoring case, is used instead of a new one. Adding again creates only what is missing, so a failed add is finished by repeating it.
+         *     The names are English; members rename them like any other. meta counts what the request created. Requires group admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The group has 100 item types (item_type.limit), or its types or fields changed during the add twice (item_set.changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The group is being deleted (group.not_active), or has 200 custom fields (custom_field.limit_reached) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        /**
+         * Remove the Collection set from the group
+         * @description Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+         *     A listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.
+         *     Types and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.
+         *     meta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            /** @description The item types and custom fields to delete, by ID */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetRemoveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The body is missing or invalid, or the group is being deleted (group.not_active) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/groups/{groupID}/hidden-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the group's hidden sections
+         * @description Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+         *     An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+         *     Unknown sections are refused; duplicates are dropped. Requires group admin role.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Hidden sections */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.GroupHiddenSectionsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.LocationGroupResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Validation error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/groups/{groupID}/invites": {
@@ -13538,7 +14957,10 @@ export type paths = {
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /** @description The UI language the account registers in. The first of en, cs or ru it names becomes the new account's language setting, which the verification and welcome emails use. */
+                    "Accept-Language"?: string;
+                };
                 path?: never;
                 cookie?: never;
             };
@@ -14003,6 +15425,191 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/users/me/data-exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List personal data exports
+         * @description Returns the authenticated user's personal data exports (GDPR Art. 20), newest first, until each expires.
+         *     `next_request_at` is when a new export may be requested; it is absent when one may be requested now.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.PersonalDataExportsListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Request a personal data export
+         * @description Starts building a copy of the authenticated user's data: profile, settings, group memberships, and what they created in each group,
+         *     with the files they uploaded. The archive is a tar.gz with JSON documents; it is not a group backup and cannot be restored.
+         *     The export runs in the background and an email says when it is ready. One request is allowed per day: an earlier one answers 429
+         *     data_export.rate_limited with `retry_at` in the error meta and a Retry-After header. An impersonation session answers 403
+         *     data_export.impersonation_forbidden.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Requested */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.PersonalDataExportView"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/data-exports/{id}/download-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get a download URL for a personal data export
+         * @description Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only
+         *     for a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one
+         *     409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works
+         *     only with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403
+         *     data_export.session_required.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Personal data export ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.PersonalDataExportDownloadURLResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/me/login-history": {
         parameters: {
             query?: never;
@@ -14331,6 +15938,45 @@ export type components = {
             /** @description Reason is the free-form justification for the block (max 500 chars). */
             reason: string;
         };
+        "apiserver.AdminFailedJobBulkDiscardMeta": {
+            /** @description ByType counts per job type; a type with none is left out. */
+            by_type?: {
+                [key: string]: number;
+            };
+            /** @example 12 */
+            discarded?: number;
+            dry_run?: boolean;
+        };
+        "apiserver.AdminFailedJobBulkDiscardResponse": {
+            meta?: components["schemas"]["apiserver.AdminFailedJobBulkDiscardMeta"];
+        };
+        "apiserver.AdminFailedJobListEnvelope": {
+            data?: components["schemas"]["apiserver.AdminFailedJobResource"][];
+            meta?: components["schemas"]["apiserver.FailedJobListMeta"];
+        };
+        "apiserver.AdminFailedJobResource": {
+            attributes?: components["schemas"]["apiserver.AdminFailedJobView"];
+            id?: string;
+            /** @example failed_jobs */
+            type?: string;
+        };
+        "apiserver.AdminFailedJobView": {
+            /** @example 3 */
+            attempts?: number;
+            created_at?: string;
+            error?: string;
+            failed_at?: string;
+            group_id?: string;
+            group_name?: string;
+            group_slug?: string;
+            /** @example export */
+            job_type?: string;
+            retryable?: boolean;
+            tenant_id?: string;
+            tenant_name?: string;
+            title?: string;
+            user_id?: string;
+        };
         "apiserver.AdminMemberEnvelope": {
             data?: components["schemas"]["apiserver.AdminMemberResource"];
         };
@@ -14356,6 +16002,38 @@ export type components = {
              *     (max 500 chars).
              */
             reason: string;
+        };
+        "apiserver.AdminTenantCreateRequest": {
+            /** @description Domain is an optional custom domain the tenant is reached on. */
+            domain?: string;
+            /** @description Name is the tenant's display name (1 to 100 characters). */
+            name?: string;
+            /**
+             * @description Slug is generated from the name when empty: lowercase letters, digits
+             *     and hyphens, at most 50 characters.
+             */
+            slug?: string;
+            /**
+             * @description Status defaults to active.
+             * @enum {unknown}
+             */
+            status?: "active" | "suspended" | "inactive";
+        };
+        "apiserver.AdminTenantStatusRequest": {
+            /** @description Reason is the operator's justification (1 to 500 characters). */
+            reason?: string;
+        };
+        "apiserver.AdminTenantUpdateRequest": {
+            /** @description Domain set to an empty string removes the custom domain. */
+            domain?: string;
+            name?: string;
+            slug?: string;
+            /**
+             * @description Status away from active ends the sessions of the tenant's users, as
+             *     POST /admin/tenants/{tenantID}/suspend does.
+             * @enum {unknown}
+             */
+            status?: "active" | "suspended" | "inactive";
         };
         "apiserver.AdminUnblockRequest": {
             /** @description Reason is the free-form justification for the unblock (max 500 chars). */
@@ -14481,6 +16159,51 @@ export type components = {
         "apiserver.DeleteAccountRequest": {
             password?: string;
         };
+        "apiserver.FailedJobListEnvelope": {
+            data?: components["schemas"]["apiserver.FailedJobResource"][];
+            meta?: components["schemas"]["apiserver.FailedJobListMeta"];
+        };
+        "apiserver.FailedJobListMeta": {
+            job_types?: components["schemas"]["apiserver.FailedJobTypeInfo"][];
+            /** @example 1 */
+            page?: number;
+            /** @example 50 */
+            per_page?: number;
+            /** @example 3 */
+            total?: number;
+            /** @example 1 */
+            total_pages?: number;
+        };
+        "apiserver.FailedJobResource": {
+            attributes?: components["schemas"]["apiserver.FailedJobView"];
+            id?: string;
+            /** @example failed_jobs */
+            type?: string;
+        };
+        "apiserver.FailedJobTypeInfo": {
+            retryable?: boolean;
+            /** @example export */
+            type?: string;
+        };
+        "apiserver.FailedJobView": {
+            /** @example 3 */
+            attempts?: number;
+            created_at?: string;
+            /** @description Error is the last error the job recorded. */
+            error?: string;
+            failed_at?: string;
+            /**
+             * @description JobType is the worker type that ran the job.
+             * @example export
+             */
+            job_type?: string;
+            /** @description Retryable is false for a type whose jobs can only be discarded. */
+            retryable?: boolean;
+            /** @description Title names the job: an export's description, a file's title. */
+            title?: string;
+            /** @description UserID is the member who started the job. */
+            user_id?: string;
+        };
         "apiserver.FeatureFlags": {
             /**
              * @description CurrencyMigration mirrors Params.FeatureCurrencyMigration. When
@@ -14497,6 +16220,14 @@ export type components = {
              *     the affordance and the /auth/magic-link routes return 404.
              */
             magic_link_login?: boolean;
+            /**
+             * @description Plans mirrors Params.PlansEnabled (#1389). The plans feature is
+             *     frozen, so the flag is off by default. When false the FE hides every
+             *     plan surface (plan badge, Upgrade links, the /plans page, the plan
+             *     part of the group settings card and the plan in the admin tenant
+             *     pages) and GET /g/{groupSlug}/plan reports the unlimited plan.
+             */
+            plans?: boolean;
             /**
              * @description PublicScan mirrors Params.PublicScanEnabled. The entry point is the
              *     anonymous landing-page "add your first item" CTA (#1988), so — like
@@ -14652,6 +16383,40 @@ export type components = {
         "apiserver.PatchSettingRequest": {
             /** @description Value is the setting value to apply and is required when using the object envelope. */
             value?: unknown;
+        };
+        "apiserver.PersonalDataExportDownloadURLResponse": {
+            expires_at?: string;
+            /**
+             * @description URL is relative to the server root and needs no bearer token. It is
+             *     bound to the session that asked for it.
+             */
+            url?: string;
+        };
+        "apiserver.PersonalDataExportView": {
+            /** @description CompletedAt is when the archive was finished; absent until then. */
+            completed_at?: string;
+            /** @description CreatedAt is when the user requested it. */
+            created_at?: string;
+            /** @description ExpiresAt is when the archive and this entry are deleted. */
+            expires_at?: string;
+            file_count?: number;
+            group_count?: number;
+            id?: string;
+            item_count?: number;
+            /** @description SizeBytes is the archive's size, 0 until it is finished. */
+            size_bytes?: number;
+            /** @enum {unknown} */
+            status?: "pending" | "in_progress" | "completed" | "failed";
+        };
+        "apiserver.PersonalDataExportsListResponse": {
+            exports?: components["schemas"]["apiserver.PersonalDataExportView"][];
+            /**
+             * @description NextRequestAt is when the user may request a new export; absent when
+             *     they may now.
+             */
+            next_request_at?: string;
+            /** @description RetentionDays is how long a finished archive is kept. */
+            retention_days?: number;
         };
         "apiserver.RegisterRequest": {
             email?: string;
@@ -14839,6 +16604,12 @@ export type components = {
             user?: components["schemas"]["jsonapi.AdminGroupMemberUser"];
         };
         "jsonapi.AdminGroupMemberUser": {
+            /**
+             * @description AvatarURL is a signed URL of the member's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the member
+             *     has none.
+             */
+            avatar_url?: string;
             email?: string;
             id?: string;
             name?: string;
@@ -14896,6 +16667,11 @@ export type components = {
         };
         "jsonapi.AdminUserDetail": {
             active_session_count?: number;
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested it. Absent when the user has none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_memberships?: components["schemas"]["jsonapi.AdminUserGroupMembership"][];
@@ -14920,6 +16696,12 @@ export type components = {
             role?: components["schemas"]["models.GroupRole"];
         };
         "jsonapi.AdminUserListItem": {
+            /**
+             * @description AvatarURL is a signed URL of the user's profile photo, valid for the
+             *     operator and session that requested the list. Absent when the user has
+             *     none.
+             */
+            avatar_url?: string;
             created_at?: string;
             email?: string;
             group_membership_count?: number;
@@ -15193,7 +16975,7 @@ export type components = {
              * @example disposed
              * @enum {string}
              */
-            value?: "in_use" | "lost" | "disposed" | "written_off";
+            value?: "in_use" | "lost" | "disposed" | "written_off" | "donated" | "stolen";
         };
         "jsonapi.CommodityBulkUpdateAttributes": {
             /** @example 37 */
@@ -15692,9 +17474,20 @@ export type components = {
             custom_fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Fields are the values read, keyed by field name. Its document_type
+             *     classifies the scan as a whole; files is the per-file source, and
+             *     document_type is derived from it when the model gives none.
+             */
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Files holds one suggestion per input file the model said something
+             *     usable about, ordered by index; a file without one has no entry.
+             *     Absent when there are none.
+             */
+            files?: components["schemas"]["jsonapi.CommodityScanFileGuess"][];
             /**
              * @description Items is present only when the source described more than one
              *     distinct product; one entry per product, most prominent first. The
@@ -15705,10 +17498,29 @@ export type components = {
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
         };
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            /** @example 0.9 */
+            confidence?: number;
+            /**
+             * @example invoice
+             * @enum {string}
+             */
+            value?: "invoice" | "receipt" | "manual" | "warranty" | "photo" | "other";
+        };
         "jsonapi.CommodityScanFieldGuess": {
             confidence?: number;
             /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanFileGuess": {
+            document_type?: components["schemas"]["jsonapi.CommodityScanDocumentTypeGuess"];
+            /**
+             * @description Index is the file's position among the photos parts of the request,
+             *     counted from 0. An empty part the server skipped still counts.
+             * @example 0
+             */
+            index: number;
+            title?: components["schemas"]["jsonapi.CommodityScanTitleGuess"];
         };
         "jsonapi.CommodityScanItem": {
             custom_fields?: {
@@ -15728,6 +17540,12 @@ export type components = {
         };
         "jsonapi.CommodityScanResponse": {
             data?: components["schemas"]["jsonapi.CommodityScanResource"];
+        };
+        "jsonapi.CommodityScanTitleGuess": {
+            /** @example 0.8 */
+            confidence?: number;
+            /** @example Bosch invoice, March 2024 */
+            value?: string;
         };
         "jsonapi.CommodityScanWarning": {
             /**
@@ -15751,10 +17569,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
@@ -16070,6 +17888,13 @@ export type components = {
             created_at?: string;
             /**
              * Format: int64
+             * @description DraftCount is the number of unfinished drafts with a value of the
+             *     field. Deleting the field takes the value out of them too.
+             * @example 0
+             */
+            draft_count?: number;
+            /**
+             * Format: int64
              * @description ItemCount and TrashedItemCount are the items with a value of the
              *     field. Deleting the field deletes those values.
              * @example 3
@@ -16357,9 +18182,42 @@ export type components = {
             data?: components["schemas"]["models.FileEntity"][];
             meta?: components["schemas"]["jsonapi.FilesMeta"];
         };
+        "jsonapi.GroupCreateItemSetOutcome": {
+            /** @example true */
+            added?: boolean;
+            /**
+             * Format: int64
+             * @example 8
+             */
+            created_custom_fields?: number;
+            /**
+             * Format: int64
+             * @example 7
+             */
+            created_item_types?: number;
+        };
         "jsonapi.GroupDeleteRequest": {
             confirm_word?: string;
             password?: string;
+        };
+        "jsonapi.GroupHiddenSectionsAttributes": {
+            /**
+             * @description HiddenSections is the full list of sections to hide: warranties,
+             *     maintenance, loans, upcoming. An empty list shows every section.
+             *     Unknown sections are refused and duplicates dropped.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
+        };
+        "jsonapi.GroupHiddenSectionsData": {
+            attributes?: components["schemas"]["jsonapi.GroupHiddenSectionsAttributes"];
+            /**
+             * @example groups
+             * @enum {string}
+             */
+            type?: "groups";
+        };
+        "jsonapi.GroupHiddenSectionsRequest": {
+            data?: components["schemas"]["jsonapi.GroupHiddenSectionsData"];
         };
         "jsonapi.GroupInviteCreateAttrs": {
             /** @example colleague@example.com */
@@ -16538,6 +18396,11 @@ export type components = {
             type?: "intake_candidates";
         };
         "jsonapi.IntakeCandidateReviewAttrs": {
+            /**
+             * @description AcceptedCustomFields are the IDs of the custom fields whose scanned
+             *     value goes into the draft; each must be one the scan read a value for.
+             */
+            accepted_custom_fields?: string[];
             accepted_fields?: string[];
             /** @example 1 */
             quantity?: number;
@@ -16852,6 +18715,227 @@ export type components = {
         "jsonapi.InviteInfoResponse": {
             data?: components["schemas"]["jsonapi.InviteInfoData"];
         };
+        "jsonapi.ItemSetFieldView": {
+            /**
+             * @description CustomFieldID is the ID of the group's field; absent while missing or
+             *     taken.
+             * @example 5d2e...
+             */
+            custom_field_id?: string;
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with a value of the
+             *     field.
+             * @example 0
+             */
+            draft_count?: number;
+            /**
+             * @description FieldType is the type of the group's field, or the set's type for a
+             *     missing one.
+             * @example select
+             */
+            field_type?: string;
+            /**
+             * Format: int64
+             * @description ItemCount and TrashedItemCount count the items with a value of the
+             *     field, outside Trash and in it.
+             * @example 0
+             */
+            item_count?: number;
+            /**
+             * @description KeepReason says why removing the set keeps a field the group has:
+             *     own or in_use (items or drafts have a value of it). Absent when the
+             *     field is removable or missing.
+             * @example in_use
+             * @enum {string}
+             */
+            keep_reason?: "own" | "in_use";
+            /**
+             * @description Key identifies the field within the set.
+             * @example condition
+             */
+            key?: string;
+            /**
+             * Format: int64
+             * @description MissingTemplates counts the set's types in the group that do not offer
+             *     the field. Adding the set offers it on them; until then the set is
+             *     not complete.
+             * @example 0
+             */
+            missing_templates?: number;
+            /**
+             * @description Name is the name of the group's field, which a member may have
+             *     changed, or the set's name for a field the group does not have.
+             * @example Condition
+             */
+            name?: string;
+            /**
+             * @description Removable is true when removing the set deletes the field.
+             * @example true
+             */
+            removable?: boolean;
+            /**
+             * @description State is missing, added, own or taken, as for an item type.
+             * @example added
+             * @enum {string}
+             */
+            state?: "missing" | "added" | "own" | "taken";
+            /**
+             * @description TakenBy is the key of the set's field that has this field's name, for
+             *     a taken field.
+             * @example signed
+             */
+            taken_by?: string;
+            /**
+             * Format: int64
+             * @example 0
+             */
+            trashed_item_count?: number;
+        };
+        "jsonapi.ItemSetItemTypeView": {
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts that have the type.
+             * @example 0
+             */
+            draft_count?: number;
+            /** @example coins */
+            icon?: string;
+            /**
+             * Format: int64
+             * @example 0
+             */
+            item_count?: number;
+            /**
+             * @description ItemTypeID is the ID of the group's type; absent while missing or
+             *     taken.
+             * @example 8f1c...
+             */
+            item_type_id?: string;
+            /**
+             * @description KeepReason says why removing the set keeps a type the group has:
+             *     own (a member made it), in_use (items, in Trash or not, or drafts have
+             *     it) or last_type (a group keeps at least one type). Absent when the
+             *     type is removable or missing.
+             * @example in_use
+             * @enum {string}
+             */
+            keep_reason?: "own" | "in_use" | "last_type";
+            /**
+             * @description Key identifies the type within the set.
+             * @example coins
+             */
+            key?: string;
+            /**
+             * @description Name is the name of the group's type, which a member may have changed,
+             *     or the set's name for a type the group does not have.
+             * @example Coins
+             */
+            name?: string;
+            /**
+             * @description Removable is true when removing the set deletes the type.
+             * @example true
+             */
+            removable?: boolean;
+            /**
+             * @description State is missing when the group has no such type and adding the set
+             *     creates it, added when the set created the type, own when it is a
+             *     member's type of the same name, which the set uses and never deletes,
+             *     and taken when another type of the set was renamed to its name, so
+             *     adding cannot create it.
+             * @example added
+             * @enum {string}
+             */
+            state?: "missing" | "added" | "own" | "taken";
+            /**
+             * @description TakenBy is the key of the set's type that has this type's name, for a
+             *     taken type.
+             * @example coins
+             */
+            taken_by?: string;
+            /**
+             * Format: int64
+             * @example 0
+             */
+            trashed_item_count?: number;
+        };
+        "jsonapi.ItemSetMeta": {
+            /**
+             * Format: int64
+             * @description AddedTemplates counts the fields the add put on a type's template,
+             *     besides those of the fields it created.
+             * @example 0
+             */
+            added_templates?: number;
+            /**
+             * Format: int64
+             * @example 8
+             */
+            created_custom_fields?: number;
+            /**
+             * Format: int64
+             * @example 7
+             */
+            created_item_types?: number;
+            deleted_custom_fields?: string[];
+            /** @description DeletedItemTypes and DeletedCustomFields name what a remove deleted. */
+            deleted_item_types?: string[];
+            kept_custom_fields?: string[];
+            /**
+             * @description KeptItemTypes and KeptCustomFields name what the remove request
+             *     listed but kept: an item started to use it since the confirmation,
+             *     or it became the group's last type.
+             */
+            kept_item_types?: string[];
+        };
+        "jsonapi.ItemSetRemoveAttributes": {
+            custom_field_ids?: string[];
+            /**
+             * @description ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,
+             *     by ID. It deletes those that are removable when it runs; one that
+             *     stopped being removable stays and is listed in meta, and an ID that
+             *     names no type or field of the set is ignored. Either list may be
+             *     empty.
+             */
+            item_type_ids?: string[];
+        };
+        "jsonapi.ItemSetRemoveData": {
+            attributes?: components["schemas"]["jsonapi.ItemSetRemoveAttributes"];
+            /**
+             * @example item_sets
+             * @enum {string}
+             */
+            type?: "item_sets";
+        };
+        "jsonapi.ItemSetRemoveRequest": {
+            data?: components["schemas"]["jsonapi.ItemSetRemoveData"];
+        };
+        "jsonapi.ItemSetResponse": {
+            data?: components["schemas"]["jsonapi.ItemSetResponseData"];
+            meta?: components["schemas"]["jsonapi.ItemSetMeta"];
+        };
+        "jsonapi.ItemSetResponseData": {
+            attributes?: components["schemas"]["jsonapi.ItemSetView"];
+            /** @example collection */
+            id?: string;
+            /**
+             * @example item_sets
+             * @enum {string}
+             */
+            type?: "item_sets";
+        };
+        "jsonapi.ItemSetView": {
+            /**
+             * @description Complete is true when adding the set has nothing left to do: the group
+             *     has every type and field of the set but those taken, and each of those
+             *     fields is offered on each of those types.
+             * @example true
+             */
+            complete?: boolean;
+            custom_fields?: components["schemas"]["jsonapi.ItemSetFieldView"][];
+            /** @description ItemTypes and CustomFields list the set's entries in the set's order. */
+            item_types?: components["schemas"]["jsonapi.ItemSetItemTypeView"][];
+        };
         "jsonapi.ItemTypeDeleteMeta": {
             /**
              * Format: int64
@@ -16912,6 +18996,13 @@ export type components = {
             /** @example true */
             builtin?: boolean;
             created_at?: string;
+            /**
+             * Format: int64
+             * @description DraftCount is the number of unfinished drafts with this type.
+             *     Deleting the type moves them along with the items.
+             * @example 0
+             */
+            draft_count?: number;
             /** @example laptop */
             icon?: string;
             /**
@@ -16986,6 +19077,14 @@ export type components = {
         };
         "jsonapi.LocationGroupAttributes": {
             /**
+             * @description CollectionSet, on create, adds the Collection set to the new group
+             *     (#1607): its item types and custom fields, as POST
+             *     /groups/{groupID}/collection-set does. It is not stored; the response
+             *     meta says whether the set was added. Create only: an update with the
+             *     attribute, true or false, is refused.
+             */
+            collection_set?: boolean;
+            /**
              * @description Description is the free-form one-line subtitle surfaced on the
              *     group settings page and the sidebar group-switcher (#1647).
              *     Optional; empty string means "no description". Capped at
@@ -16999,8 +19098,23 @@ export type components = {
              *     reprice-aware currency migration is tracked under #202.
              */
             group_currency?: string;
+            /**
+             * @description HiddenSections lists the sections the group hides for all its
+             *     members: warranties, maintenance, loans, upcoming. Optional. On
+             *     create, absent means the group hides nothing; on update, absent
+             *     leaves the list as it is and a list replaces it. Unknown sections
+             *     are refused and duplicates dropped.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
             icon?: string;
             name?: string;
+        };
+        "jsonapi.LocationGroupCreateMeta": {
+            /**
+             * @description CollectionSet reports on adding the Collection set, when the request
+             *     had collection_set.
+             */
+            collection_set?: components["schemas"]["jsonapi.GroupCreateItemSetOutcome"];
         };
         "jsonapi.LocationGroupData": {
             attributes?: components["schemas"]["jsonapi.LocationGroupAttributes"];
@@ -17016,6 +19130,11 @@ export type components = {
         };
         "jsonapi.LocationGroupResponse": {
             data?: components["schemas"]["jsonapi.LocationGroupResponseData"];
+            /**
+             * @description Meta is set on a create that asked for extras such as the Collection
+             *     set.
+             */
+            meta?: components["schemas"]["jsonapi.LocationGroupCreateMeta"];
         };
         "jsonapi.LocationGroupResponseData": {
             attributes?: components["schemas"]["models.LocationGroup"];
@@ -18137,6 +20256,17 @@ export type components = {
             purchase_date?: string | null;
             registered_date?: string;
             /**
+             * @description Revision counts the writes to the item: a new item has revision 1, and
+             *     every registry write of a column an edit form sends back adds one (an
+             *     edit, a bulk change, the draft mark, a tag rename or delete, an item
+             *     type delete that moves the item, a currency migration). An edit form
+             *     sends the revision it was opened at with its save, and the save is
+             *     refused when the item was written since (registry.WithExpectedRevision),
+             *     so it cannot undo a change it never showed. Server-managed: Create and
+             *     Update ignore the caller's value.
+             */
+            revision?: number;
+            /**
              * @description SalePrice is the realised proceeds for a `sold` transition. NULL
              *     for any other status. Stored in the commodity's original purchase
              *     currency — sale-side currency reporting is out of scope for #1611.
@@ -18261,10 +20391,10 @@ export type components = {
              */
             commodity_id?: string;
             /**
-             * @description CostAmount is the optional repair bill. Bare decimal.Decimal —
-             *     zero means "no cost recorded" (per the codebase's existing
-             *     price-field convention). Pair-validated with CostCurrency:
-             *     either both unset or both set.
+             * @description CostAmount is the optional repair bill. Bare decimal.Decimal:
+             *     CostCurrency, not the amount, says whether a cost is recorded, so
+             *     0 with a currency is a free repair and 0 without one is no cost.
+             *     A non-zero amount needs a currency.
              */
             cost_amount?: number;
             /**
@@ -18320,7 +20450,7 @@ export type components = {
             uuid?: string;
         };
         /** @enum {string} */
-        "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
+        "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off" | "donated" | "stolen";
         "models.CurrencyMigration": {
             /** @description CommodityCount is the number of rows actually mutated by the worker. */
             commodity_count?: number;
@@ -18609,9 +20739,21 @@ export type components = {
         };
         /** @enum {string} */
         "models.GroupRole": "viewer" | "user" | "admin" | "owner";
+        /** @enum {string} */
+        "models.GroupSection": "warranties" | "maintenance" | "loans" | "upcoming";
         "models.IntakeCandidate": {
+            /**
+             * @description AcceptedCustomFields are the IDs of the custom fields whose scanned
+             *     value goes into the draft.
+             */
+            accepted_custom_fields?: string[];
             accepted_fields?: string[];
             created_at?: string;
+            /**
+             * @description CustomFields is what the scan read for the group's custom fields, by
+             *     field ID, a select field's value as its option ID.
+             */
+            custom_fields?: components["schemas"]["models.IntakeFields"];
             /**
              * @description DraftID is the draft made for the candidate. The draft can be
              *     discarded or promoted later, so there is no foreign key.
@@ -18738,6 +20880,13 @@ export type components = {
              */
             group_currency?: string;
             /**
+             * @description HiddenSections lists the sections the group hides for all its members
+             *     (see GroupSection). Empty for a group that hides nothing. Admins change
+             *     it through the group's update endpoints; every member reads it with the
+             *     group.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
+            /**
              * @description Icon is an optional emoji from the curated set in
              *     models.ValidGroupIcons. Empty string means "no icon". Issue #1255.
              */
@@ -18825,6 +20974,8 @@ export type components = {
             updated_at?: string;
             uuid?: string;
         };
+        /** @enum {string} */
+        "models.PersonalDataExportStatus": "pending" | "in_progress" | "completed" | "failed";
         "models.Plan": {
             allows_api_access?: boolean;
             allows_restore?: boolean;
@@ -18931,6 +21082,13 @@ export type components = {
             notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;
+            /**
+             * @description WhatsNewLastSeenVersion is the newest release the user has seen on the
+             *     What's new page. The app shows an unread dot while the build carries a
+             *     newer release, and writes the build's newest release here when the
+             *     page opens. Kept on the server so it follows the user across devices.
+             */
+            whatsNewLastSeenVersion?: string;
         };
         "models.SupplyLink": {
             /**
@@ -19002,10 +21160,12 @@ export type components = {
              * @description AvatarPath is the blob key of the user's profile photo, or nil when they
              *     have none and the UI falls back to their initials (#1382).
              *
-             *     The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
-             *     bust browser caches: replacing a photo writes a new key rather than
-             *     overwriting one, so nothing has to reason about cache headers to make the
-             *     new picture show up.
+             *     The key lives under the user's tenant and ends in a revision number and a
+             *     random suffix (`t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg`; a photo
+             *     with a flat `avatars/<user>/...` key works the same). Replacing a
+             *     photo writes a new key rather than overwriting one, so nothing has to
+             *     reason about cache headers to make the new picture show up, and a tenant
+             *     move copies the photo to a new key under the new tenant.
              *
              *     Not user input: it is set by the avatar endpoints, which decide the key
              *     after validating and re-encoding what was uploaded. A client that could
@@ -19142,6 +21302,12 @@ export type components = {
         "jsonapi.AreaRequest": {
             content: {
                 "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
+            };
+        };
+        /** @description Reason */
+        "apiserver.AdminTenantStatusRequest": {
+            content: {
+                "application/json": components["schemas"]["apiserver.AdminTenantStatusRequest"];
             };
         };
         /** @description Commodity object */

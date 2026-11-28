@@ -28,6 +28,12 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
+    # Fork pull requests are generated like any other once labeled. The
+    # GitHub pull request generator of ArgoCD 3.6 exposes no head-repository
+    # field to filter on, and `labels` must all be present on every PR, so a
+    # second label could not single out forks. Only users with triage access
+    # can add the label; what a labeled PR's chart can do is bounded by the
+    # `previews` AppProject and the namespace's Pod Security labels below.
     - pullRequest:
         github:
           owner: denisvmedia
@@ -150,6 +156,22 @@ spec:
             duration: 15s
             factor: 2
             maxDuration: 3m
+        # Pod Security for the namespace ArgoCD creates (CreateNamespace).
+        # `baseline` refuses what gives a pod the node: privileged
+        # containers, hostPath volumes, host namespaces and ports, added
+        # capabilities. The chart passes it (the Helm Kind smoke test installs
+        # into a namespace with these labels, read from this block). It does
+        # not pass `restricted` yet: demo Redis and the MinIO bucket Job run
+        # as their image's root user. `warn` and `audit` at `restricted` keep
+        # that gap visible on every sync.
+        #
+        # The master and longevity ApplicationSets carry the same labels; the
+        # smoke test fails when the three blocks differ.
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: baseline
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

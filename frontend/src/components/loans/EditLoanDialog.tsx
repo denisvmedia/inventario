@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldError } from "@/components/FieldError"
 import { editLoanFormSchema, type EditLoanFormInput } from "@/features/loans/schemas"
 import type { LoanEntity, UpdateLoanRequest } from "@/features/loans/api"
 import { applyServerFieldErrors } from "@/lib/form-errors"
@@ -122,7 +123,11 @@ export function EditLoanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="edit-loan-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-md"
+        data-testid="edit-loan-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {isClosed ? t("loans:editDialog.titleClosed") : t("loans:editDialog.title")}
@@ -164,13 +169,17 @@ export function EditLoanDialog({
               id="edit-loan-borrower-name"
               data-testid="edit-loan-borrower-name"
               autoComplete="off"
+              aria-invalid={!!errors.borrower_name}
+              aria-describedby={
+                errors.borrower_name?.message ? "edit-loan-borrower-name-error" : undefined
+              }
               {...register("borrower_name")}
             />
-            {errors.borrower_name?.message ? (
-              <p className="text-xs text-destructive" data-testid="edit-loan-borrower-name-error">
-                {t(errors.borrower_name.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="edit-loan-borrower-name-error"
+              testId="edit-loan-borrower-name-error"
+              message={errors.borrower_name?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -179,17 +188,18 @@ export function EditLoanDialog({
               id="edit-loan-borrower-contact"
               data-testid="edit-loan-borrower-contact"
               autoComplete="off"
+              aria-invalid={!!errors.borrower_contact}
+              aria-describedby={
+                errors.borrower_contact?.message ? "edit-loan-borrower-contact-error" : undefined
+              }
               {...register("borrower_contact")}
             />
             <p className="text-xs text-muted-foreground">{t("loans:dialog.borrowerContactHint")}</p>
-            {errors.borrower_contact?.message ? (
-              <p
-                className="text-xs text-destructive"
-                data-testid="edit-loan-borrower-contact-error"
-              >
-                {t(errors.borrower_contact.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="edit-loan-borrower-contact-error"
+              testId="edit-loan-borrower-contact-error"
+              message={errors.borrower_contact?.message}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -241,14 +251,18 @@ export function EditLoanDialog({
                   id="edit-loan-due-back-at"
                   type="date"
                   data-testid="edit-loan-due-back-at"
+                  aria-invalid={!!errors.due_back_at}
+                  aria-describedby={
+                    errors.due_back_at?.message ? "edit-loan-due-back-at-error" : undefined
+                  }
                   {...register("due_back_at")}
                 />
               )}
-              {errors.due_back_at?.message ? (
-                <p className="text-xs text-destructive" data-testid="edit-loan-due-back-at-error">
-                  {t(errors.due_back_at.message)}
-                </p>
-              ) : null}
+              <FieldError
+                id="edit-loan-due-back-at-error"
+                testId="edit-loan-due-back-at-error"
+                message={errors.due_back_at?.message}
+              />
             </div>
             {isClosed ? (
               <div className="flex flex-col gap-1.5">
@@ -275,13 +289,17 @@ export function EditLoanDialog({
               id="edit-loan-borrower-note"
               data-testid="edit-loan-borrower-note"
               autoComplete="off"
+              aria-invalid={!!errors.borrower_note}
+              aria-describedby={
+                errors.borrower_note?.message ? "edit-loan-borrower-note-error" : undefined
+              }
               {...register("borrower_note")}
             />
-            {errors.borrower_note?.message ? (
-              <p className="text-xs text-destructive" data-testid="edit-loan-borrower-note-error">
-                {t(errors.borrower_note.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="edit-loan-borrower-note-error"
+              testId="edit-loan-borrower-note-error"
+              message={errors.borrower_note?.message}
+            />
           </div>
 
           <DialogFooter>

@@ -33,7 +33,10 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab(commodityCount?: number) {
+function renderTab({
+  commodityCount,
+  canEdit = true,
+}: { commodityCount?: number; canEdit?: boolean } = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -44,7 +47,11 @@ function renderTab(commodityCount?: number) {
             <GroupProvider>
               <main>
                 <WhenGroupLoaded>
-                  <MaintenanceTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
+                  <MaintenanceTab
+                    commodityId={COMMODITY_ID}
+                    commodityCount={commodityCount}
+                    canEdit={canEdit}
+                  />
                 </WhenGroupLoaded>
               </main>
             </GroupProvider>
@@ -84,14 +91,54 @@ describe("<MaintenanceTab />", () => {
     expect(await screen.findByTestId("maintenance-list")).toBeInTheDocument()
     expect(screen.getByTestId("schedule-ms-1-done")).toBeInTheDocument()
     expect(screen.getByTestId("schedule-ms-1-next-due")).toBeInTheDocument()
+    // Delete is the red ghost trigger of a row, labeled like its neighbors (#2914).
+    const deleteTrigger = screen.getByTestId("schedule-ms-1-delete")
+    expect(deleteTrigger).toHaveAttribute("data-variant", "ghost")
+    expect(deleteTrigger).toHaveTextContent("Delete")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("renders the bundle hint instead of the form for count > 1 rows", async () => {
     server.use(...groupHandlers.list(groupFixture))
-    renderTab(/* commodityCount */ 5)
+    renderTab({ commodityCount: 5 })
     expect(
       await screen.findByText(/can't be set on a bundle/i, { selector: "*" })
     ).toBeInTheDocument()
     expect(screen.queryByTestId("maintenance-add")).toBeNull()
+  })
+})
+
+// #3038: the server refuses maintenance writes to a viewer, so the tab shows
+// the schedules with no action on them; a paused one still says so.
+describe("<MaintenanceTab /> for a role that cannot change the item", () => {
+  it("shows the schedule and its state with nothing that changes it", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...maintenanceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "ms-1",
+          commodity_id: COMMODITY_ID,
+          title: "Descale espresso machine",
+          interval_days: 60,
+          next_due_at: "2027-01-01",
+          enabled: false,
+        },
+      ])
+    )
+    renderTab({ canEdit: false })
+    expect(await screen.findByTestId("maintenance-list")).toHaveTextContent(
+      "Descale espresso machine"
+    )
+    expect(screen.getByText("Paused")).toBeInTheDocument()
+    expect(screen.getByTestId("schedule-ms-1-next-due")).toBeInTheDocument()
+    expect(screen.queryByTestId("maintenance-add")).not.toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "Enabled" })).not.toBeInTheDocument()
+    expect(screen.queryByTestId("schedule-ms-1-done")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument()
+    expect(screen.queryByTestId("schedule-ms-1-delete")).not.toBeInTheDocument()
   })
 })

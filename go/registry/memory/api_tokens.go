@@ -22,6 +22,9 @@ var _ registry.APITokenRegistry = (*APITokenRegistry)(nil)
 type APITokenRegistry struct {
 	mu     sync.RWMutex
 	tokens map[string]models.APIToken
+	// memberships, set by setMemberships, lets Create refuse a token limited
+	// to a group its user has left; nil skips that check.
+	memberships *GroupMembershipRegistry
 }
 
 // NewAPITokenRegistry returns an empty registry.
@@ -29,7 +32,7 @@ func NewAPITokenRegistry() *APITokenRegistry {
 	return &APITokenRegistry{tokens: make(map[string]models.APIToken)}
 }
 
-func (r *APITokenRegistry) Create(_ context.Context, token models.APIToken) (*models.APIToken, error) {
+func (r *APITokenRegistry) Create(ctx context.Context, token models.APIToken) (*models.APIToken, error) {
 	switch {
 	case token.TokenHash == "":
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TokenHash"))
@@ -51,6 +54,12 @@ func (r *APITokenRegistry) Create(_ context.Context, token models.APIToken) (*mo
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Checked under mu: a member removal deletes the membership first and
+	// then revokes the group's tokens under mu, so it either sees this
+	// token or this check sees the membership gone.
+	if token.GroupID != nil && !r.isGroupMember(ctx, token) {
+		return nil, errxtrace.Classify(registry.ErrNotAGroupMember, errx.Attrs("group_id", *token.GroupID))
+	}
 	for _, existing := range r.tokens {
 		if existing.TokenHash == token.TokenHash {
 			return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs("entity_type", "APIToken"))
@@ -58,6 +67,19 @@ func (r *APITokenRegistry) Create(_ context.Context, token models.APIToken) (*mo
 	}
 	r.tokens[token.ID] = token
 	return new(token), nil
+}
+
+// setMemberships wires the membership store Create checks.
+func (r *APITokenRegistry) setMemberships(memberships *GroupMembershipRegistry) {
+	r.memberships = memberships
+}
+
+func (r *APITokenRegistry) isGroupMember(ctx context.Context, token models.APIToken) bool {
+	if r.memberships == nil {
+		return true
+	}
+	m, err := r.memberships.GetByGroupAndUser(ctx, *token.GroupID, token.UserID)
+	return err == nil && m.TenantID == token.TenantID
 }
 
 func (r *APITokenRegistry) GetByTokenHash(_ context.Context, tokenHash string) (*models.APIToken, error) {

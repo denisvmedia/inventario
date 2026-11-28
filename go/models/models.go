@@ -95,6 +95,13 @@ type File struct {
 	// from a background pass at startup.
 	//ptah:schema:field name="sha256" type="TEXT" not_null="true" default=""
 	SHA256 string `json:"sha256" db:"sha256" userinput:"false"`
+
+	// ThumbnailsOriented is true once the file's thumbnails, if it has any,
+	// show a JPEG photo turned the way its EXIF orientation says. Writing the
+	// thumbnails sets it. A JPEG file without it gets checked by a background
+	// pass at startup, which makes the thumbnails of a turned photo again.
+	//ptah:schema:field name="thumbnails_oriented" type="BOOLEAN" not_null="true" default="false"
+	ThumbnailsOriented bool `json:"-" db:"thumbnails_oriented" userinput:"false"`
 }
 
 func (*File) Validate() error {
@@ -173,12 +180,16 @@ const (
 	FileCategoryOther     FileCategory = "other"
 )
 
-// FileTagInvoice and FileTagManual carry the kind of a commodity document.
-// The bucket is `documents` for both; what distinguishes an invoice from a
-// manual is the tag, so neither needs a top-level bucket of its own (#1989).
+// FileTagInvoice, FileTagManual and FileTagWarranty carry the kind of a
+// commodity document. The bucket is `documents` for all of them; what
+// distinguishes an invoice from a manual is the tag, so none needs a
+// top-level bucket of its own (#1989). FileTagPhoto marks a picture of the
+// item itself, as opposed to a photographed document.
 const (
-	FileTagInvoice = "invoice"
-	FileTagManual  = "manual"
+	FileTagInvoice  = "invoice"
+	FileTagManual   = "manual"
+	FileTagWarranty = "warranty"
+	FileTagPhoto    = "photo"
 )
 
 // ValidFileCategories is the closed set accepted by validation and the
@@ -338,19 +349,25 @@ type FileEntity struct {
 }
 
 // LegacyFileLink holds the single-link columns of files that file_links
-// replaces. Nothing reads or writes them except the startup move into
-// file_links (FileRegistry.MoveLegacyLinks), which empties each row it moves.
-// The columns are dropped by a later migration, once every installation has run
-// that move.
+// replaces. Nothing uses them except the startup move into file_links
+// (FileRegistry.MoveLegacyLinks), which empties each row it moves. The columns
+// are dropped by a later migration, once every installation has run that move
+// (#2898).
+//
+// No INSERT or UPDATE names them (`dbwrite:"false"`), so this release keeps
+// creating and editing files after the columns are gone, which is what its pods
+// meet while the release that drops them rolls out. The columns default to an
+// empty string, so a row inserted without them reads the way earlier releases
+// wrote it: those releases scan the columns into plain strings and fail on NULL.
 type LegacyFileLink struct {
-	//ptah:schema:field name="linked_entity_type" type="TEXT"
-	LegacyLinkedEntityType string `json:"-" db:"linked_entity_type" userinput:"false"`
+	//ptah:schema:field name="linked_entity_type" type="TEXT" default=""
+	LegacyLinkedEntityType string `json:"-" db:"linked_entity_type" dbwrite:"false" userinput:"false"`
 
-	//ptah:schema:field name="linked_entity_id" type="TEXT"
-	LegacyLinkedEntityID string `json:"-" db:"linked_entity_id" userinput:"false"`
+	//ptah:schema:field name="linked_entity_id" type="TEXT" default=""
+	LegacyLinkedEntityID string `json:"-" db:"linked_entity_id" dbwrite:"false" userinput:"false"`
 
-	//ptah:schema:field name="linked_entity_meta" type="TEXT"
-	LegacyLinkedEntityMeta string `json:"-" db:"linked_entity_meta" userinput:"false"`
+	//ptah:schema:field name="linked_entity_meta" type="TEXT" default=""
+	LegacyLinkedEntityMeta string `json:"-" db:"linked_entity_meta" dbwrite:"false" userinput:"false"`
 }
 
 // PostgreSQL-specific indexes for files
@@ -452,8 +469,10 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fe.Title, validation.Length(0, 255)), // Title is now optional
-		validation.Field(&fe.Description, validation.Length(0, 1000)),
+		// Title is optional. Its limit counts characters, not UTF-8 bytes
+		// (the column is TEXT).
+		validation.Field(&fe.Title, validation.RuneLength(0, 255)),
+		validation.Field(&fe.Description, validation.RuneLength(0, 1000)),
 		validation.Field(&fe.Type, validation.Required, validation.In(
 			FileTypeImage, FileTypeDocument, FileTypeVideo,
 			FileTypeAudio, FileTypeArchive, FileTypeOther,

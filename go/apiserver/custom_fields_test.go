@@ -1,6 +1,7 @@
 package apiserver_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -166,6 +167,60 @@ func TestCustomFields_CRUDAndItemValues(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &filtered), qt.IsNil)
 	c.Check(filtered.Data, qt.HasLen, 0)
+}
+
+func TestCustomFields_DeleteCountsDraftValues(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regSet := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+
+	serial := createCustomFieldAPI(c, env, `{"name":"Serial","type":"text"}`)
+	notes := createCustomFieldAPI(c, env, `{"name":"Notes","type":"text"}`)
+	draft, created, err := regSet.CommodityDraftRegistry.CreateOrGet(ctx, models.CommodityDraft{
+		ClientKey: "draft-serial",
+		Values: models.CommodityDraftValues{"name": "Drill", "custom_fields": map[string]any{
+			serial.Data.ID: map[string]any{"value": "SN-1", "currency": ""},
+			// A field the form shows but the member left empty holds no value.
+			notes.Data.ID: map[string]any{"value": "", "currency": ""},
+		}},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+
+	rr := env.do(http.MethodGet, "/custom-fields/"+serial.Data.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	var view jsonapi.CustomFieldResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &view), qt.IsNil)
+	c.Check(view.Data.Attributes.ItemCount, qt.Equals, 0)
+	c.Check(view.Data.Attributes.DraftCount, qt.Equals, 1)
+
+	// No item has a value, and the draft alone needs the confirmation.
+	rr = env.do(http.MethodDelete, "/custom-fields/"+serial.Data.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, "custom_field.in_use")
+	c.Check(rr.Body.String(), qt.Contains, `"item_count":0`)
+	c.Check(rr.Body.String(), qt.Contains, `"draft_count":1`)
+	rr = env.do(http.MethodDelete, "/custom-fields/"+serial.Data.ID+"?delete_values=true&expected_values=0", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodDelete, "/custom-fields/"+serial.Data.ID+"?delete_values=true&expected_values=1", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	var deleted jsonapi.CustomFieldDeleteResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &deleted), qt.IsNil)
+	c.Check(deleted.Meta.DeletedValues, qt.Equals, 1)
+
+	got, err := regSet.CommodityDraftRegistry.Get(ctx, draft.ID)
+	c.Assert(err, qt.IsNil)
+	left := got.Values.DraftCustomFields()
+	_, hasSerial := left[serial.Data.ID]
+	c.Check(hasSerial, qt.IsFalse, qt.Commentf("the deleted field's entry is gone"))
+	_, hasNotes := left[notes.Data.ID]
+	c.Check(hasNotes, qt.IsTrue, qt.Commentf("the other field's entry stays"))
+	c.Check(got.Revision, qt.Equals, draft.Revision+1)
+
+	// The empty entry does not stop the other field from going.
+	rr = env.do(http.MethodDelete, "/custom-fields/"+notes.Data.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 }
 
 func TestCustomFields_LinkedItemsOnTheItemPageAndList(t *testing.T) {

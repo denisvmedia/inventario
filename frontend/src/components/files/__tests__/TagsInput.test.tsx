@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, onTestFinished, vi } from "vitest"
 import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { TagsInput } from "@/components/files/TagsInput"
+import { i18next } from "@/i18n"
 import { renderWithProviders } from "@/test/render"
 
 describe("<TagsInput />", () => {
@@ -37,8 +38,25 @@ describe("<TagsInput />", () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     render(<TagsInput values={["alpha", "beta"]} onChange={onChange} testId="t" />)
-    await user.click(screen.getByLabelText("remove alpha"))
+    await user.click(screen.getByLabelText("Remove alpha"))
     expect(onChange).toHaveBeenCalledWith(["beta"])
+  })
+
+  // #2941: the chip buttons are named in the language of the app.
+  it("names its remove and add buttons in the user's language", async () => {
+    // The lazy backend loads the ru catalogs (#3018). The shared instance is
+    // used by every file in this worker, so its bundles are left alone:
+    // removeResourceBundle also takes the namespace out of options.ns, and
+    // after that no language loads it.
+    await i18next.changeLanguage("ru")
+    onTestFinished(async () => {
+      await i18next.changeLanguage("en")
+    })
+    const user = userEvent.setup()
+    render(<TagsInput values={["alpha"]} onChange={vi.fn()} testId="t" />)
+    expect(screen.getByRole("button", { name: "Убрать alpha" })).toBeInTheDocument()
+    await user.type(screen.getByTestId("t-input"), "beta")
+    expect(screen.getByRole("button", { name: "Добавить beta" })).toBeInTheDocument()
   })
 
   it("pops the last tag on Backspace when the draft is empty", async () => {
@@ -66,7 +84,7 @@ describe("<TagsInput />", () => {
     const chips = screen.getAllByTestId("t-chip")
     expect(chips[0]).toHaveTextContent("USB кабель")
     expect(chips[1]).toHaveTextContent("orphan")
-    await user.click(screen.getByLabelText("remove USB кабель"))
+    await user.click(screen.getByLabelText("Remove USB кабель"))
     expect(onChange).toHaveBeenCalledWith(["orphan"])
   })
 

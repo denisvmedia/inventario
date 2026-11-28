@@ -55,7 +55,7 @@ func RunLegacyFileLinkMove(ctx context.Context, factorySet *registry.FactorySet,
 		moved, err := MoveLegacyFileLinks(ctx, factorySet)
 		if err == nil {
 			if moved > 0 {
-				slog.Info("legacy file links moved",
+				slog.InfoContext(ctx, "legacy file links moved",
 					"files", moved, "duration_ms", time.Since(start).Milliseconds())
 			}
 			return
@@ -63,7 +63,7 @@ func RunLegacyFileLinkMove(ctx context.Context, factorySet *registry.FactorySet,
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("legacy file link move failed; will retry",
+		slog.WarnContext(ctx, "legacy file link move failed; will retry",
 			"error", err.Error(), "files", moved, "retry_in", retryInterval.String())
 		if !sleepCtx(ctx, retryInterval) {
 			return
@@ -85,12 +85,12 @@ func BackfillFileChecksums(ctx context.Context, factorySet *registry.FactorySet,
 	}
 	bucket, err := blob.OpenBucket(ctx, uploadLocation)
 	if err != nil {
-		slog.Warn("checksum backfill skipped: bucket unavailable", "error", err.Error())
+		slog.WarnContext(ctx, "checksum backfill skipped: bucket unavailable", "error", err.Error())
 		return
 	}
 	defer func() {
 		if cerr := bucket.Close(); cerr != nil {
-			slog.Warn("checksum backfill: failed to close bucket", "error", cerr.Error())
+			slog.WarnContext(ctx, "checksum backfill: failed to close bucket", "error", cerr.Error())
 		}
 	}()
 
@@ -104,7 +104,7 @@ func BackfillFileChecksums(ctx context.Context, factorySet *registry.FactorySet,
 		}
 		batch, err := reg.ListPendingChecksum(ctx, afterID, fileChecksumBatchSize)
 		if err != nil {
-			slog.Warn("checksum backfill stopped: failed to list pending files",
+			slog.WarnContext(ctx, "checksum backfill stopped: failed to list pending files",
 				"error", err.Error(), "updated", updated, "failed", failed)
 			return
 		}
@@ -122,14 +122,14 @@ func BackfillFileChecksums(ctx context.Context, factorySet *registry.FactorySet,
 					return
 				}
 				failed++
-				slog.Debug("checksum backfill: file skipped", "file_id", file.ID, "error", err.Error())
+				slog.DebugContext(ctx, "checksum backfill: file skipped", "file_id", file.ID, "error", err.Error())
 				continue
 			}
 			updated++
 		}
 	}
 	if updated > 0 || failed > 0 {
-		slog.Info("checksum backfill complete",
+		slog.InfoContext(ctx, "checksum backfill complete",
 			"updated", updated, "failed", failed, "duration_ms", time.Since(start).Milliseconds())
 	}
 }

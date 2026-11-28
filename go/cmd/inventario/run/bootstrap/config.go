@@ -57,6 +57,7 @@ type Config struct {
 	MaintenanceReminderInterval  string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
 	ItemReminderInterval         string `yaml:"item_reminder_interval" env:"ITEM_REMINDER_INTERVAL" env-default:""`
 	CurrencyMigrationInterval    string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
+	CurrencyMigrationRetention   string `yaml:"currency_migration_retention" env:"CURRENCY_MIGRATION_RETENTION" env-default:""`
 	BusinessMetricsInterval      string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
 	WorkerControlRefreshInterval string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
 	// Orphan-file GC (#2237). Mode is off | report | delete and is validated
@@ -182,6 +183,16 @@ type Config struct {
 	// stacks and the throwaway localhost server the Helm init-data Job boots
 	// to curl /seed.
 	SeedEndpointEnabled bool `yaml:"enable_seed_endpoint" env:"ENABLE_SEED_ENDPOINT" env-default:"false"`
+
+	// PlansEnabled shows the subscription-plan surfaces (#1389): the plan
+	// badge and Upgrade link on the profile and settings pages, the plan
+	// part of the group settings card, the /plans page and the plan in the
+	// admin tenant pages. Default FALSE: the plans feature is frozen and
+	// self-hosted installs do not show it. With it off GET /g/{slug}/plan
+	// reports the unlimited plan whatever the tenant's plan_id says, so no
+	// plan caps reach a client. Storage quotas do not come from plans and
+	// apply either way. Env INVENTARIO_RUN_ENABLE_PLANS=true / --enable-plans.
+	PlansEnabled bool `yaml:"enable_plans" env:"ENABLE_PLANS" env-default:"false"`
 
 	// MetricsToken is the optional shared-secret bearer token that gates
 	// GET /metrics (issue #2102). When set (≥ 32 bytes recommended), the
@@ -479,6 +490,9 @@ func (c *Config) setWorkerDefaults() {
 	c.setWeeklyDigestDefaults()
 	if c.CurrencyMigrationInterval == "" {
 		c.CurrencyMigrationInterval = defaults.GetCurrencyMigrationInterval()
+	}
+	if c.CurrencyMigrationRetention == "" {
+		c.CurrencyMigrationRetention = defaults.GetCurrencyMigrationRetention()
 	}
 	if c.BusinessMetricsInterval == "" {
 		c.BusinessMetricsInterval = defaults.GetBusinessMetricsInterval()

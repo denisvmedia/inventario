@@ -34,6 +34,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `status` | repeatable, a known status | Item status is one of the values. |
 | `area_id` | area id | Item is in that area. |
 | `unassigned` | `true`/`false` | Item has no area. Ignored when `area_id` is set. |
+| `location_id` | location id | Item is in an area of that location. With `area_id` both apply, so an area of another location matches nothing. An item without an area is in no location, so it cannot be combined with `unassigned=true`. |
 | `seller_id` | seller ids, repeatable, at most 50 | Item was bought from one of the sellers. An id no seller of the group has matches nothing, so a link to a deleted seller lists no items instead of failing. |
 | `include_inactive` | `true`/`false`, default `true` | `false` hides drafts and, unless `status` is set, items that are not in use. |
 | `warranty_status` | repeatable: `active`, `expiring`, `expired`, `none` | Computed warranty status is one of the values. |
@@ -72,6 +73,8 @@ Every term must match. A term matches an item when one of these holds:
 `%` and `_` are ordinary characters, as in a plain substring search.
 
 In PostgreSQL most searched fields are joined into the generated column `commodities.search_text` (by the `commodity_search_text` SQL function), which carries a trigram GIN index, so a term is one `ILIKE` on an indexed column. The brand and the model are matched with an `ILIKE` each on their own trigram-indexed columns: putting them into `search_text` would change the function's parameters, which the generated column depends on, and rewriting a generated column's expression in place needs PostgreSQL 17. The memory registry evaluates `MatchCommoditySearch` in Go. `registry.CommoditySearchTextFields` must list the fields of the generated column, and together with `registry.CommodityColumnSearchFields` the same fields as `registry.CommoditySearchFields`; a unit test checks both.
+
+The backends ignore case differently for some non-ASCII letters. The memory registry uses Unicode case folding (`registry.ContainsFold`), so `οδος` finds `ΟΔΟΣ` and `strasse` finds `Straße`. PostgreSQL's `ILIKE` lowercases by the collation of the database, and under the libc collation the `postgres` image initializes with, neither of those matches. The comment on `registry.ContainsFold` lists the differences; the shared registry tests ignore case only in ASCII letters.
 
 Not part of the contract yet: `field:value` syntax (`serial:ABC123`, `tag:fragile`) and the text of attached PDFs. Until they are added, a colon is an ordinary character in a term.
 
@@ -169,6 +172,7 @@ The items list page keeps its query in the page URL under names that predate the
 | `q` | `q` |
 | `type`, `status` (repeated) | `type`, `status` |
 | `area` | `area_id` |
+| `location` | `location_id` |
 | `unassigned=1` | `unassigned=true` |
 | `seller` (repeated) | `seller_id` |
 | `inactive=1` | `include_inactive=true`; absent sends `include_inactive=false` |
@@ -199,4 +203,4 @@ The bulk endpoints (`POST /commodities/bulk-update`, `bulk-move`, `bulk-delete`)
 
 `services.ResolveBulkSelection` runs the query when the request arrives, in the list's order. When it matches more than `MaxBulkQueryItems` (500) items the request fails with 422 `bulk.too_many` (`meta.matched`, `meta.max`). This check comes first, so a confirmed set that grew past 500 gives 422, not 409. When it matches a different number than `expected_count`, or as many items whose digest is not `expected_digest` (one left the query and another joined it), it fails with 409 `bulk.selection_changed` (`meta.expected`, `meta.matched`; equal values mean a swapped item). None of these changes anything, so a filter edited in another tab or an item someone else added or changed cannot widen or shift an action the user confirmed for a given set of items.
 
-Bulk update and move read each item again right before they write it, so an edit someone saves while the action runs is kept rather than overwritten by the row the query read. Each item is written in its own transaction with the checks of a single change.
+Bulk update and move write each item through `CommodityRegistry.Patch`, in its own transaction with the checks of a single change. Patch reads the item under its row lock and writes only the columns a bulk action edits (tags, type, status, status date and note, sale price, area), so an edit someone saves while the action runs is kept rather than overwritten by a row the action read earlier. The bulk tag change of files goes through `FileRegistry.PatchTags` the same way. A single edit writes the whole item as its form loaded it, together with `attributes.revision`, the revision the form loaded. `CommodityRegistry.Update` compares it with the item's revision under the row lock (`registry.WithExpectedRevision`) and refuses a stale one with 409 `commodity.revision_conflict`, so the edit cannot undo a bulk change saved after the form was opened: Patch moves the revision on, as does every other write of a column the form sends back. A save without a revision is not checked. The server's own writes of a whole item (the cover photo action, the clearing of a cover photo removed from the item, and the area delete that leaves the area's items without one) name the revision they read too; when refused, `services.RewriteCommodity` reads the item again and retries, up to three times. A file's edit has no such check: it writes the whole file as its form loaded it, so it can undo a bulk tag change saved after the form was opened.

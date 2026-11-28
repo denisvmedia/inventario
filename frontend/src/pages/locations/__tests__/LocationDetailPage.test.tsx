@@ -3,11 +3,13 @@ import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
+import type { QueryClient } from "@tanstack/react-query"
 
 import { LocationDetailPage } from "@/pages/locations/LocationDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -16,10 +18,14 @@ import {
   fileHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
+  tagHandlers,
 } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { createQueryClient } from "@/lib/query-client"
+import { toastSpies } from "@/test/global-mocks"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -50,17 +56,25 @@ function commodityResource(id: string, attrs: CommodityAttrs) {
   return { id, type: "commodities", attributes: { ...attrs, id } }
 }
 
-function renderDetail(initialPath: string, props: { initialMode?: "edit" } = {}) {
+function renderDetail(
+  initialPath: string,
+  props: { initialMode?: "edit" } = {},
+  queryClient?: QueryClient
+) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
+    queryClient,
     routes: (
       <Route
         path="/g/:groupSlug/locations/:id"
         element={
           <ConfirmProvider>
             <GroupProvider>
-              <LocationDetailPage {...props} />
+              <WhenRoleKnown>
+                <LocationDetailPage {...props} />
+              </WhenRoleKnown>
             </GroupProvider>
           </ConfirmProvider>
         }
@@ -68,6 +82,13 @@ function renderDetail(initialPath: string, props: { initialMode?: "edit" } = {})
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 beforeEach(() => {
   clearAuth()
@@ -118,6 +139,14 @@ describe("<LocationDetailPage />", () => {
     expect(within(kitchen).getByText("2 items")).toBeInTheDocument()
     const workshop = tiles.find((t) => within(t).queryByText("Workshop"))!
     expect(within(workshop).getByText("1 item")).toBeInTheDocument()
+    // Delete is the red outline trigger of a detail surface (#2914).
+    const deleteTrigger = screen.getByTestId("location-detail-delete")
+    expect(deleteTrigger).toHaveAttribute("data-variant", "outline")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("surfaces the warranty-expiring pill when an area carries expiring items", async () => {
@@ -200,6 +229,58 @@ describe("<LocationDetailPage />", () => {
       expect(screen.getByRole("heading", { name: "Cottage" })).toBeInTheDocument()
     )
     expect(screen.getByTestId("location-detail-areas-empty")).toBeInTheDocument()
+  })
+
+  function serveEmptyLocation(deleteResponse: () => Response) {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc2", locationResource("loc2", { name: "Cottage" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc2", { name: "Cottage" })]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, []),
+      ...fileHandlers.list(SLUG, []),
+      // The file sheet loads the file tag catalog. Without it the request
+      // fails as a network error, whose toast would race the one asserted.
+      ...tagHandlers.list(SLUG, []),
+      http.delete(apiUrl(`/g/${SLUG}/locations/loc2`), deleteResponse)
+    )
+  }
+
+  async function deleteCottage(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByTestId("location-detail-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+  }
+
+  it("shows the server's reason when the delete is refused", async () => {
+    const user = userEvent.setup()
+    serveEmptyLocation(() =>
+      HttpResponse.json(
+        { errors: [{ status: "Conflict", detail: "the location is in use by a saved view" }] },
+        { status: 409 }
+      )
+    )
+    renderDetail(`/g/${SLUG}/locations/loc2`)
+    await deleteCottage(user)
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("the location is in use by a saved view")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows one toast when the delete fails on the server", async () => {
+    const user = userEvent.setup()
+    serveEmptyLocation(() =>
+      HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+    )
+    // The app's client, so the global 5xx toast runs as it does in the app.
+    renderDetail(`/g/${SLUG}/locations/loc2`, {}, createQueryClient())
+    await deleteCottage(user)
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("Server error. Please try again later.")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
   })
 
   it("opens the upload dialog with the location name in the title from the EntityFilesPanel Attach button (#1448)", async () => {
@@ -354,5 +435,79 @@ describe("<LocationDetailPage />", () => {
     expect(await screen.findByTestId("entity-drop-overlay")).toBeInTheDocument()
     fireEvent.dragLeave(page, init)
     await waitFor(() => expect(screen.queryByTestId("entity-drop-overlay")).not.toBeInTheDocument())
+  })
+})
+
+describe("<LocationDetailPage /> in a group that hides warranties (#1607)", () => {
+  it("leaves out the warranty-expiring pill", async () => {
+    const soon = new Date()
+    soon.setDate(soon.getDate() + 30)
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties"] }]),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Kitchen", location_id: "loc1" })]),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", {
+          name: "Espresso",
+          area_id: "a1",
+          status: "in_use",
+          warranty_expires_at: soon.toISOString().slice(0, 10),
+        }),
+      ])
+    )
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    await waitFor(() => expect(within(tile).getByText("1 item")).toBeInTheDocument())
+    expect(within(tile).queryByTestId("location-detail-area-expiring")).not.toBeInTheDocument()
+  })
+})
+
+describe("<LocationDetailPage /> by role (#2886)", () => {
+  // The server takes location and area writes from admins and owners, and
+  // file writes from users too.
+  function seedGarage() {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Garage" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Garage" })]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Shelf", location_id: "loc1" })]),
+      ...fileHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+  }
+
+  function expectNoLocationWrites(tile: HTMLElement) {
+    expect(screen.queryByTestId("location-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("location-detail-delete")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("location-detail-add-area")).not.toBeInTheDocument()
+    expect(within(tile).queryByTestId("location-detail-area-menu")).not.toBeInTheDocument()
+  }
+
+  it("offers a viewer no edit, delete, add area or attach", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seedGarage()
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    expectNoLocationWrites(tile)
+    expect(await screen.findByText(/no files attached/i)).toBeInTheDocument()
+    expect(screen.queryByTestId("entity-files-panel-attach")).not.toBeInTheDocument()
+  })
+
+  it("offers a user the files but not the location's edit, delete or areas", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedGarage()
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    expect(await screen.findByTestId("entity-files-panel-attach")).toBeVisible()
+    expectNoLocationWrites(tile)
+  })
+
+  it("opens no edit dialog for a user who follows an edit link", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedGarage()
+    renderDetail(`/g/${SLUG}/locations/loc1`, { initialMode: "edit" })
+    expect(await screen.findByTestId("location-detail-area")).toBeInTheDocument()
+    expect(screen.queryByTestId("location-form-dialog")).not.toBeInTheDocument()
   })
 })

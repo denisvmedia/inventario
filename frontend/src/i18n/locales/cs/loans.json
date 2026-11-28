@@ -67,6 +67,7 @@
     "blockedByService": "Tato položka je momentálně v servisu u {{provider}}. Než ji zapůjčíte, označte ji jako přijatou zpět — předmět může být vždy jen na jednom místě.",
     "editHistory": "Upravit minulou zápůjčku",
     "emptyState": "Momentálně není zapůjčeno. Zápůjčky, které zde vytvoříte, sledují, kdo položku má a kdy ji má vrátit.",
+    "emptyStateReadOnly": "Momentálně není zapůjčeno.",
     "historyTitle": "Minulé zápůjčky",
     "lendButton": "Zapůjčit…",
     "title": "Zapůjčeno"

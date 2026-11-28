@@ -112,7 +112,8 @@
   "nav": {
     "groups": "Skupiny",
     "section": "Správa",
-    "tenants": "Tenanty"
+    "tenants": "Tenanty",
+    "failedJobs": "Neúspěšné úlohy"
   },
   "pagination": {
     "next": "Další stránka",
@@ -120,6 +121,65 @@
     "previous": "Předchozí stránka",
     "previousLabel": "Předchozí",
     "showing": "Zobrazeno {{from}}–{{to}} z {{total}}"
+  },
+  "tenantActions": {
+    "cancel": "Zrušit",
+    "create": {
+      "action": "Nový tenant",
+      "body": "Tenant začíná jako aktivní s uzavřenou registrací.",
+      "submit": "Vytvořit tenanta",
+      "success": "Tenant {{name}} byl vytvořen.",
+      "title": "Nový tenant"
+    },
+    "danger": {
+      "button": "Smazat tenanta",
+      "description": "Smazat tohoto tenanta včetně jeho uživatelů, skupin, položek a souborů. Tuto akci nelze vrátit.",
+      "title": "Nebezpečná zóna"
+    },
+    "delete": {
+      "body": "Tenant se nejprve pozastaví a relace jeho uživatelů skončí, poté se trvale smaže tenant a vše, co obsahuje: jeho uživatelé, skupiny, položky a soubory. Tuto akci nelze vrátit.",
+      "confirmLabel": "Pro potvrzení zadejte slug tenanta:",
+      "submit": "Smazat tenanta",
+      "success": "Tenant {{name}} se maže. Do dokončení mazání zůstane pozastavený.",
+      "title": "Smazat {{name}}?"
+    },
+    "edit": {
+      "action": "Upravit",
+      "body": "Změňte název, slug nebo vlastní doménu tenanta {{name}}.",
+      "submit": "Uložit změny",
+      "success": "Tenant {{name}} byl upraven.",
+      "title": "Upravit tenanta"
+    },
+    "errors": {
+      "confirmationMismatch": "Zadaný slug neodpovídá slugu tenanta.",
+      "domainReserved": "Tato doména leží pod základní doménou tenantů, kde je každá subdoména adresou některého tenanta. Použijte doménu mimo ni.",
+      "domainTaken": "Tuto doménu již používá jiný tenant.",
+      "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
+      "reasonRequired": "Důvod je povinný.",
+      "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
+      "roleRequired": "Tenanty může měnit pouze správce platformy.",
+      "servesThisHost": "Back office je otevřený na adrese tohoto tenanta, takže by tato změna back office zablokovala. Použijte místo toho CLI inventario tenants.",
+      "slugTaken": "Tento slug již používá jiný tenant."
+    },
+    "reactivate": {
+      "action": "Obnovit",
+      "body": "Uživatelé tenanta se mohou znovu přihlásit. Relace ukončené pozastavením zůstávají ukončené, takže se všichni přihlásí znovu.",
+      "submit": "Obnovit tenanta",
+      "success": "Tenant {{name}} byl obnoven.",
+      "title": "Obnovit {{name}}?"
+    },
+    "reason": {
+      "counter": "{{current}}/{{max}}",
+      "label": "Důvod",
+      "placeholder": "Proč se tato akce provádí?"
+    },
+    "suspend": {
+      "action": "Pozastavit",
+      "body": "Všichni uživatelé tohoto tenanta budou okamžitě odhlášeni a nebudou se moci přihlásit ani používat API tokeny, dokud tenant nebude obnoven. Data tenanta zůstávají zachována.",
+      "submit": "Pozastavit tenanta",
+      "success": "Tenant {{name}} byl pozastaven.",
+      "title": "Pozastavit {{name}}?"
+    }
   },
   "tenantDetail": {
     "back": "Zpět na tenanty",
@@ -186,6 +246,29 @@
       }
     }
   },
+  "tenantForm": {
+    "domain": {
+      "hint": "Nepovinné. Holý název hostitele bez schématu a portu.",
+      "label": "Vlastní doména"
+    },
+    "name": {
+      "label": "Název"
+    },
+    "slug": {
+      "hintCreate": "Nepovinné. Pokud zůstane prázdný, vygeneruje se z názvu.",
+      "hintEdit": "Malá písmena, číslice a pomlčky, nejvýše 50 znaků.",
+      "label": "Slug"
+    },
+    "validation": {
+      "domainFormat": "Zadejte holý název hostitele malými písmeny, například inventory.example.com.",
+      "domainTooLong": "Doména může mít nejvýše 255 znaků.",
+      "nameRequired": "Název je povinný.",
+      "nameTooLong": "Název může mít nejvýše 100 znaků.",
+      "slugFormat": "Používejte pouze malá písmena, číslice a pomlčky.",
+      "slugRequired": "Slug je povinný.",
+      "slugTooLong": "Slug může mít nejvýše 50 znaků."
+    }
+  },
   "tenants": {
     "empty": "Žádné tenanty neodpovídají hledání.",
     "loadError": "Nepodařilo se načíst tenanty. Zkuste to prosím znovu.",
@@ -234,7 +317,8 @@
       "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
       "selfBlocked": "Nemůžete zablokovat svůj vlastní účet.",
       "targetBlocked": "Tento účet je zablokovaný. Před vystupováním jako tento uživatel jej odblokujte.",
-      "targetIsAdmin": "Za systémové administrátory nelze vystupovat."
+      "targetIsAdmin": "Za systémové administrátory nelze vystupovat.",
+      "tenantNotActive": "Tenant tohoto uživatele není aktivní, takže za uživatele nelze vystupovat."
     },
     "fallbackName": "Uživatel",
     "groups": {
@@ -264,7 +348,7 @@
       "placeholder": "Proč je tato akce prováděna?"
     },
     "roles": {
-      "admin": "Administrátor",
+      "admin": "Správce",
       "owner": "Vlastník",
       "user": "Uživatel",
       "viewer": "Pozorovatel"
@@ -286,5 +370,73 @@
       "success": "Uživatel {{name}} byl odblokován."
     },
     "unknownTenant": "Neznámý tenant"
+  },
+  "failedJobs": {
+    "title": "Neúspěšné úlohy",
+    "subtitle": "Úlohy na pozadí všech tenantů, které definitivně selhaly a které nikdo nezopakoval ani nezahodil, od nejnovějších.",
+    "filter": {
+      "typeLabel": "Filtrovat podle druhu úlohy",
+      "allTypes": "Všechny druhy úloh",
+      "tenantLabel": "Filtrovat podle tenantu",
+      "allTenants": "Všechny tenanty"
+    },
+    "table": {
+      "job": "Úloha",
+      "tenant": "Tenant / skupina",
+      "error": "Chyba",
+      "failed": "Selhalo",
+      "attempts": "Pokusy",
+      "actions": "Akce"
+    },
+    "loading": "Načítání neúspěšných úloh…",
+    "loadError": "Neúspěšné úlohy se nepodařilo načíst. Zkuste to později.",
+    "empty": "Žádné neúspěšné úlohy.",
+    "emptyFiltered": "Těmto filtrům neodpovídají žádné neúspěšné úlohy.",
+    "retry": "Opakovat",
+    "retryLabel": "Opakovat {{title}}",
+    "discard": "Zahodit",
+    "discardLabel": "Zahodit {{title}}",
+    "retried": "Úloha je zpět ve frontě.",
+    "discarded": "Úloha je zahozena.",
+    "gone": "Tato úloha už není neúspěšná. Seznam je nyní aktuální.",
+    "notRetryable": "Tento druh úlohy nelze opakovat. Zahoďte ji.",
+    "roleRequired": "Neúspěšnou úlohu může zahodit jen správce platformy.",
+    "retryError": "Úlohu se nepodařilo zopakovat. Zkuste to později.",
+    "discardError": "Úlohu se nepodařilo zahodit. Zkuste to později.",
+    "discardDialog": {
+      "title": "Zahodit tuto neúspěšnou úlohu?",
+      "body": "Úloha zmizí ze seznamu neúspěšných úloh i z metriky. Její záznam a chyba zůstanou, dokud je neodstraní běžný úklid. Tuto akci nelze vrátit.",
+      "cancel": "Zrušit",
+      "confirm": "Zahodit"
+    },
+    "bulk": {
+      "action": "Zahodit starší…",
+      "title": "Zahodit starší neúspěšné úlohy",
+      "body": "Všechny neúspěšné úlohy níže uvedeného druhu a tenanta, které selhaly před zvoleným dnem, zmizí ze seznamu neúspěšných úloh i z metriky. Jejich záznamy a chyby zůstanou, dokud je neodstraní běžný úklid. Tuto akci nelze vrátit.",
+      "scopeType": "Druh úlohy",
+      "scopeTenant": "Tenant",
+      "dateLabel": "Selhaly před",
+      "dateHint": "Úlohy, které selhaly před 00:00 UTC tohoto dne. Úloha bez času selhání se počítá od svého vytvoření.",
+      "pickDate": "Zvolte den a uvidíte, kolik úloh se zahodí.",
+      "counting": "Počítání neúspěšných úloh…",
+      "countError": "Neúspěšné úlohy se nepodařilo spočítat. Zkuste to později.",
+      "none": "Žádná neúspěšná úloha těchto filtrů neselhala před tímto dnem.",
+      "count_one": "Zahodí se {{count}} neúspěšná úloha.",
+      "count_few": "Zahodí se {{count}} neúspěšné úlohy.",
+      "count_many": "Zahodí se {{count}} neúspěšné úlohy.",
+      "count_other": "Zahodí se {{count}} neúspěšných úloh.",
+      "confirmIdle": "Zahodit",
+      "confirm_one": "Zahodit {{count}} úlohu",
+      "confirm_few": "Zahodit {{count}} úlohy",
+      "confirm_many": "Zahodit {{count}} úlohy",
+      "confirm_other": "Zahodit {{count}} úloh",
+      "cancel": "Zrušit",
+      "discarded_one": "{{count}} neúspěšná úloha je zahozena.",
+      "discarded_few": "{{count}} neúspěšné úlohy jsou zahozeny.",
+      "discarded_many": "{{count}} neúspěšné úlohy je zahozeno.",
+      "discarded_other": "{{count}} neúspěšných úloh je zahozeno.",
+      "future": "Den nesmí být pozdější než dnešek.",
+      "error": "Úlohy se nepodařilo zahodit. Zkuste to později."
+    }
   }
 }

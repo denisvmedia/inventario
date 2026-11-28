@@ -8,7 +8,7 @@
 // surfaces (Phase 3 hardening). The plane-aware http client (lib/http.ts)
 // reads the right token / CSRF / refresh endpoint based on the path
 // prefix, so this module never has to thread plane metadata explicitly.
-import { http } from "@/lib/http"
+import { http, withSignOut } from "@/lib/http"
 import type { Schema } from "@/types"
 
 import { clearBackofficeAuth, setBackofficeAccessToken, setBackofficeCsrfToken } from "./storage"
@@ -134,14 +134,18 @@ export function getBackofficeMe(signal?: AbortSignal): Promise<BackofficeUser> {
 }
 
 export async function backofficeLogout(): Promise<void> {
-  try {
-    await http.post<void>("/backoffice/auth/logout")
-  } finally {
-    // Whether or not the server acknowledged, the operator has clicked
-    // Sign out — wipe local credentials so the UI can't keep using
-    // them. Mirrors the tenant `clearAuth()` pattern.
-    clearBackofficeAuth()
-  }
+  // Same guard as the tenant logout: a 401 the logout causes must not
+  // refresh the session back (#3026).
+  await withSignOut("backoffice", async () => {
+    try {
+      await http.post<void>("/backoffice/auth/logout")
+    } finally {
+      // Whether or not the server acknowledged, the operator has clicked
+      // Sign out — wipe local credentials so the UI can't keep using
+      // them. Mirrors the tenant `clearAuth()` pattern.
+      clearBackofficeAuth()
+    }
+  })
 }
 
 // backofficeRefresh is exported for tests and explicit boot probes;

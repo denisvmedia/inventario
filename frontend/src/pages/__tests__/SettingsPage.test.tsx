@@ -4,6 +4,7 @@ import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import whatsNewMeta from "virtual:whats-new/meta"
 
 import { SettingsPage } from "@/pages/SettingsPage"
 import { pickRadixSelect } from "@/test/radix"
@@ -18,6 +19,7 @@ import {
   type OnboardingTourControls,
 } from "@/hooks/useOnboardingTourControls"
 import { renderWithProviders } from "@/test/render"
+import { featureFlagHandlers } from "@/test/handlers"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -160,6 +162,25 @@ describe("<SettingsPage />", () => {
     expect(screen.queryByTestId("section-appearance")).not.toBeInTheDocument()
   })
 
+  // #1389: the Free plan badge on the account card shows only when the
+  // deployment has plans on; the flag is off by default.
+  it("hides the plan badge on the account card when plans are off", async () => {
+    server.use(...featureFlagHandlers.set({ plans: false }), ...baseHandlers)
+    const { queryClient } = renderSettings()
+    expect(await screen.findByTestId("section-account")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(queryClient.getQueryState(["feature-flags"])?.status).toBe("success")
+    )
+    expect(screen.queryByTestId("settings-account-plan-badge")).not.toBeInTheDocument()
+    expect(screen.queryByText("Free plan")).not.toBeInTheDocument()
+  })
+
+  it("shows the plan badge on the account card when plans are on", async () => {
+    server.use(...featureFlagHandlers.set({ plans: true }), ...baseHandlers)
+    renderSettings()
+    expect(await screen.findByTestId("settings-account-plan-badge")).toHaveTextContent("Free plan")
+  })
+
   it("appearance section shows theme/density/locale controls", async () => {
     server.use(...baseHandlers)
     const user = userEvent.setup()
@@ -239,6 +260,31 @@ describe("<SettingsPage />", () => {
     expect(await screen.findByTestId("delete-account-dialog")).toBeInTheDocument()
     expect(screen.getByTestId("delete-confirm-email")).toBeInTheDocument()
     expect(screen.getByTestId("delete-password")).toBeInTheDocument()
+  })
+
+  // #2177 — the dialog sends the user to "Download my data" before erasing.
+  it("delete-account dialog links to the personal data export", async () => {
+    server.use(...baseHandlers)
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    expect(await screen.findByTestId("personal-data-export")).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId("personal-data-export-request")).toBeEnabled())
+
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    expect(screen.getByTestId("delete-export-first")).toHaveTextContent(
+      "Want to keep a copy of your data?"
+    )
+    await user.click(screen.getByTestId("delete-export-first-link"))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("delete-account-dialog")).not.toBeInTheDocument()
+    )
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    expect(screen.getByTestId("personal-data-export-request")).toHaveFocus()
   })
 
   it("delete-account dialog blocks submit on an email mismatch (client-side)", async () => {
@@ -431,6 +477,41 @@ describe("<SettingsPage />", () => {
     expect(await screen.findByTestId("section-appearance")).toBeInTheDocument()
     expect(screen.getByTestId("default-view-select")).toBeInTheDocument()
     expect(screen.getByTestId("preferred-currency-row")).toBeInTheDocument()
+  })
+
+  it("saves only the default group, not the name this page loaded (#2910)", async () => {
+    const puts: unknown[] = []
+    server.use(...withGroupHandlers({}))
+    server.use(
+      msw.get(api("/groups"), () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "g1",
+              type: "groups",
+              attributes: { id: "g1", slug: "household", name: "Household" },
+            },
+            { id: "g2", type: "groups", attributes: { id: "g2", slug: "office", name: "Office" } },
+          ],
+        })
+      ),
+      msw.put(api("/auth/me"), async ({ request }) => {
+        puts.push(await request.json())
+        return HttpResponse.json({
+          id: "u1",
+          email: "alex@example.com",
+          name: "Alex",
+          default_group_id: "g2",
+          created_at: "2024-01-15T00:00:00Z",
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    const trigger = await screen.findByTestId("settings-default-group-select")
+    await waitFor(() => expect(trigger).toHaveTextContent("Household"))
+    await pickRadixSelect(user, /^Default group$/i, { optionLabel: /Office/ })
+    await waitFor(() => expect(puts).toEqual([{ default_group_id: "g2" }]))
   })
 
   it("changing Default view saves it and drops this device's toolbar layout (#2797)", async () => {
@@ -750,6 +831,48 @@ describe("<SettingsPage />", () => {
     await user.click(await screen.findByTestId("settings-nav-help"))
     expect(screen.getByTestId("help-row-whatsNew")).toBeInTheDocument()
     expect(screen.queryByTestId("help-row-whatsNew-badge")).not.toBeInTheDocument()
+  })
+
+  // #1386 — the row opens the in-app page instead of GitHub Releases.
+  it("What's new row opens the in-app page", async () => {
+    server.use(...withGroupHandlers({}))
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    const row = screen.getByTestId("help-row-whatsNew")
+    expect(row).toHaveAttribute("href", "/whats-new?g=household")
+    expect(row).not.toHaveAttribute("target")
+    await user.click(row)
+    expect(await screen.findByTestId("loc")).toHaveAttribute("data-pathname", "/whats-new")
+  })
+
+  it("marks the What's new row and the Help tab while a release is unread", async () => {
+    server.use(...withGroupHandlers({ whatsNewLastSeenVersion: "0.0.1" }))
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    expect(await screen.findByTestId("settings-nav-help-unread")).toBeInTheDocument()
+    expect(screen.getByTestId("settings-nav-help")).toHaveTextContent("new release")
+    await user.click(screen.getByTestId("settings-nav-help"))
+    expect(await screen.findByTestId("help-row-whatsNew-unread")).toBeInTheDocument()
+  })
+
+  it("shows no unread dot once the newest release was seen", async () => {
+    let served = false
+    // Listed first so it answers before the default settings handler.
+    server.use(
+      msw.get(api("/g/household/settings"), () => {
+        served = true
+        return HttpResponse.json({ whatsNewLastSeenVersion: whatsNewMeta.latestVersion })
+      }),
+      ...withGroupHandlers({})
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    await waitFor(() => expect(served).toBe(true))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("help-row-whatsNew-unread")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("settings-nav-help-unread")).not.toBeInTheDocument()
   })
 
   it("merged support/feedback row opens the FeedbackDialog in place (#1387)", async () => {

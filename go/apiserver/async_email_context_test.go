@@ -140,6 +140,10 @@ func (*blockingEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _
 	return nil
 }
 
+func (*blockingEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (m *blockingEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }

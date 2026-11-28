@@ -273,9 +273,10 @@ func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 // staleDiscardAfter ago and did not complete, at most staleDiscardBatch of
 // them, and returns how many it finished. Until then such a draft keeps its
 // files and its client key. A draft another discard finishes meanwhile
-// counts as finished. A draft that fails is logged and the others are still
-// finished, so one draft that keeps failing does not hold them up; the first
-// failure is returned.
+// counts as finished. A draft that fails is logged here, with its ID, and
+// the others are still finished, so one draft that keeps failing does not
+// hold them up. The error reports only what stopped the whole call: the
+// registry or the list of stopped discards.
 func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, error) {
 	reg, err := s.drafts(ctx)
 	if err != nil {
@@ -286,17 +287,14 @@ func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, e
 		return 0, errxtrace.Wrap("failed to list stopped discards", err)
 	}
 	finished := 0
-	var firstErr error
 	for _, draft := range stale {
 		err := s.Discard(ctx, draft.ID)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			slog.Error("Failed to finish a stopped draft discard", "draft_id", draft.ID, "error", err)
-			if firstErr == nil {
-				firstErr = errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
-			}
+			slog.ErrorContext(ctx, "Failed to finish a stopped draft discard",
+				"draft_id", draft.ID, "group_id", draft.GroupID, "error", err)
 			continue
 		}
 		finished++
 	}
-	return finished, firstErr
+	return finished, nil
 }

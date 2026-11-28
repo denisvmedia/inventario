@@ -39,6 +39,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.IntVar(&cfg.LoanReminderDueSoonDays, "loan-reminder-due-soon-days", cfg.LoanReminderDueSoonDays, "Forward-looking window in days for the due-soon loan reminder (default 7)")
 	flags.StringVar(&cfg.MaintenanceReminderInterval, "maintenance-reminder-interval", cfg.MaintenanceReminderInterval, "Interval between maintenance reminder sweeps (14/7/1-day + overdue maintenance emails; e.g., 1h)")
 	flags.StringVar(&cfg.ItemReminderInterval, "item-reminder-interval", cfg.ItemReminderInterval, "Interval between item reminder sweeps (emails for the reminders users set on items; e.g., 1h)")
+	flags.StringVar(&cfg.CurrencyMigrationRetention, "currency-migration-retention", cfg.CurrencyMigrationRetention, "How long a finished currency migration and its audit rows stay before they are deleted (default 2160h, 90 days; min 24h)")
 	flags.StringVar(&cfg.CurrencyMigrationInterval, "currency-migration-interval", cfg.CurrencyMigrationInterval, "Currency migration worker active-poll interval (when pending rows exist; idle cadence is fixed at 1m). Values like 5s, 10s.")
 	flags.StringVar(&cfg.BusinessMetricsInterval, "business-metrics-interval", cfg.BusinessMetricsInterval, "Interval between installation-wide business-metrics collection sweeps (#843; e.g., 60s)")
 	flags.StringVar(&cfg.OrphanFileGCInterval, "orphan-file-gc-interval", cfg.OrphanFileGCInterval, "Interval between orphan-file GC sweeps (#2237; e.g., 24h)")
@@ -148,6 +149,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.IntVar(&cfg.AIVisionMaxTokens, "ai-vision-max-tokens", cfg.AIVisionMaxTokens, "Cap on the vision model's structured output (must hold a multi-line invoice; 0 = provider default 4096)")
 	flags.BoolVar(&cfg.PublicAIVisionScanEnabled, "public-ai-vision-scan-enabled", cfg.PublicAIVisionScanEnabled, "Enable the unauthenticated public photo-scan endpoint for the landing-page CTA (#1988). Default false; spends vendor tokens.")
 	flags.BoolVar(&cfg.SeedEndpointEnabled, "enable-seed-endpoint", cfg.SeedEndpointEnabled, "Mount the public, unauthenticated POST /api/v1/seed route (#2039). Default false; runs a privileged RLS-bypassing op — keep off in prod.")
+	flags.BoolVar(&cfg.PlansEnabled, "enable-plans", cfg.PlansEnabled, "Show subscription plans in the UI (#1389). Default false; with it off no plan limits are reported to clients.")
 	flags.StringVar(&cfg.MetricsToken, "metrics-token", cfg.MetricsToken, "Bearer token gating GET /metrics (#2102; minimum 32 bytes recommended). Empty = open + one-time startup warning.")
 	flags.BoolVar(&cfg.EnableAPIDocs, "enable-api-docs", cfg.EnableAPIDocs, "Mount the GET /swagger/* API documentation UI (#2102). Default true for dev/e2e; set false in production to hide the API surface.")
 

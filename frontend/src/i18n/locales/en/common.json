@@ -11,9 +11,24 @@
     "save": "Save"
   },
   "brand": "Inventario",
+  "chipInput": {
+    "add": "Add {{value}}",
+    "remove": "Remove {{value}}"
+  },
   "documentTitle": "{{title}} · {{brand}}",
   "errors": {
     "generic": "Something went wrong"
+  },
+  "failedJobs": {
+    "types": {
+      "currencyMigration": "Currency migration",
+      "export": "Export",
+      "import": "Import",
+      "intake": "Intake scan",
+      "personalDataExport": "Personal data export",
+      "restore": "Restore",
+      "thumbnail": "Thumbnail"
+    }
   },
   "listError": {
     "description": "The request failed, so nothing is shown here. This does not mean the list is empty.",

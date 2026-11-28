@@ -1,11 +1,14 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +46,11 @@ type AsyncEmailService struct {
 	retryBaseDelay    time.Duration
 	retryMaxDelay     time.Duration
 	sendTimeout       time.Duration
+	// dequeueBackoffBase and dequeueBackoffMax pace a worker whose Dequeue
+	// fails, so a queue outage does not turn every worker into a busy loop.
+	// Zero uses defaultDequeueBackoffBase and defaultDequeueBackoffMax.
+	dequeueBackoffBase time.Duration
+	dequeueBackoffMax  time.Duration
 
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -104,7 +112,7 @@ func (s *AsyncEmailService) Start(ctx context.Context) {
 		s.runRetryPromoter(ctx)
 	})
 
-	slog.Info("Email service workers started",
+	slog.InfoContext(ctx, "Email service workers started",
 		"workers", s.workers,
 		"max_retries", s.maxRetries,
 	)
@@ -309,6 +317,18 @@ func (s *AsyncEmailService) SendItemReminderEmail(ctx context.Context, to, name,
 	})
 }
 
+// SendPersonalDataExportReadyEmail enqueues the notice that a personal data
+// export is ready (#2177).
+func (s *AsyncEmailService) SendPersonalDataExportReadyEmail(ctx context.Context, to, name, settingsURL string, expiresAt time.Time) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType: emailTemplatePersonalDataExportReady,
+		To:           to,
+		Name:         name,
+		URL:          settingsURL,
+		ExpiresAt:    new(expiresAt),
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)
@@ -337,7 +357,13 @@ func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	return s.queue.Enqueue(ctx, payload)
 }
 
+const (
+	defaultDequeueBackoffBase = 250 * time.Millisecond
+	defaultDequeueBackoffMax  = 30 * time.Second
+)
+
 func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
+	failures := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -352,16 +378,27 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 			if isContextShutdownError(err) {
 				return
 			}
-			slog.Error("Email worker dequeue failed", "worker_id", workerID, "error", err)
+			failures++
+			delay := s.dequeueBackoff(failures)
+			slog.ErrorContext(ctx, "Email worker dequeue failed",
+				"worker_id", workerID,
+				"attempt", failures,
+				"retry_in", delay.String(),
+				"error", err,
+			)
+			if !s.wait(ctx, delay) {
+				return
+			}
 			continue
 		}
+		failures = 0
 		if payload == nil {
 			continue
 		}
 
 		var job emailJob
 		if err := json.Unmarshal(payload, &job); err != nil {
-			slog.Error("Email worker failed to decode job payload; dropping job",
+			slog.ErrorContext(ctx, "Email worker failed to decode job payload; dropping job",
 				"worker_id", workerID,
 				"error", err,
 			)
@@ -371,23 +408,46 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 	}
 }
 
+// dequeueBackoff is the pause after the given number of Dequeue failures in a
+// row: the base delay, doubled for each further failure, up to the maximum.
+func (s *AsyncEmailService) dequeueBackoff(failures int) time.Duration {
+	base := cmp.Or(s.dequeueBackoffBase, defaultDequeueBackoffBase)
+	limit := cmp.Or(s.dequeueBackoffMax, defaultDequeueBackoffMax)
+	delay := base
+	for i := 1; i < failures && delay < limit; i++ {
+		delay *= 2
+	}
+	return min(delay, limit)
+}
+
+// wait pauses for d and reports whether the worker should go on. It returns
+// false as soon as ctx is canceled or Stop is called.
+func (s *AsyncEmailService) wait(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-s.stopCh:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 func isContextShutdownError(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, workerID int) {
+	jobAttrs := emailJobLogAttrs(job, workerID)
 	rendered, err := s.renderer.render(job)
 	if err != nil {
 		// Terminal drop: an un-renderable job is never delivered, so count
 		// it as failed like the other drop paths below (retries exhausted,
 		// marshal error, ScheduleRetry error) — otherwise it undercounts.
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Email template rendering failed; dropping job",
-			"worker_id", workerID,
-			"job_id", job.ID,
-			"template", job.TemplateType,
-			"error", err,
-		)
+		slog.ErrorContext(ctx, "Email template rendering failed; dropping job", slices.Concat(jobAttrs, []any{"error", err})...)
 		return
 	}
 
@@ -419,26 +479,16 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	metrics.ObserveEmailSend(time.Since(sendStart))
 	if err == nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusSent)
-		slog.Debug("Email sent",
-			"worker_id", workerID,
-			"job_id", job.ID,
-			"template", job.TemplateType,
-			"to", job.To,
-		)
+		slog.DebugContext(ctx, "Email sent", jobAttrs...)
 		return
 	}
 
+	sendErr := emailJobErrorForLog(job, err)
 	nextAttempt := job.Attempt + 1
 	if nextAttempt > s.maxRetries {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Email delivery failed after retries; dropping job",
-			"worker_id", workerID,
-			"job_id", job.ID,
-			"template", job.TemplateType,
-			"to", job.To,
-			"attempts", nextAttempt,
-			"error", err,
-		)
+		slog.ErrorContext(ctx, "Email delivery failed after retries; dropping job",
+			slices.Concat(jobAttrs, []any{"attempts", nextAttempt, "error", sendErr})...)
 		return
 	}
 
@@ -448,42 +498,57 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	retryPayload, marshalErr := json.Marshal(job)
 	if marshalErr != nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Failed to encode email retry payload; dropping job",
-			"worker_id", workerID,
-			"job_id", job.ID,
-			"template", job.TemplateType,
-			"to", job.To,
-			"attempt", nextAttempt,
-			"send_error", err,
-			"marshal_error", marshalErr,
-		)
+		slog.ErrorContext(ctx, "Failed to encode email retry payload; dropping job",
+			slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "send_error", sendErr, "marshal_error", marshalErr})...)
 		return
 	}
 
 	if retryErr := s.queue.ScheduleRetry(ctx, retryPayload, readyAt); retryErr != nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Failed to schedule email retry; dropping job",
-			"worker_id", workerID,
-			"job_id", job.ID,
-			"template", job.TemplateType,
-			"to", job.To,
-			"attempt", nextAttempt,
-			"send_error", err,
-			"retry_error", retryErr,
-		)
+		slog.ErrorContext(ctx, "Failed to schedule email retry; dropping job",
+			slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "send_error", sendErr, "retry_error", retryErr})...)
 		return
 	}
 
 	metrics.RecordEmailProcessed(metrics.EmailStatusRetried)
-	slog.Warn("Email delivery failed; retry scheduled",
-		"worker_id", workerID,
-		"job_id", job.ID,
-		"template", job.TemplateType,
-		"to", job.To,
-		"attempt", nextAttempt,
-		"retry_in", delay.String(),
-		"error", err,
-	)
+	slog.WarnContext(ctx, "Email delivery failed; retry scheduled",
+		slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "retry_in", delay.String(), "error", sendErr})...)
+}
+
+// emailJobLogAttrs is what every line about a queued email carries: the
+// worker, the job and its template, and the recipient's address under `email`
+// only for the sign-in, registration and recovery emails. Every other email
+// leaves the address out (devdocs/logging.md, What never goes into a log).
+func emailJobLogAttrs(job emailJob, workerID int) []any {
+	attrs := []any{"worker_id", workerID, "job_id", job.ID, "template", job.TemplateType}
+	if emailJobMayNameRecipient(job) {
+		attrs = append(attrs, "email", job.To)
+	}
+	return attrs
+}
+
+// emailJobMayNameRecipient reports whether a line about the job may carry the
+// recipient's address: only for the sign-in, registration and recovery emails.
+func emailJobMayNameRecipient(job emailJob) bool {
+	switch job.TemplateType {
+	case emailTemplateVerification, emailTemplatePasswordReset, emailTemplateMagicLink,
+		emailTemplatePasswordChange, emailTemplateWelcome:
+		return true
+	default:
+		return false
+	}
+}
+
+// emailJobErrorForLog is the send error as a line about the job may log it. A
+// provider error can quote the recipient (an SMTP rejection names the
+// address), so for an email whose lines leave the address out it returns the
+// error text with the address, in any case, replaced by <recipient>.
+func emailJobErrorForLog(job emailJob, err error) any {
+	to := strings.TrimSpace(job.To)
+	if err == nil || to == "" || emailJobMayNameRecipient(job) {
+		return err
+	}
+	return regexp.MustCompile("(?i)"+regexp.QuoteMeta(to)).ReplaceAllLiteralString(err.Error(), "<recipient>")
 }
 
 func (s *AsyncEmailService) retryDelay(attempt int) time.Duration {
@@ -517,11 +582,11 @@ func (s *AsyncEmailService) runRetryPromoter(ctx context.Context) {
 				if isContextShutdownError(err) {
 					return
 				}
-				slog.Error("Failed to promote due email retries", "error", err)
+				slog.ErrorContext(ctx, "Failed to promote due email retries", "error", err)
 				continue
 			}
 			if moved > 0 {
-				slog.Debug("Promoted due retry emails", "count", moved)
+				slog.DebugContext(ctx, "Promoted due retry emails", "count", moved)
 			}
 
 			// Reuse the existing ticker to refresh the queue-depth
@@ -531,7 +596,7 @@ func (s *AsyncEmailService) runRetryPromoter(ctx context.Context) {
 				if isContextShutdownError(depthErr) {
 					return
 				}
-				slog.Debug("Failed to read email queue depth", "error", depthErr)
+				slog.DebugContext(ctx, "Failed to read email queue depth", "error", depthErr)
 			} else {
 				metrics.SetEmailQueueDepth(depth)
 			}

@@ -129,6 +129,16 @@ func (r *TagRegistry) tableForKind(kind models.TagKind) store.TableName {
 	return r.tableNames.Commodities()
 }
 
+// tagRewriteSet is the SET list of a rewrite of the tags column of the
+// kind's table to expr. An item's tags are a column its edit form sends
+// back, so the rewrite moves its revision on (see models.Commodity.Revision).
+func tagRewriteSet(kind models.TagKind, expr string) string {
+	if kind == models.TagKindFile {
+		return "tags = " + expr
+	}
+	return "tags = " + expr + ", revision = revision + 1"
+}
+
 func (r *TagRegistry) List(ctx context.Context) ([]*models.Tag, error) {
 	var tags []*models.Tag
 	for tag, err := range r.newSQLRegistry().Scan(ctx) {
@@ -497,8 +507,8 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.Tag
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2),
+			`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(kind), tagRewriteSet(kind, jsonbReplaceSlugExpr(1, 2)),
 		)
 		res, execErr := tx.ExecContext(ctx, query, oldSlug, newSlug)
 		if execErr != nil {
@@ -572,6 +582,15 @@ func defaultTagLabelFromSlug(slug string) string {
 // Slugs are deduplicated and sorted before locking so the lock
 // acquisition order is deterministic across writers — eliminates
 // deadlock potential when two writers reference overlapping slug sets.
+//
+// Lock order for every writer that touches tags: the (group, slug)
+// advisory locks in sorted order, then the tag rows, then the group's
+// currency-migration lock when it needs one, then the item or file rows.
+// An item or file update calls this before it locks its own row, and a
+// tag rename or delete rewrites the items or files only after it holds
+// the slug and tag-row locks. A writer that locked an item row first and
+// then waited for a slug lock would deadlock against a rename holding the
+// slug and waiting for that row.
 func ensureTagRowsInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, kind models.TagKind, slugs []string) error {
 	if len(slugs) == 0 || groupID == "" {
 		return nil
@@ -698,11 +717,19 @@ func (r *TagRegistry) renameRewriteSlug(
 			registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
 	}
 
+	// A running currency migration updates the group's items one by one
+	// under its lock. The rewrite below locks every item that carries the
+	// slug at once, in another order, so it waits for the migration first.
+	if kind == models.TagKindCommodity {
+		if err := lockGroupCurrencyMigration(ctx, tx, current.GroupID); err != nil {
+			return err
+		}
+	}
 	// Rewrite references only on the kind's own table — a commodity-tag
 	// rename must not touch files (those slugs belong to file tags).
 	rewriteQuery := fmt.Sprintf(
-		`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-		r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2))
+		`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+		r.tableForKind(kind), tagRewriteSet(kind, jsonbReplaceSlugExpr(1, 2)))
 	if _, err := tx.ExecContext(ctx, rewriteQuery, oldSlug, newSlug); err != nil {
 		return errxtrace.Wrap("failed to rewrite tag references", err)
 	}
@@ -773,11 +800,12 @@ func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, kind mo
 // from whatever slug the first one settled on.
 //
 // Lock order: id-advisory → peek slug (no row lock) → slug-advisory
-// (old + new, sorted) → tag-row FOR UPDATE → rewrite + update → saved
-// view group lock. The peek-then-slug-lock split is what avoids
-// deadlocking against concurrent ensureTagRowsInTx (which takes
-// slug-lock then row-lock). The saved view writes never take a tag
-// lock, so taking their group lock last cannot deadlock against them.
+// (old + new, sorted) → tag-row FOR UPDATE → currency-migration lock (item
+// tags) → rewrite of the item or file rows + update → saved view group
+// lock. The peek-then-slug-lock split is what avoids deadlocking against
+// concurrent ensureTagRowsInTx (which takes slug-lock then row-lock). The
+// saved view writes never take a tag lock, so taking their group lock last
+// cannot deadlock against them.
 func (r *TagRegistry) RenameAtomic(
 	ctx context.Context,
 	id, newLabel, newSlug string,
@@ -858,10 +886,10 @@ func (r *TagRegistry) RenameAtomic(
 // block until our tx commits.
 //
 // Lock order: id-advisory → peek slug (no row lock) → slug-advisory →
-// tag-row FOR UPDATE → strip + delete. Same shape as RenameAtomic for
-// the same reason — taking the row lock before the slug lock would
-// deadlock against ensureTagRowsInTx, which acquires them in the
-// reverse order (slug-lock then row-lock).
+// tag-row FOR UPDATE → currency-migration lock (item tags) → strip +
+// delete. Same shape as RenameAtomic for the same reason — taking the row
+// lock before the slug lock would deadlock against ensureTagRowsInTx,
+// which acquires them in the reverse order (slug-lock then row-lock).
 //
 // When force=false and usage > 0, returns the populated TagUsage along
 // with registry.ErrTagInUse and rolls back without mutating state.
@@ -911,11 +939,18 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		if refCount > 0 && !force {
 			return registry.ErrTagInUse
 		}
+		// Like the rename, the strip waits for a running currency
+		// migration before it locks the group's items.
+		if current.Kind == models.TagKindCommodity {
+			if err := lockGroupCurrencyMigration(ctx, tx, current.GroupID); err != nil {
+				return err
+			}
+		}
 		// The strip covers trashed rows too, so a restored item does not
 		// bring back a tag that no longer exists.
 		stripQuery := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableForKind(current.Kind), jsonbStripSlugExpr(1))
+			`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(current.Kind), tagRewriteSet(current.Kind, jsonbStripSlugExpr(1)))
 		if _, err := tx.ExecContext(ctx, stripQuery, current.Slug); err != nil {
 			return errxtrace.Wrap("failed to strip tag references", err)
 		}
@@ -937,8 +972,8 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 	reg := r.newSQLRegistry()
 	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-			r.tableForKind(kind), jsonbStripSlugExpr(1),
+			`UPDATE %s SET %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(kind), tagRewriteSet(kind, jsonbStripSlugExpr(1)),
 		)
 		res, execErr := tx.ExecContext(ctx, query, slug)
 		if execErr != nil {

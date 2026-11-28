@@ -1,8 +1,8 @@
-import { useMemo, useState, type ReactNode } from "react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
 import { Controller, useForm, type FieldErrors } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, ChevronRight, ListChecks } from "lucide-react"
+import { ArrowLeft, ChevronRight, ListChecks, RefreshCw } from "lucide-react"
 
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { CustomFieldsEditor } from "@/components/customFields/CustomFieldsEditor"
@@ -24,7 +24,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import type { Commodity, UpdateCommodityRequest } from "@/features/commodities/api"
+import {
+  isCommodityRevisionConflict,
+  type Commodity,
+  type UpdateCommodityRequest,
+} from "@/features/commodities/api"
 import { buildDefaults, toRequest } from "@/features/commodities/draft"
 import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
 import {
@@ -35,6 +39,7 @@ import {
 import { useCustomFields } from "@/features/customFields/hooks"
 import { customFieldsRequest } from "@/features/customFields/values"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
 import type { ListNavigation, ListNeighbor } from "@/hooks/useListNavigation"
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard"
@@ -82,6 +87,15 @@ export interface CommodityEditFormProps {
   /** Saves the record; rejects with the server's error. */
   onSubmit: (req: UpdateCommodityRequest) => Promise<unknown>
   isPending?: boolean
+  /**
+   * The item changed after the form opened, so a save from it was refused
+   * (by the step-by-step dialog, too). The form also notices it on its own
+   * save.
+   */
+  stale?: boolean
+  /** Reads the item again and opens a fresh form on it. */
+  onReload: () => void
+  reloading?: boolean
   /** The list the item was opened from; inactive when there is none. */
   nav: ListNavigation
   hrefFor: (target: ListNeighbor) => string
@@ -114,6 +128,9 @@ export function CommodityEditForm({
   groupCurrency,
   onSubmit,
   isPending,
+  stale: staleProp,
+  onReload,
+  reloading,
   nav,
   hrefFor,
   onExit,
@@ -128,6 +145,13 @@ export function CommodityEditForm({
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   // A failing field this form does not show; only the dialog can fix it.
   const [hiddenFieldError, setHiddenFieldError] = useState(false)
+  // The revision the form's values were read at. A save sends it, so the
+  // server refuses the save when the item was written since (a bulk change,
+  // another edit, a tag rename): saving would undo that write. A later read
+  // of the item does not change it, since the values stay those read first.
+  const revision = useRef(commodity.revision)
+  const [refusedAsStale, setRefusedAsStale] = useState(false)
+  const stale = refusedAsStale || !!staleProp
 
   const defaults = useMemo(
     () => buildDefaults(commodity, groupCurrency),
@@ -163,15 +187,21 @@ export function CommodityEditForm({
     try {
       // Spread over the record so what the form does not cover (status
       // metadata, cover) goes back unchanged.
-      await onSubmit({
+      const saved = await onSubmit({
         ...commodity,
         ...toRequest(values, groupCurrency),
         custom_fields: customFieldsPayload(values),
+        revision: revision.current,
       })
+      revision.current = savedRevision(saved) ?? revision.current
       form.reset(values)
       toast.success(t("commodities:toast.updated"))
       return true
     } catch (err) {
+      if (isCommodityRevisionConflict(err)) {
+        setRefusedAsStale(true)
+        return false
+      }
       // A refused value often means a field or an option was deleted
       // meanwhile; read the group's fields again so the form shows them as
       // they are.
@@ -236,6 +266,7 @@ export function CommodityEditForm({
       ...commodity,
       ...toRequest(values, groupCurrency),
       custom_fields: customFieldsPayload(values),
+      revision: revision.current,
     })
   }
 
@@ -245,6 +276,12 @@ export function CommodityEditForm({
   const isBundle = Number.isFinite(count) && count > 1
   const expiresAt = watch("warranty_expires_at")
   const warrantyNotes = watch("warranty_notes")
+  // A group that hides warranties (#1607) gets no Warranty section, unless
+  // the item holds a warranty. The fields stay in the form values, so a
+  // save keeps what the item holds.
+  const showWarranties = useSectionVisible("warranties")
+  const showWarrantySection =
+    showWarranties || !!commodity.warranty_expires_at || !!commodity.warranty_notes
   const purchaseCurrency = watch("original_price_currency") ?? ""
   const isForeignCurrency =
     !!purchaseCurrency &&
@@ -342,7 +379,6 @@ export function CommodityEditForm({
               >
                 <Input
                   id="edit-short-name"
-                  maxLength={40}
                   className="font-mono text-sm"
                   {...register("short_name")}
                   aria-invalid={!!errors.short_name}
@@ -502,45 +538,49 @@ export function CommodityEditForm({
             ) : null}
           </div>
 
-          <Separator />
+          {showWarrantySection ? (
+            <>
+              <Separator />
 
-          <div className="space-y-3">
-            <SectionLabel>{t("commodities:editForm.sections.warranty")}</SectionLabel>
-            {/* A bundle (count > 1) carries no warranty (#1554). An empty
+              <div className="space-y-3">
+                <SectionLabel>{t("commodities:editForm.sections.warranty")}</SectionLabel>
+                {/* A bundle (count > 1) carries no warranty (#1554). An empty
               field is disabled; a filled one stays editable so legacy data
               can be cleared. */}
-            <EditField
-              label={t("commodities:editForm.warrantyExpiry")}
-              htmlFor="edit-warranty-exp"
-              hint={
-                isBundle
-                  ? t("commodities:trackingRestrictions.warrantyStepHint")
-                  : t("commodities:editForm.warrantyExpiryHint")
-              }
-              error={errors.warranty_expires_at}
-            >
-              <Input
-                id="edit-warranty-exp"
-                type="date"
-                disabled={isBundle && !expiresAt?.trim()}
-                {...register("warranty_expires_at")}
-                aria-invalid={!!errors.warranty_expires_at}
-              />
-            </EditField>
-            <EditField
-              label={t("commodities:fields.warrantyNotes")}
-              htmlFor="edit-warranty-notes"
-              error={errors.warranty_notes}
-            >
-              <Textarea
-                id="edit-warranty-notes"
-                rows={2}
-                className="resize-none"
-                disabled={isBundle && !warrantyNotes?.trim()}
-                {...register("warranty_notes")}
-              />
-            </EditField>
-          </div>
+                <EditField
+                  label={t("commodities:editForm.warrantyExpiry")}
+                  htmlFor="edit-warranty-exp"
+                  hint={
+                    isBundle
+                      ? t("commodities:trackingRestrictions.warrantyStepHint")
+                      : t("commodities:editForm.warrantyExpiryHint")
+                  }
+                  error={errors.warranty_expires_at}
+                >
+                  <Input
+                    id="edit-warranty-exp"
+                    type="date"
+                    disabled={isBundle && !expiresAt?.trim()}
+                    {...register("warranty_expires_at")}
+                    aria-invalid={!!errors.warranty_expires_at}
+                  />
+                </EditField>
+                <EditField
+                  label={t("commodities:fields.warrantyNotes")}
+                  htmlFor="edit-warranty-notes"
+                  error={errors.warranty_notes}
+                >
+                  <Textarea
+                    id="edit-warranty-notes"
+                    rows={2}
+                    className="resize-none"
+                    disabled={isBundle && !warrantyNotes?.trim()}
+                    {...register("warranty_notes")}
+                  />
+                </EditField>
+              </div>
+            </>
+          ) : null}
 
           <Separator />
 
@@ -591,6 +631,26 @@ export function CommodityEditForm({
                 />
               </div>
             </>
+          ) : null}
+
+          {stale ? (
+            <Alert variant="destructive" data-testid="commodity-edit-stale">
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                {t("commodities:editForm.changedSinceOpened")}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={onReload}
+                  disabled={reloading}
+                  data-testid="commodity-edit-reload"
+                >
+                  <RefreshCw className="size-3.5" aria-hidden="true" />
+                  {t("commodities:editForm.reload")}
+                </Button>
+              </AlertDescription>
+            </Alert>
           ) : null}
 
           {hiddenFieldError ? (
@@ -653,6 +713,12 @@ export function CommodityEditForm({
       {dialog}
     </div>
   )
+}
+
+// The revision a save answered with, when the caller resolved with the item.
+function savedRevision(saved: unknown): number | undefined {
+  const value = (saved as { revision?: unknown } | null | undefined)?.revision
+  return typeof value === "number" ? value : undefined
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {

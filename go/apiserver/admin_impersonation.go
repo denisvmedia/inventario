@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -176,7 +177,8 @@ func clampImpersonationTTL(ttl time.Duration) time.Duration {
 // @Description `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
 // @Description `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
 // @Description Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
-// @Description `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+// @Description `admin.impersonate.target_blocked` when the target account is blocked, `tenant.not_active` when the target's
+// @Description tenant is suspended or inactive, and `admin.impersonate.nested`
 // @Description when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
 // @Description per-operator start rate limit (10/hour) is exceeded.
 // @Tags admin
@@ -189,7 +191,7 @@ func clampImpersonationTTL(ttl time.Duration) time.Duration {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 403 {object} jsonapi.Errors "Forbidden - platform_admin role required"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown tenant user"
-// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - target is admin / blocked / in a tenant that is not active / nested impersonation / reason too long"
 // @Failure 429 {object} jsonapi.Errors "Too Many Requests - per-operator rate limit"
 // @Router /admin/users/{userID}/impersonate [post]
 func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +237,7 @@ func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *h
 		return
 	}
 
-	if guardErr := impersonationTargetGuard(r.Context(), api.factorySet.SystemAdminGrantRegistry, target); guardErr != nil {
+	if guardErr := impersonationTargetGuard(r.Context(), api.factorySet.SystemAdminGrantRegistry, api.factorySet.TenantRegistry, target); guardErr != nil {
 		api.auditStart(r, operator.ID, "", target.ID, target.TenantID, false, guardErr.Error())
 		_ = renderEntityError(w, r, guardErr)
 		return
@@ -255,9 +257,9 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 
 	tokenString, err := api.signImpersonationToken(target, operator.ID, jti, startedAt, expiresAt)
 	if err != nil {
-		slog.Error("Failed to sign impersonation token", "operator_id", operator.ID, "target_id", target.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to sign impersonation token", "operator_id", operator.ID, "target_id", target.ID, "error", err)
 		api.auditStart(r, operator.ID, "", target.ID, target.TenantID, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -280,14 +282,14 @@ func (api *adminImpersonationAPI) issueAndRespond(w http.ResponseWriter, r *http
 		ExpiresAt:               expiresAt,
 	}
 	if err := api.store.Put(r.Context(), slot); err != nil {
-		slog.Error("Failed to record impersonation return slot", "operator_id", operator.ID, "target_id", target.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to record impersonation return slot", "operator_id", operator.ID, "target_id", target.ID, "error", err)
 		api.auditStart(r, operator.ID, "", target.ID, target.TenantID, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
 	api.auditStart(r, operator.ID, reason, target.ID, target.TenantID, true, "")
-	slog.Info("Impersonation session started", "operator_id", operator.ID, "target_id", target.ID, "jti", jti)
+	slog.InfoContext(r.Context(), "Impersonation session started", "operator_id", operator.ID, "target_id", target.ID, "jti", jti)
 
 	// Cross-plane impersonation (#1785 Phase 5) does NOT touch the
 	// tenant `refresh_token` cookie at start: the operator was never
@@ -433,7 +435,7 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	// fail vacuously, so reject it up front as malformed — an
 	// authentication failure (401).
 	if jti == "" {
-		slog.Warn("Impersonation end: token missing jti claim", "operator_id", operatorID)
+		slog.WarnContext(r.Context(), "Impersonation end: token missing jti claim", "operator_id", operatorID)
 		_ = unauthorizedError(w, r, ErrImpersonationTokenInvalid)
 		return
 	}
@@ -445,15 +447,15 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 			// gone (already ended, or the process restarted). Treat as
 			// "not active" — the FE banner clears and the operator
 			// re-logs in.
-			slog.Warn("Impersonation end: return slot not found", "jti", jti, "operator_id", operatorID)
+			slog.WarnContext(r.Context(), "Impersonation end: return slot not found", "jti", jti, "operator_id", operatorID)
 			_ = renderEntityError(w, r, ErrNotImpersonating)
 			return
 		}
 		// A non-not-found error is a genuine store fault (e.g. a
 		// Redis-backed store outage), not a missing slot — surface it
 		// as a 500 rather than masking it as "not active".
-		slog.Error("Impersonation end: failed to read return slot", "jti", jti, "operator_id", operatorID, "error", err)
-		_ = internalServerError(w, r, err)
+		slog.ErrorContext(r.Context(), "Impersonation end: failed to read return slot", "jti", jti, "operator_id", operatorID, "error", err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -462,8 +464,8 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	// the two disagree, the slot belongs to a different operator — refuse
 	// rather than restore the wrong session.
 	if slot.OperatorUserID != operatorID {
-		slog.Error("Impersonation end: slot/token operator mismatch",
-			"jti", jti, "slot_operator", slot.OperatorUserID, "token_operator", operatorID)
+		slog.ErrorContext(r.Context(), "Impersonation end: slot/token operator mismatch",
+			"jti", jti, "slot_operator_id", slot.OperatorUserID, "token_operator_id", operatorID)
 		_ = renderEntityError(w, r, ErrNotImpersonating)
 		return
 	}
@@ -474,7 +476,7 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	// without `end` learning to handle it. Failing loudly is safer
 	// than restoring the wrong cookie shape.
 	if slot.OperatorKind != services.ImpersonationOperatorBackoffice {
-		slog.Error("Impersonation end: unsupported slot operator kind",
+		slog.ErrorContext(r.Context(), "Impersonation end: unsupported slot operator kind",
 			"jti", jti, "operator_kind", string(slot.OperatorKind))
 		_ = renderEntityError(w, r, ErrNotImpersonating)
 		return
@@ -493,19 +495,19 @@ func (api *adminImpersonationAPI) endImpersonation(w http.ResponseWriter, r *htt
 	// INVENTARIO_RUN_TOKEN_BLACKLIST_REDIS_URL.
 	api.blacklistImpersonationToken(r.Context(), jti, slot.ExpiresAt)
 	if delErr := api.store.Delete(r.Context(), jti); delErr != nil {
-		slog.Warn("Impersonation end: failed to delete return slot", "jti", jti, "error", delErr)
+		slog.WarnContext(r.Context(), "Impersonation end: failed to delete return slot", "jti", jti, "error", delErr)
 	}
 
 	operator, err := api.factorySet.BackofficeUserRegistry.Get(r.Context(), slot.OperatorUserID)
 	if err != nil {
-		slog.Error("Impersonation end: failed to reload back-office operator", "operator_id", slot.OperatorUserID, "error", err)
+		slog.ErrorContext(r.Context(), "Impersonation end: failed to reload back-office operator", "operator_id", slot.OperatorUserID, "error", err)
 		api.auditEnd(r, slot, targetID, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
 	api.auditEnd(r, slot, targetID, true, "")
-	slog.Info("Impersonation session ended", "operator_id", operator.ID, "target_id", slot.TargetUserID, "jti", jti)
+	slog.InfoContext(r.Context(), "Impersonation session ended", "operator_id", operator.ID, "target_id", slot.TargetUserID, "jti", jti)
 
 	api.restoreBackofficeSession(w, r, operator, slot)
 }
@@ -541,8 +543,8 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 		// A non-not-found error is a genuine store fault, not a missing
 		// slot — surface it as a 500 rather than reporting a misleading
 		// inactive banner that masks a backend outage.
-		slog.Error("Impersonation current: failed to read return slot", "jti", jti, "error", err)
-		_ = internalServerError(w, r, err)
+		slog.ErrorContext(r.Context(), "Impersonation current: failed to read return slot", "jti", jti, "error", err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -552,14 +554,14 @@ func (api *adminImpersonationAPI) currentImpersonation(w http.ResponseWriter, r 
 	// banner rather than rendering active=true with a nil user.
 	target, terr := api.factorySet.UserRegistry.Get(r.Context(), slot.TargetUserID)
 	if terr != nil {
-		slog.Warn("Impersonation current: failed to resolve target user, reporting inactive",
+		slog.WarnContext(r.Context(), "Impersonation current: failed to resolve target user, reporting inactive",
 			"jti", jti, "target_id", slot.TargetUserID, "error", terr)
 		writeJSON(w, http.StatusOK, ImpersonationStateResponse{Active: false})
 		return
 	}
 	operator, oerr := api.factorySet.BackofficeUserRegistry.Get(r.Context(), slot.OperatorUserID)
 	if oerr != nil {
-		slog.Warn("Impersonation current: failed to resolve back-office operator, reporting inactive",
+		slog.WarnContext(r.Context(), "Impersonation current: failed to resolve back-office operator, reporting inactive",
 			"jti", jti, "operator_id", slot.OperatorUserID, "error", oerr)
 		writeJSON(w, http.StatusOK, ImpersonationStateResponse{Active: false})
 		return
@@ -595,8 +597,8 @@ func (api *adminImpersonationAPI) restoreBackofficeSession(w http.ResponseWriter
 
 	tokenString, err := api.signBackofficeAccessTokenForEnd(operator, rti)
 	if err != nil {
-		slog.Error("Impersonation end: failed to mint back-office access token", "operator_id", operator.ID, "error", err)
-		_ = internalServerError(w, r, err)
+		slog.ErrorContext(r.Context(), "Impersonation end: failed to mint back-office access token", "operator_id", operator.ID, "error", err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -719,7 +721,7 @@ func (api *adminImpersonationAPI) blacklistImpersonationToken(ctx context.Contex
 		return
 	}
 	if err := api.blacklist.BlacklistToken(ctx, jti, expiresAt); err != nil {
-		slog.Warn("Impersonation end: failed to blacklist token", "jti", jti, "error", err)
+		slog.WarnContext(ctx, "Impersonation end: failed to blacklist token", "jti", jti, "error", err)
 	}
 }
 
@@ -766,7 +768,7 @@ func (api *adminImpersonationAPI) checkRateLimit(w http.ResponseWriter, r *http.
 	}
 	res, err := api.rateLimiter.CheckImpersonationAttempt(r.Context(), operatorID)
 	if err != nil {
-		slog.Error("Impersonation rate limiter error", "operator_id", operatorID, "error", err)
+		slog.ErrorContext(r.Context(), "Impersonation rate limiter error", "operator_id", operatorID, "error", err)
 		return true
 	}
 	if !res.Allowed {
@@ -832,12 +834,13 @@ func (api *adminImpersonationAPI) auditEnd(r *http.Request, slot services.Impers
 }
 
 // impersonationTargetGuard rejects targets that may not be impersonated:
-// a system admin (privilege-escalation footgun) or a blocked account
-// (resurrecting a torn-down session). Returns nil when the target is a
-// valid impersonation subject. System-admin status is resolved via the
-// dedicated grants registry (#1784) — the legacy IsSystemAdmin column
-// on users is gone.
-func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGrantRegistry, target *models.User) error {
+// a system admin (privilege-escalation footgun), a blocked account
+// (resurrecting a torn-down session) or a user of a tenant that is not
+// active (the session would be refused on its first request, #1037).
+// Returns nil when the target is a valid impersonation subject.
+// System-admin status is resolved via the dedicated grants registry
+// (#1784) — the legacy IsSystemAdmin column on users is gone.
+func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGrantRegistry, tenants registry.TenantRegistry, target *models.User) error {
 	if grants != nil {
 		ok, err := grants.Exists(ctx, target.ID)
 		if err != nil {
@@ -849,6 +852,13 @@ func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGr
 	}
 	if !target.IsActive {
 		return ErrTargetBlocked
+	}
+	active, err := userTenantIsActive(ctx, tenants, target)
+	if err != nil {
+		return errxtrace.Wrap("impersonation guard: tenant lookup failed", err)
+	}
+	if !active {
+		return errxtrace.Classify(registry.ErrTenantNotActive, errx.Attrs("tenant_id", target.TenantID))
 	}
 	return nil
 }

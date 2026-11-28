@@ -119,7 +119,7 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 		if job.FileID != fileID {
 			continue
 		}
-		if latest == nil || job.CreatedAt.After(latest.CreatedAt) {
+		if latest == nil || newerThumbnailJob(job, latest) {
 			latest = job
 		}
 	}
@@ -127,6 +127,15 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 		return nil, registry.ErrNotFound
 	}
 	return latest, nil
+}
+
+// newerThumbnailJob reports whether a was created after b, the id breaking a
+// tie, as the postgres GetJobByFileID orders them.
+func newerThumbnailJob(a, b *models.ThumbnailGenerationJob) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.ID > b.ID
 }
 
 // ListByFileID returns every thumbnail generation job referencing the given

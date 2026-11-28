@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -52,25 +54,23 @@ func isIntakeReviewField(name string) bool {
 // intakeCandidatesFromScan turns a scan result into the candidates of a
 // source. A multi-product result gives one candidate per product in the
 // order the provider listed them, most prominent first. Products the scan
-// read nothing for are left out.
-func intakeCandidatesFromScan(result *aivision.ScanResult) []models.IntakeCandidate {
+// read nothing for are left out. The custom field guesses are those the
+// scan kept for the group's fields in defs, a select value already an option
+// ID; a value an item could not store is left out, so the review never
+// offers it.
+func intakeCandidatesFromScan(result *aivision.ScanResult, defs map[string]*models.CustomFieldDefinition) []models.IntakeCandidate {
 	if result == nil {
 		return nil
 	}
 	items := result.Items
-	if len(items) == 0 && len(result.Fields) > 0 {
-		items = []aivision.ScanItem{{Fields: result.Fields}}
+	if len(items) == 0 && (len(result.Fields) > 0 || len(result.CustomFields) > 0) {
+		items = []aivision.ScanItem{{Fields: result.Fields, CustomFields: result.CustomFields}}
 	}
 	out := make([]models.IntakeCandidate, 0, len(items))
 	for _, item := range items {
-		fields := models.IntakeFields{}
-		for name, guess := range item.Fields {
-			if guess.Value == nil {
-				continue
-			}
-			fields[name] = models.IntakeFieldGuess{Value: guess.Value, Confidence: guess.Confidence}
-		}
-		if !hasReviewValue(fields) {
+		fields := intakeGuesses(item.Fields)
+		custom := storableCustomGuesses(defs, intakeGuesses(item.CustomFields))
+		if !hasReviewValue(fields) && len(custom) == 0 {
 			continue
 		}
 		accepted := []string{}
@@ -79,17 +79,72 @@ func intakeCandidatesFromScan(result *aivision.ScanResult) []models.IntakeCandid
 				accepted = append(accepted, name)
 			}
 		}
+		acceptedCustom := []string{}
+		for _, id := range slices.Sorted(maps.Keys(custom)) {
+			if custom[id].Confidence >= IntakeAcceptConfidence {
+				acceptedCustom = append(acceptedCustom, id)
+			}
+		}
 		out = append(out, models.IntakeCandidate{
-			Fields:         fields,
-			Selected:       true,
-			AcceptedFields: accepted,
-			Quantity:       quantityFromGuess(fields[aivision.FieldNameQuantity]),
+			Fields:               fields,
+			CustomFields:         custom,
+			Selected:             true,
+			AcceptedFields:       accepted,
+			AcceptedCustomFields: acceptedCustom,
+			Quantity:             quantityFromGuess(fields[aivision.FieldNameQuantity]),
 		})
 	}
 	return out
 }
 
-// hasReviewValue reports whether the scan read anything a draft can use.
+// intakeGuesses keeps the guesses that hold a value. A NUL character is
+// removed from scanned text, since PostgreSQL cannot store it in JSONB.
+func intakeGuesses(guesses map[string]aivision.FieldGuess) models.IntakeFields {
+	out := models.IntakeFields{}
+	for name, guess := range guesses {
+		if guess.Value != nil {
+			out[name] = models.IntakeFieldGuess{Value: withoutNUL(guess.Value), Confidence: guess.Confidence}
+		}
+	}
+	return out
+}
+
+// withoutNUL removes NUL characters from a scanned string or list of
+// strings.
+func withoutNUL(v any) any {
+	switch v := v.(type) {
+	case string:
+		return strings.ReplaceAll(v, "\x00", "")
+	case []any:
+		out := make([]any, len(v))
+		for i, e := range v {
+			out[i] = withoutNUL(e)
+		}
+		return out
+	case []string:
+		out := make([]string, len(v))
+		for i, e := range v {
+			out[i] = strings.ReplaceAll(e, "\x00", "")
+		}
+		return out
+	}
+	return v
+}
+
+// storableCustomGuesses keeps the custom field guesses an item could store:
+// the field is in defs and its value parses as that field's value.
+func storableCustomGuesses(defs map[string]*models.CustomFieldDefinition, guesses models.IntakeFields) models.IntakeFields {
+	out := models.IntakeFields{}
+	for id, guess := range guesses {
+		if _, ok := storedCustomFieldValue(defs[id], guess.Value); ok {
+			out[id] = guess
+		}
+	}
+	return out
+}
+
+// hasReviewValue reports whether the scan read a built-in field a draft can
+// use.
 func hasReviewValue(fields models.IntakeFields) bool {
 	for _, name := range IntakeReviewFields {
 		if _, ok := fields[name]; ok {
@@ -118,6 +173,8 @@ func quantityFromGuess(guess models.IntakeFieldGuess) int {
 type intakeDraftInput struct {
 	sellers registry.SellerRegistry
 	types   registry.ItemTypeRegistry
+	// customFields are the group's custom fields by ID.
+	customFields map[string]*models.CustomFieldDefinition
 }
 
 // intakeDraftValues builds the values of the draft made for a candidate from
@@ -125,8 +182,8 @@ type intakeDraftInput struct {
 // item form. A value the form could not use is left out, so the field stays
 // unknown rather than wrong: a date that is not YYYY-MM-DD, an unknown
 // currency, a type the group does not have (#2802), a price that is not a
-// number. The price is the product's
-// own line amount; nothing else is ever copied into it.
+// number, a custom field value an item could not store. The price is the
+// product's own line amount; nothing else is ever copied into it.
 func intakeDraftValues(ctx context.Context, in intakeDraftInput, cand *models.IntakeCandidate) (models.CommodityDraftValues, error) {
 	values := models.CommodityDraftValues{}
 	setTextValues(values, cand)
@@ -149,6 +206,9 @@ func intakeDraftValues(ctx context.Context, in intakeDraftInput, cand *models.In
 	}
 	if err := setSellerValue(ctx, values, in.sellers, cand); err != nil {
 		return nil, err
+	}
+	if custom := acceptedCustomFieldValues(in.customFields, cand); len(custom) > 0 {
+		values["custom_fields"] = custom
 	}
 	if cand.Quantity > 1 {
 		values["count"] = float64(cand.Quantity)
@@ -246,6 +306,47 @@ func setSellerValue(ctx context.Context, values models.CommodityDraftValues, sel
 		return err
 	}
 	return nil
+}
+
+// acceptedCustomFieldValues returns the accepted custom field values in the
+// form an item stores them, by field ID. A value is left out when its field
+// is gone, when the item could not store it (an option the field no longer
+// has, a date that is not YYYY-MM-DD, a text over the limit), or when it is
+// empty.
+func acceptedCustomFieldValues(defs map[string]*models.CustomFieldDefinition, cand *models.IntakeCandidate) map[string]any {
+	out := map[string]any{}
+	for _, id := range cand.AcceptedCustomFields {
+		guess, ok := cand.CustomFields[id]
+		if !ok {
+			continue
+		}
+		if v, ok := storedCustomFieldValue(defs[id], guess.Value); ok {
+			out[id] = v
+		}
+	}
+	return out
+}
+
+// storedCustomFieldValue returns value in the form an item stores it for
+// field def, and false when there is no field or the item could not store
+// the value, or it is empty.
+func storedCustomFieldValue(def *models.CustomFieldDefinition, value any) (any, bool) {
+	if def == nil {
+		return nil, false
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	data, err := def.ParseValue(raw)
+	if err != nil {
+		return nil, false
+	}
+	var v any
+	if stored := data.JSON(def.Type); stored == nil || json.Unmarshal(stored, &v) != nil || v == "" {
+		return nil, false
+	}
+	return v, true
 }
 
 // IntakeDraftSellerNameKey is the draft value that carries a scanned seller

@@ -16,12 +16,38 @@ import {
 } from "@/lib/auth-storage"
 import { setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import type { Schema } from "@/types"
-import type { AdminGroupsParams, AdminTenantsParams, AdminTenantUsersParams } from "./keys"
+import {
+  failedJobsQuery,
+  resolveFailedJobs,
+  type FailedJobListMeta,
+} from "@/features/failed-jobs/api"
+import type {
+  AdminFailedJobsBulkParams,
+  AdminFailedJobsParams,
+  AdminGroupsParams,
+  AdminTenantsParams,
+  AdminTenantUsersParams,
+} from "./keys"
 
 // A tenant row as returned by GET /admin/tenants — carries computed
 // user_count / group_count alongside the tenant identity. The detail
 // endpoint (GET /admin/tenants/{id}) returns the very same shape.
 export type AdminTenant = Schema<"jsonapi.AdminTenantListItem">
+
+// A tenant's lifecycle status: active | suspended | inactive.
+export type TenantStatus = NonNullable<AdminTenant["status"]>
+
+// Body for POST /admin/tenants. Only `name` is required: the BE generates
+// the slug from it when `slug` is empty and defaults `status` to active.
+export type AdminTenantCreateRequest = Schema<"apiserver.AdminTenantCreateRequest">
+
+// Body for PATCH /admin/tenants/{id}. Every field is optional and only the
+// ones sent change; an empty `domain` removes the custom domain.
+export type AdminTenantUpdateRequest = Schema<"apiserver.AdminTenantUpdateRequest">
+
+// Body for POST /admin/tenants/{id}/suspend and /reactivate. `reason` is
+// required, 1 to 500 characters.
+export type AdminTenantStatusRequest = Schema<"apiserver.AdminTenantStatusRequest">
 
 // A user row as returned by GET /admin/tenants/{id}/users — carries the
 // computed group_membership_count alongside identity + activity.
@@ -168,6 +194,89 @@ export async function getAdminTenant(tenantId: string, signal?: AbortSignal): Pr
     throw new Error(`Admin tenant response for "${tenantId}" is missing its payload`)
   }
   return body.data
+}
+
+// Every tenant write answers with the tenant's detail row, the shape
+// getAdminTenant returns. A 2xx without one is a malformed response.
+function tenantFromWrite(body: AdminTenantResponse, what: string): AdminTenant {
+  if (!body.data || !body.data.id) {
+    throw new Error(`Admin tenant ${what} response is missing its payload`)
+  }
+  return body.data
+}
+
+// Creates a tenant (POST /admin/tenants, 201). Codes the caller branches
+// on: 409 `tenant.slug_taken` and `tenant.domain_taken`, 422
+// `tenant.domain_reserved` for a domain under the tenant base domain; any
+// other 422 carries field errors under data.attributes (name, slug, domain,
+// status).
+export async function createAdminTenant(payload: AdminTenantCreateRequest): Promise<AdminTenant> {
+  const body = await http.post<AdminTenantResponse>("/admin/tenants", payload)
+  return tenantFromWrite(body, "create")
+}
+
+// Updates a tenant's name, slug, domain or status (PATCH
+// /admin/tenants/{id}). Same error codes as createAdminTenant, plus 422
+// `admin.tenant.serves_this_host` for a change that takes the tenant serving
+// the back office off its host (a status away from active, or the slug or
+// domain the host was resolved by).
+export async function updateAdminTenant(
+  tenantId: string,
+  payload: AdminTenantUpdateRequest
+): Promise<AdminTenant> {
+  const body = await http.patch<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}`,
+    payload
+  )
+  return tenantFromWrite(body, "update")
+}
+
+// Suspends a tenant (POST /admin/tenants/{id}/suspend): its users cannot
+// sign in and their sessions end. Typed 422 codes:
+// `admin.tenant.reason_required`, `admin.tenant.reason_too_long`,
+// `admin.tenant.serves_this_host`.
+export async function suspendAdminTenant(
+  tenantId: string,
+  payload: AdminTenantStatusRequest
+): Promise<AdminTenant> {
+  const body = await http.post<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/suspend`,
+    payload
+  )
+  return tenantFromWrite(body, "suspend")
+}
+
+// Reactivates a suspended or inactive tenant (POST
+// /admin/tenants/{id}/reactivate). Shares the reason codes with suspend.
+export async function reactivateAdminTenant(
+  tenantId: string,
+  payload: AdminTenantStatusRequest
+): Promise<AdminTenant> {
+  const body = await http.post<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/reactivate`,
+    payload
+  )
+  return tenantFromWrite(body, "reactivate")
+}
+
+// Starts deleting a tenant and everything in it (DELETE
+// /admin/tenants/{id}). The BE suspends the tenant, answers 202 with the
+// suspended row, and deletes it in the background; a failed deletion leaves
+// it suspended and the same request continues it. `confirmSlug` is the slug
+// the operator typed; the BE compares it with the tenant's exactly, as
+// `inventario tenants delete` does, and answers 422
+// `admin.tenant.confirmation_mismatch` when it differs. 422
+// `admin.tenant.serves_this_host` refuses the tenant behind the back
+// office's own host.
+export async function deleteAdminTenant(
+  tenantId: string,
+  confirmSlug: string
+): Promise<AdminTenant> {
+  const query = new URLSearchParams({ confirm_slug: confirmSlug })
+  const body = await http.del<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}?${query.toString()}`
+  )
+  return tenantFromWrite(body, "delete")
 }
 
 // Lists the users belonging to one tenant. Pagination + free-text search
@@ -531,4 +640,91 @@ export async function endImpersonation(): Promise<EndImpersonationResult> {
   const targetUserId = getImpersonationReturn()?.targetUserId ?? null
   clearAuth()
   return { targetUserId }
+}
+
+// A failed background job as the back office sees it (#1307): the group
+// view's fields plus the tenant and group it belongs to.
+export type AdminFailedJob = Schema<"apiserver.AdminFailedJobView"> & { id: string }
+type AdminFailedJobListEnvelope = Schema<"apiserver.AdminFailedJobListEnvelope">
+
+export interface AdminFailedJobsResult {
+  jobs: AdminFailedJob[]
+  meta: FailedJobListMeta
+}
+
+// Lists the failed jobs nobody retried or discarded, across every tenant,
+// newest failure first. `type` and `tenantID` narrow the list.
+export async function listAdminFailedJobs(
+  params: AdminFailedJobsParams = {},
+  signal?: AbortSignal
+): Promise<AdminFailedJobsResult> {
+  const query = new URLSearchParams(failedJobsQuery(params))
+  if (params.type) query.set("type", params.type)
+  if (params.tenantID) query.set("tenantID", params.tenantID)
+  const qs = query.toString()
+  const body = await http.get<AdminFailedJobListEnvelope>(
+    qs ? `/admin/failed-jobs?${qs}` : "/admin/failed-jobs",
+    { signal }
+  )
+  return { jobs: resolveFailedJobs(body.data), meta: body.meta ?? {} }
+}
+
+function adminFailedJobPath(jobType: string, id: string, action: "retry" | "discard"): string {
+  return `/admin/failed-jobs/${encodeURIComponent(jobType)}/${encodeURIComponent(id)}/${action}`
+}
+
+// Puts a failed job back in its queue (204). 404 failed_job.not_found: the
+// job is no longer failed; 409 failed_job.not_retryable: discard only.
+export async function retryAdminFailedJob(jobType: string, id: string): Promise<void> {
+  await http.post(adminFailedJobPath(jobType, id, "retry"))
+}
+
+// Marks a failed job discarded (204). The job keeps its row and error; it
+// only leaves the failed list.
+export async function discardAdminFailedJob(jobType: string, id: string): Promise<void> {
+  await http.post(adminFailedJobPath(jobType, id, "discard"))
+}
+
+type AdminFailedJobBulkDiscardResponse = Schema<"apiserver.AdminFailedJobBulkDiscardResponse">
+
+// How many jobs a bulk discard took, or would take on a dry run, in all and
+// per job type (a type with none is left out).
+export interface AdminFailedJobsBulkResult {
+  discarded: number
+  byType: Record<string, number>
+}
+
+async function postBulkDiscard(
+  params: AdminFailedJobsBulkParams,
+  dryRun: boolean,
+  signal?: AbortSignal
+): Promise<AdminFailedJobsBulkResult> {
+  const query = new URLSearchParams({ failed_before: params.failedBefore })
+  if (params.type) query.set("type", params.type)
+  if (params.tenantID) query.set("tenantID", params.tenantID)
+  if (dryRun) query.set("dry_run", "true")
+  const body = await http.post<AdminFailedJobBulkDiscardResponse>(
+    `/admin/failed-jobs/bulk-discard?${query.toString()}`,
+    undefined,
+    { signal }
+  )
+  return { discarded: body.meta?.discarded ?? 0, byType: body.meta?.by_type ?? {} }
+}
+
+// Counts the failed jobs a bulk discard with these filters would take, and
+// discards nothing (#2946). 400 failed_job.invalid_failed_before: the date
+// is in the future.
+export function countAdminFailedJobsBefore(
+  params: AdminFailedJobsBulkParams,
+  signal?: AbortSignal
+): Promise<AdminFailedJobsBulkResult> {
+  return postBulkDiscard(params, true, signal)
+}
+
+// Discards every failed job of the filters that failed before the date.
+// Platform admins only (403 admin.role_required otherwise).
+export function bulkDiscardAdminFailedJobs(
+  params: AdminFailedJobsBulkParams
+): Promise<AdminFailedJobsBulkResult> {
+  return postBulkDiscard(params, false)
 }

@@ -38,13 +38,15 @@ A backup keeps an unknown price or purchase date unknown and a zero price zero, 
 
 1. Go to **Backup** and click **New export**.
 2. On the **What to export** step, choose a scope:
-   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types, custom fields. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them, and the record of the [documents other systems sent](../documents-from-other-systems/). It does not include the batches of [files added for the AI scan](../items/#add-items-from-files), which are a work queue: the drafts made from them are in the backup, and a dropped file that nothing else uses is exported as a standalone file.
-   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them, and so do the custom fields they have a value of. Files attached to a location or area you selected come with it; standalone files, drafts and the record of documents other systems sent are only included in a **Full database** export, since there's no parent to bring them along.
+   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types, custom fields, and each item's [loans, service records, maintenance schedules](../warranties-loans-maintenance/), supply links and reminders. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them, and the record of the [documents other systems sent](../documents-from-other-systems/). It does not include the batches of [files added for the AI scan](../items/#add-items-from-files), which are a work queue: the drafts made from them are in the backup, and a dropped file that nothing else uses is exported as a standalone file. It does not include an item's history or the group's [saved views](../items/#saved-views).
+   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them, and so do the custom fields they have a value of and the items' loans, service records, maintenance schedules, supply links and reminders. Files attached to a location or area you selected come with it; standalone files, drafts and the record of documents other systems sent are only included in a **Full database** export, since there's no parent to bring them along.
 3. Decide whether to **Include attached files (photos, invoices, manuals)**. Despite the shorter label, this covers *every* file in scope — item attachments, files attached to a location or an area, and standalone files. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup. A file attached to several items is stored in the archive once and comes back attached to each of them that the backup includes.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
 
 The export job runs in the background. Inventario takes you to the export's detail page, where the status badge updates on its own — **Pending**, then **In progress**, then **Completed**. The detail page also shows the scope, file size, attachments size, and counts of locations, areas, items, and files included.
+
+If the server stops while an export is in progress, for example because it is restarted for an update, the export is started again about ten minutes later. An export that the server stopped during its third try is marked **Failed** with "the worker stopped before the export finished"; the group's owners and administrators can retry it from the [failed background jobs](../groups-and-sharing/#failed-background-jobs). An uploaded backup that was being read when the server stopped is read again the same way.
 
 ## Download a backup
 
@@ -62,7 +64,7 @@ Storing your `.inb` files somewhere outside Inventario (a synced folder, an exte
 If you have an `.inb` file from before — perhaps from another Inventario instance, or a download you saved — you can bring it back in.
 
 1. Go to **Backup** and click **Import backup**.
-2. Click the dropzone to choose a backup file. Only `.inb` files are accepted; anything else is rejected with "Choose a backup (.inb) file."
+2. Click the dropzone to choose a backup file. Only `.inb` files are accepted; anything else is rejected with "Choose a backup (.inb) file." A [personal data export](#a-backup-is-not-a-personal-data-export) is refused with its own message, even when renamed to `.inb`.
 3. Optionally add a **Description** so you can find the import in the list later.
 4. Click **Upload and continue**.
 
@@ -71,6 +73,20 @@ The file is staged on the server first and only inspected when you start the res
 :::caution[Backups stay with your group]
 A backup restores only into the current group. Inventario confines an uploaded backup to the group that owns it — you can't import or restore someone else's backup into your group, and yours can't be pulled into theirs.
 :::
+
+### A backup is not a personal data export
+
+**Download my data** in [Settings & account](../settings-and-account/#download-my-data) gives each person a copy of their own data: their profile, and in every group they belong to, the items, files and records they created. A group backup is the other way round: it holds the whole group, whoever created each part of it, and only for that one group.
+
+| | Group backup | Personal data export |
+| --- | --- | --- |
+| Holds | Everything in one group | One person's data across all their groups |
+| Made from | **Backup** in the group | **Preferences → Account**, by each person for themselves |
+| File | Signed `.inb` | `.tar.gz` of JSON files |
+| Kept | Until you delete it | 7 days |
+| Restores | Into the group | Never |
+
+Use a backup to keep or move a group. Use the personal data export to see or take away what you put into Inventario.
 
 ## Restore a backup
 
@@ -95,7 +111,7 @@ A file from the backup that your group no longer has and that is attached only t
 items in your trash goes to the trash with them, so restoring the item brings it
 back.
 
-**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. The same goes for [drafts of new items](../items/#drafts-of-a-new-item): the group's drafts are replaced with the ones in the backup. Batches of files [added from files](../items/#add-items-from-files) are removed and not restored, since backups do not carry them. The record of the documents other systems sent is replaced with the one in the backup, see [Documents from other systems](#documents-from-other-systems).
+**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. The same goes for [drafts of new items](../items/#drafts-of-a-new-item): the group's drafts are replaced with the ones in the backup. Batches of files [added from files](../items/#add-items-from-files) are removed and not restored, since backups do not carry them. The record of the documents other systems sent is replaced with the one in the backup, see [Documents from other systems](#documents-from-other-systems). Removing an item removes its loans, service records, maintenance schedules, supply links and reminders, and the backup brings back its own, see [Loans, maintenance and reminders](#loans-maintenance-and-reminders).
 
 ### Drafts
 
@@ -123,6 +139,32 @@ record with the backup's, so after restoring a backup that has none, for
 example one made before Inventario kept it, a document sent again makes a new
 draft. A dry run writes no record.
 
+### Loans, maintenance and reminders
+
+A restore brings back each item's loans, service records, maintenance
+schedules, supply links and reminders together with the item, and only with an
+item it creates. The two merge strategies keep an item your group already has
+with the records it has now, **Merge update** included, and the restore log
+counts the backup's records of that item as kept as they were.
+
+Each record keeps the member who recorded it when that person is a member of
+your group. Otherwise the member who runs the restore becomes its author. This
+decides who gets the emails: a loan's reminders go to the member who recorded
+the loan, and an [item reminder](../warranties-loans-maintenance/#item-reminders)
+goes only to the member who created it.
+
+A backup remembers which reminder emails of a loan or a service record were
+sent, so a restore does not send them again. It does not remember that for
+maintenance schedules and item reminders: when one of their dates is close, the
+restored schedule or reminder can send its closest reminder email once more.
+
+A record the restore cannot add is counted as an error in the restore log, and
+its item and the item's other records still come back. A dry run adds no
+records. A backup made by Inventario 0.2 or earlier has no loans, service
+records, maintenance schedules, supply links or reminders: a merge leaves yours
+as they are, and **Full replace** removes them with the items and brings none
+back.
+
 ### Sellers
 
 A restore links each item to the group's [seller](../sellers/) with the same
@@ -139,6 +181,19 @@ the group does not have under that key is matched by name, ignoring case and
 extra spaces, and created when no type has that name either. A type that
 already exists keeps its name and icon, whichever strategy you pick, and
 **Full replace** does not remove item types. A dry run creates no item types.
+
+A backup made by this version remembers which types and fields the
+[Collection set](../groups-and-sharing/#add-the-collection-set) created. A
+restore applies that only to the types and fields it creates, so removing the
+set afterwards deletes those as if the set had just added them. A type or field
+the restore matches to one the group already has stays as it was: if it is the
+group's own, removing the set keeps it. A backup made before the Collection set
+existed restores all of them as the group's own.
+
+As without a restore, removing the set deletes only what the confirmation
+lists and no item or [draft](../items/#save-as-draft) uses, counting items in
+the [Trash](../trash/), and it keeps the group's last item type even when
+nothing uses it.
 
 ### Custom fields
 
@@ -186,6 +241,13 @@ A dry run never touches your live data, so make a habit of previewing first, rea
 Every restore — dry run or real — produces a step-by-step log. It opens automatically when the run finishes, and you can reopen it later from the **Restore history** on the export's detail page (**View log**).
 
 The log walks through each step with a result marker so you can see what was created, updated, or skipped, and it flags anything that errored. For a dry run the header reminds you that **No changes were made**; for a real restore it confirms the operation finished.
+
+If the server stops while a restore runs, the restore is marked **Failed** about ten minutes later with "the worker stopped before the restore finished". It is not run again on its own, because it may have changed part of your data already: look at what it restored, then start a new restore.
+
+An item the restore cannot bring back, for example one edited by hand in the
+backup file, counts as an error, and the rest of the restore goes on. A file
+that item shared with other items still comes back with them. A file that only
+such items used is left out and counts as an error too.
 
 ## Manage and delete exports
 

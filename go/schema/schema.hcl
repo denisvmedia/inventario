@@ -550,6 +550,10 @@ table "commodities" {
     type = BOOLEAN
     default = "true"
   }
+  column "revision" {
+    type = BIGINT
+    default = "1"
+  }
   column "deleted_at" {
     type = TIMESTAMP
     null = true
@@ -803,9 +807,6 @@ table "commodity_custom_field_values" {
   }
   index "idx_commodity_custom_field_values_field_select" {
     columns = [column.field_id, column.value_select]
-  }
-  index "idx_commodity_custom_field_values_field_text" {
-    columns = [column.field_id, column.value_text]
   }
   index "idx_commodity_custom_field_values_item" {
     columns = [column.value_item_id]
@@ -1678,6 +1679,10 @@ table "currency_migrations" {
     type = TEXT
     null = true
   }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -1747,6 +1752,10 @@ table "custom_field_definitions" {
   column "options" {
     type = JSONB
     null = true
+  }
+  column "set_entry" {
+    type = TEXT
+    default = ""
   }
   column "created_at" {
     type = TIMESTAMP
@@ -1954,6 +1963,18 @@ table "exports" {
     null = true
     default = "0"
   }
+  column "attempt_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "heartbeat_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -2145,14 +2166,17 @@ table "files" {
   column "linked_entity_type" {
     type = TEXT
     null = true
+    default = ""
   }
   column "linked_entity_id" {
     type = TEXT
     null = true
+    default = ""
   }
   column "linked_entity_meta" {
     type = TEXT
     null = true
+    default = ""
   }
   column "path" {
     type = TEXT
@@ -2173,6 +2197,10 @@ table "files" {
   column "sha256" {
     type = TEXT
     default = ""
+  }
+  column "thumbnails_oriented" {
+    type = BOOLEAN
+    default = "false"
   }
   primary_key {
     columns = [column.id]
@@ -2580,6 +2608,14 @@ table "intake_candidates" {
     type = JSONB
     null = true
   }
+  column "custom_fields" {
+    type = JSONB
+    default = sql("'{}'")
+  }
+  column "accepted_custom_fields" {
+    type = JSONB
+    null = true
+  }
   column "quantity" {
     type = INTEGER
     default = "1"
@@ -2901,6 +2937,10 @@ table "intake_sources" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
   }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -2941,6 +2981,10 @@ table "intake_sources" {
     unique = true
     where = "external_document_id <> ''"
     columns = [column.group_id, column.external_system, column.external_instance, column.external_document_id]
+  }
+  index "idx_intake_sources_failed" {
+    where = "status = 'failed' AND discarded_at IS NULL"
+    columns = [column.group_id, column.updated_at]
   }
   index "idx_intake_sources_queue" {
     where = "status IN ('pending', 'scanning')"
@@ -3053,6 +3097,10 @@ table "item_types" {
     type = TEXT
     default = ""
   }
+  column "set_entry" {
+    type = TEXT
+    default = ""
+  }
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
@@ -3138,6 +3186,10 @@ table "location_groups" {
   column "group_currency" {
     type = TEXT
     default = "USD"
+  }
+  column "hidden_sections" {
+    type = JSONB
+    default = sql("'[]'")
   }
   column "created_at" {
     type = TIMESTAMP
@@ -3661,6 +3713,101 @@ table "password_resets" {
   }
 }
 
+table "personal_data_exports" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant personal data export isolation"
+  }
+  column "status" {
+    type = VARCHAR(16)
+    default = "pending"
+  }
+  column "blob_key" {
+    type = TEXT
+    default = ""
+  }
+  column "size_bytes" {
+    type = BIGINT
+    default = "0"
+  }
+  column "group_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "item_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "file_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "error_message" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "started_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "completed_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "attempt_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "expires_at" {
+    type = TIMESTAMP
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_user" {
+    columns = [column.user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_personal_data_exports_expires_at" {
+    columns = [column.expires_at]
+  }
+  index "idx_personal_data_exports_status" {
+    columns = [column.status]
+  }
+  index "idx_personal_data_exports_user_created" {
+    columns = [column.user_id, column.created_at]
+  }
+  index "idx_personal_data_exports_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "refresh_tokens" {
   row_security {
     enabled = true
@@ -3809,6 +3956,14 @@ table "restore_operations" {
     type = INTEGER
     null = true
     default = "0"
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "heartbeat_at" {
+    type = TIMESTAMP
+    null = true
   }
   column "tenant_id" {
     type = TEXT
@@ -4472,7 +4627,9 @@ table "tenants" {
     unique = true
     columns = [column.uuid]
   }
-  index "tenants_domain_idx" {
+  index "tenants_domain_unique_idx" {
+    unique = true
+    where = "domain IS NOT NULL"
     columns = [column.domain]
   }
   index "tenants_single_default_idx" {
@@ -4528,6 +4685,10 @@ table "thumbnail_generation_jobs" {
   column "updated_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
   }
   column "tenant_id" {
     type = TEXT
@@ -5725,6 +5886,24 @@ policy "operation_slot_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
   comment = "Ensures operation slots can only be accessed and modified by their tenant and user with required contexts"
+}
+
+policy "personal_data_export_background_worker_access" {
+  on = table.personal_data_exports
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows the export worker to build and expire the personal data exports of every user"
+}
+
+policy "personal_data_export_isolation" {
+  on = table.personal_data_exports
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
+  comment = "Ensures personal data exports can only be accessed by the owning user within their tenant"
 }
 
 policy "refresh_token_background_worker_access" {

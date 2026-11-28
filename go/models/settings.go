@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
@@ -123,6 +124,11 @@ const (
 	// language and is the source of truth the backend reads to localize
 	// transactional emails (#2090). Unset falls back to English.
 	SettingNameAppearanceLanguage SettingName = "appearance.language"
+
+	// The newest release the user has seen on the What's new page (#1386),
+	// in the form of a CHANGELOG.md heading ("1.2.3"). Unset means the user
+	// never opened the page.
+	SettingNameWhatsNewLastSeenVersion SettingName = "whats_new.last_seen_version"
 )
 
 // SettingsObject is the user-scoped key/value blob persisted to the
@@ -163,6 +169,12 @@ type SettingsObject struct {
 	// AppearanceLanguage is the user's UI language (en/cs/ru) and the source
 	// of truth for localizing transactional emails (#2090).
 	AppearanceLanguage *string `json:"appearanceLanguage,omitempty" configfield:"appearance.language"`
+
+	// WhatsNewLastSeenVersion is the newest release the user has seen on the
+	// What's new page. The app shows an unread dot while the build carries a
+	// newer release, and writes the build's newest release here when the
+	// page opens. Kept on the server so it follows the user across devices.
+	WhatsNewLastSeenVersion *string `json:"whatsNewLastSeenVersion,omitempty" configfield:"whats_new.last_seen_version"`
 }
 
 func (s *SettingsObject) Set(field string, value any) error {
@@ -185,13 +197,37 @@ func (*SettingsObject) Validate() error {
 }
 
 // ValidateWithContext checks the values that have limits: the reminder
-// lead times. The toggles and appearance strings are free-form.
+// lead times and the last seen release version. The toggles and appearance
+// strings are free-form.
 func (s *SettingsObject) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, s,
 		validation.Field(&s.NotificationsWarrantyLeadTimes, BuiltinReminderLeadTimesRule),
 		validation.Field(&s.NotificationsMaintenanceLeadTimes, BuiltinReminderLeadTimesRule),
 		validation.Field(&s.NotificationsLoanLeadTime, validation.By(validateLoanLeadTime)),
+		validation.Field(&s.WhatsNewLastSeenVersion, validation.By(validateReleaseVersion)),
 	)
+}
+
+// releaseVersionPattern matches the version of a CHANGELOG.md release
+// heading: semantic versioning without the "v", with an optional
+// pre-release part.
+var releaseVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// releaseVersionMaxLength bounds the stored version string.
+const releaseVersionMaxLength = 64
+
+// validateReleaseVersion checks the last seen release version; nil means
+// "never opened".
+func validateReleaseVersion(value any) error {
+	version, ok := value.(*string)
+	if !ok || version == nil {
+		return nil
+	}
+	if len(*version) > releaseVersionMaxLength || !releaseVersionPattern.MatchString(*version) {
+		return validation.NewError("validation_release_version",
+			"must be a release version such as 1.2.3")
+	}
+	return nil
 }
 
 // validateLoanLeadTime checks the loan lead time. validation.Min skips a

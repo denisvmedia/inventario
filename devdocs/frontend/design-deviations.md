@@ -35,6 +35,105 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-27 — Item edit form: a save refused because the item changed meanwhile
+
+- **Issue/PR**: #2981
+- **Mock**: `ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (L429–L593) saves with **Save Changes** and has no error state; the mock never refuses a save.
+- **Reality**: When the server refuses a save with 409 `commodity.revision_conflict` (the item was written after the form opened), `frontend/src/components/items/CommodityEditForm.tsx` keeps what was typed and shows a destructive `Alert` above the hidden-field alert: "This item changed since you opened it, so your changes were not saved. Reload it to see the item as it is now, then make your changes again." with an outline `sm` **Reload** button (`RefreshCw` icon). Reload reads the item again and opens a fresh form on it. The **All fields** dialog shows the same refusal in its server-error banner and asks to close the dialog and reload; the edit form under it shows the alert. A quick edit or a status change refused this way shows an error toast instead, and the page shows the item as it is now.
+- **Why**: Not present in mock. A save from a form opened before a bulk change would undo that change; the refusal needs a visible state and a way out. Fallback: the destructive `Alert` of [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (L629–L633), with an outline `sm` button as the form's other alert has.
+- **Approved by**: user (explicit) — pre-approved for #2981 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a conflict state for the edit form; otherwise permanent.
+
+#### 2026-11-27 — Item edit dialog: status shown, not changed
+
+- **Issue/PR**: #2915 / PR #2954
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) has no status field; the status changes from the Change Status row of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (L720).
+- **Reality**: In edit mode (**All fields**), the Basics step of `frontend/src/components/items/CommodityFormDialog.tsx` keeps the Status select at the end of the step, disabled, with the item's status in it and a muted `text-xs` line under it that names **Change Status** on the item page. Saving the dialog sends the status, its date, note and sale price as the item has them. When the server refuses one of those (the status was changed meanwhile), the server-error banner says so in the app's words instead of the server's text.
+- **Why**: Leaving In Use needs a date and Sold a sale price, which only the Change Status dialog asks for; an editable select there could not save such a change. The disabled select keeps the status visible in a dialog the edit form calls All fields.
+- **Approved by**: user (explicit) — pre-approved for #2915 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Drop the disabled select and keep the mock's form without a status once the edit form shows the status.
+
+#### 2026-11-27 — Item edit dialog: new files upload before Save changes
+
+- **Issue/PR**: #2916 / PR #2967
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) is for adding an item and has no upload states; editing is the mock's `ItemEditForm`, which has no files.
+- **Reality**: In edit mode (**All fields**), **Save changes** in `frontend/src/components/items/CommodityFormDialog.tsx` uploads the staged files one at a time and attaches each to the item before it sends the changes, with the per-file icons and the "Uploading 1 of 3…" button of the Add item entry below. A failure shows the same destructive `Alert` (`DraftSaveAlert`) titled "Changes not saved", naming the files not uploaded, saying that the files that made it are on the item, and offering **Retry**; the dialog opens the Files step. The attached files leave the list.
+- **Why**: The issue asks that files added while editing are uploaded before the dialog closes or kept for a retry; reusing the Add item states keeps one look for the same work.
+- **Approved by**: user (explicit) — pre-approved for #2916 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Permanent while the dialog stays the editor behind All fields.
+
+#### 2026-11-27 — Item status colors
+
+- **Issue/PR**: #2926
+- **Mock**: `COMMODITY_STATUS_CONFIG` in [`design-mocks/src/data/mock.ts`](../../design-mocks/src/data/mock.ts) (L589–L598) colors In Use `status-active` (green), Sold `chart-2` (green), Lost `status-expiring` (amber), Disposed `text-muted-foreground` on `bg-muted` and Written Off `status-expired` (red), as text on a `/10` tint of the same color. The status pills of [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) (L447, L512), the status pill, Change Status buttons and status card of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (L669, L727, L740–L743) read it.
+- **Reality**: Seven `--item-status-*` tokens in `frontend/src/index.css`, with a `.dark` value each, color the status pills on cards and rows, the status pill and status card on the item page and the Change Status buttons, through `COMMODITY_STATUS_TONES` and `COMMODITY_STATUS_TEXT_TONES` in `frontend/src/features/commodities/constants.ts`: In Use green, Sold teal, Lost amber, Disposed gray, Written Off red, Donated blue, Stolen pink, as text on a `/10` tint with the mock's `border-current/20` border (the status card had a `/30` border of the status color, now the same `border-current/20`). In light mode they are darker than the mock's colors. Disposed has a gray tint in place of `bg-muted`. The pills had colored Sold amber, Lost red and Written Off gray, and the Change Status buttons Sold green; both now take the mock's hues, except Sold, which is teal on both. Donated and Stolen leave `chart-3` and `chart-4` (orange) of the "Donated and Stolen item statuses" entry below.
+- **Why**: As pill text the mock's colors reach 1.9:1 to 3.2:1 in light mode, and Lost 4.1:1 in dark mode, under the 4.5:1 that [accessibility.md](accessibility.md) asks for text. The new values reach at least 4.7:1 on their tint over the card and over the page background in both modes, stay inside sRGB so that every display shows the measured color, and lie at least 0.08 apart in OKLab; `frontend/src/__tests__/item-status-contrast.test.ts` measures all three, and the Change Status buttons too. Sold has the green of In Use in the mock; Disposed and Written Off were the same gray in the app, and Stolen's orange sat between Lost's amber and Written Off's red, so those three got hues of their own. One color per status on the pill and the button replaces two maps that disagreed on Sold, Lost and Written Off. The hues and values are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2926 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Add the seven tokens to `inventario-design`'s `src/index.css` and use them in its `COMMODITY_STATUS_CONFIG`; this entry is then resolved.
+
+#### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
+
+- **Issue/PR**: #1626 / #2905
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) disables Cancel and Back while it saves and turns the primary button into a spinner with "Saving…" (L658, L698–L711). Its file rows in `FileDropZone` (L1454–L1497) show an icon, the name, the size and a remove button, with no upload state; the mock has no failure state for a file.
+- **Reality**: In create mode for a signed-in user, **Add item** saves the form as a server draft, uploads the staged files to it one at a time, and promotes the draft only once all of them are on it. While this runs, each pending-file row shows a status icon before the size, as `IntakeUploadDialog` does: a spinning `Loader2` while uploading, a `CheckCircle2` in `text-status-active` once uploaded, an `AlertCircle` in `text-destructive` and the line "Upload failed" (in place of the category line) when it failed; a screen reader hears the state after the file name. The primary button reads "Uploading 1 of 3…" next to the spinner until the files are up, then "Saving…"; a polite `sr-only` status region repeats the count. When a file fails, nothing is promoted: the destructive `Alert` below the steps reads "Item not added", names the files not uploaded, says that the uploaded files stay under "Saved with this draft", where they can be removed, and that Retry goes on from where it stopped; its **Retry** runs Add item again without re-picking files. The files that made it move to the "Saved with this draft" list. A promotion that fails shows the existing server-error banner with **Retry**, which only promotes.
+- **Why**: The owner decision on #1626 (2026-11-26) is that files go up with the draft before the item exists, so a failed upload is visible and retryable instead of a toast after the dialog closed. The icons and colors are the ones `IntakeUploadDialog` already uses for the same states. Showing the same count on **Save draft**, locking the Save as draft switch, the stepper, Continue, the dropzone and the file rows (no edit, no remove) while a save runs, discarding the draft Add item made when the form is discarded, and moving an uploaded file to Trash when its row is removed were agent-suggested; they follow the owner's #1626 decisions (orphans are deleted on cancel, design deviations pre-approved).
+- **Approved by**: agent-suggested-then-user-confirmed — pre-approved for #1626 by the 2026-11-26 owner decisions; the agent-suggested parts accepted in the #2905 review (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` draws upload progress for the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — Add item dialog: an editable title per staged file
+
+- **Issue/PR**: #1626 / #2905
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name as plain text; a file cannot be named in the dialog.
+- **Reality**: Each pending-file row has a compact `Input` (`h-7`, `text-xs`) between the name line and the tags input, filled with the file name without its extension and labeled "Title of {name}" for screen readers. The title is kept with the staged file in IndexedDB and sent with the file's tags in `PUT /files/{id}`; an empty title falls back to the default. While a save runs the input is disabled.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for an editable title per file in the Add item dialog. Without it the server names an upload after the file and the time of the upload (`receipt-1767225600`).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
+- **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
+
+#### 2026-11-26 — Add item dialog: the scan's tag and title on each file
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name, the size and a remove button. The mock has no per-file tags, and its AI review (L761–L786) lists item fields only; nothing the scan reads is shown on a file.
+- **Reality**: After **Use these values**, each scanned file the scan classified gets the matching tag (**Invoice** for an invoice or a receipt, **Manual**, **Warranty**, **Photo**) in its tags input. The chip is a `Badge variant="outline"` with a dashed `border-amber-500/60` border, a `Sparkles` icon in `text-amber-500` (the AI accent the mock uses on the Fill with AI title and dropzone, L514 and L845), and the pill color of that tag from `FILE_TAG_PILLS`; it reads "suggested by the AI scan" on hover and to screen readers, and is removed with its X like any chip. A suggested title fills the title input and gets a `Sparkles` icon before it, with the same note for screen readers; typing over it clears the marker. The review gets one muted line with a `Sparkles` icon saying how many files got a suggestion. The suggestion applies only while the file has its default title and none of those four tags, and a tag the user removed is not suggested again on the next scan.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the suggested tag as a removable chip on each file, using the existing file tag UI, and the suggested title only while the title is the default. The sparkle marker, the review line and remembering a removed tag across scans were agent-suggested; they follow those decisions (design deviations for #1626 pre-approved).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the marker, the review line and the removed-tag memory are agent-suggested.
+- **Reversion plan**: Follow the mock if `inventario-design` draws per-file tags or AI suggestions in the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — AI scan review: the user's value next to the scan's
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) review phase (L761–L786) shows a two-column grid of read-only cards, one value each, and no way to keep a value the form already holds.
+- **Reality**: The review keeps the row per field, with a checkbox and a confidence badge, that it already had. A row for a field that already holds a value the user entered shows two lines in a small `auto / 1fr` grid: "Yours" with the form's value, then "Scan" with the scan's value in `font-medium`, labels in `text-[11px] text-muted-foreground`. Such a row starts unticked whatever its confidence. The tags row adds "Ticked, these tags are added to yours." below, and ticked scanned tags merge into the form's tags (case-insensitive) instead of replacing them. The same holds for custom fields and for a second scan.
+- **Why**: Decision 3 of the owner's #1626 comment (2026-11-26): a scan never overwrites user input; a field with a user value shows both values and is unticked by default, and scanned tags merge. What counts as entered was decided by the agent: a value that differs from what a new, empty form holds, so the group currency a new form starts with, the short name the form derives from the name, and a custom field value equal to its item type's default do not count, while values typed, accepted from an earlier scan, brought by a resumed draft, or an existing item's saved values do.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the "entered" rule and the merge hint line are agent-suggested.
+- **Reversion plan**: Permanent unless the mock draws its own conflict state for the AI review.
+
+#### 2026-11-26 — Add item dialog: title and tags on the files saved with a draft
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has no drafts and no files already on the server; its `FileDropZone` rows (L1483–L1493) show a name, a size and a remove button.
+- **Reality**: Each row under "Saved with this draft" keeps its name, size and remove button, and gains the same compact title `Input` and tags input the pending-file rows have (#2905). A tag change is saved at once and a title when the field loses focus or on Enter, with `PUT /files/{id}`, which also sends the file's description back since the PUT replaces it; an empty title saves the file name. While Add item runs, the row's fields are disabled; a failed save shows an error toast and the row shows the file's saved title and tags again.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the saved-file rows of a resumed draft to show title and tags and let the user edit both, saved through the files API, so the tags and titles batch intake set can be checked before the item is added. Saving on blur instead of with the form was agent-suggested: the files already exist on the server, and the form's Save draft does not write files.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; saving on blur is agent-suggested.
+- **Reversion plan**: Permanent unless the mock adds drafts with their own file rows.
+
+#### 2026-11-26 — Donated and Stolen item statuses
+
+- **Issue/PR**: #1607 / #2903
+- **Mock**: [`design-mocks/src/data/mock.ts`](../../design-mocks/src/data/mock.ts) has five statuses (`in_use`, `sold`, `lost`, `disposed`, `written_off`) in `CommodityStatus` (L10) and `COMMODITY_STATUS_CONFIG` (L589–L598); the Change Status row of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lists Sold, Lost, Disposed and Written Off (L720).
+- **Reality**: Two more statuses, **Donated** and **Stolen**, follow Written Off everywhere a status is listed: the Change Status row on the item page, the status select of the item form, the Status filter on All Items and on an area's items, and the bulk **Set status** menu. Donated uses the `chart-3` color (blue) and Stolen `chart-4` (orange): as the text color of the Change Status button, and as text, `/30` border and `/10` background of the status pill on cards and rows and of the status card on the item page. They open the same date and note dialog as Lost, with their own description and note placeholder. Like the other statuses, they have no icon.
+- **Why**: Owner decision 5 on #1607 (2026-11-26) makes Donated and Stolen statuses of their own. The mock's status colors (green, amber, red, muted) are all in use, so the two take chart colors that the file category badges already use. In light mode the two colors fall short of the 4.5:1 that [accessibility.md](accessibility.md) asks for text: as pill text `chart-3` measures about 3.2:1 and `chart-4` about 2.2:1 (in dark mode 4.6:1 and 6.1:1), and Stolen's orange sits between Lost's red and Sold's amber. No existing token does better on both counts: blue is the only hue the statuses do not use, and `tag-blue`, the darkest blue, reaches 4.1:1 as pill text. The four existing status colors measure 1.9:1 to 3.2:1 as pill text in light mode too, so 4.5:1 for status pills needs new status tokens, a token change of its own. Appending Donated and Stolen after Written Off keeps the mock's order for the existing statuses. The order and the two colors are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the owner's decisions of 2026-11-26; the order and the colors agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the two statuses; otherwise permanent.
+
+#### 2026-11-26 — Item form, edit form and item page follow the group's hidden sections
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) always has the Warranty step; [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) always has the Warranty tab (L771); [`design-mocks/src/components/WarrantyBadge.tsx`](../../design-mocks/src/components/WarrantyBadge.tsx) shows "No warranty" for an item without one.
+- **Reality**: While the group hides warranties, the Add item / edit dialog leaves out the Warranty step (the stepper and the "Step N of M" counter count one step fewer) and the in-place edit form leaves out the Warranty section, unless the item already holds a warranty date or notes. The item page leaves out the Warranty, Lend, Service and Maintenance tabs of hidden sections once it has read the item's data and found none in them, and then opens Details for a link to such a tab; while the data loads, or when it cannot be read, the tab stays; when the item has data, the tab stays and shows it, without the button that starts a new loan, service visit or schedule. The "No warranty" badge goes; a badge for a warranty the item has stays.
+- **Why**: The owner decision removes a hidden section from the item form and the item's actions while existing data still shows. Hiding the "No warranty" badge is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the "No warranty" badge agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent while sections can be hidden.
+
 #### 2026-11-25 — Server drafts in the Add item dialog: Save draft on every step, draft alerts, close-confirm copy
 
 - **Issue/PR**: #2812 / #2861
@@ -79,6 +178,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reality**: `frontend/src/pages/intake/IntakeSessionPage.tsx` is a narrow `Page` with a detail `PageHeader`: a back link to Items, "Review files" with the state `Badge`, "Added {date} · summary" as the subtitle, and for members who can edit an outline **Stop scanning** (while scanning), an outline **Retry unfinished** (when files failed or were stopped) and a ghost `Trash2` remove button. While files are scanned a default `Alert` with a spinning `Loader2` says the scan runs on the server. Each purchase is a `Card`: a 40px thumbnail or `FileText` tile, the file name (or "name and N more files"), a **One item** outline `Badge`, a status line (queued, waiting for the hourly scan limit, retried shortly, scanning, stopped, N products found, or why it failed in destructive text) and a ghost small **Rescan** in `CardAction` while the file is not queued or scanned and none of its products has a draft; when the server still refuses (a draft the page did not know of, or a scan still running after Stop scanning), an error toast says why and the page reads the batch again. Each product is a row with a `Checkbox` (make a draft), the name (italic muted "Unnamed product" without one), brand, model and the line amount, a quantity `Input` (`h-8 w-20`), a ghost toggle "N fields used" that lists every field the scan read with a `Checkbox`, its value and the confidence, and an outcome `Badge` (Draft created / Left out / Draft failed) with an outline **Continue** button that opens the draft in the item form. A sticky footer with a top border says how many products become drafts and holds the primary **Create N drafts** (or **Leave all out**) button while something is undecided; a click first waits for the product choices still being saved (the button stays enabled meanwhile, since the quantity field saves on the blur that the press on the button causes, and a button disabled between press and release loses the click), and the button and every **Rescan** stay disabled until the drafts are made.
 - **Why**: not present in mock. The issue asks for a durable review where the member keeps some detected products, accepts or rejects fields, and sees per-product and per-file outcomes on any device. The sticky footer and the per-field confidence are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the sticky footer and the confidence column agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
+
+#### 2026-11-27 — Batch review page: custom field values
+
+- **Issue/PR**: #2880
+- **Mock**: No such page in [`design-mocks/src/views/`](../../design-mocks/src/views/); the rows follow the field list of the 2026-11-25 Batch review page entry.
+- **Reality**: The "N fields used" list of a product shows, after the item fields, one row per group custom field the scan read a value for, in the group's field order: the same `Checkbox`, the field's name as the label, the value (a select option by its label, yes/no in words) and the confidence. A field deleted since the scan has no row. "N fields used" counts the ticked custom fields too.
+- **Why**: not present in mock. The issue asks for the custom field guesses as review rows with their confidence, as the single-item scan review shows them.
+- **Approved by**: user (explicit) — pre-approved for #2880 by the 2026-11-27 goal to work through the backlog
 - **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
 
 #### 2026-11-25 — Views control on the items list toolbar
@@ -500,7 +608,25 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2809 by the 2026-11-24 goal to implement the open enhancements; the row's place and the link agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an item's source; otherwise permanent.
 
+#### 2026-11-27 — Location filter on the items toolbar
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) filters the items by a text search only; it has no area or location filter.
+- **Reality**: `frontend/src/pages/commodities/CommoditiesListPage.tsx` adds a **Location** `DropdownMenu` before the **Area** menu, with the same outline trigger, **All locations** first and one entry per location (`commodities-filter-location`). The page URL keeps it as `location=<id>` and the list sends `location_id`. While a location is chosen the **Area** menu lists only that location's areas, plus the chosen area if it is in another location, so it can still be cleared. Choosing a location clears an area of another location and turns off **No location**; turning on **No location** clears the location, because the server refuses the two together. A saved view keeps the location: the **Saved views** page names it on its condition badge, and a deleted location reads **Deleted location** in the `status-expiring` stale style and adds a line to the view's stale notice.
+- **Why**: not present in mock. #2897 asks for "Show items" on locations in search, which needs a location filter on the items list. The menu follows the toolbar's Area menu.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a location filter; otherwise permanent.
+
 ### Dashboard / Overview
+
+#### 2026-11-26 — Warranty cards leave the dashboard while warranties are hidden
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) has four stat cards in `lg:grid-cols-4` (L112), two of them about warranties, then Expiring Warranties beside Recently Added (L133) and Warranty Health (L216).
+- **Reality**: While the group hides warranties, the two warranty stat cards go and the remaining two sit in `lg:grid-cols-2`; Expiring Warranties and Warranty Health go and Recently Added takes the full width. The ready-made saved view suggestions leave out "Expiring warranties" while warranties are hidden and "Lent out" while loans are hidden.
+- **Why**: The owner decision removes a hidden section from the dashboard. Filtering the saved view suggestions is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the saved view suggestions agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent while sections can be hidden.
 
 #### 2026-11-25 — Needs attention card on the dashboard
 
@@ -548,6 +674,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage on the card.
 
 ### Locations & Areas
+
+#### 2026-11-26 — Area and location pages leave out warranty counts while the group hides warranties
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has three stat cells, Items, Active warranties and Value, in a `grid-cols-3` strip (L204–L207). The area tiles of [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) show an "expiring" badge when an area holds items whose warranty expires soon (L617–L633).
+- **Reality**: While the group hides warranties, the area page's stat strip has two cells, Items and Value, in a `grid-cols-2` strip, and the location page's area tiles show no expiring-warranty badge.
+- **Why**: The owner decision removes a hidden section from the group's pages; a warranty count is a warranty surface.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections.
+- **Reversion plan**: Permanent while sections can be hidden.
 
 #### 2026-11-24 — Area header: Print labels menu
 
@@ -774,6 +909,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Item types
 
+#### 2026-11-27 — Item type delete and Collection set removal: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has item types or the Collection set; the dialogs follow the confirm dialog, as the 2026-11-25 Item types page and 2026-11-26 Collection set card entries record.
+- **Reality**: `ItemTypeDeleteDialog` counts the drafts saved on the server (`draft_count`) with the items. With items and drafts, the description adds "N drafts have it too and move with them."; with drafts only, it reads "No item has the type X, but N drafts do. Pick the type they move to; then X is deleted.", the picker is labeled **Move the drafts to** and the button **Move drafts and delete**. A 409 refusal reads the draft count from its meta. In `CollectionSetRemoveDialog`, a type or field that stays because drafts use it names them after the items ("3 drafts have this type."), or alone when no item uses it.
+- **Why**: not present in mock. Drafts name a type and hold field values, so a delete that ignored them left drafts that could not be saved or finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws these dialogs; otherwise permanent.
+
+#### 2026-11-26 — Four more item type icons for the Collection set
+
+- **Issue/PR**: #1607
+- **Mock**: none; see the Item types page entry below.
+- **Reality**: `frontend/src/features/itemTypes/icons.ts` gains `coins` (`Coins`), `stamp` (`Stamp`), `disc-3` (`Disc3`) and `layers` (`Layers`), so the Collection set's Coins, Stamps, Records and Cards types have icons of their own. The icon picker shows them with the hobby icons, after Music and Palette; it now has 42 icons.
+- **Why**: not present in mock. The set's types need icons the picker lacked. The choice of icons is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decisions; the icons agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
+
 #### 2026-11-25 — Item types page
 
 - **Issue/PR**: #2802 / PR #2863
@@ -784,6 +937,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 ### Custom fields
+
+#### 2026-11-27 — Custom field delete: drafts counted
+
+- **Issue/PR**: #2939
+- **Mock**: No mock has custom fields; the dialog follows `ItemTypeDeleteDialog`, as the 2026-11-25 Custom fields page entry records.
+- **Reality**: `CustomFieldDeleteDialog` counts the drafts with a value of the field (`draft_count`). With items and drafts, the description adds "N drafts have a value too; it is taken out of them."; with drafts only, it reads "No item has a value for this field, but N drafts do. Deleting the field takes the values out of them." The **Delete the values too** checkbox is required in both cases, and the confirmed count sent as `expected_values` includes the drafts.
+- **Why**: not present in mock. A draft's value of a deleted field was lost unseen when the draft was finished.
+- **Approved by**: user (explicit) — pre-approved for #2939 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws this dialog; otherwise permanent.
 
 #### 2026-11-25 — Custom fields page
 
@@ -823,6 +985,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Forms & Validation
 
+#### 2026-11-27 — Icon pickers: an invalid state
+
+- **Issue/PR**: #2983
+- **Mock**: The icon grids of [`design-mocks/src/components/LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) (L102–L122) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) (L62–L82) have no error state. The mock has no group icon picker.
+- **Reality**: When the server refuses the icon, the group icon picker (`frontend/src/components/groups/IconPicker.tsx`, on the create group and group settings pages) points its trigger's `aria-describedby` at the field's `FieldError`, and the trigger gets the destructive border and ring that an invalid `Input` has. The location and area picker (`frontend/src/components/locations/IconPicker.tsx`) puts `aria-describedby` on its tile row, now a `role="group"`; its look does not change.
+- **Why**: not present in mock. `devdocs/frontend/forms.md` asks every control that failed to point at its error and to look invalid. `aria-invalid` is not valid ARIA on a button or a group, so the border comes from a class with the colors of the `aria-invalid` classes of `Input`.
+- **Approved by**: user (explicit) — pre-approved for #2983 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws an error state for an icon picker; otherwise permanent.
+
+#### 2026-11-26 — Create group page: what the group is for
+
+- **Issue/PR**: #1607
+- **Mock**: none for creating a group; the page follows the existing create form. The radio cards follow the scope picker of the API token dialog (`CreateAPITokenDialog`), which follows the `RadioGroup` of [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx).
+- **Reality**: `frontend/src/pages/groups/CreateGroupPage.tsx` adds a **What is the group for?** field after the currency: two radio cards side by side from `sm` up, **Household items** (`Home` icon, the default) and **Collection** (`Library` icon), each with a one-line description, and the note "You can change this later in the group settings." below. **Collection** sends `collection_set` and `hidden_sections: ["warranties"]` with the create request. When the response says the set was not added, the page shows an error toast pointing to Sections in the group settings instead of the success toast, and still opens the new group.
+- **Why**: not present in mock. Owner decision 4 on #1607 asks for two cards, Household items by default and Collection, with the note. The icons, the descriptions and the toast on a partial create are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decisions; the icons, descriptions and the partial-create toast agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` draws the create group page.
+
 #### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions
 
 - **Issue/PR**: #1264 / PR (this branch)
@@ -831,6 +1011,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: #1264 is largely satisfied by the React rewrite (#1397); this is the roadmap's "#1264 start" slice (per #1651). Extracting `<FieldError>` is invisible visually but removes n copies of the same markup. The dropdown guard makes every remaining native `<select>` a conscious, documented choice ("pick one and stick with it") without a risky sweep of tested utility selectors. Converting those six is a deferred follow-up.
 - **Approved by**: user (explicit) — chose scope "Roadmap «start»" + approach "primitives-direct + FieldError" when offered the options.
 - **Reversion plan**: Permanent for `<FieldError>` + the lint guard. The six annotated native selectors are the explicit backlog: migrate them to `<Select>` (or a ported `native-select` primitive) and drop the disable comments in the post-launch design-system "finish" pass.
+- **Resolved**: 2026-11-27, PR #2972 — back to 1:1 for the six native selects: they render through `components/ui/native-select.tsx`, ported from the mock, and no `eslint-disable` remains outside the primitive. The port adds a `wrapperClassName` prop, since the mock's wrapper is `w-fit` and four of the six fill their row. `<FieldError>` and the lint guard stay as described.
 
 #### 2026-05-29 — Two intentional IconPicker components (popover vs. inline grid) kept separate
 
@@ -850,7 +1031,25 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
 
+#### 2026-11-27 — Send for service dialog: cost amount and currency
+
+- **Issue/PR**: #2909
+- **Mock**: The mock has no service dialog. Its money field is the purchase price row of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1173–L1195): one label, the amount with the currency symbol inside, and the `compact` `CurrencyCombobox` beside it.
+- **Reality**: `frontend/src/components/services/SendForServiceDialog.tsx` draws the cost as that row: the "Cost (optional)" label, the amount with the symbol of the picked currency inside, and the `compact` `CurrencyCombobox` named "Currency". The picker starts on the group currency, and the currency is saved only with an amount. Each part shows its own `FieldError` under the row.
+- **Why**: Not present in mock. #2909 asks for the currency picker every other currency field uses; the row copies the mock's money field.
+- **Approved by**: user (explicit) — pre-approved for #2909 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a service dialog.
+
 ### Auth & Profile
+
+#### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L93–L97) shows an outline "Free plan" badge and an outline **Upgrade** button beside the avatar; the button opens [`PlansView.tsx`](../../design-mocks/src/views/PlansView.tsx).
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/ProfilePage.tsx` renders neither the badge nor the Upgrade link; the avatar row keeps only the avatar. `/plans` (`components/routing/PlansRoute.tsx`) redirects to the group home (`/g/<slug>` for the group in `?g=`, otherwise `/`) instead of showing its coming-soon page. With the flag on, the profile matches the mock and `/plans` is the coming-soon page as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. The redirect goes to the group home rather than the previous page: nothing links to `/plans` with the flag off, so a visit comes from an old link and usually has no previous page in the app.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the redirect target was agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-24 — A third sign-in button for the operator's OpenID Connect provider
 
@@ -883,7 +1082,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #1382 / PR (pending)
 - **Mock**: Every avatar in the mock is an initials tile: the sidebar user menu ([`AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx)), the account card in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx), the identity card in [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) and the member rows in [`MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx).
-- **Reality**: All of them render `frontend/src/components/UserAvatar.tsx` (the vendored shadcn `Avatar`). It shows the user's photo, cropped to the tile's shape, and the initials tile when there is no photo or it fails to load. The admin user detail and admin group membership editor use it too, but always show initials, because the admin API does not hand out photo URLs. The initials follow one rule everywhere: the first letters of the first two words of the name, else the first letter of the email.
+- **Reality**: All of them render `frontend/src/components/UserAvatar.tsx` (the vendored shadcn `Avatar`). It shows the user's photo, cropped to the tile's shape, and the initials tile when there is no photo or it fails to load. The admin user detail and admin group membership editor use it too, with the photo URL the admin API signs for the operator (#2894). The initials follow one rule everywhere: the first letters of the first two words of the name, else the first letter of the email.
 - **Why**: #1382 adds profile photos and asks for them wherever a user is drawn. The mock's initials are the no-photo state.
 - **Approved by**: user (explicit) — pre-approved for #1382 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent.
@@ -900,6 +1099,60 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent. If the upstream mock ever ships its own layout primitive, swap the token values to match and drop this entry. Pages requesting an exemption (centered error/auth/empty-state cards, print pages) are listed in the convention guard's `SPECIAL_PURPOSE_PAGES` allow list — those stay bespoke by design.
 
 ### Settings & Preferences
+
+#### 2026-11-27 — Storage card: what the usage counts
+
+- **Issue/PR**: #2896 / PR #2975
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (Data & Storage) shows "Storage used", the amount of the quota, the bar and one muted line, "97.6 MB available on free plan". It does not say what the number counts.
+- **Reality**: `frontend/src/features/storage/StorageCard.tsx` adds a muted `text-xs` line under the usage and the breakdown: "Counts each file at the size it was uploaded. The thumbnails made for photos are not counted."
+- **Why**: The usage sums the size of the uploaded files. The three JPEG thumbnails rendered for each JPEG and PNG upload are stored apart with no file row, so neither the card nor the storage quota reminders count them. The issue asks for the usage to include them or for the card to say it counts originals only; counting them would need their sizes stored and a backfill over every existing thumbnail, so the card says what it counts.
+- **Approved by**: user (explicit) — pre-approved for #2896 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the line if the usage starts counting thumbnails, or follow the mock if `inventario-design` words the card's scope.
+
+#### 2026-11-26 — Account: "Download my data" card and the delete dialog's link to it
+
+- **Issue/PR**: #2177 / PR #2925 (backend), UI PR stacked on it
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `AccountSection` (L125–L160) has the profile card and the name, email and member-since rows only. The closest surface is `DataSection` (L403–L452): a `rounded-xl border` card, a `divide-y` list card, and outline small buttons with a `Download` icon, "Export data (JSON)" and "Export data (CSV)". The mock's danger zone (L388–L397, in `PrivacySection`) is a sentence and a button; it has no delete-account dialog.
+- **Reality**: `frontend/src/components/settings/PersonalDataExportCard.tsx` renders a `rounded-xl border p-4` card in Account settings between the account rows and the danger zone, with the `DataSection` anatomy: title "Download my data", a description that states the content, the `.tar.gz` format, the once-a-day limit, the retention in days and that it cannot be restored, and an outline small **Request a copy** button with the `Download` icon. While the daily limit holds the button is disabled and a muted line gives the date and time of the next allowed request. Below, a `divide-y` list card has one row per copy: "Requested {date}", a status `Badge` (outline with a spinner for waiting and preparing, secondary for ready, destructive for failed) and a muted line with the size and deletion date, the preparing note or the failure note; a ready row has an outline small **Download** button. The list polls every 5 seconds while a copy requested in the last two hours is being prepared, and a visually hidden polite live region announces a copy that becomes ready or fails. When the next allowed time comes, the button is enabled again and the list reloads. A download refused because the copy expired (404) or is not finished (409) reloads the list and says which in a toast. In the delete-account dialog the body no longer says "Export or back up anything first"; a line under the header asks "Want to keep a copy of your data?" with a link-variant button **Download my data first**, which closes the dialog, scrolls to the card and focuses its button.
+- **Why**: not present in mock. The issue asks for a start button with the daily limit explained, a list of finished exports with size, expiry and download link, in-progress and failed states, and a delete-account dialog that points to the button. The card reuses the `DataSection` export button and list card rather than inventing a new pattern. Agent-suggested: placing the card in Account rather than Privacy & security, the 5-second polling and its two-hour cutoff, announcing a failed copy as well as a ready one, disabling the button with the next allowed time instead of answering the click with 429, and the scroll-and-focus behavior of the dialog link.
+- **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the agent-suggested parts are listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a personal data export surface; otherwise permanent.
+
+#### 2026-11-26 — Failed background jobs card in the group settings
+
+- **Issue/PR**: #1307
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no list of background jobs; its Data card (L134–L156) holds the Members and Backup & Restore rows only.
+- **Reality**: For admins and owners, the Data & storage section ends with `frontend/src/components/groups/FailedJobsCard.tsx`, a bordered card with a title, a subtitle and a `divide-y` list of the group's failed jobs, newest first. Each row has an outline `Badge` with the job type, the job's title, a muted line with the failure time and the attempt count, the last error in the destructive color (up to three lines; an intake scan's error code reads as the sentence the Inbox uses), and an outline **Retry** button (`RotateCcw` icon) for a type that can run again, or a muted note that says what to do instead: start a new restore or a new currency change, which an operator can dismiss. Nothing failed shows the empty-state block with a `CircleCheck` icon. The card lists the 50 newest and says how many more there are. Members without the admin role do not get the card.
+- **Why**: not present in mock. The owner decision on #1307 gives group admins their group's failed jobs with a Retry button in the group settings; the card follows the Sections card anatomy and the empty-state block of the admin lists. The what-to-do-instead note is the owner's decision in the review of #2938. The 50-row cap with the count note and leaving the card out (rather than disabling it) for other roles are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the note by the review of 2026-11-26; the row cap and leaving the card out for other roles agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the card; otherwise permanent.
+
+#### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) (L31–L79) shows the Plan card: a `Zap` tile, "Pro Plan" with an **Active** badge, "Owner: …", an outline **Upgrade** button, three chips in the "9 / 500" form, and an info banner about the owner's subscription. [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (L138) puts a secondary "Free plan" badge under the name on the account card.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/components/groups/PlanCard.tsx` renders the same card anatomy with a `Gauge` tile, the title "Usage" and the three chips showing only the current count or size (no "/ limit"); the plan name, Active badge, owner line, Upgrade button and banner are not rendered. The card shows its skeleton until the feature flags have loaded, and the skeleton has the shape of the card the flag gives: without the owner line, Upgrade button and banner when plans are off. While the flags are still loading the skeleton assumes plans are off, so only a deployment with plans on sees the card grow when it loads. The account card on Preferences (`SettingsPage.tsx`) leaves out the "Free plan" badge. With the flag on, both match the mock as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. Storage usage is not a plan feature and stays visible. The title is "Usage" because the card also counts items and locations, so "Storage" would not fit; the tile icon is `Gauge`; the owner line goes with the plan.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the title, the icon and dropping the owner line were agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
+
+#### 2026-11-26 — Sections card in the group settings
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no setting that hides parts of the app; its Notifications block (L118) is the nearest card with switches.
+- **Reality**: The group settings rail gains a **Sections** entry after Info (`LayoutList` icon), and `frontend/src/components/groups/SectionsCard.tsx` renders a bordered card with a title, a subtitle and one row per section (Warranties, Maintenance and repairs, Loans, Upcoming): label, a muted description of what hiding removes, and a `Switch` that is on while the section shows. Members without the admin role see the same rows with the switches disabled and a muted note. While a save is in flight the switches show the requested state. `?section=<id>` on the settings URL opens a rail entry directly, which the hidden-section notice uses. The Notifications card leaves out the warranty alert row while the group hides warranties.
+- **Why**: not present in mock. The owner decision asks for a per-group setting an admin changes for all members; the card follows the Notifications card anatomy. Read-only switches for other roles, the in-flight state, the `?section=` deep link and dropping the warranty alert row are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; read-only switches, the deep link and the warranty alert row agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the setting; otherwise permanent.
+
+#### 2026-11-26 — Collection set card in the group settings
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no ready-made set of item types or fields; the nearest anatomy is its bordered cards, and the confirmation follows the confirm dialog the item type delete uses.
+- **Reality**: The **Sections** pane of the group settings shows `frontend/src/components/groups/CollectionSetCard.tsx` below the Sections card: a bordered card with a `Library` icon tile, a title, a subtitle, a state badge (**Not added**, **Partly added**, **Added**), the set's item types as outline badges with their icons and its custom fields as outline badges, a note on names and reuse, and for admins **Add the set** (or **Add what is missing**) and an outline **Remove the set**. A badge the group lacks (missing, or taken by a renamed set row) is muted with a dashed border, and each badge carries its state as screen-reader text and a `title` (added by the set, the group's own, not in the group, or not added because another set row has the name), so the state does not rest on color. A field that some of the set's types do not offer adds "not offered on N of the set's types" to that text, and a muted line under the lists says that some fields are not offered on all the types; the card then shows **Partly added**. `CollectionSetRemoveDialog` lists, in a scrolling body, what is deleted and what stays, each row with its kind and, for a row that stays, the reason (the group's own row, items using it with the count, Trash included, or the last type); with nothing to delete it says so and offers only **Close**. Opening it refetches the status: a muted "checking" line shows and **Remove the set** stays disabled until the fresh status arrives, and a failed check shows an error line and keeps it disabled. On confirm the dialog keeps the status it was confirmed on while it closes. Other members see the card without the buttons and a muted note. Results and failures show as toasts: the deleted rows by name, a warning naming the listed rows the server kept, and the item type and custom field limits named.
+- **Why**: not present in mock. Owner decision 2 on #1607 asks for a set an admin adds and removes in the group settings, with a confirmation that lists what goes and what stays and why. Placing the card in the Sections pane, the state badge, the badge lists and the read-only view for other roles are agent-suggested. The dashed border and the state text, the check on open, the frozen dialog content and the toasts naming rows follow the #2933 review (2026-11-26), which asked that the confirmation bind what the server deletes and that the badge states not rest on color; the missing-link text and line follow the CodeRabbit review of #2933, which found the card showing **Added** while the set's fields were not on its types.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decisions; the placement in the Sections pane, the state badge, the badge lists and the read-only view agent-suggested, listed in the PR for the owner; the review-driven parts asked for in the #2933 review.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the setting; otherwise permanent.
 
 #### 2026-11-25 — Storage card: Trash bucket and note
 
@@ -1036,7 +1289,34 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
+#### 2026-11-26 — Help & Support "What's new" row opens the in-app page and carries an unread dot
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` has a "What's new" row with a `v1.2` badge and no action (L458). Neither the row nor the section nav has an unread marker.
+- **Reality**: The row is a link to `/whats-new` in the same tab. While the build has a release newer than the user's `whats_new.last_seen_version` setting, a `size-2 rounded-full bg-primary` dot follows the version badge (`help-row-whatsNew-unread`) and the **Help & support** entry of the section nav (`settings-nav-help-unread`). Each dot carries sr-only text ", new release".
+- **Why**: The owner's decisions of 2026-11-26 on #1386: the row links to the in-app page, and a dot on the entry is the only notice of a new release. The nav dot marks the menu that leads to the row, so the notice is visible from any section. The dot follows the status dot of [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L188) in the primary color.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the dot on the section nav agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-26 — What's new page
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: No What's new page; the only What's new surface is the Help row in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx).
+- **Reality**: `frontend/src/pages/WhatsNewPage.tsx` at `/whats-new` uses `Page width="narrow"` and `PageHeader`. Each release is a `Card`: the `CardTitle` is an `h2` "v0.2.2", the `CardDescription` the long date, and the `CardContent` lists each section under a small semibold `h3` with a disc list. Inline code uses the muted code chip of the typography showcase, bold stays bold, and links are primary-colored and open in a new tab. The Operators section renders only for system administrators, with a muted note "Shown to system administrators only."; a release with nothing else shows other users "This release changed only how the server is installed and run." A development build shows a default `Alert` with the `Info` icon above the list, and a build without releases shows a dashed empty box.
+- **Why**: not present in mock. The page, its content and the Operators rule are the owner's decisions of 2026-11-26 on #1386. The layout falls back to the `Card`, `Alert` and typography sections of [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (inline code at L1339). The development-build alert, the Operators note, the "only how the server is installed" line and the empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the alert, the two notes and the empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the page.
+
 ### Navigation & App shell
+
+#### 2026-11-26 — Sidebar, command palette and routes follow the group's hidden sections
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) always lists Warranties (L62) and the state entries such as Maintenance (L88); [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) always offers Warranties.
+- **Reality**: The sidebar leaves out Upcoming, Warranties, Maintenance, Lent out and In service while the active group hides the matching section, and the command palette leaves out Warranties. The pages behind them (`/warranties`, `/maintenance`, `/in-service`, `/lent`, `/upcoming`) are wrapped in `SectionRoute`, which keeps the URL and renders a notice in place of the page: the empty-state anatomy with an `EyeOff` icon, "<Section> is hidden in this group", a line saying the data is kept, a primary **Open group settings** button (to the Sections card) and an outline **Go to dashboard** button. The Upcoming page also drops the tabs and rows of hidden kinds.
+- **Why**: The owner decision removes a hidden section from the navigation. The notice instead of a redirect keeps a bookmark or an emailed link explaining itself; it follows the empty-state pattern in [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). The notice and the Upcoming kind filtering are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the notice page and the Upcoming kind filtering agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent while sections can be hidden.
 
 #### 2026-11-25 — Inbox entry with a count in the sidebar
 
@@ -1173,6 +1453,32 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Reconcile when the upstream mock adds the entry.
 
+#### 2026-11-26 — Unread dot on the sidebar Help entry
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has no Help entry, so it has no marker on one either. The app's footer Help row links to Settings → Help & support.
+- **Reality**: While the build has a release the user has not seen, the `SidebarMenuBadge` slot of **Help** shows the `size-2 rounded-full bg-primary` dot (`sidebar-help-unread`), and the link carries sr-only ", new release". It is the slot the Inbox count uses.
+- **Why**: Help leads to Settings → Help & support, where the What's new row is. The task for the owner's decisions of 2026-11-26 on #1386 asks for the dot on the entry and on the menu that leads to it.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-27 — "Show items" on locations, and result rows at phone width
+
+- **Issue/PR**: #2897 / PR pending
+- **Mock**: [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) rows put the title and the subtitle side by side and have no second action. The search page is not in the mock.
+- **Reality**: Location rows in `frontend/src/components/CommandPalette.tsx` and location cards in `frontend/src/pages/SearchPage.tsx` get the "Show items" action that area and tag rows have (`palette-location-items-<id>`, `result-location-items-<id>`); it opens the items list filtered by `location=<id>`, and its accessible name is "Show items in {name}". Below the `sm` breakpoint a palette row stacks the subtitle under the title (`flex-col`, `sm:flex-row`), and the "Show items" / "Show files" action of the palette and the search page shows its icon only, with the label in `title` and the accessible name, so the title keeps the row's width at 360 px.
+- **Why**: #2897 asks for the action on locations, which #2801 left out because the items list had no location filter, and for result titles that a 360 px screen does not cut to a few letters.
+- **Approved by**: user (explicit) — pre-approved for #2897 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a palette with live results.
+#### 2026-11-27 — Group switcher and role badge in the top bar
+
+- **Issue/PR**: #1258 / #2910
+- **Mock**: The header in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) (L258–L302) holds the page title, search and the toggles, with no group or role control. The group switcher is only in the sidebar ([`design-mocks/src/components/LocationGroupSwitcher.tsx`](../../design-mocks/src/components/LocationGroupSwitcher.tsx)). A role is always the `RoleBadge` of [`design-mocks/src/views/MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx) (L410–L419).
+- **Reality**: `frontend/src/components/GroupRoleCluster.tsx` puts a compact group switcher (an `h-7` outline trigger with the group name and `ChevronsUpDown`) and the caller's role between the search and the toggles. The role is the shared `frontend/src/components/RoleBadge.tsx` that the Members page and the admin pages draw: the mock's icon, tint and translated `members:roles.*` label, here at the trigger's `h-7`, `rounded-md` and `text-xs` so the pair reads as one unit. Both switchers go through `useSwitchGroup` (`frontend/src/features/group/useSwitchGroup.ts`): a switch opens `/g/<slug>` and saves the group as the user's default group.
+- **Why**: Not present in mock. #1258 asks for the active group and the caller's role side by side in the header, so a member sees which group and which rights a page shows while the sidebar is collapsed to icons or closed on a phone. #2910 asks for one badge and one switch handler.
+- **Approved by**: user (explicit) — pre-approved for #2910 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Remove the cluster if the owner decides the sidebar switcher is enough, or follow the mock if `inventario-design` draws a group control in its header.
+
 ### i18n & Formatting
 
 #### 2026-05-16 — Dashboard hero: K/M/B compact-notation fallback at ≥1e7
@@ -1185,6 +1491,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
+
+#### 2026-11-26 — Admin Failed jobs page
+
+- **Issue/PR**: #1307
+- **Mock**: [`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) has no page for background jobs; the nearest list is [`GroupsView.tsx`](../../design-mocks/src/views/admin/GroupsView.tsx).
+- **Reality**: `frontend/src/pages/admin/AdminFailedJobsPage.tsx` at `/admin/failed-jobs`, reached from a third **Failed jobs** pill in the `AdminLayout` secondary nav. It follows `AdminGroupsPage`: the icon tile (`TriangleAlert`), title and subtitle, a row of two `Select` filters (job type, tenant), a bordered `Table` and `AdminPagination`. The columns are the job (type `Badge`, title, id in mono), the tenant with the group below it, the last error (muted, up to three lines), the failure time, the attempt count, and outline **Retry** (`RotateCcw`, only for a type that can run again) and **Discard** (`ArchiveX`, only for a `platform_admin`; a support agent may retry but not discard) buttons. Discard opens a `Dialog` that asks first and names the job in a muted bordered block: type `Badge`, title, tenant · group, id in mono. The filters and the page round-trip through `?type`, `?tenantID` and `?page`. With filters on, the empty state says that nothing matches them.
+- **Why**: not present in mock. The owner decision on #1307 gives system admins a Failed jobs page in the back office with type and tenant filters; the page reuses the admin list anatomy so it reads like its siblings. Discard for platform admins only and the job named in the dialog are the owner's decisions in the review of #2938. The discard confirmation, the job id in the row (the CLI takes it) and the filtered empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the role split and the named job by the review of 2026-11-26; the confirmation, the id and the filtered empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
+
+#### 2026-11-27 — Admin Failed jobs bulk discard
+
+- **Issue/PR**: #2946
+- **Mock**: [`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) has no page for background jobs and no bulk action of this kind; the header button follows **New tenant** in [`TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx).
+- **Reality**: For a `platform_admin`, the header of `frontend/src/pages/admin/AdminFailedJobsPage.tsx` gets an outline **Discard older…** button (`CalendarX`) on the right, as **New tenant** sits on the Tenants page. It opens `AdminFailedJobsBulkDiscardDialog.tsx`: the title and a body that says what a discard does, a muted bordered block that names the job type and tenant of the page's filters ("All job types" and "All tenants" without them), a **Failed before** date input (`Input type="date"`, at most today in UTC) with a hint that the day starts at 00:00 UTC, and a live line with the dry-run count. The destructive confirm button names the count ("Discard 12 jobs") and stays disabled until a day is picked and the count is above zero. A support agent does not get the button.
+- **Why**: not present in mock. #2946 asks for a bulk discard in the back office; the dialog takes the page's filters so the operator sees which jobs it takes, and confirms a count the server counted for that filter. The header placement, the date input instead of a date-and-time picker and the count in the confirm button are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2946 by the 2026-11-27 goal to work through the backlog.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
+
+#### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) (L87) has a Plan stat among four tiles.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders three tiles (Users, Groups, Created) in a `sm:grid-cols-3` grid; with the flag on it renders the Plan tile with the raw `plan_id` as before (see "Tenant detail header has no Plan-name lookup"). The tenant list already has no Plan column ("Admin Tenants list drops the mock's `Plan` column").
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it, the admin pages included.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default.
+- **Reversion plan**: Back to the four tiles when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-25 — Trash page (`/g/:slug/trash`)
 
@@ -1372,9 +1705,79 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Cross-cutting (theme, density, a11y, performance)
 
-_None yet._
+#### 2026-11-27 — Delete triggers: one red outline or ghost trigger, with the label and size of their neighbors
+
+- **Issue/PR**: #2914
+- **Mock**: On a detail surface the delete trigger is an icon-only `variant="outline" size="sm"` button with `text-destructive hover:bg-destructive/10` ([`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) L705; [`FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) L302 adds `hover:text-destructive`). On a row it is a ghost button, icon-only `size-7` in [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) L314, labeled `size="sm"` in [`FilePreviewDialog.tsx`](../../design-mocks/src/components/FilePreviewDialog.tsx) L153. The mock has no header delete on a location or area page (delete sits in the card menu) and no maintenance, supplies or reminders surface.
+- **Reality**: Every delete trigger listed in `devdocs/frontend/components.md` → Delete triggers takes `text-destructive hover:bg-destructive/10 hover:text-destructive`, the item page's included. The location and area headers keep the labeled default-size outline button, the size of Insurance report and Edit next to it. The file detail sheet's footer keeps its labeled `sm` outline button next to the labeled Edit. The maintenance schedule card keeps its labeled ghost `sm` button next to I did this and Edit. The supplies and reminders rows keep their `size="icon"` ghost button next to the same-size Edit.
+- **Why**: The triggers match the mock's variant and colors for their place. The label and size follow the buttons beside each trigger, so a row or header does not mix icon-only and labeled actions or two heights.
+- **Approved by**: user (explicit) — pre-approved for #2914 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Move the location and area delete into a menu if `inventario-design` draws one for those headers; otherwise permanent.
+
+#### 2026-11-26 — Long-form dialogs fill the screen below `sm`
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: Every dialog in the mock is the shadcn centered card at every width: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) keeps a 16px margin on each side below `sm` and opens with a fade and zoom. [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx), [`LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) have no phone layout of their own.
+- **Reality**: `frontend/src/components/ui/dialog.tsx` adds `variant="fullscreen-mobile"` to `DialogContent`. Below 640px the dialog covers the screen edge to edge (`100dvh`, no border, radius or shadow) and scrolls inside; `DialogHeader` sticks to the top with a bottom border and carries its own close button, the first control, so it takes the focus on open; `DialogFooter` sticks to the bottom with a top border and pads itself by `env(safe-area-inset-bottom)`. The dialog slides up from the bottom on open and down on close (a fade under reduced motion). From 640px up it is the centered card, which with this variant is never taller than the screen minus 2rem and scrolls as a whole (a phone held sideways). The variant is used by the item create/edit dialog (every step, the AI scan step included), location, area, custom field, seller, currency change, add from files, upload files, attach an existing file, restore from export, lend, edit loan, send for service, maintenance schedule, reminder, create API token and feedback dialogs. Confirmations and short dialogs stay centered cards at every width and open above a full-screen dialog. The on-screen keyboard, the back gesture and toasts: see "Full-screen dialogs on phones: keyboard, back gesture, toasts" below.
+- **Why**: The owner approved the full-screen layout for every long-form dialog on 2026-11-26 (#1627): on a 375–412px phone the card loses 32px of width to its margins and a tall dialog's top runs off the screen.
+- **Approved by**: user (explicit) — owner decision of 2026-11-26 on #1627.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs; otherwise permanent.
+
+#### 2026-11-26 — Full-screen dialog header below `sm`: left-aligned, 44px close button
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogHeader` is `text-center sm:text-left`, so below `sm` the title and description are centered; the only close button is the 16px icon in the corner of the card.
+- **Reality**: In the `fullscreen-mobile` variant the header text is left-aligned at every width, and below `sm` the header holds a 44px square close button at its right edge; the title keeps 56px clear of it.
+- **Why**: A centered title collides with the close button that sits in the same row of the sticky header. 44px is the tap-target minimum of [14-accessibility.md](design/14-accessibility.md).
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-26 — Full-screen dialog footer below `sm`: one row
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogFooter` is `flex-col-reverse sm:flex-row sm:justify-end`, so below `sm` the buttons stack in a column.
+- **Reality**: In the `fullscreen-mobile` variant the footer lays its buttons out in a row at every width, aligned to the end, and wraps to a second row when they do not fit.
+- **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-27 — Write actions left out for a role the server refuses
+
+- **Issue/PR**: #2886, #3038
+- **Mock**: Every view draws every action for one all-powerful member: [`AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) and [`DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) (Add item), [`ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) (Add item, the bulk bar), [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) (Edit, Delete, Change status, Add Supply Link), [`FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) (Upload, selection), [`LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) (add location and area, edit, delete) and [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) (create, rename, delete). The mock has no read-only or role-limited state.
+- **Reality**: A page offers a write action only when `useGroupPermissions()` (`frontend/src/features/group/roles.ts`) says the caller's role passes the server's gate for it. A viewer gets no Add item (sidebar, Dashboard, Items list), no bulk move, edit or delete (Print labels stays), no Edit, Delete, Change status, quick edit, upload or attach on an item's page, no upload, selection, Edit, Delete or Remove attachment on the Files page and in the file sheet wherever it opens, no create, rename or delete on the Tags, Sellers, Item types and Custom fields pages, no attach or drop zone on the location and area pages, and no add location, add area, edit or delete. The item page's Lend, Service, Supplies and Maintenance tabs and its reminders give a viewer no Lend, Send for service, Add link, Add schedule or Add reminder, and no action on a loan, service, supply link, schedule or reminder; a supply link keeps Open, and a paused schedule keeps its Paused badge without the switch. Their empty states tell a viewer only the state ("Not currently lent.", "No supply links yet."), without the line that asks to add one. The item page also drops Revert to In Use and the prompt to assign a location (#3038). A member with the user role gets everything except the location and area writes. The actions are left out, not shown disabled: a card or row whose only actions are refused loses its menu, and an empty state loses its create button. A link to a create or edit route (`/locations/new`, `/locations/:id/edit`, `/areas/:id/edit`, `/commodities/new`, `/commodities/:id/edit`) opens no dialog or form. While the role is unknown (the member list loading or failed) the actions stay hidden.
+- **Why**: not present in mock. The server refuses these writes with 403 (`structuralWriteGate` and `contentWriteGate` in `go/apiserver/apiserver.go`), so an offered action ends in an error after the member has filled in a form. Leaving the action out follows the app's existing role-limited surfaces (the Drafts card, the Inbox, Trash, the Failed jobs card); a disabled button with a reason would need a tooltip per action and still invites the click.
+- **Approved by**: user (explicit) — pre-approved for #2886 and #3038 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a read-only state for viewers.
+
+#### 2026-11-27 — Every dialog card is never taller than the screen
+
+- **Issue/PR**: #2988
+- **Mock**: `design-mocks/src/components/ui/dialog.tsx` gives `DialogContent` no maximum height; the mock's `AddItemDialog.tsx` adds `max-h-[90vh] overflow-y-auto` at its call site.
+- **Reality**: `DialogContent` is never taller than the screen minus 2rem (`max-h-[calc(100dvh-2rem)]`) and scrolls as a whole (`overflow-y-auto`) in both variants; below `sm` the `fullscreen-mobile` variant still fills the screen. A dialog whose content fits looks as in the mock. The full-screen file viewers (the image viewer, the PDF preview, and the PDF readers of the file panel and the file review page) pass `max-h-none overflow-visible`, as they pass `max-w-none`.
+- **Why**: A dialog taller than the window is centered with `translate-y-[-50%]`, so without a limit its top and bottom are off-screen and cannot be scrolled to; the bulk tags dialog loses its Apply button with about 25 tags at 1280x720. The limit in the primitive covers every dialog instead of one call site at a time.
+- **Approved by**: user (explicit) — pre-approved for #2988 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: permanent; the limit belongs in the mock's primitive upstream.
+
+#### 2026-11-27 — Full-screen dialogs on phones: keyboard, back gesture, toasts
+
+- **Issue/PR**: #2931
+- **Mock**: The mock has no phone layout for dialogs (see "Long-form dialogs fill the screen below `sm`" above), so it has no keyboard handling, no history entry for an open dialog, and its Sonner toaster ([`design-mocks/src/components/ui/sonner.tsx`](../../design-mocks/src/components/ui/sonner.tsx)) keeps Sonner's default 16px / 24px bottom offset at every width.
+- **Reality**: Below `sm` a `fullscreen-mobile` dialog follows `window.visualViewport`: while the on-screen keyboard is open it sets its own `top` and `height` to the visible part of the screen, so the sticky footer sits right above the keyboard (not under a pinch zoom). While it is open it pushes a history entry with the same URL; a step back (the Android back gesture, the iOS edge swipe, the Back button) pops it and closes the dialog through a hidden `DialogClose`, the same path as the close button, so an unsaved-changes question asks first; when the dialog stays open the entry is pushed again. A close by any other means takes the entry off, and a page the app opens as the dialog closes takes the entry's place, so no extra step back is left. Toasts shown while it is open sit above its footer and the keyboard: the dialog sets `--fullscreen-dialog-toast-inset` on `<html>` and the toaster adds it to its bottom offsets. From `sm` up nothing changes: Back leaves the page and toasts keep their place.
+- **Why**: On a phone the keyboard hid the Save button while a field had the focus, the back gesture left the page under the dialog and lost the form, and an error toast covered the footer for seconds. The issue offered `interactive-widget=resizes-content` for the keyboard; it works on Android only and resizes every page, so the dialog follows the visual viewport instead, which also covers iOS.
+- **Approved by**: user (explicit) — pre-approved for #2931 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs; otherwise permanent.
 
 ### Backup & Restore
+
+#### 2026-11-26 — Restore upload names a personal data export
+
+- **Issue/PR**: #2177 / UI PR stacked on PR #2925
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) has no file validation messages on the restore upload.
+- **Reality**: `frontend/src/pages/exports/ExportImportPage.tsx` refuses a file named `inventario-personal-data-*.tar.gz` before uploading, with the inline error "This is a personal data export, a copy of one person's data. It cannot be restored. Choose a group backup (.inb) file.", and shows the same text when the server answers 422 `restore.personal_data_export` for one renamed to `.inb`. The error uses the existing inline file-error line and the existing error `Alert`.
+- **Why**: The issue asks the restore path to refuse a personal data export clearly. A user who downloaded one from Account settings may well take it for a backup. Agent-suggested: the client-side check by file name.
+- **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the file-name check is agent-suggested and listed in the PR.
+- **Reversion plan**: Permanent.
 
 #### 2026-05-12 — Standalone `/exports/:id/restore` page preserved alongside the in-context Restore dialog
 
@@ -1449,6 +1852,24 @@ _None yet._
 - **Why**: Backend design changed after the issue was written. The final BE keeps the admin's "return slot" server-side (jti-keyed) plus an httpOnly marker refresh cookie; `end` self-validates and hands the admin tokens back. A frontend-cached admin token would be redundant and a security liability (a long-lived admin credential sitting in localStorage during an impersonation session). Relatedly, auto-expiry recovery (`recoverFromImpersonationExpiry` in `lib/http.ts`) does NOT restore a cached admin token — it calls `POST /admin/impersonation/end` with the now-expired impersonation token, which the BE deliberately tolerates, and adopts the admin tokens from that response.
 - **Approved by**: agent-suggested-then-user-confirmed — the issue brief explicitly instructed this deviation and required it logged here.
 - **Reversion plan**: Permanent. The `admin_return_token` approach is incompatible with the shipped backend contract; it would only return if the BE dropped the server-side return slot.
+
+#### 2026-11-26 — Admin Tenants page: New tenant button and create dialog
+
+- **Issue/PR**: #1037
+- **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) is a read-only list: the header has the title and subtitle only (L64–L75), and there is no way to add a tenant.
+- **Reality**: For a `platform_admin`, `frontend/src/pages/admin/AdminTenantsPage.tsx` puts a small primary **New tenant** button (`Plus` icon) at the right of the header, the header-action pattern of [`MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx) (L121–L133). It opens `TenantFormDialog` (`frontend/src/pages/admin/AdminTenantDialogs.tsx`): a `Dialog` with Name, Slug (mono, optional, with a hint that it is generated from the name) and Custom domain fields, field errors under each field, and Cancel / **Create tenant** buttons. The created tenant opens on its detail page. A `support_agent` gets the page without the button.
+- **Why**: not present in mock. The owner decision on #1037 adds tenant create to the back office; the dialog follows the form dialogs of the mock's `MembersView` invite dialog. Hiding the button from a `support_agent`, whom the API refuses, is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1037, 2026-11-26; hiding the actions from a `support_agent` agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws tenant creation; otherwise permanent.
+
+#### 2026-11-26 — Admin tenant detail: Edit, Suspend / Reactivate and a Danger zone with a type-the-slug delete
+
+- **Issue/PR**: #1037
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) shows the tenant header card and the Users / Groups tabs with no actions.
+- **Reality**: For a `platform_admin`, `frontend/src/pages/admin/AdminTenantDetailPage.tsx` ends the header card with a `Separator` and an action row: outline **Edit** (`Pencil`), and outline **Suspend** in the destructive color (`Ban`) for an active tenant or **Reactivate** (`CircleCheck`) for a suspended or inactive one, the identity-card actions of [`admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx). Edit opens `TenantFormDialog` with the current name, slug and domain (the status is not on the form). Suspend and Reactivate open a dialog with a required reason `Textarea` and a character counter, as Block and Unblock do on the user page. Below the tabs, a Danger zone card, the anatomy of the one in [`admin/GroupDetailView.tsx`](../../design-mocks/src/views/admin/GroupDetailView.tsx) (L258–L285), holds **Delete tenant**; its dialog asks the operator to type the tenant's slug into a mono `Input` and keeps the destructive **Delete tenant** button disabled until the typed value equals the slug. The server suspends the tenant and deletes it in the background, so on success a toast says the deletion has started and the tenant stays suspended until it is gone, and the page returns to the Tenants list. Typed server refusals show as a destructive `Alert` in the dialog. A `support_agent` sees the page read-only, without the action row or the Danger zone.
+- **Why**: not present in mock. The owner decision on #1037 asks for these actions on the tenant pages and for a delete that makes the operator type the slug, the confirmation `inventario tenants delete` asks for. Keeping the status off the edit form, so that it changes only with a reason, and hiding the actions from a `support_agent` are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1037, 2026-11-26; the status-only-through-Suspend/Reactivate split and the role gating agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws tenant actions; otherwise permanent.
 
 ### Reports
 

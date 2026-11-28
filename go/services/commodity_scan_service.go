@@ -238,6 +238,20 @@ type ScanCustomFieldOption struct {
 	Label string
 }
 
+// ScanCustomFields turns a group's custom fields into the fields a scan
+// offers. The scan leaves out those of a type it cannot read from a photo.
+func ScanCustomFields(defs []*models.CustomFieldDefinition) []ScanCustomField {
+	out := make([]ScanCustomField, 0, len(defs))
+	for _, d := range defs {
+		f := ScanCustomField{ID: d.ID, Name: d.Name, Type: string(d.Type)}
+		for _, o := range d.Options {
+			f.Options = append(f.Options, ScanCustomFieldOption{ID: o.ID, Label: o.Label})
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 func (in ScanInput) customFieldOptions() []aivision.CustomFieldOption {
 	if len(in.CustomFields) == 0 {
 		return nil
@@ -406,7 +420,7 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 		// Internal-only path: see the doc-comment above. Log loudly so
 		// the wiring failure is visible to operators even though no
 		// audit row is written (the FK constraint would reject it).
-		slog.Error("commodity scan called without tenant or user identity; deployment-wiring bug", "tenant_id_empty", tenantID == "", "user_id_empty", userID == "", "provider", s.providerName())
+		slog.ErrorContext(ctx, "commodity scan called without tenant or user identity; deployment-wiring bug", "tenant_id_empty", tenantID == "", "user_id_empty", userID == "", "provider", s.providerName())
 		return nil, errxtrace.Classify(ErrScanIdentityMissing)
 	}
 
@@ -522,6 +536,9 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 	}
 
 	in.mapCustomFieldGuesses(result)
+	// A model that classifies the files one by one may leave out the
+	// scan-level document type older clients read; derive it then.
+	result.FillDocumentType()
 	audit.Status = models.CommodityScanStatusOK
 	audit.TokensUsed = clampInt32(result.UsedTokens)
 	// The provider may have a more accurate latency reading (e.g. it
@@ -592,6 +609,7 @@ func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) 
 		return nil, errxtrace.Classify(ErrScanProviderError)
 	}
 	in.mapCustomFieldGuesses(result)
+	result.FillDocumentType()
 	return result, nil
 }
 
@@ -702,7 +720,7 @@ func (s *CommodityScanService) checkRateLimit(ctx context.Context, tenantID, use
 		// Fail open on counter error — observability wins over a hard
 		// block. Log loudly so operators notice an actual outage of
 		// the audit store.
-		slog.Error("commodity scan rate-limit counter failed; allowing request", "error", err.Error(), "user_id", userID, "provider", s.providerName())
+		slog.ErrorContext(ctx, "commodity scan rate-limit counter failed; allowing request", "error", err.Error(), "user_id", userID, "provider", s.providerName())
 		return nil
 	}
 	if count >= s.cfg.RateLimitPerHour {
@@ -748,6 +766,6 @@ func (s *CommodityScanService) writeAudit(ctx context.Context, audit models.Comm
 		return
 	}
 	if _, err := s.audit.Record(ctx, audit); err != nil {
-		slog.Error("commodity scan audit write failed", "error", err.Error(), "user_id", audit.UserID, "status", audit.Status)
+		slog.ErrorContext(ctx, "commodity scan audit write failed", "error", err.Error(), "user_id", audit.UserID, "status", audit.Status)
 	}
 }

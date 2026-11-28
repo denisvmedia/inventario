@@ -800,29 +800,41 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
     --env=INVENTARIO_DB_DSN="$MIGRATOR_DSN" -- inventario db status
   ```
 
+  The same pod with `inventario db migrate up --dry-run` runs the checks `migrate up`
+  makes before it applies anything: that the extensions the migrations need are
+  installed, and that no two tenants share a domain. Each failure names what to fix.
+
 - [ ] The setup hook re-runs migrations idempotently. ⚠️ **Migrations must be
   backward-compatible** (expand-contract): during the rolling update, old-image pods
-  briefly serve traffic against the newly migrated schema. Spread destructive renames /
-  drops across releases. This holds in `argocdMode` too — it shortens the window, it does
-  not remove it. See the chart README, "Database migrations".
+  serve traffic against the newly migrated schema. This holds in `argocdMode` too — it
+  shortens the window, it does not remove it. See the chart README, "Database
+  migrations". An old pod keeps working when the migration adds a table, an index, or a
+  column that is nullable or has a default: it ignores columns it does not know, and its
+  inserts name their columns, so the database fills in the default. It fails when the
+  migration drops or renames a column or table it uses, changes a column's type, adds a
+  `NOT NULL` column without a default, or adds a constraint its writes break. Spread
+  those across releases. v0.2.x pods do not ignore unknown columns; see "Upgrading from
+  v0.2.x" below.
 - [ ] A failed migration fails the setup Job, and `--wait --wait-for-jobs` fails with it,
   so the Deployment is never touched and the old release keeps serving. Read the Job logs,
   fix forward, re-run. Do not reach for `migrate down` in production — see Appendix D.
-- [ ] **Upgrading from v0.2.x.** Later versions store an unknown price as NULL, and
-  v0.2.x cannot read one. The chart rolls pods over one at a time
-  (`maxUnavailable: 0`, `maxSurge: 1`), so old and new pods overlap. While they do, an old
-  pod fails on every item the new pods' startup backfill has given an unknown price, and an
-  old pod that saves an item writes 0 into a price the backfill has already cleared, which
-  the new version then shows as a known zero. Avoid the overlap: scale the chart's
-  Deployments to zero, then run `helm upgrade`:
+- [ ] **Upgrading from v0.2.x.** v0.2.x refuses a row that has a column it does not
+  know, and later versions add columns to items, files, groups and other tables. Later
+  versions also store an unknown price as NULL, and v0.2.x cannot read one. The chart
+  rolls pods over one at a time (`maxUnavailable: 0`, `maxSurge: 1`), so old and new pods
+  overlap. While they do, an old pod fails every request that reads a table the migration
+  added a column to, it fails on every item the new pods' startup backfill has given an
+  unknown price, and an old pod that saves an item writes 0 into a price the backfill has
+  already cleared, which the new version then shows as a known zero. Avoid the overlap:
+  scale the chart's Deployments to zero, then run `helm upgrade`:
 
   ```bash
   kubectl -n <NAMESPACE> scale deploy -l app.kubernetes.io/instance=inventario --replicas=0
   ```
 
-  If a few minutes of errors on item pages are acceptable, a plain rolling upgrade works
-  too, but an item saved on an old pod during the rollout may keep a zero price that
-  should be unknown.
+  If a few minutes of errors on item, file and group pages are acceptable, a plain
+  rolling upgrade works too, but an item saved on an old pod during the rollout may keep
+  a zero price that should be unknown.
 - [ ] Watch the rollout and the Grafana dashboard for error-rate / latency regressions.
 
 ## Appendix D — Rollback
@@ -837,9 +849,9 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
   a down migration that drops a column drops the data in it, and if you followed
   expand-contract the old image runs against the new schema anyway, so rolling the image
   back is usually enough on its own.
-- [ ] ⚠️ Once an item has an unknown price, rolling the image back to v0.2.x is not
-  supported: v0.2.x cannot read it. Restore the Postgres backup taken before the upgrade
-  instead.
+- [ ] ⚠️ Rolling the image back to v0.2.x after the upgrade has migrated is not
+  supported: v0.2.x cannot read a table that gained a column, nor an item with an unknown
+  price. Restore the Postgres backup taken before the upgrade instead.
 
 ## Appendix E — Troubleshooting
 
