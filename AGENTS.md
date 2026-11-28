@@ -381,7 +381,7 @@ Support for multiple database backends via DSN:
 
 ## Working as an agent
 
-Before the first file read on any task, load the [`agent-workflow`](.agents/skills/agent-workflow/SKILL.md) skill (canonical in `.agents/skills/`, linked into `.claude/skills/` for Claude Code). It covers ranged reading, the scoped checks `.agents/skills/agent-workflow/scripts/lint-changed.sh` and `test-changed.sh`, the full chain before a push, local review, and pushing once without polling CI. Run `.agents/skills/agent-workflow/scripts/worktree-setup.sh` in each new worktree, and read [`devdocs/code-map.md`](devdocs/code-map.md) before exploring the tree.
+Before the first file read on any task, load the [`agent-workflow`](.agents/skills/agent-workflow/SKILL.md) skill (canonical in `.agents/skills/`, linked into `.claude/skills/` for Claude Code). It covers ranged reading, the scoped checks `.agents/skills/agent-workflow/scripts/lint-changed.sh` and `test-changed.sh`, the full chain before a push, local review, and pushing once without polling CI. Run `cd .claude/worktrees/<name> && .agents/skills/agent-workflow/scripts/worktree-setup.sh` in each new worktree (the scripts refuse the main checkout), and read [`devdocs/code-map.md`](devdocs/code-map.md) before exploring the tree.
 
 ## Repo-level skills
 

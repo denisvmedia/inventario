@@ -17,6 +17,9 @@
 #   markdown  markdownlint-cli2 on the changed files, with the repo config
 #   actions   actionlint on the changed workflows, at the CI severity
 #
+# Run it from the worktree: the main checkout is refused (AGENT_ALLOW_MAIN=1
+# overrides).
+#
 # Prints one line per step and the head of the output of a failed one. Exits
 # non-zero when any step fails or its tool is missing. Set LOG_LINES to show
 # more of a failed step's output; the full log path is printed.
@@ -38,14 +41,9 @@ while [ $# -gt 0 ]; do
 done
 
 here="$(cd "$(dirname "$0")" && pwd -P)"
-# The repository is the one the caller stands in, so the scripts work from
-# any checkout or worktree, also when called through the .claude/skills
-# symlink or from another checkout's copy.
-root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "lint-changed: run it from inside a checkout of the repository" >&2
-  exit 2
-}
-root="$(cd "$root" && pwd -P)"
+# shellcheck source=SCRIPTDIR/lib.sh
+. "$here/lib.sh"
+root="$(agent_root lint-changed)" || exit 2
 cd "$root"
 LOG_LINES="${LOG_LINES:-60}"
 tmp="${TMPDIR:-/tmp}"
@@ -60,7 +58,7 @@ cleanup() {
 trap cleanup EXIT
 
 "$here/changed-files.sh" "$base" >"$changed"
-echo "lint-changed: $(wc -l <"$changed" | tr -d ' ') changed files vs $base"
+echo "lint-changed: $root: $(wc -l <"$changed" | tr -d ' ') changed files vs $base"
 
 # in_dir runs a command in a directory without changing ours.
 in_dir() {
@@ -172,10 +170,13 @@ fi
 md=()
 while IFS= read -r f; do md+=("$f"); done < <(select_files '\.md$')
 if [ "${#md[@]}" -gt 0 ]; then
+  # A leading : makes markdownlint-cli2 read the argument as a path, not a glob.
+  md_args=()
+  for f in "${md[@]}"; do md_args+=(":$f"); done
   if command -v markdownlint-cli2 >/dev/null 2>&1; then
     # From the root, so .markdownlint-cli2.jsonc applies with its ignores;
     # --no-globs drops the config's **/*.md, which would lint the whole repo.
-    run_step "markdown: markdownlint-cli2 (${#md[@]} files)" markdownlint-cli2 --no-globs "${md[@]}"
+    run_step "markdown: markdownlint-cli2 (${#md[@]} files)" markdownlint-cli2 --no-globs "${md_args[@]}"
   else
     missing_tool "markdown" "markdownlint-cli2 is not installed (brew install markdownlint-cli2)"
   fi

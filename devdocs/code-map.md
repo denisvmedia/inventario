@@ -69,10 +69,10 @@ changing anything here; `design-mocks/` is the read-only visual contract.
 | What | Command | Writes |
 | --- | --- | --- |
 | OpenAPI spec and frontend types | `make swagger` | Runs `make swagger-backend` (`cd go && go tool swag init --output docs`) and `make codegen-frontend` (`cd frontend && npm run codegen`). |
-| OpenAPI spec only | `make swagger-backend` | `go/docs/swagger.{json,yaml,go}` |
+| OpenAPI spec only | `make swagger-backend` | `go/docs/swagger.json`, `go/docs/swagger.yaml` and `go/docs/docs.go` |
 | Frontend types only | `cd frontend && npm run codegen` | `frontend/src/types/api.d.ts` from `go/docs/swagger.json` |
 | Migration | `./scripts/generate-migration.sh <name>` | A new pair in `go/schema/migrations/_sqldata/` and a refreshed `ptah.sum`. Needs a local Docker daemon and Go. |
-| `ptah.sum` alone | ``cd go && go run "ptah.run/cmd/ptah@$(go list -m -f '{{.Version}}' ptah.run)" migrations hash --dir schema/migrations/_sqldata`` | `go/schema/migrations/_sqldata/ptah.sum`, the same step the migration script runs last. |
+| `ptah.sum` | Refreshed only by `./scripts/generate-migration.sh`, as its last step | Never rehash it to cover an edited, renamed or rebased migration. After a rebase, regenerate the migration so it sorts after the ones already merged (AGENTS.md, "Database Migrations"). |
 | Schema artifact | `make schema-hcl` | `go/schema/schema.hcl`, through `scripts/generate-schema-hcl.sh` |
 
 CI fails on a stale result of each: Swagger Docs Sync, Frontend Codegen
@@ -80,8 +80,8 @@ Drift, Migrations Lint and Schema Artifact Sync.
 
 ## Large files: read in ranges
 
-Measured with `wc -l`. Outline first (`grep -n '^func \|^type '` for Go,
-`grep -n '^export \|^function '` for TypeScript), then read around the part
+Measured with `wc -l`. Outline first (`grep -nE '^(func|type) '` for Go,
+`grep -nE '^(export|function) '` for TypeScript), then read around the part
 you need.
 
 | Lines | File |
@@ -115,7 +115,9 @@ The test files next to these are about as large; treat them the same way.
 ## Agent scripts
 
 The `agent-workflow` skill (`.agents/skills/agent-workflow/SKILL.md`) ships
-the scripts agents use while iterating; run them from the worktree root:
+the scripts agents use while iterating. They act on the checkout of the
+current directory and refuse the main checkout, so `cd` into the worktree in
+the same command (`cd .claude/worktrees/<name> && <script>`):
 
 - `.agents/skills/agent-workflow/scripts/worktree-setup.sh`: disk, npm,
   Playwright and Go module checks for a fresh worktree.

@@ -22,6 +22,10 @@
 #               It never installs browsers and never deletes anything from the
 #               cache, which other worktrees share.
 #   go          `go mod download` when a module is missing from the cache
+#
+# Run it from the worktree. It refuses the main checkout (AGENT_ALLOW_MAIN=1
+# overrides) and a node_modules that is a symlink, because npm ci there would
+# wipe dependencies another checkout uses.
 
 set -euo pipefail
 
@@ -44,20 +48,26 @@ case "$min_free_gib" in
   '' | *[!0-9]*) echo "worktree-setup: --min-free-gib takes a whole number" >&2; exit 2 ;;
 esac
 
-# The repository is the one the caller stands in, so the scripts work from
-# any checkout or worktree, also when called through the .claude/skills
-# symlink or from another checkout's copy.
-root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "worktree-setup: run it from inside a checkout of the repository" >&2
-  exit 2
-}
-root="$(cd "$root" && pwd -P)"
+here="$(cd "$(dirname "$0")" && pwd -P)"
+# shellcheck source=SCRIPTDIR/lib.sh
+. "$here/lib.sh"
+root="$(agent_root worktree-setup)" || exit 2
 cd "$root"
 did=()
 warn=0
 tmp="${TMPDIR:-/tmp}"
 
 say() { echo "worktree-setup: $*"; }
+
+# npm ci deletes node_modules before installing. Through a symlink it would
+# empty the directory the link points to, which belongs to another checkout.
+for dir in frontend e2e; do
+  if [ -L "$dir/node_modules" ]; then
+    say "$dir/node_modules is a symlink (to $(readlink "$dir/node_modules")); npm ci would empty its target."
+    say "Remove the link yourself (rm $dir/node_modules, not rm -r) and run this again."
+    exit 2
+  fi
+done
 
 # --- Disk -------------------------------------------------------------------
 # POSIX df output: the fourth column is the space available, in KiB.

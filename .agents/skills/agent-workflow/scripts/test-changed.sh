@@ -19,7 +19,15 @@
 # Go: tests the packages that hold a changed file (a non-Go file counts for
 # the nearest package above it, so a migration under _sqldata/ selects the
 # migrations package) plus the packages that import one of them directly,
-# test imports included.
+# test imports included, and the importers of a deleted or moved package.
+# Any Go change also runs internal/validationguard and internal/logguard,
+# which read the whole module. A changed file behind //go:build
+# legacy_xml_backup or integration adds a run with that tag; with_frontend
+# gets a note, since it needs a built bundle. With POSTGRES_TEST_DSN set,
+# every go test runs with -p 1, because the packages share that database.
+#
+# Run it from the worktree: the main checkout is refused (AGENT_ALLOW_MAIN=1
+# overrides).
 #
 # Postgres: the packages under go/registry/postgres/ run only when that tree
 # or the shared registrytest contract changed (or with --pg), and only when
@@ -53,14 +61,9 @@ while [ $# -gt 0 ]; do
 done
 
 here="$(cd "$(dirname "$0")" && pwd -P)"
-# The repository is the one the caller stands in, so the scripts work from
-# any checkout or worktree, also when called through the .claude/skills
-# symlink or from another checkout's copy.
-root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "test-changed: run it from inside a checkout of the repository" >&2
-  exit 2
-}
-root="$(cd "$root" && pwd -P)"
+# shellcheck source=SCRIPTDIR/lib.sh
+. "$here/lib.sh"
+root="$(agent_root test-changed)" || exit 2
 cd "$root"
 LOG_LINES="${LOG_LINES:-150}"
 tmp="${TMPDIR:-/tmp}"
@@ -75,7 +78,7 @@ cleanup() {
 trap cleanup EXIT
 
 "$here/changed-files.sh" "$base" >"$changed"
-echo "test-changed: $(wc -l <"$changed" | tr -d ' ') changed files vs $base"
+echo "test-changed: $root: $(wc -l <"$changed" | tr -d ' ') changed files vs $base"
 
 # show_log LOG [DROP_REGEX]: print the head of a log, minus noise lines.
 show_log() {
@@ -135,6 +138,8 @@ go_dirs="$logdir/go-dirs.txt"
 { grep -E '^go/' "$changed" || true; } | while IFS= read -r f; do
   case "$f" in go/go.mod | go/go.sum) continue ;; esac
   d="$(dirname "$f" | sed -E 's#/(testdata|_[^/]*|\.[^/]*)(/.*)?$##')"
+  # A directory that is gone was a package; its importers come from gone_dirs.
+  [ -d "$d" ] || continue
   while [ "$d" != go ] && [ "$d" != . ]; do
     set -- "$d"/*.go
     if [ -e "$1" ]; then break; fi
@@ -148,22 +153,55 @@ go_dirs="$logdir/go-dirs.txt"
   echo "$root/$d"
 done | sort -u >"$go_dirs"
 
+# Directories, relative to go/, of changed .go files that hold no .go file
+# any more: deleted or moved packages. `go list -e` still names such a path
+# in the imports of every package that imports it, and those packages no
+# longer compile, so they are selected as importers.
+gone_dirs="$logdir/go-gone.txt"
+{ grep -E '^go/.+\.go$' "$changed" || true; } | while IFS= read -r f; do
+  d="$(dirname "$f")"
+  [ "$d" = go ] && continue
+  set -- "$d"/*.go
+  [ -e "$1" ] || echo "${d#go/}"
+done | sort -u >"$gone_dirs"
+
+# "<tag> <dir>" for each positive tag in the //go:build line of a changed
+# file. A file behind a tag compiles only with that tag, so the plain run
+# does not even build it.
+go_tags="$logdir/go-tags.txt"
+{ grep -E '^go/.+\.go$' "$changed" || true; } | while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  c="$(awk '/^\/\/go:build /{ sub(/^\/\/go:build /, ""); print; exit } /^package /{ exit }' "$f")"
+  [ -n "$c" ] || continue
+  d="$(dirname "$f")"
+  echo "$c" | tr -c 'A-Za-z0-9_.!\n' ' ' | tr ' ' '\n' | { grep -E '^[A-Za-z_]' || true; } |
+    while IFS= read -r t; do echo "$t $d"; done
+done | sort -u >"$go_tags"
+
+go_changed=no
+if grep -Eq '^go/.+\.go$' "$changed"; then go_changed=yes; fi
+
 if grep -Eq '^go/go\.(mod|sum)$' "$changed"; then
   echo "note  go.mod/go.sum changed: run the whole Go suite before the push"
 fi
 
-if [ -s "$go_dirs" ]; then
+if [ -s "$go_dirs" ] || [ -s "$gone_dirs" ]; then
   if ! command -v go >/dev/null 2>&1; then
     printf 'FAIL  go: go is not installed\n'
     failed+=("go")
   else
+    module="$(cd go && go list -m)"
+
     # One `go list` gives every package's directory, import path and direct
     # imports (test imports included); awk keeps the changed packages and
     # their direct importers.
     pkgs="$logdir/go-pkgs.txt"
     (cd go && go list -e -f '{{.Dir}}|{{.ImportPath}}|{{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' ./...) |
-      awk -F'|' -v dirs="$go_dirs" '
-        BEGIN { while ((getline d < dirs) > 0) want[d] = 1 }
+      awk -F'|' -v dirs="$go_dirs" -v gone="$gone_dirs" -v mod="$module" '
+        BEGIN {
+          while ((getline d < dirs) > 0) want[d] = 1
+          while ((getline g < gone) > 0) changed[mod "/" g] = 1
+        }
         {
           n++; path[n] = $2; imports[n] = $3
           if ($1 in want) changed[$2] = 1
@@ -174,9 +212,17 @@ if [ -s "$go_dirs" ]; then
             m = split(imports[i], list, " ")
             for (j = 1; j <= m; j++) if (list[j] in changed) { print path[i]; break }
           }
-        }' | sort -u >"$pkgs"
+        }' >"$pkgs"
 
-    module="$(cd go && go list -m)"
+    # The guard packages read the whole module from their tests and import
+    # none of it, so no import edge selects them. Any Go change can trip one.
+    if [ "$go_changed" = yes ]; then
+      for g in internal/validationguard internal/logguard; do
+        if [ -d "go/$g" ]; then echo "$module/$g" >>"$pkgs"; fi
+      done
+    fi
+    sort -u -o "$pkgs" "$pkgs"
+
     pg_prefix="$module/registry/postgres"
     pg_changed=no
     if grep -Eq '^go/registry/(postgres|registrytest)/' "$changed"; then pg_changed=yes; fi
@@ -196,9 +242,16 @@ if [ -s "$go_dirs" ]; then
     test_flags=()
     if [ "$race" = yes ]; then test_flags+=(-race); fi
     if [ "${#go_args[@]}" -gt 0 ]; then test_flags+=("${go_args[@]}"); fi
+    # Packages that use go/internal/pgtest share one database when
+    # POSTGRES_TEST_DSN is set, so no two may run at once (pgtest.go says why).
+    par=""
+    if [ -n "${POSTGRES_TEST_DSN:-}" ]; then
+      test_flags=(-p 1 ${test_flags[@]+"${test_flags[@]}"})
+      par=", -p 1 for POSTGRES_TEST_DSN"
+    fi
 
     if [ "${#plain[@]}" -gt 0 ]; then
-      run_step "go test (${#plain[@]} pkgs)" "$GO_NOISE" "" \
+      run_step "go test (${#plain[@]} pkgs$par)" "$GO_NOISE" "" \
         in_dir go go test ${test_flags[@]+"${test_flags[@]}"} "${plain[@]}"
     fi
 
@@ -207,15 +260,31 @@ if [ -s "$go_dirs" ]; then
       if [ "$pg_changed" = no ] && [ "$force_pg" = no ]; then
         echo "skip  postgres registry tests: nothing under go/registry/postgres/ or registrytest/ changed (--pg runs them)"
       elif [ -n "${POSTGRES_TEST_DSN:-}" ]; then
-        # One shared database: the packages must not run in parallel.
-        run_step "go test postgres (${#pg[@]} pkgs, POSTGRES_TEST_DSN)" "$GO_NOISE" "" \
-          in_dir go go test -p 1 ${test_flags[@]+"${test_flags[@]}"} "${pg[@]}"
+        run_step "go test postgres (${#pg[@]} pkgs$par)" "$GO_NOISE" "" \
+          in_dir go go test ${test_flags[@]+"${test_flags[@]}"} "${pg[@]}"
       elif [ -e "$1" ] || [ "$force_pg" = yes ]; then
         run_step "go test postgres (${#pg[@]} pkgs, embedded server)" "$GO_NOISE" "" \
           in_dir go go test ${test_flags[@]+"${test_flags[@]}"} "${pg[@]}"
       else
         echo "skip  postgres registry tests: POSTGRES_TEST_DSN is unset and no embedded server is cached (--pg downloads one)"
       fi
+    fi
+
+    # Tagged files. CI tests legacy_xml_backup in go-test.yml and integration
+    # in go-test-postgres.yml; with_frontend needs a built bundle to compile.
+    for tag in legacy_xml_backup integration; do
+      tag_pkgs=()
+      while IFS= read -r d; do
+        rel="${d#go}"
+        tag_pkgs+=(".$rel")
+      done < <(awk -v t="$tag" '$1 == t { print $2 }' "$go_tags")
+      if [ "${#tag_pkgs[@]}" -gt 0 ]; then
+        run_step "go test -tags $tag (${#tag_pkgs[@]} pkgs)" "$GO_NOISE" "" \
+          in_dir go go test -tags "$tag" ${test_flags[@]+"${test_flags[@]}"} "${tag_pkgs[@]}"
+      fi
+    done
+    if grep -q '^with_frontend ' "$go_tags"; then
+      echo "note  with_frontend files changed: make build-frontend, then cd go && go test -tags with_frontend -run TestFrontendEmbed ./apiserver/"
     fi
   fi
 fi

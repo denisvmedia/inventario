@@ -31,7 +31,10 @@ if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; then
   exit 2
 fi
 
-merge_base="$(git merge-base "$base" HEAD)"
+merge_base="$(git merge-base "$base" HEAD)" || {
+  echo "changed-files: no merge base with '${base}' (shallow clone? git fetch --unshallow)" >&2
+  exit 2
+}
 {
   git -c core.quotePath=false diff --name-only --no-renames "$merge_base"
   git -c core.quotePath=false ls-files --others --exclude-standard

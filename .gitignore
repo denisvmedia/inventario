@@ -49,6 +49,13 @@ dist/
 # Local agent tooling
 .codex
 
+# Shared agent skills are tracked under .agents/skills/. A global excludes
+# file may ignore /.agents as local agent state; repo patterns take
+# precedence, so re-include the skills and nothing else.
+!/.agents/
+/.agents/*
+!/.agents/skills/
+
 # Lighthouse CI local run output
 .lighthouseci/
 
