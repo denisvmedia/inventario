@@ -53,7 +53,7 @@ func rejectTenantHeader(w http.ResponseWriter, r *http.Request, allowTestTenantH
 		if allowTestTenantHeader && strings.EqualFold(headerName, TestTenantHeaderName) {
 			continue
 		}
-		slog.ErrorContext(r.Context(), "Security violation: user-provided tenant ID in header",
+		slog.WarnContext(r.Context(), "Security violation: user-provided tenant ID in header",
 			"header", headerName,
 			"value", strings.Join(headerValues, ","),
 			"user_agent", r.UserAgent(),
@@ -91,7 +91,7 @@ func rejectTenantQueryParam(w http.ResponseWriter, r *http.Request) bool {
 		if !strings.Contains(strings.ToLower(paramName), "tenant") {
 			continue
 		}
-		slog.ErrorContext(r.Context(), "Security violation: user-provided tenant ID in query parameter",
+		slog.WarnContext(r.Context(), "Security violation: user-provided tenant ID in query parameter",
 			"param", paramName,
 			"value", strings.Join(paramValues, ","),
 			"user_agent", r.UserAgent(),
@@ -200,12 +200,12 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	body, err := io.ReadAll(io.LimitReader(r.Body, tenantScanMaxBodyBytes+1))
 	_ = r.Body.Close() // mirrors PasswordResetRateLimitMiddleware; r.Body is replaced below
 	if err != nil {
-		slog.ErrorContext(r.Context(), "Failed to read request body for security validation", "error", err)
+		slog.WarnContext(r.Context(), "Failed to read request body for security validation", "error", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return true
 	}
 	if int64(len(body)) > tenantScanMaxBodyBytes {
-		slog.ErrorContext(r.Context(), "Security violation: request body exceeds tenant-scan size cap",
+		slog.WarnContext(r.Context(), "Security violation: request body exceeds tenant-scan size cap",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"content_type", contentType,
@@ -222,21 +222,18 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	// here, so the immutable reader is more accurate.
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
-	// Convert []byte→string ONCE — the body can be up to
-	// tenantScanMaxBodyBytes (1 MiB) on every POST/PUT/PATCH and a second
-	// conversion in the violation-logging branch would double the
-	// per-request allocation cost on a hot path.
-	bodyStr := string(body)
-	bodyLower := strings.ToLower(bodyStr)
+	bodyLower := strings.ToLower(string(body))
 	if !strings.Contains(bodyLower, "tenant_id") &&
 		!strings.Contains(bodyLower, "\"tenant\"") &&
 		!strings.Contains(bodyLower, "'tenant'") &&
 		!strings.Contains(bodyLower, "\"tenantid\"") {
 		return false
 	}
-	slog.ErrorContext(r.Context(), "Security violation: user-provided tenant ID in request body",
+	// The body is not logged: it is the client's request, and the field that
+	// tripped the scan can sit next to a password (devdocs/logging.md, What
+	// never goes into a log).
+	slog.WarnContext(r.Context(), "Security violation: user-provided tenant ID in request body",
 		"content_type", contentType,
-		"body_preview", truncateString(bodyStr, 200),
 		"user_agent", r.UserAgent(),
 		"remote_addr", r.RemoteAddr,
 		"method", r.Method,
@@ -285,7 +282,7 @@ func RejectSpecificTenantHeaders() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for _, header := range forbiddenHeaders {
 				if value := r.Header.Get(header); value != "" {
-					slog.ErrorContext(r.Context(), "Security violation: forbidden tenant header detected",
+					slog.WarnContext(r.Context(), "Security violation: forbidden tenant header detected",
 						"header", header,
 						"value", value,
 						"user_agent", r.UserAgent(),
@@ -318,12 +315,4 @@ func LogSecurityAttempts() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-// truncateString truncates a string to maxLength characters
-func truncateString(s string, maxLength int) string {
-	if len(s) <= maxLength {
-		return s
-	}
-	return s[:maxLength] + "..."
 }

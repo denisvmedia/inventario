@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -405,6 +406,59 @@ func TestHandleVerifyEmail_HappyPathActivatesUserAndSendsWelcome(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("welcome email should be dispatched after a successful verification")
 	}
+}
+
+// failingUserGet fails every user lookup by id with a database error.
+type failingUserGet struct {
+	*mockUserRegistryForAuth
+}
+
+func (failingUserGet) Get(context.Context, string) (*models.User, error) {
+	return nil, errors.New("database is unavailable")
+}
+
+// verifyWithUserRegistry opens a valid verification link for a user, looking
+// the user up in userReg.
+func verifyWithUserRegistry(c *qt.C, userReg registry.UserRegistry) (*httptest.ResponseRecorder, registry.EmailVerificationRegistry) {
+	c.Helper()
+	verReg := memory.NewEmailVerificationRegistry()
+	ev, err := verReg.Create(context.Background(), models.EmailVerification{
+		UserID:    "verify-lookup-user",
+		TenantID:  testTenantID,
+		Email:     "verify-lookup@example.com",
+		Token:     "verify-lookup-token",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+	r := newRegistrationRouter(apiserver.RegistrationParams{
+		UserRegistry:         userReg,
+		VerificationRegistry: verReg,
+		RateLimiter:          services.NewInMemoryAuthRateLimiter(),
+	}, models.RegistrationModeOpen)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, newVerifyRequest(ev.Token))
+	return w, verReg
+}
+
+// A database that cannot answer is not the link's fault: the user retries the
+// same link, so it must stay unused.
+func TestHandleVerifyEmail_UserLookupFailureReturns500(t *testing.T) {
+	c := qt.New(t)
+
+	w, verReg := verifyWithUserRegistry(c, failingUserGet{mockUserRegistryForAuth: &mockUserRegistryForAuth{}})
+
+	c.Assert(w.Code, qt.Equals, http.StatusInternalServerError)
+	ev, err := verReg.GetByToken(context.Background(), "verify-lookup-token")
+	c.Assert(err, qt.IsNil)
+	c.Assert(ev.IsVerified(), qt.IsFalse)
+}
+
+func TestHandleVerifyEmail_MissingUserReturns404(t *testing.T) {
+	c := qt.New(t)
+
+	w, _ := verifyWithUserRegistry(c, &mockUserRegistryForAuth{users: map[string]*models.User{}})
+
+	c.Assert(w.Code, qt.Equals, http.StatusNotFound)
 }
 
 // claimLosingVerificationRegistry simulates the #1005 race loser: GetByToken

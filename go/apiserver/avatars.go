@@ -257,7 +257,7 @@ func signedAvatarURL(r *http.Request, signer *services.FileSigningService, subje
 	}
 	signed, err := signer.GenerateAvatarURL(subject.ID, *subject.AvatarPath, viewerID, groupID, services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "subject_id", subject.ID, "viewer_id", viewerID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "user_id", subject.ID, "viewer_user_id", viewerID, "error", err)
 		return ""
 	}
 	return signed
@@ -274,7 +274,7 @@ func operatorAvatarURL(r *http.Request, signer *services.FileSigningService, sub
 	}
 	signed, err := signer.GenerateOperatorAvatarURL(subject.ID, *subject.AvatarPath, operator.ID, services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "subject_id", subject.ID, "operator_id", operator.ID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "user_id", subject.ID, "admin_id", operator.ID, "error", err)
 		return ""
 	}
 	return signed

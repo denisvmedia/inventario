@@ -407,7 +407,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.ErrorContext(r.Context(), "admin block: failed to load user", "user_id", userID, "error", err)
 		api.logBlockOutcome(r, actor.ID, userID, "", req, false, err.Error(), false)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -449,7 +449,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	if grantErr != nil {
 		slog.ErrorContext(r.Context(), "admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, grantErr.Error(), false)
-		_ = internalServerError(w, r, grantErr)
+		_ = renderInternalServerError(w, r, grantErr)
 		return
 	}
 	if targetIsAdmin && !req.Force {
@@ -469,9 +469,9 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	updated.IsActive = false
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "admin block: failed to deactivate user", "user_id", target.ID, "error", err)
+		slog.Log(r.Context(), errorLogLevel(err), "admin block: failed to deactivate user", "user_id", target.ID, "error", err)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error(), forced)
-		_ = renderEntityError(w, r, err)
+		_ = renderLoggedEntityError(w, r, err)
 		return
 	}
 
@@ -539,7 +539,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.ErrorContext(r.Context(), "admin unblock: failed to load user", "user_id", userID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, userID, "", req, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
@@ -556,9 +556,9 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	updated.IsActive = true
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
+		slog.Log(r.Context(), errorLogLevel(err), "admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error())
-		_ = renderEntityError(w, r, err)
+		_ = renderLoggedEntityError(w, r, err)
 		return
 	}
 
@@ -670,7 +670,7 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 	var msgs []string
 	if api.factorySet != nil && api.factorySet.RefreshTokenRegistry != nil {
 		if err := api.factorySet.RefreshTokenRegistry.RevokeByUserID(r.Context(), userID); err != nil {
-			slog.WarnContext(r.Context(), "admin block: failed to revoke refresh tokens", "user_id", userID, "error", err)
+			slog.ErrorContext(r.Context(), "admin end sessions: failed to revoke refresh tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "revoke_refresh_tokens: "+err.Error())
 		}
 	}
@@ -692,7 +692,7 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 		// invalidation of unrelated tokens; the one-second window is
 		// short enough that an operator can re-block to close it.
 		if err := api.blacklist.BlacklistUserTokens(r.Context(), userID, 2*accessTokenExpiration); err != nil {
-			slog.WarnContext(r.Context(), "admin block: failed to blacklist user tokens", "user_id", userID, "error", err)
+			slog.ErrorContext(r.Context(), "admin end sessions: failed to blacklist access tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "blacklist_user_tokens: "+err.Error())
 		}
 	}

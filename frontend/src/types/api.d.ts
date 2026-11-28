@@ -2799,6 +2799,15 @@ export type paths = {
                         "application/json": string;
                     };
                 };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
             };
         };
         delete?: never;
@@ -14948,7 +14957,10 @@ export type paths = {
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /** @description The UI language the account registers in. The first of en, cs or ru it names becomes the new account's language setting, which the verification and welcome emails use. */
+                    "Accept-Language"?: string;
+                };
                 path?: never;
                 cookie?: never;
             };
