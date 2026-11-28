@@ -149,23 +149,47 @@ func TestBareNameSeesThroughParentheses(t *testing.T) {
 	}
 }
 
+// The migrator and a few other components log through a *slog.Logger field,
+// so a logger kept in a value is a log call too.
+func TestIsSlogCallSeesLoggerFields(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		want bool
+	}{
+		{src: `slog.Info("x")`, want: true},
+		{src: `slog.ErrorContext(ctx, "x")`, want: true},
+		{src: `m.logger.InfoContext(ctx, "x")`, want: true},
+		{src: `logger.Warn("x")`, want: true},
+		{src: `fmt.Println("x")`, want: false},
+		{src: `m.logger.With("k", v)`, want: false},
+	} {
+		t.Run(tc.src, func(t *testing.T) {
+			c := qt.New(t)
+
+			expr, err := parser.ParseExpr(tc.src)
+			c.Assert(err, qt.IsNil)
+			call, ok := expr.(*ast.CallExpr)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(isSlogCall(call), qt.Equals, tc.want)
+		})
+	}
+}
+
 // isSlogCall reports whether the call is slog.Error/Warn/Info/Debug, with or
-// without the Context suffix.
+// without the Context suffix, or the same method on a logger kept in a value
+// named logger (`m.logger.InfoContext`), which writes to the same log.
 func isSlogCall(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
-	pkg, ok := sel.X.(*ast.Ident)
-	if !ok || pkg.Name != "slog" {
+	switch strings.TrimSuffix(sel.Sel.Name, "Context") {
+	case "Error", "Warn", "Info", "Debug":
+	default:
 		return false
 	}
-	name := strings.TrimSuffix(sel.Sel.Name, "Context")
-	switch name {
-	case "Error", "Warn", "Info", "Debug":
-		return true
-	}
-	return false
+	recv, ok := bareName(sel.X)
+	return ok && (recv == "slog" || strings.EqualFold(recv, "logger"))
 }
 
 // bareName returns the trailing identifier of an expression that carries a

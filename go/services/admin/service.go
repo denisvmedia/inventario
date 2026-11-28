@@ -95,7 +95,9 @@ func NewService(dbConfig *shared.DatabaseConfig) (*Service, error) {
 	// Get registry function using abstraction
 	registryFunc, ok := registry.GetRegistry(dbConfig.DBDSN)
 	if !ok {
-		return nil, fmt.Errorf("unsupported database type in DSN: %s", dbConfig.DBDSN)
+		// Not the DSN itself: it carries the password, and this error is
+		// printed by the command.
+		return nil, errors.New("unsupported database type in DSN (expected postgres://)")
 	}
 
 	// Create factory set using abstraction
