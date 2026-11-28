@@ -1212,12 +1212,13 @@ jobs:
             sleep 60
           done
 
-          # Not a failure. An image left behind costs storage until the next
-          # close or the time-based sweep; an image deleted early costs a
+          # Not a failure. An image left behind costs storage until a later
+          # close of this PR or a deletion by hand (nothing sweeps the package
+          # on a schedule); an image deleted early costs a
           # re-run and a red check that means "merged". Leaving it is the
           # cheaper mistake, so say so and stop.
           echo "reclaim=false" >> "$GITHUB_OUTPUT"
-          echo "::notice::Runs on $HEAD_SHA are still going after 30 minutes. Leaving this PR's images in place rather than deleting them from under a live lane; the next close or GHCR retention reclaims them."
+          echo "::notice::Runs on $HEAD_SHA are still going after 30 minutes. Leaving this PR's images in place rather than deleting them from under a live lane; a later close of this PR reclaims them, or they stay until deleted by hand."
 
       - name: Delete all GHCR image versions published by this PR
         if: steps.drain.outputs.reclaim == 'true'
@@ -1232,13 +1233,15 @@ jobs:
           REPO: ${{ github.repository }}
           PACKAGE_NAME: inventario
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
         run: |
           set -euo pipefail
 
           # Tags this PR may have published: pr-<N> + sha-<7> for every commit
           # on the PR (paginated, so long PRs are fully covered). Commits that
-          # were rebased/force-pushed away aren't in this list; any image they
-          # left behind is swept later by time-based GHCR retention, not here.
+          # were rebased/force-pushed away aren't in this list; an image they
+          # left behind stays in the package, since nothing sweeps it on a
+          # schedule.
           declare -A pr_tags=( ["pr-${PR_NUMBER}"]=1 )
           while IFS= read -r full_sha; do
             [ -z "$full_sha" ] && continue
@@ -1256,32 +1259,70 @@ jobs:
           fi
 
           # Pass 1 — collect the version ids to delete. We must NOT delete
-          # inside the `gh api --paginate` stream: removing a version from an
-          # earlier page shifts the remaining pages, so later matches would be
-          # skipped and survive cleanup. Drain the full listing first, then
-          # delete in pass 2. A version is ours if ANY of its tags is one of
-          # ours — the multi-arch manifest list carries both pr-<N> and its
-          # sha-<7>; intermediate per-commit versions carry only sha-<7>.
+          # while paging: removing a version from an earlier page shifts the
+          # remaining pages, so later matches would be skipped and survive
+          # cleanup. Read the pages first, then delete in pass 2. A version is
+          # ours if ANY of its tags is one of ours — the multi-arch manifest
+          # list carries both pr-<N> and its sha-<7>; intermediate per-commit
+          # versions carry only sha-<7>.
+          #
+          # The package holds every version ever published (12,845 on
+          # 2026-11-28), and reading all of them cost 129 API requests per
+          # close. docker.yml builds only on pull request events, so every
+          # version this PR published was created after the PR was opened.
+          # The listing comes newest first, so paging stops at the first page
+          # whose newest version is older than that, less an hour of slack for
+          # clock skew. That order is what GitHub returns, not a documented
+          # contract, so each page is checked: if a page is not newest first,
+          # or starts newer than the previous page ended, the stop is off for
+          # the rest of the listing and it reads everything, as before. A
+          # version the listing misses is left in place, never deleted.
+          cutoff="$(jq -nr --arg t "$PR_CREATED_AT" '($t | fromdateiso8601) - 3600')"
           versions_to_delete=()
           listed=0
-          while IFS=$'\t' read -r version_id tags_csv; do
-            [ -z "$version_id" ] && continue
-            listed=$((listed + 1))
-            IFS=',' read -ra tags <<< "${tags_csv}"
-            for t in "${tags[@]}"; do
-              if [ -n "${pr_tags[$t]:-}" ]; then
-                versions_to_delete+=("${version_id}"$'\t'"${tags_csv}")
-                break
-              fi
-            done
-          done < <(
-            gh api "${package_api}?per_page=100" --paginate \
-              --jq '.[] | [(.id|tostring), ((.metadata.container.tags // []) | join(","))] | @tsv'
-          )
-          # The listing is one API request per 100 versions, and the package
-          # holds every version GHCR retention has not swept yet. Logged so
-          # the request budget can count it (devdocs/ci/github-api-budget.md).
-          echo "Listed ${listed} package version(s): $(( (listed + 99) / 100 )) request(s) to the versions API."
+          pages=0
+          stopped_early=false
+          newest_first=true
+          prev_oldest=""
+          page=1
+          while :; do
+            body="$(gh api "${package_api}?per_page=100&page=${page}")"
+            pages=$((pages + 1))
+            count="$(jq 'length' <<< "${body}")"
+            [ "${count}" -eq 0 ] && break
+            while IFS=$'\t' read -r version_id tags_csv; do
+              [ -z "$version_id" ] && continue
+              listed=$((listed + 1))
+              IFS=',' read -ra tags <<< "${tags_csv}"
+              for t in "${tags[@]}"; do
+                if [ -n "${pr_tags[$t]:-}" ]; then
+                  versions_to_delete+=("${version_id}"$'\t'"${tags_csv}")
+                  break
+                fi
+              done
+            done < <(
+              jq -r '.[] | [(.id|tostring), ((.metadata.container.tags // []) | join(","))] | @tsv' <<< "${body}"
+            )
+            # An unreadable date counts as new, which breaks the order check
+            # and turns the stop off.
+            read -r newest oldest sorted < <(
+              jq -r '[.[] | (.created_at | try fromdateiso8601 catch 9999999999)]
+                | "\(max) \(min) \(. == (sort | reverse))"' <<< "${body}"
+            )
+            if [ "${sorted}" != "true" ] || { [ -n "${prev_oldest}" ] && [ "${newest}" -gt "${prev_oldest}" ]; }; then
+              newest_first=false
+            fi
+            prev_oldest="${oldest}"
+            if [ "${newest_first}" = "true" ] && [ "${newest}" -lt "${cutoff}" ]; then
+              stopped_early=true
+              break
+            fi
+            [ "${count}" -lt 100 ] && break
+            page=$((page + 1))
+          done
+          # Logged so the request budget can count it
+          # (devdocs/ci/github-api-budget.md).
+          echo "Listed ${listed} package version(s) in ${pages} request(s) to the versions API (newest first: ${newest_first}; stopped at versions older than the PR: ${stopped_early})."
 
           # Pass 2 — delete the collected versions.
           deleted=0
