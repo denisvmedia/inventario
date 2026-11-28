@@ -8,7 +8,9 @@ This file is the source of truth for release notes: the release workflow reads
 the section matching the tag and publishes it as the GitHub Release body.
 Changes for the people who run the server are under **Operators**, the last
 heading of each release. See [CONTRIBUTING.md](CONTRIBUTING.md#changelog) for
-when to add an entry and where it goes.
+when to add an entry and where it goes. Entries for the next release wait in
+[`changelog.d/`](changelog.d/README.md) until it is cut, so `[Unreleased]`
+stays empty.
 
 ## [Unreleased]
 

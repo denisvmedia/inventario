@@ -86,8 +86,9 @@ would have nothing to pull.
   release that adds features or changes something an operator must act on bumps the
   minor version (`v0.2.2` → `v0.3.0`), and a release of fixes alone bumps the patch
   version. Use annotated tags.
-- [ ] **Merge the release pull request first.** It renames the CHANGELOG section and
-  sets `version` and `appVersion` in `helm/inventario/Chart.yaml`; see "Cutting a
+- [ ] **Merge the release pull request first.** It builds the CHANGELOG section from
+  the fragments in `changelog.d/` with `scripts/changelog-assemble.sh` and sets
+  `version` and `appVersion` in `helm/inventario/Chart.yaml`; see "Cutting a
   release" in [CONTRIBUTING.md](CONTRIBUTING.md#cutting-a-release). `release.yml`
   refuses a tag whose chart does not match it.
 - [ ] **Tag the exact `master` commit and push:**

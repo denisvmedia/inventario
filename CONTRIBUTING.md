@@ -236,12 +236,23 @@ permanent freeze.
 
 [`CHANGELOG.md`](CHANGELOG.md) is the source of truth for release notes: the
 release workflow reads the section matching the tag and publishes it as the
-GitHub Release body. Entries are written as the change lands, not assembled at
-tag time by someone reconstructing two months of history from commit subjects.
+GitHub Release body. Entries are written as the change lands, not
+reconstructed at tag time by someone reading two months of commit subjects.
 
-Add an entry to the `## [Unreleased]` section, under `Added`, `Changed`,
-`Deprecated`, `Removed`, `Fixed` or `Security`, when your change is one a user
-or an operator would notice:
+A pull request does not add entries to `CHANGELOG.md`: two pull requests that
+add entries at the same spot conflict, and each resolution costs a push and a
+CI run. Instead it adds one file under `changelog.d/`, named after the branch,
+with its entries exactly as they will read in the changelog, each under its
+heading: `### Added`, `### Changed`, `### Deprecated`, `### Removed`,
+`### Fixed`, `### Security` or `### Operators`.
+[`changelog.d/README.md`](changelog.d/README.md) describes the format, and
+`./scripts/changelog-assemble.sh --check` validates it. Markdown Lint runs the
+same check on every pull request that changes a Markdown file, and it also
+fails when `## [Unreleased]` holds text: that section stays empty until a
+release is cut. A correction to
+a release that is already in `CHANGELOG.md` is made in the file itself.
+
+Add an entry when your change is one a user or an operator would notice:
 
 - a feature, or a change to how an existing one behaves;
 - a bug they could have hit;
@@ -267,8 +278,9 @@ they are in the git history, and a changelog nobody can skim is a changelog
 nobody reads. Write for the person who hits the problem, not for the reviewer:
 say what was wrong, not which function changed. Link the issue.
 
-The entries also render in the app, on the What's new page, which reads the
-file when the frontend is built. The heading must be spelled exactly
+The entries also render in the app, on the What's new page, which reads
+`CHANGELOG.md` when the frontend is built, so an entry shows there once a
+release carries it. The heading must be spelled exactly
 `### Operators`, because that spelling decides that only system administrators
 see the section. The page renders inline code, bold, `[text](url)` links and
 list items that start with `-`, with indented continuation lines. Code fences,
@@ -279,10 +291,16 @@ section heading the page cannot read.
 
 ### Cutting a release
 
-1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh
-   empty `## [Unreleased]` above it.
-2. Update the link definitions at the foot of the file.
-3. In `helm/inventario/Chart.yaml`, set `appVersion` to `vX.Y.Z` and `version`
+1. Run `./scripts/changelog-assemble.sh X.Y.Z`, with `--date YYYY-MM-DD`
+   when the release is not dated today. It inserts `## [X.Y.Z] - YYYY-MM-DD`
+   under the empty `## [Unreleased]` with the entries of every fragment in
+   `changelog.d/`, under the headings in the order listed above, updates the
+   link definitions at the foot of the file, and deletes the fragments.
+   Commit the deletions with the changelog. Under one heading the entries
+   follow the fragments' file names, so read the new section and reorder or
+   edit entries where needed. `--check X.Y.Z` prints the section and changes
+   nothing.
+2. In `helm/inventario/Chart.yaml`, set `appVersion` to `vX.Y.Z` and `version`
    to `X.Y.Z`. The chart shares the release version, so every release ships a
    chart, changed or not. Helm Lint fails when the two lines disagree, and the
    release workflow refuses a tag that does not match them. The workflow
@@ -290,7 +308,7 @@ section heading the page cannot read.
    attaches the package to the GitHub Release. If the chart needs a change the
    operator must act on, say so in the changelog and in the chart README's
    upgrade notes.
-4. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
+3. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
    body.
 
 Nothing else carries the version. The binary and the UI both get it from the

@@ -119,8 +119,10 @@ jobs:
         #   1. .github/release-notes/<tag>.md — a hand-written announcement,
         #      for a release that wants prose rather than a change list. Rare.
         #   2. The CHANGELOG.md section for the tag. This is the normal path:
-        #      the entries were written as the changes landed, so nobody
-        #      assembles a list at tag time.
+        #      the entries were written in changelog.d/ as the changes
+        #      landed, and the release pull request moved them into the file
+        #      with scripts/changelog-assemble.sh, so nobody writes a list at
+        #      tag time.
         #   3. Neither — goreleaser generates a changelog from the commits.
         if: startsWith(github.ref, 'refs/tags/v')
         env:
