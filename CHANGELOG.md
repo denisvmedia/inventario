@@ -1230,6 +1230,19 @@ when to add an entry and where it goes.
   ends because it could not be renewed, and a change the previous account
   saved that finishes after the switch no longer shows up for the next one
   ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
+- `inventario db migrate up` logged the database DSN it was given, password
+  included, on every run, in every release since v0.1.0. With the Helm chart
+  that is the `migrate` init container of every app pod; with Docker Compose
+  it is the migrate service. A DSN that did not parse also put its password
+  into the panic `inventario run` stopped with, into the errors of the
+  migrator and of `db migrate data`, and into the error of the `tenants`,
+  `users`, `admin`, `jobs` and `workers` commands. The migrate line now
+  masks the password, a DSN that does not parse stops `inventario run` with
+  an error instead of a panic, and these errors keep the reason and leave the
+  DSN out. If your logs hold the output of `inventario db migrate up`, or of
+  a command run with a `--db-dsn` (`INVENTARIO_DB_DSN`) that did not parse,
+  purge or restrict those logs and rotate the database password that appears
+  in them ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ### Operators
 

@@ -3,10 +3,11 @@ package debug
 import (
 	"encoding/json"
 	"errors"
-	"net/url"
 	"runtime"
 
 	errxjson "github.com/go-extras/errx/json"
+
+	"go.5x5.cz/inventario/internal/urlerr"
 )
 
 // BaseInfo contains debug information about the application configuration
@@ -56,13 +57,13 @@ func NewInfo(dbDSN, uploadLocation string) *Info {
 
 	info.OperatingSystem = runtime.GOOS
 
-	parsedDBDSN, err := url.Parse(dbDSN)
+	parsedDBDSN, err := urlerr.Parse(dbDSN)
 	if err != nil {
 		info.Error = err
 	} else {
 		info.DatabaseDriver = parsedDBDSN.Scheme
 	}
-	parsedUploadLocation, err := url.Parse(uploadLocation)
+	parsedUploadLocation, err := urlerr.Parse(uploadLocation)
 	if err != nil {
 		info.Error = errors.Join(info.Error, err)
 	} else {
