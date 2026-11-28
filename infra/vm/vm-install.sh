@@ -2,10 +2,9 @@
 #
 # vm-install.sh — Inventario preview-env remote installer (#1853).
 #
-# Runs as root on a clean Ubuntu 26.04 VM. Brings up tailscaled, vcluster
-# standalone (single-VM = both control-plane and worker; no token+join, per
-# #1867 spike), Tailscale Kubernetes Operator (#1855), and ArgoCD (#1858).
-# Idempotent — re-running is safe.
+# Runs as root on a clean Ubuntu 26.04 VM. Brings up tailscaled, k3s (one
+# node that is both server and agent, #2433), Tailscale Kubernetes Operator
+# (#1855), and ArgoCD (#1858). Idempotent — re-running is safe.
 #
 # Argument: $1 = path to an upload tmp dir on the VM. May contain
 #               secrets.plain.json (sops-decrypted bundle, schema per #1854).
@@ -29,8 +28,16 @@ fi
 # The `# renovate:` comments are read by the custom manager in renovate.json,
 # so these bump through a reviewable PR rather than drifting silently or
 # freezing forever.
-VCLUSTER_VERSION="v0.34.0"
-K8S_VERSION="v1.34.0"
+#
+# k3s v1.35 is the newest Kubernetes minor every chart below is tested on:
+# Velero 1.18 is tested up to 1.35, Argo CD 3.6 on 1.34-1.37. Move to a newer
+# minor only after Velero lists it, and one minor at a time on a running VM
+# (`make upgrade` reruns the k3s installer when this pin changes).
+# renovate: datasource=github-releases depName=k3s-io/k3s
+K3S_VERSION="v1.35.10+k3s1"
+# k3s ships kubectl but no helm CLI. v4 is what CI's setup-helm installs.
+# renovate: datasource=github-releases depName=helm/helm
+HELM_VERSION="v4.3.2"
 # Velero (#1865): chart + matching CLI. The velero-plugin-for-aws image is
 # pinned in infra/vm/helm-values/velero.yaml alongside the rest of the static
 # config. Keep the CLI version aligned with the chart's appVersion so
@@ -183,76 +190,145 @@ else
     fi
 fi
 
-# --- vcluster standalone (single-VM = CP + worker, no taint; verified in #1867) ---
-# Always write the canonical vcluster.yaml so config drift (e.g. adding the
-# tailnet FQDN extraSAN from #1892) lands on every bootstrap, not just the
-# first one. The file is small and deterministic; on re-runs against a
-# running vcluster.service, a content change is fine — the binary re-reads
-# the config on next restart. SANs are baked into the apiserver TLS cert on
-# first generation, so a fresh extraSAN added against an EXISTING cluster
-# does NOT propagate to the live cert until certs are regenerated (manual
-# `make destroy` + `make bootstrap`, or selective cert wipe in
-# /var/lib/vcluster/pki/). For first-time bootstraps (the common path) this
-# is a no-op — the config is written before vcluster ever starts, so the
-# initial cert includes the SAN.
-note "Writing /etc/vcluster/vcluster.yaml (k8s $K8S_VERSION)"
-mkdir -p /etc/vcluster
+# --- k3s (one node: server and agent on this VM) ---
+# k3s cannot share the host with vcluster standalone: both run their own
+# kubelet and containerd, on the same ports (10250 and 10010). vcluster writes
+# kubelet.service and containerd.service next to its own unit, and they stay
+# when it is stopped, so any of the three blocks the install. `make destroy`
+# removes them and reboots the VM to stop the containers they leave behind.
+if [ -e /etc/systemd/system/vcluster.service ] || systemctl is-active --quiet vcluster.service \
+    || [ -e /etc/systemd/system/kubelet.service ] || [ -e /etc/systemd/system/containerd.service ]; then
+    echo "A vcluster standalone install is on this VM (vcluster, kubelet or containerd unit); k3s cannot run beside it." >&2
+    echo "Run 'make -C infra destroy VM=...' (it removes vcluster and reboots the VM), then bootstrap again." >&2
+    exit 1
+fi
 
-# proxy.extraSANs adds the host's tailnet FQDN to the apiserver cert SAN
-# list so a kubeconfig with server=https://<host>.<tailnet>.ts.net:8443
-# verifies cleanly — no tls-server-name override, no insecure-skip-tls.
-# Schema: https://github.com/loft-sh/vcluster v0.34 controlPlane.proxy.extraSANs.
-# Without tailscale.tailnet_name in the sops bundle we skip the SAN and
-# fall back to the legacy IP-rewrite path in bootstrap.sh.
+# AppArmor: container processes must keep a plain profile label.
+# Ubuntu 26.04 ships kernel.apparmor_restrict_unprivileged_unconfined=1. With
+# it, runc stacks the container's profile with `unconfined` (audit message:
+# "change_profile unprivileged unconfined converted to stacking"), so every
+# container process is labeled cri-containerd.apparmor.d//&unconfined, while
+# containerd's default profile lets a process signal only peers labeled
+# cri-containerd.apparmor.d. The processes of one container then cannot signal
+# each other: the demo PostgreSQL entrypoint fails in `pg_ctl stop` with
+# "Permission denied", and the server restarts into recovery and stays there.
+# With the sysctl at 0 containers get the plain label again. What it restricts
+# is an unprivileged, unconfined host process switching AppArmor profiles (the
+# aa-exec route around the unprivileged-userns restriction); this VM has one
+# admin user and no other local accounts. The drop-in sorts after the package's
+# /usr/lib/sysctl.d/10-apparmor.conf, so its value wins. Pods that started
+# before the change keep the stacked label until they are recreated.
+APPARMOR_SYSCTL_FILE=/proc/sys/kernel/apparmor_restrict_unprivileged_unconfined
+if [ -e "$APPARMOR_SYSCTL_FILE" ]; then
+    printf '%s\n' 'kernel.apparmor_restrict_unprivileged_unconfined = 0' >/etc/sysctl.d/60-inventario-apparmor.conf
+    if [ "$(cat "$APPARMOR_SYSCTL_FILE")" != 0 ]; then
+        note "Turning off kernel.apparmor_restrict_unprivileged_unconfined"
+        sysctl -q -w kernel.apparmor_restrict_unprivileged_unconfined=0
+    fi
+fi
+
+# /etc/rancher/k3s/config.yaml carries every server option, so the systemd
+# unit the installer writes needs no flags. k3s reads it on each start.
 #
-# Source the hostname from the live tailscaled (not the configured
-# `TS_HOSTNAME` default) so the cert SAN tracks whatever the VM is
-# currently registered as — important when the operator has manually
-# re-keyed under a different hostname on an already-authenticated VM,
-# where vm-install.sh only warns about the mismatch rather than forcing
-# a reset. Falls back to `TS_HOSTNAME` (the install-time default) when
-# tailscaled isn't authenticated yet (e.g. bootstrap-without-secrets).
-# bootstrap.sh queries the SAME `.Self.HostName` source for the
-# kubeconfig server, so both ends use the same identity.
-EXTRA_SANS_BLOCK=""
+# tls-san adds the host's tailnet FQDN to the apiserver serving cert, so a
+# kubeconfig with server=https://<host>.<tailnet>.ts.net:6443 verifies
+# without a tls-server-name override. k3s adds a new tls-san entry to the
+# cert on restart, which is why a changed config restarts k3s below. Without
+# tailscale.tailnet_name in the sops bundle there is no SAN, and bootstrap.sh
+# falls back to an IP-based kubeconfig.
+#
+# The hostname comes from the live tailscaled, not the `TS_HOSTNAME`
+# default, so the SAN matches whatever the VM is registered as (vm-install.sh
+# only warns about a mismatch, it does not re-key). It falls back to
+# `TS_HOSTNAME` while tailscaled is not authenticated yet. bootstrap.sh reads
+# the same `.Self.HostName` for the kubeconfig server.
+#
+# Traefik and ServiceLB, which k3s bundles, stay enabled: they are the k3s
+# setup PRODUCTION.md documents, and the previews should run on it. Every
+# Ingress here uses the tailscale class, so Traefik routes nothing, but
+# ServiceLB publishes it on ports 80 and 443 of the VM's own addresses. To
+# run without them, add `disable: [traefik, servicelb]` to the config below.
 TAILNET_NAME=$(sops_get "tailscale.tailnet_name")
 LIVE_TS_HOSTNAME=$(tailscale status --self=true --peers=false --json 2>/dev/null \
     | jq -r '.Self.HostName // empty')
 SAN_HOSTNAME="${LIVE_TS_HOSTNAME:-$TS_HOSTNAME}"
+K3S_CONFIG=/etc/rancher/k3s/config.yaml
+K3S_CONFIG_NEW="$REMOTE_TMP/k3s-config.yaml"
+{
+    echo 'write-kubeconfig-mode: "0600"'
+    if [ -n "${TAILNET_NAME:-}" ]; then
+        echo 'tls-san:'
+        echo "  - ${SAN_HOSTNAME}.${TAILNET_NAME}.ts.net"
+    fi
+} >"$K3S_CONFIG_NEW"
 if [ -n "${TAILNET_NAME:-}" ]; then
-    EXTRA_SANS_BLOCK="
-  proxy:
-    extraSANs:
-      - ${SAN_HOSTNAME}.${TAILNET_NAME}.ts.net"
-    note "vcluster apiserver cert will include SAN: ${SAN_HOSTNAME}.${TAILNET_NAME}.ts.net"
+    note "k3s apiserver cert will include SAN: ${SAN_HOSTNAME}.${TAILNET_NAME}.ts.net"
 else
     warn "tailscale.tailnet_name missing from sops bundle — apiserver cert won't include tailnet FQDN SAN."
     warn "bootstrap.sh will fall back to IP-based kubeconfig with tls-server-name override."
 fi
+mkdir -p "$(dirname "$K3S_CONFIG")"
+K3S_CONFIG_CHANGED=no
+if ! cmp -s "$K3S_CONFIG_NEW" "$K3S_CONFIG"; then
+    note "Writing $K3S_CONFIG"
+    install -m 0600 "$K3S_CONFIG_NEW" "$K3S_CONFIG"
+    K3S_CONFIG_CHANGED=yes
+fi
+rm -f "$K3S_CONFIG_NEW"
 
-cat >/etc/vcluster/vcluster.yaml <<EOF
-controlPlane:
-  distro:
-    k8s:
-      version: $K8S_VERSION${EXTRA_SANS_BLOCK}
-EOF
-
-if ! systemctl is-active --quiet vcluster.service; then
-    note "Installing vcluster standalone $VCLUSTER_VERSION"
-    INSTALL_URL="https://github.com/loft-sh/vcluster/releases/download/${VCLUSTER_VERSION}/install-standalone.sh"
-    curl -sfL "$INSTALL_URL" -o "$REMOTE_TMP/install-standalone.sh"
-    bash "$REMOTE_TMP/install-standalone.sh" --vcluster-name standalone
+# The installer runs when k3s is missing or not at K3S_VERSION; rerun on a
+# working node it upgrades k3s in place. It comes from the release tag, so
+# the script is pinned along with the binary it fetches (and checks against
+# the release's sha256sum file); `+` in the tag is URL-encoded.
+# INSTALL_K3S_SYMLINK=force makes /usr/local/bin/kubectl the k3s symlink even
+# when another kubectl is on PATH, because every script here calls that path.
+INSTALLED_K3S_VERSION=""
+if [ -x /usr/local/bin/k3s ]; then
+    INSTALLED_K3S_VERSION=$(/usr/local/bin/k3s --version 2>/dev/null | awk 'NR == 1 { print $3 }' || true)
+fi
+K3S_RESTART=no
+if [ "$INSTALLED_K3S_VERSION" != "$K3S_VERSION" ]; then
+    note "Installing k3s $K3S_VERSION (installed: ${INSTALLED_K3S_VERSION:-none})"
+    K3S_INSTALL_URL="https://raw.githubusercontent.com/k3s-io/k3s/${K3S_VERSION//+/%2B}/install.sh"
+    curl -sfL "$K3S_INSTALL_URL" -o "$REMOTE_TMP/k3s-install.sh"
+    INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_SYMLINK=force sh "$REMOTE_TMP/k3s-install.sh"
+elif [ "$K3S_CONFIG_CHANGED" = yes ]; then
+    K3S_RESTART=yes
+fi
+if [ "$K3S_RESTART" = yes ] || ! systemctl is-active --quiet k3s.service; then
+    note "Restarting k3s.service"
+    systemctl restart k3s.service
 fi
 
-export KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml
-HELM=/var/lib/vcluster/bin/helm
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+HELM=/usr/local/bin/helm
 KUBECTL=/usr/local/bin/kubectl
 
-# --- Wait for kube-apiserver to be reachable ---
-note "Waiting for kube-apiserver"
-for i in $(seq 1 30); do
-    if "$KUBECTL" get nodes >/dev/null 2>&1; then break; fi
-    if [ "$i" -eq 30 ]; then echo "kube-apiserver never came up" >&2; exit 1; fi
+# Helm 4 applies server-side. The Tailscale chart renders the
+# tailscale/operator-oauth Secret, and apply-secrets.sh applies the same
+# Secret server-side with kubectl, so its `stringData` belongs to whichever of
+# the two ran last. A Helm run after apply-secrets.sh stops on that ("Apply
+# failed with 2 conflicts") unless it forces the conflicts, and every
+# `make bootstrap` after the first is such a run. `--server-side=true` fixes
+# the method, because `auto` follows the method of the previous release.
+HELM_APPLY=(--server-side=true --force-conflicts)
+
+# --- helm CLI (pinned, checksum-verified) ---
+if [ "$("$HELM" version --template '{{.Version}}' 2>/dev/null || true)" != "$HELM_VERSION" ]; then
+    note "Installing helm $HELM_VERSION"
+    HELM_TGZ="helm-${HELM_VERSION}-linux-amd64.tar.gz"
+    curl -sfL "https://get.helm.sh/${HELM_TGZ}" -o "$REMOTE_TMP/${HELM_TGZ}"
+    curl -sfL "https://get.helm.sh/${HELM_TGZ}.sha256sum" -o "$REMOTE_TMP/${HELM_TGZ}.sha256sum"
+    (cd "$REMOTE_TMP" && sha256sum --check --quiet "${HELM_TGZ}.sha256sum")
+    tar -xzf "$REMOTE_TMP/${HELM_TGZ}" -C "$REMOTE_TMP" linux-amd64/helm
+    install -m 0755 "$REMOTE_TMP/linux-amd64/helm" "$HELM"
+fi
+
+# --- Wait for the node to be Ready ---
+note "Waiting for the k3s node to be Ready"
+for i in $(seq 1 60); do
+    if "$KUBECTL" get nodes --no-headers 2>/dev/null | awk '$2 == "Ready" { found = 1 } END { exit !found }'; then break; fi
+    if [ "$i" -eq 60 ]; then echo "k3s node never became Ready" >&2; "$KUBECTL" get nodes >&2 || true; exit 1; fi
     sleep 5
 done
 
@@ -284,6 +360,7 @@ EOF
     "$HELM" upgrade --install tailscale-operator tailscale/tailscale-operator \
         --version "$TS_OPERATOR_CHART_VERSION" \
         --namespace tailscale \
+        "${HELM_APPLY[@]}" \
         --values "$TS_OP_STATIC_VALUES" \
         --values "$TS_OAUTH_VALUES" \
         --wait --timeout 5m
@@ -302,6 +379,7 @@ note "Installing/upgrading ArgoCD"
 "$HELM" upgrade --install argocd argo/argo-cd \
     --version "$ARGOCD_CHART_VERSION" \
     --namespace argocd \
+    "${HELM_APPLY[@]}" \
     --set 'configs.params.server\.insecure=true' \
     --set 'configs.params.applicationsetcontroller\.policy=sync' \
     --set 'applicationSet.enabled=true' \
@@ -322,6 +400,7 @@ note "Installing/upgrading reflector"
 "$HELM" upgrade --install reflector emberstack/reflector \
     --version "$REFLECTOR_CHART_VERSION" \
     --namespace reflector --create-namespace \
+    "${HELM_APPLY[@]}" \
     --wait --timeout 5m
 
 # --- Velero (#1865 — daily, encrypted, off-VM backup of inv-vcl01-longevity to R2) ---
@@ -426,6 +505,7 @@ EOF
     "$HELM" repo update >/dev/null || warn "helm repo update failed; using cached chart index for Velero"
     if "$HELM" upgrade --install velero vmware-tanzu/velero \
         --namespace velero \
+        "${HELM_APPLY[@]}" \
         --version "$VELERO_CHART_VERSION" \
         --values "$VELERO_STATIC_VALUES" \
         --values "$VELERO_BSL_VALUES" \

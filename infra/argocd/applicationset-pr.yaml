@@ -58,6 +58,17 @@ spec:
       # wedging the sync op and thereby deadlocking this very finalizer.
       finalizers:
         - resources-finalizer.argocd.argoproj.io
+      # Argo CD 3.6 turns on Server-Side Diff for an Application that syncs
+      # with ServerSideApply=true. The setup and init-data Jobs carry
+      # Replace=true, and the server-side apply dry run that the diff makes
+      # for them is refused with "spec.template: ... field is immutable".
+      # The Application then shows sync status Unknown with a
+      # ComparisonError, auto-sync does not start, and the preview stays on
+      # the revision it first synced. The annotation turns the server-side
+      # diff off and takes precedence over the automatic mode. The master
+      # and longevity ApplicationSets carry it too.
+      annotations:
+        argocd.argoproj.io/compare-options: ServerSideDiff=false
       labels:
         inventario-preview: "true"
         inventario-pr: '{{.number}}'

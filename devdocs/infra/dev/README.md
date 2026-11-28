@@ -12,9 +12,9 @@
 | Question | Answer |
 |---|---|
 | **What does it give a contributor?** | Label a PR `preview` → within ~5 min the PR comment posts a hostname `inv-vcl01-prN`. Any tailnet member opens `https://inv-vcl01-prN.<tailnet>.ts.net/` and gets a fully-functional Inventario with that PR's code, demo Postgres/Redis/MinIO, and seeded sample data. Unlabel or close the PR → preview disappears within a poll cycle. |
-| **What is the cluster?** | A single-VM Kubernetes cluster on Proxmox (VM 101 @ host `your-proxmox-host`, Ubuntu 26.04) running [vcluster](https://www.vcluster.com) standalone with [ArgoCD](https://argo-cd.readthedocs.io) on top and the [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator) for tailnet-bound Ingresses. |
+| **What is the cluster?** | A single-VM Kubernetes cluster on Proxmox (VM 101 @ host `your-proxmox-host`, Ubuntu 26.04) running single-node [k3s](https://k3s.io) with [ArgoCD](https://argo-cd.readthedocs.io) on top and the [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator) for tailnet-bound Ingresses. |
 | **How does a PR turn into a preview?** | ArgoCD's [ApplicationSet](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/) PR generator polls GitHub every 60 s, sees PRs labeled `preview`, spawns an `Application` per PR that templates the helm chart at the PR's head commit. ArgoCD syncs the chart into a per-PR namespace. The Tailscale Operator notices the chart's Ingress, provisions a tailnet proxy node with a `tailscale.com/hostname` annotation, and the URL becomes reachable. |
-| **What's NOT in scope (yet)?** | Production-grade admin password from sops ([#1883](https://github.com/denisvmedia/inventario/issues/1883)); in-place migrations under ArgoCD upgrade ([#1884](https://github.com/denisvmedia/inventario/issues/1884)); chart-side `tls[].secretName` polish ([#1882](https://github.com/denisvmedia/inventario/issues/1882)); direct tailnet exposure of the ArgoCD UI and vcluster API ([#1892](https://github.com/denisvmedia/inventario/issues/1892)). |
+| **What's NOT in scope (yet)?** | Production-grade admin password from sops ([#1883](https://github.com/denisvmedia/inventario/issues/1883)); in-place migrations under ArgoCD upgrade ([#1884](https://github.com/denisvmedia/inventario/issues/1884)); chart-side `tls[].secretName` polish ([#1882](https://github.com/denisvmedia/inventario/issues/1882)); direct tailnet exposure of the ArgoCD UI and Kubernetes API ([#1892](https://github.com/denisvmedia/inventario/issues/1892)). |
 
 ---
 
@@ -88,10 +88,10 @@ Three ancillary loops keep the system healthy:
 |   |   Snapshot: pre1853deploy202605241651 (pre-install state) |     |
 |   |                                                           |     |
 |   |   +------------------------------------------+            |     |
-|   |   | vcluster standalone v0.34.0              |            |     |
-|   |   |   k8s v1.34.0, single-VM CP + worker     |            |     |
-|   |   |   kubeconfig: /var/lib/vcluster/         |            |     |
-|   |   |              kubeconfig.yaml             |            |     |
+|   |   | k3s v1.35.10+k3s1 (k3s.service)          |            |     |
+|   |   |   one node: server + agent               |            |     |
+|   |   |   kubeconfig: /etc/rancher/k3s/          |            |     |
+|   |   |              k3s.yaml                    |            |     |
 |   |   |                                          |            |     |
 |   |   | Namespaces:                              |            |     |
 |   |   |   argocd/      ArgoCD core               |            |     |
@@ -125,7 +125,7 @@ Three ancillary loops keep the system healthy:
 Nothing in this layout is exposed to the public internet:
 - The VM's tailscaled is the only inbound; SSH is gated by Tailscale ACL.
 - The TS Operator's Ingresses serve `*.<tailnet>.ts.net` only — MagicDNS resolves only inside the tailnet.
-- ArgoCD UI and vcluster API are also tailnet-internal ([#1892](https://github.com/denisvmedia/inventario/issues/1892) will surface them as proper hostnames; today reached via `kubectl port-forward` + the kubeconfig).
+- ArgoCD UI and Kubernetes API are also tailnet-internal ([#1892](https://github.com/denisvmedia/inventario/issues/1892) will surface them as proper hostnames; today reached via `kubectl port-forward` + the kubeconfig).
 
 ---
 
@@ -182,7 +182,7 @@ sequenceDiagram
     V->>V: wait for dpkg lock (unattended-upgrades)
     V->>V: apt install curl jq conntrack socat
     V->>T: tailscale up --hostname=inv-vcl01 --authkey=...
-    V->>V: install vcluster standalone (k8s v1.34)
+    V->>V: install k3s (Kubernetes v1.35) + helm CLI
     V->>K: helm install tailscale-operator
     V->>K: helm install argocd
     L->>V: apply-secrets.sh (operator-oauth, github-app-creds, inv-admin)
@@ -197,7 +197,7 @@ The script is **idempotent** — re-running it is the upgrade path. Notable defe
 - **NTP resync before apt.** Snapshot rollback restores the kernel clock to T0; without re-stepping NTP, `apt-get update` rejects the archive InRelease ("not valid yet") and JWT exchanges (GitHub App, ArgoCD auth) fail with "iat in the past". The script polls `timedatectl show -p NTPSynchronized` up to 30 s and hard-exits with a `timedatectl status` dump if NTP never converges.
 - **dpkg-lock wait before apt.** Ubuntu cloud images run `unattended-upgrades` on first boot; racing it produces `Could not get lock /var/lib/dpkg/lock-frontend`. The script waits up to 10 min with a 30 s progress heartbeat.
 - **Single bash literal substitution** (`${var//search/replace}`) for the `<TAILNET>` placeholder in ArgoCD manifests — avoids `sed`'s `&`/backslash gotchas.
-- **No skip on missing secrets.** If sops bundle isn't present, the script still brings vcluster + ArgoCD up but warns loudly; downstream Applications will fail until the operator credentials land.
+- **No skip on missing secrets.** If sops bundle isn't present, the script still brings k3s + ArgoCD up but warns loudly; downstream Applications will fail until the operator credentials land.
 
 ### 2. Sops bundle (`infra/vm/secrets/`) + `apply-secrets.sh`
 
@@ -232,18 +232,17 @@ github:
 
 The **same** OAuth client serves the operator and the cleanup CronJob — verified empirically (the `devices:core` scope name is mandatory; bare `devices` is rejected by the TS token endpoint).
 
-### 3. vcluster
+### 3. k3s
 
-Single-node K3s-flavoured Kubernetes inside the VM. Standalone install (`install-standalone.sh`), config at `/etc/vcluster/vcluster.yaml`:
+Single-node [k3s](https://k3s.io), installed by the k3s installer from the pinned release tag (`K3S_VERSION` in `vm-install.sh`) as `k3s.service`. Every server option lives in `/etc/rancher/k3s/config.yaml`, which `vm-install.sh` writes:
 
 ```yaml
-controlPlane:
-  distro:
-    k8s:
-      version: v1.34.0
+write-kubeconfig-mode: "0600"
+tls-san:
+  - inv-vcl01.<tailnet>.ts.net
 ```
 
-The VM acts as both control-plane and worker (no taint, no separate node). The kubeconfig is at `/var/lib/vcluster/kubeconfig.yaml`; `bootstrap.sh` copies it to `~/.kube/inv-vcl01.config` on the laptop with the API server rewritten to the VM's tailnet IP + `tls-server-name: 127.0.0.1` (vcluster's cert SAN is for `127.0.0.1` only — [#1892](https://github.com/denisvmedia/inventario/issues/1892) will fix this by re-issuing with the tailnet FQDN in SAN).
+The VM is both server and agent (no taint, no separate node). k3s keeps its bundled CoreDNS, local-path provisioner (the default StorageClass, data under `/var/lib/rancher/k3s/storage`), metrics-server, Traefik and ServiceLB; every Ingress here uses the `tailscale` class, so Traefik routes nothing. The kubeconfig is at `/etc/rancher/k3s/k3s.yaml`; `bootstrap.sh` copies it to `~/.kube/inv-vcl01.config` on the laptop with the server rewritten to `https://inv-vcl01.<tailnet>.ts.net:6443`, which the `tls-san` entry makes verifiable. k3s adds a new `tls-san` entry to its serving cert on restart, and `vm-install.sh` restarts k3s when the config changes.
 
 ### 4. Tailscale Operator
 
@@ -554,7 +553,7 @@ selfHeal handles cluster-side drift continuously — `kubectl delete` anything A
 | Decision | Why this and not the other thing |
 |---|---|
 | ArgoCD ApplicationSet PR generator vs a custom Go controller / labels bot | Out-of-the-box, declarative, well-documented, multi-tenant by design (AppProject scopes). Custom controller would have to re-implement PR-list polling, GH auth, sync-on-change, prune-on-removal. Trade-off accepted: harder to do non-standard things like sticky comments (now done in a separate GH Actions workflow) or per-PR feature gating. See #1867 spike for the alternatives considered. |
-| Single VM (vcluster standalone) vs a managed k8s | Phase 1 is one-developer + occasional contributors. Managed k8s costs money continuously; a Hetzner-ish single VM is < €15/mo with snapshots for DR. vcluster standalone gives a real k8s without the operational overhead of kubeadm. |
+| Single VM (k3s) vs a managed k8s | Phase 1 is one-developer + occasional contributors. Managed k8s costs money continuously; a Hetzner-ish single VM is < €15/mo with snapshots for DR. k3s gives a real k8s without the operational overhead of kubeadm, and it is the distribution `PRODUCTION.md` uses for its worked example, so previews run on the documented production target ([#2433](https://github.com/denisvmedia/inventario/issues/2433)). |
 | Tailscale Operator Ingress vs cert-manager + public DNS | No public exposure of preview environments was a hard requirement (PRs touch real data shapes). Tailscale gives us tailnet-only HTTPS with automatic cert provisioning for free. cert-manager + public DNS would still need a tailnet-gated reverse proxy in front; more moving parts. |
 | Git-generator pin file for master vs a moving `image.tag: master` | Master needs continuous deployment, but with a moving tag the rendered chart doesn't change between commits → ArgoCD sees no diff → no sync. The fix ([#1885](https://github.com/denisvmedia/inventario/issues/1885)) is the `inventario-master-preview` git-generator ApplicationSet: a master push triggers `docker.yml`, which force-pushes `infra/argocd/master-image.json` with the new `{ sha, imageTag }` to the dedicated orphan branch `argocd/master-pin` (the file is **not** on master); the generator reads it from there, ArgoCD diffs on the changed SHA and syncs the immutable `sha-<7>` image. PR Applications pin `sha-<7>` for the same per-commit reproducibility reviewers want. |
 | `argocdMode: true` (drop helm hook) for setup Job vs sync-wave -5 | First attempt (a4800814) used `sync-wave: -5` so the Job ran before the rest. That created a chicken-and-egg with the ServiceAccount + Secret + ConfigMap (also wave 0) — Job tried to spawn its pod before its own SA existed and FailedCreate. Dropping the wave lets the Job run alongside everything else; its existing `pg_isready` loop in the bootstrap init container handles the ordering against Postgres. |
@@ -569,7 +568,7 @@ selfHeal handles cluster-side drift continuously — `kubectl delete` anything A
 |---|---|
 | **Tailnet** | Your private Tailscale network. MagicDNS suffix `<tailnet-name>.ts.net`. |
 | **MagicDNS** | Tailscale's automatic DNS for tailnet hostnames. Devices register a short hostname; tailnet members resolve `<short>.<tailnet>.ts.net` (and often just `<short>`) without manual config. |
-| **vcluster** | A "virtual cluster" — a real kube-apiserver + scheduler running as a pod (or, in our case, as a systemd service on a VM) instead of as a multi-node k8s installation. Same API as upstream k8s; lighter footprint. |
+| **k3s** | A Kubernetes distribution packaged as one binary and one systemd unit, with containerd, flannel, CoreDNS and a local-path provisioner built in. Same API as upstream k8s; lighter footprint. |
 | **AppProject** (ArgoCD) | A boundary inside ArgoCD: which repos can sources come from, which namespaces can resources land in, which cluster (we have one). |
 | **Application** (ArgoCD) | A single deployable unit: source(s) + destination + sync policy. Reconciled by ArgoCD continuously. |
 | **ApplicationSet** | An ArgoCD CRD that **generates** Applications from a template + a generator (PR generator, git generator, cluster generator, …). |
@@ -613,7 +612,7 @@ selfHeal handles cluster-side drift continuously — `kubectl delete` anything A
 | Epic | [#1852](https://github.com/denisvmedia/inventario/issues/1852) — preview-env infrastructure |
 | Issues that landed | [#1853](https://github.com/denisvmedia/inventario/issues/1853), [#1854](https://github.com/denisvmedia/inventario/issues/1854), [#1855](https://github.com/denisvmedia/inventario/issues/1855), [#1856](https://github.com/denisvmedia/inventario/issues/1856), [#1858](https://github.com/denisvmedia/inventario/issues/1858), [#1890](https://github.com/denisvmedia/inventario/issues/1890) |
 | Spikes / decision threads | [#1867](https://github.com/denisvmedia/inventario/issues/1867) — vcluster + ArgoCD pivot discussion |
-| Open follow-ups | [#1882](https://github.com/denisvmedia/inventario/issues/1882) (chart TLS secretName), [#1883](https://github.com/denisvmedia/inventario/issues/1883) (admin password from sops), [#1884](https://github.com/denisvmedia/inventario/issues/1884) (in-place ArgoCD migrations), [#1892](https://github.com/denisvmedia/inventario/issues/1892) (expose ArgoCD UI + vcluster API as tailnet services) |
+| Open follow-ups | [#1882](https://github.com/denisvmedia/inventario/issues/1882) (chart TLS secretName), [#1883](https://github.com/denisvmedia/inventario/issues/1883) (admin password from sops), [#1884](https://github.com/denisvmedia/inventario/issues/1884) (in-place ArgoCD migrations), [#1892](https://github.com/denisvmedia/inventario/issues/1892) (expose ArgoCD UI + Kubernetes API as tailnet services) |
 | Shipped follow-ups | [#1885](https://github.com/denisvmedia/inventario/issues/1885) (master auto-rollout via the git-generator `inventario-master-preview` ApplicationSet) |
 | User-facing README | [#1863](https://github.com/denisvmedia/inventario/issues/1863) (in flight) |
 | PR that landed everything described here | [#1881](https://github.com/denisvmedia/inventario/pull/1881) |

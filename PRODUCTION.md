@@ -10,7 +10,7 @@ Inventario to production on Kubernetes. It has two parts:
 It is written to be **distribution-agnostic**. The default worked example targets
 **k3s**, and every step that differs between distributions calls out **k3s / GKE /
 DigitalOcean DOKS** explicitly. Nothing here is specific to the maintainer's private
-ArgoCD/vcluster infrastructure under `infra/` — that is a separate, personal setup.
+ArgoCD/k3s preview infrastructure under `infra/` — that is a separate, personal setup.
 
 > For a single-box / systemd install (no Kubernetes) see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 > For local evaluation see [`QUICKSTART.md`](QUICKSTART.md) and [`DOCKER.md`](DOCKER.md).

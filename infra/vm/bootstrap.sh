@@ -2,8 +2,8 @@
 #
 # bootstrap.sh — laptop orchestrator for the Inventario preview-env VM (#1853).
 #
-# Brings up a clean Ubuntu 26.04 VM with tailscaled, vcluster standalone,
-# Tailscale Operator, and ArgoCD. Reads secrets from the sops bundle
+# Brings up a clean Ubuntu 26.04 VM with tailscaled, k3s, Tailscale
+# Operator, and ArgoCD. Reads secrets from the sops bundle
 # (introduced in #1854) and applies ArgoCD manifests (introduced in #1858)
 # at the end. Idempotent — re-runs are safe and act as upgrades.
 #
@@ -182,15 +182,15 @@ fi
 # current tailnet IP: the FQDN survives VM redeploys (Tailscale preserves
 # the hostname via the reusable auth-key in the sops bundle), so the
 # kubeconfig keeps working without re-bootstrap. The FQDN path requires the
-# vcluster apiserver cert to include the FQDN in its SAN list — added via
-# `controlPlane.proxy.extraSANs` in /etc/vcluster/vcluster.yaml by
-# vm-install.sh. Without the SAN we fall back to the legacy IP-rewrite +
-# `tls-server-name: 127.0.0.1` override so the existing path still works
-# until cert regen (manual `make destroy` + `make bootstrap`).
+# k3s apiserver cert to include the FQDN in its SAN list — added via
+# `tls-san` in /etc/rancher/k3s/config.yaml by vm-install.sh. Without a
+# tailnet name there is no SAN, and we fall back to the IP rewrite +
+# `tls-server-name: 127.0.0.1` override (k3s always has 127.0.0.1 in the
+# cert).
 LAPTOP_KUBECONFIG="$HOME/.kube/inv-vcl01.config"
 note "Copying kubeconfig to $LAPTOP_KUBECONFIG"
 mkdir -p "$HOME/.kube"
-ssh "$VM" 'sudo cat /var/lib/vcluster/kubeconfig.yaml' >"$LAPTOP_KUBECONFIG"
+ssh "$VM" 'sudo cat /etc/rancher/k3s/k3s.yaml' >"$LAPTOP_KUBECONFIG"
 chmod 600 "$LAPTOP_KUBECONFIG"
 
 # Pull the actual TS hostname from the live tailscaled (not the default in
@@ -207,15 +207,15 @@ if [ -n "$TS_HOSTNAME_REMOTE" ] && [ -n "$TAILNET_NAME" ]; then
         "$LAPTOP_KUBECONFIG"
     # Strip any legacy `tls-server-name: 127.0.0.1` line left by a pre-#1892
     # bootstrap run. The FQDN-based server matches the cert SAN directly
-    # (assuming extraSANs is in place — vm-install.sh writes it), so no
-    # server-name override is needed.
+    # (vm-install.sh adds it as tls-san), so no server-name override is
+    # needed.
     perl -i -ne 'print unless /^\s*tls-server-name:\s*127\.0\.0\.1\s*$/' \
         "$LAPTOP_KUBECONFIG"
     note "kubeconfig server rewritten to https://${TS_FQDN}:<port>"
 elif [ -n "$TS_IP" ]; then
     # Fallback: tailnet_name missing from sops OR hostname unreadable — use
-    # the legacy IP rewrite + tls-server-name override. Same kludge as
-    # pre-#1892 bootstrap.sh; works against any vcluster cert.
+    # the IP rewrite + tls-server-name override, which verifies against the
+    # 127.0.0.1 SAN every k3s cert carries.
     warn "Falling back to legacy IP-based kubeconfig (no tailnet FQDN available)."
     perl -pi -e "s|https://127\.0\.0\.1:|https://${TS_IP}:|g; s|https://localhost:|https://${TS_IP}:|g" \
         "$LAPTOP_KUBECONFIG"
@@ -226,7 +226,7 @@ elif [ -n "$TS_IP" ]; then
     note "kubeconfig server rewritten to https://${TS_IP}:<port> (tls-server-name: 127.0.0.1)"
 else
     warn "Couldn't fetch tailnet hostname OR IP. kubeconfig still points at 127.0.0.1 —"
-    warn "either ssh-tunnel port 443/6443 or edit the server: field manually."
+    warn "either ssh-tunnel port 6443 or edit the server: field manually."
 fi
 
 note "Bootstrap complete. Verify:"

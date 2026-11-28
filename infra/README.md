@@ -43,10 +43,11 @@ For the credentials walkthrough alone see [`SECRETS.md`](./SECRETS.md).
 
 `make -C infra bootstrap` brings a clean Ubuntu 26.04 VM up to a state where
 labeling a PR with `preview` produces a working URL for any tailnet member to
-click on. The cluster is single-VM [vcluster](https://www.vcluster.com)
-standalone with [ArgoCD](https://argo-cd.readthedocs.io) and the
+click on. The cluster is a single-node [k3s](https://k3s.io) install with
+[ArgoCD](https://argo-cd.readthedocs.io) and the
 [Tailscale Kubernetes Operator](https://tailscale.com/kb/1236/kubernetes-operator)
-on top.
+on top. k3s is the distribution [`PRODUCTION.md`](../PRODUCTION.md) uses for
+its worked example, so the previews run on the setup users are told to run.
 
 ```
 Contributor's GitHub PR              Tailnet member's browser
@@ -63,7 +64,7 @@ Contributor's GitHub PR              Tailnet member's browser
          | inv-vcl01-prN                        | to per-PR proxy
          v                                      v
 +--------------------------------------------------------------+
-|  VM: Ubuntu 26.04, tailscaled, vcluster standalone (k8s)     |
+|  VM: Ubuntu 26.04, tailscaled, k3s (single node)             |
 |                                                              |
 |     +----------------------+   +--------------------------+  |
 |     | argocd namespace     |   | tailscale namespace      |  |
@@ -83,11 +84,17 @@ Contributor's GitHub PR              Tailnet member's browser
 +--------------------------------------------------------------+
 ```
 
-Nothing is exposed to the public internet. The VM joins your Tailscale tailnet
-under a stable hostname (default `inv-vcl01`); every per-PR Ingress provisions
-its own tailnet device under `inv-vcl01-prN` and serves HTTPS with a
-Tailscale-managed Let's Encrypt cert for the FQDN
+No preview is exposed to the public internet. The VM joins your Tailscale
+tailnet under a stable hostname (default `inv-vcl01`); every per-PR Ingress
+provisions its own tailnet device under `inv-vcl01-prN` and serves HTTPS with
+a Tailscale-managed Let's Encrypt cert for the FQDN
 `inv-vcl01-prN.<tailnet>.ts.net`.
+
+k3s keeps its bundled Traefik ingress controller and ServiceLB load balancer.
+Every Ingress here uses the `tailscale` class, so Traefik routes nothing, but
+ServiceLB publishes it on ports 80 and 443 of the VM's own addresses, and the
+Kubernetes API listens on port 6443. On a VM with a public address, allow only
+SSH from outside.
 
 ---
 
@@ -359,7 +366,7 @@ Expected timing on a fresh VM: 3-5 minutes. The script:
 2. Waits up to 10 minutes for `unattended-upgrades` to release the dpkg lock.
 3. Installs `curl jq ca-certificates conntrack socat` via apt.
 4. Installs and authenticates Tailscale on the VM (hostname: `inv-vcl01`).
-5. Installs vcluster standalone (kubectl + helm bundled).
+5. Installs k3s (it brings kubectl) and a pinned, checksum-verified helm CLI.
 6. Installs the Tailscale Kubernetes Operator via helm (OAuth from sops bundle).
 7. Installs ArgoCD via helm.
 8. Installs Velero via helm + the matching CLI — ONLY when the `velero.*`
@@ -379,7 +386,7 @@ Expected timing on a fresh VM: 3-5 minutes. The script:
     (`inventario-pr-previews`).
 12. Copies the kubeconfig back to `~/.kube/inv-vcl01.config` on your laptop,
     with the server set to the stable tailnet FQDN
-    (`inv-vcl01.<tailnet>.ts.net:8443`) so the kubeconfig survives VM
+    (`inv-vcl01.<tailnet>.ts.net:6443`) so the kubeconfig survives VM
     redeploys without an IP rewrite.
 
 The script is **idempotent** — re-running it is the upgrade path. The
@@ -511,7 +518,7 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd \
 ```
 
 For raw kubectl access (the kubeconfig server is the stable tailnet FQDN —
-`inv-vcl01.<tailnet>.ts.net:8443` — so it keeps working after a VM redeploy):
+`inv-vcl01.<tailnet>.ts.net:6443` — so it keeps working after a VM redeploy):
 
 ```bash
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n inv-vcl01-pr<N> get pods
@@ -647,10 +654,10 @@ with kubectl" is self-correcting; no manual re-sync needed.
 | `make -C infra bootstrap VM=user@host` | Brings a clean VM up to a working preview-env host (or upgrades an existing one — idempotent). |
 | `make -C infra upgrade VM=user@host` | Alias for `bootstrap`. Use semantically when running a version bump on an already-working VM. |
 | `make -C infra recover VM=user@host` | Alias for `bootstrap`. Use semantically after total VM loss → fresh VM → `ssh-copy-id` → `make recover`. |
-| `make -C infra status VM=user@host` | Snapshot of vcluster + tailscaled + kubectl get nodes,pods -A. |
-| `make -C infra logs VM=user@host` | Tails `journalctl -u vcluster.service`. Override the unit with `SVC=tailscaled.service`, etc. |
+| `make -C infra status VM=user@host` | Snapshot of k3s + tailscaled + kubectl get nodes,pods -A. |
+| `make -C infra logs VM=user@host` | Tails `journalctl -u k3s.service`. Override the unit with `SVC=tailscaled.service`, etc. |
 | `make -C infra shell VM=user@host` | Plain SSH into the VM. |
-| `make -C infra destroy VM=user@host` | Stops vcluster and wipes `/var/lib/vcluster` + `/etc/vcluster`. Tailscale membership preserved. Doesn't touch the VM's OS. |
+| `make -C infra destroy VM=user@host` | Runs `k3s-uninstall.sh`, which stops k3s and wipes `/etc/rancher/k3s`, `/var/lib/rancher/k3s` (PVC data included) and `/var/lib/kubelet`. Also removes a vcluster standalone install if it finds one: the `vcluster`, `kubelet` and `containerd` units, their binaries in `/usr/local/bin`, the CNI plugins and `/var/lib/containerd` (the old image store, tens of GB). It reboots the VM first, to stop the containers those units leave running. Tailscale membership preserved. Doesn't touch the VM's OS. |
 | `make -C infra restore-longevity VM=user@host` | Interactive Velero restore of `inv-vcl01-longevity` from an R2 backup (#1865). Lists backups, prompts which, freezes ArgoCD, deletes + restores the namespace. See §6. |
 
 ---
@@ -730,6 +737,34 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n inv-vcl01-pr<N> \
   Once the Job is Completed, the app pod will recover within its next
   backoff retry (~30 s).
 - Other crash reason — file an issue with the log.
+
+### Demo PostgreSQL never becomes Ready (`could not send stop signal`)
+
+The demo PostgreSQL pod restarts once, then stays at `0/1 Running` and its
+logs repeat `FATAL: the database system is in recovery mode`. The log of the
+first container ends with:
+
+```text
+pg_ctl: could not send stop signal (PID: 32): Permission denied
+```
+
+AppArmor refuses a signal between two processes of the same container. With
+`kernel.apparmor_restrict_unprivileged_unconfined=1`, Ubuntu 26.04's default,
+runc gives container processes a stacked label
+(`cri-containerd.apparmor.d//&unconfined`) that containerd's default profile
+does not accept as a signal peer. `vm-install.sh` sets the sysctl to 0 for
+this reason. Check the VM:
+
+```bash
+ssh $VM 'sysctl kernel.apparmor_restrict_unprivileged_unconfined'
+ssh $VM 'sudo journalctl -k --since "-10 min" | grep "operation=\"signal\"" | tail -3'
+```
+
+A value of 1, or `apparmor="DENIED" operation="signal" ...
+peer="cri-containerd.apparmor.d//&unconfined"` in the kernel log, confirms
+it. Run `make -C infra bootstrap VM=$VM`, which writes
+`/etc/sysctl.d/60-inventario-apparmor.conf` and applies it, then delete the
+PostgreSQL pod so that it starts with the plain label.
 
 ### TS Operator pod stuck or crashlooping
 
@@ -864,31 +899,6 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n tailscale \
 Manual cleanup via the [admin Machines view](https://login.tailscale.com/admin/machines)
 is always an option — filter by `tag:k8s`, remove offline rows.
 
-### kubectl fails with "certificate is valid for 127.0.0.1, ..., not <FQDN>"
-
-You're on a cluster bootstrapped before #1892 landed. The vcluster apiserver
-TLS cert was generated WITHOUT the tailnet FQDN in its SAN list, but the
-new bootstrap.sh writes a kubeconfig that points at the FQDN. The
-post-#1892 `/etc/vcluster/vcluster.yaml` carries the correct
-`controlPlane.proxy.extraSANs`, but vcluster only consults it during
-initial cert generation — restarting the service against an existing
-PKI dir won't pick up the new SAN.
-
-Fastest fix: redo the bootstrap from scratch (loses any in-cluster state
-that isn't ArgoCD-managed, which for a Phase 1 preview-env is normally
-nothing important — per-PR namespaces re-sync from the ApplicationSet in
-~5 min):
-
-```bash
-make -C infra destroy VM=user@host
-make -C infra bootstrap VM=user@host
-```
-
-Surgical alternative: stop vcluster, delete the apiserver cert + key files
-under `/var/lib/vcluster/pki/`, restart vcluster. The exact filenames vary
-across vcluster patch versions, so the `make destroy` + `make bootstrap`
-path is generally less error-prone.
-
 ### bootstrap fails on `apt-get update` with "Release file ... is not valid yet"
 
 VM clock skew. The bootstrap NTP resync didn't converge in 30 s — check VM
@@ -989,11 +999,11 @@ at rest in R2 is unreadable without it.
 
 ```bash
 # List backups (run on the VM, where the velero CLI + kubeconfig live):
-ssh user@vm-host 'sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml velero backup get'
+ssh user@vm-host 'sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml velero backup get'
 
 # Trigger an on-demand backup now (don't wait for 02:00 UTC) — useful right
 # after first bootstrap to confirm the pipeline end-to-end:
-ssh user@vm-host 'sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml \
+ssh user@vm-host 'sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml \
   velero backup create longevity-adhoc-$(date +%s) \
   --include-namespaces inv-vcl01-longevity --default-volumes-to-fs-backup --wait'
 ```
@@ -1090,8 +1100,8 @@ infra/
 │   └── longevity-base.values.yaml  layered over preview-base for inv-vcl01-longevity: PVC persistence (#1865)
 └── vm/
     ├── bootstrap.sh          laptop orchestrator (ssh, sops, upload, apply)
-    ├── vm-install.sh         remote installer (tailscale, vcluster, TS-op, ArgoCD, Velero)
-    ├── destroy.sh            remote teardown (vcluster + data; tailnet preserved)
+    ├── vm-install.sh         remote installer (tailscale, k3s, helm, TS-op, ArgoCD, Velero)
+    ├── destroy.sh            remote teardown (k3s + data; tailnet preserved)
     ├── helm-values/          static chart overlays vm-install.sh layers secrets on top of
     │   ├── tailscale-operator.yaml  TS operator static values (OAuth layered at install)
     │   └── velero.yaml              Velero static values: plugin, node-agent, schedule (#1865)
@@ -1114,8 +1124,8 @@ infra/
 
 | Component | Version | Where pinned |
 |---|---|---|
-| vcluster standalone | `v0.34.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `VCLUSTER_VERSION` |
-| Kubernetes (inside vcluster) | `v1.34.0` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `K8S_VERSION` |
+| k3s (Kubernetes v1.35) | `v1.35.10+k3s1` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `K3S_VERSION` |
+| helm CLI | `v4.3.2` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `HELM_VERSION` |
 | Tailscale CLI | latest from the official installer | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) (idempotent re-install) |
 | Tailscale Operator chart | `1.104.7` | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `TS_OPERATOR_CHART_VERSION` |
 | ArgoCD chart | `10.18.2` (appVersion v3.6.2) | [`infra/vm/vm-install.sh`](./vm/vm-install.sh) `ARGOCD_CHART_VERSION` |
@@ -1129,7 +1139,12 @@ Every chart this VM installs is pinned (#1946). An unpinned `helm upgrade
 `make bootstrap` and `make recover` on a clean VM are not reproducible and an
 upstream release can break recovery at the worst moment.
 
-The chart versions carry `# renovate:` comments that a custom manager in
-[`renovate.json`](../renovate.json) reads, so they arrive as reviewable bump
+The k3s pin is the newest Kubernetes minor that every pinned chart is tested
+on (Velero 1.18 is tested up to 1.35). `make upgrade` reruns the k3s installer
+when `K3S_VERSION` changes, which upgrades the node in place; Kubernetes
+supports that one minor at a time, so step through each minor.
+
+The chart and tool versions carry `# renovate:` comments that a custom manager
+in [`renovate.json`](../renovate.json) reads, so they arrive as reviewable bump
 PRs instead of either drifting silently or freezing forever. Pinning a chart
 is only half the job; the other half is having something that moves it.
