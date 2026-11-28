@@ -91,6 +91,7 @@ func TestCheckDatabaseURL(t *testing.T) {
 		{name: "a ? in the password", dsn: "postgres://app:12?tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
 		{name: "a # in the password", dsn: "postgres://app:12#tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
 		{name: "the postgresql scheme", dsn: "postgresql://app:12/tail@host/x", wantErr: urlerr.ErrAtAfterHost.Error()},
+		{name: "a ? in the password with a pgxpool parameter", dsn: "postgres://app:12?tail@host/x&pool_max_conns=2", wantErr: urlerr.ErrAtAfterHost.Error()},
 		{name: "an @ in a query value", dsn: "postgres://app:pw@host/x?application_name=a@b", wantErr: urlerr.ErrAtAfterHost.Error()},
 		{name: "a DSN that does not parse", dsn: "postgres://app:p#ss@db/x", wantErr: "invalid port after host" + hint},
 		{name: "an @ in the password", dsn: "postgres://app:p@ss@host/x"},
@@ -121,5 +122,5 @@ func TestErrAtAfterHost(t *testing.T) {
 
 	c.Assert(urlerr.CheckDatabaseURL("postgres://app:12/tail@host/x"), qt.ErrorIs, urlerr.ErrAtAfterHost)
 	c.Assert(urlerr.ErrAtAfterHost.Error(), qt.Equals,
-		"the database URL has an @ after the host; percent-encode @ in the password or the database name as %40")
+		"the database URL has an @ after the host; percent-encode / ? # in the password (%2F %3F %23), and an @ in the database name or a query value as %40")
 }

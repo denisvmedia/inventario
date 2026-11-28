@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"regexp"
 	"testing"
 	"testing/fstest"
 
@@ -45,29 +46,39 @@ func TestMigrateUp_LogLeavesThePasswordOut(t *testing.T) {
 	c.Assert(buf.String(), qt.Not(qt.Contains), "s3cret")
 }
 
-// A "/" in the password ends the host part early, so the rest of the
-// password is the database name, which a failed connection quotes. Every
-// entry point refuses such a DSN before it connects.
+// A "/" or "?" in the password ends the host part early, so the rest of the
+// password is the database name or the query, which a failed connection or
+// a log line quotes. Every entry point refuses such a DSN before it logs or
+// connects. Stripping the pgxpool parameters re-encodes the query, so the
+// check runs on the DSN as given.
 func TestMigrator_RefusesAnAtAfterTheHost(t *testing.T) {
-	const want = "the database URL has an @ after the host; percent-encode @ in the password or the database name as %40"
-	m := migrator.New("postgres://app:12/tail@host/x", fstest.MapFS{})
-	tests := []struct {
+	const want = "the database URL has an @ after the host; percent-encode / ? # in the password (%2F %3F %23), and an @ in the database name or a query value as %40"
+	entryPoints := []struct {
 		name string
-		run  func() error
+		run  func(m *migrator.Migrator) error
 	}{
-		{name: "migrate up", run: func() error { return m.MigrateUp(context.Background(), migrator.Args{}) }},
-		{name: "verify", run: func() error { return m.VerifySchemaUpToDate(context.Background()) }},
-		{name: "drop tables", run: func() error { return m.DropTables(context.Background(), false, true) }},
-		{name: "drop database", run: func() error { return m.DropDatabase(context.Background(), false, true) }},
+		{name: "migrate up", run: func(m *migrator.Migrator) error { return m.MigrateUp(context.Background(), migrator.Args{}) }},
+		{name: "verify", run: func(m *migrator.Migrator) error { return m.VerifySchemaUpToDate(context.Background()) }},
+		{name: "drop tables", run: func(m *migrator.Migrator) error { return m.DropTables(context.Background(), false, true) }},
+		{name: "drop database", run: func(m *migrator.Migrator) error { return m.DropDatabase(context.Background(), false, true) }},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := qt.New(t)
+	for _, dsn := range []string{
+		"postgres://app:12/tail@host/x",
+		"postgres://app:12?tail@host/x&pool_max_conns=2",
+	} {
+		for _, ep := range entryPoints {
+			t.Run(dsn+" "+ep.name, func(t *testing.T) {
+				c := qt.New(t)
 
-			err := tt.run()
+				var buf bytes.Buffer
+				m := migrator.New(dsn, fstest.MapFS{}).SetLogger(slog.New(slog.NewTextHandler(&buf, nil)))
 
-			c.Assert(err, qt.ErrorMatches, ".*"+want)
-			c.Assert(err.Error(), qt.Not(qt.Contains), "tail")
-		})
+				err := ep.run(m)
+
+				c.Assert(err, qt.ErrorMatches, ".*"+regexp.QuoteMeta(want))
+				c.Assert(err.Error(), qt.Not(qt.Contains), "tail")
+				c.Assert(buf.String(), qt.Not(qt.Contains), "tail")
+			})
+		}
 	}
 }

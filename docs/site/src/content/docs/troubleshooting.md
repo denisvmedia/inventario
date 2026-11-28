@@ -193,10 +193,11 @@ In `postgres://app:12/secret@db/inventario` the `/` ends the host part, and
 the rest of the password becomes the database name. The server and every
 `inventario db` command refuse such a URL before they connect.
 
-Percent-encode the reserved characters of the password in `--db-dsn`
-(`INVENTARIO_DB_DSN`): `@` as `%40`, `/` as `%2F`, `?` as `%3F` and `#` as
-`%23`. The URL above becomes `postgres://app:12%2Fsecret@db/inventario`. A
-literal `@` in the database name or in a query value needs `%40` too.
+Percent-encode `/`, `?` and `#` in the password of `--db-dsn`
+(`INVENTARIO_DB_DSN`) as `%2F`, `%3F` and `%23`. The URL above becomes
+`postgres://app:12%2Fsecret@db/inventario`. Encoding only the `@` does not
+help: the host part still ends at the `/`. A literal `@` in the database
+name or in a query value is written as `%40`.
 
 ### Everything works, then every restart loses the data
 

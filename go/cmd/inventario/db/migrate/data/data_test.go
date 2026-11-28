@@ -134,5 +134,5 @@ func TestCommand_RefusesAnAtAfterTheHost(t *testing.T) {
 
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Equals,
-		"the database URL has an @ after the host; percent-encode @ in the password or the database name as %40")
+		"the database URL has an @ after the host; percent-encode / ? # in the password (%2F %3F %23), and an @ in the database name or a query value as %40")
 }

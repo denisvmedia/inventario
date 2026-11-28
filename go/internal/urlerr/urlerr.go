@@ -41,7 +41,7 @@ func (e *Error) Error() string {
 // ErrAtAfterHost refuses a database URL with an "@" after the host.
 var ErrAtAfterHost = &Error{
 	Reason: "the database URL has an @ after the host",
-	Hint:   "percent-encode @ in the password or the database name as %40",
+	Hint:   "percent-encode / ? # in the password (%2F %3F %23), and an @ in the database name or a query value as %40",
 }
 
 // Parse is url.Parse with an *Error in place of the error url.Parse returns.
