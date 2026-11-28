@@ -18,9 +18,10 @@ Both baselines preserve the same startup flow used by `docker-compose.yaml`:
 
 ## Image and tag assumptions
 
-- The `k8s/prod` manifests pin a released tag (`v0.1.0` today). Bump every
-  `image:` reference in `k8s/prod/deployment.yaml` and `k8s/prod/job-setup.yaml`
-  when you move to a newer release. Do not put `:latest` back — it floats, so
+- The `k8s/prod` manifests pin a released tag (`v0.3.0` today). The release
+  pull request bumps every `image:` reference in `k8s/prod/deployment.yaml` and
+  `k8s/prod/job-setup.yaml` to the new release, and the release workflow
+  refuses a tag they do not name. Do not put `:latest` back — it floats, so
   two applies of the same manifest can land different code.
 - **For production, the Helm chart at `helm/inventario/` is the preferred deploy
   path.** `k8s/prod` is a **hand-maintained reference baseline**: it is **not**

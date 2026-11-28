@@ -113,6 +113,23 @@ jobs:
           fi
           echo "chart ${version} with appVersion ${app} matches ${TAG}"
 
+      - name: Check k8s/prod pins this release
+        # The k8s/prod manifests follow master, so a pin left on an older
+        # release pairs them with a binary they were not written for.
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          files="k8s/prod/deployment.yaml k8s/prod/job-setup.yaml"
+          # shellcheck disable=SC2086 # the file list is meant to split
+          pins="$(grep -ho 'ghcr.io/denisvmedia/inventario:[^[:space:]"]*' $files | sort -u)"
+          if [ "$pins" != "ghcr.io/denisvmedia/inventario:${TAG}" ]; then
+            echo "::error::k8s/prod pins $(echo "$pins" | tr '\n' ' ')but the tag is ${TAG}. Set every image in ${files} to :${TAG} before tagging."
+            exit 1
+          fi
+          echo "k8s/prod pins ${TAG}"
+
       - name: Resolve the release notes
         id: notes
         # Three sources, in order (#2155):

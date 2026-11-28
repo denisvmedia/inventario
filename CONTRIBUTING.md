@@ -311,7 +311,11 @@ section heading the page cannot read.
    attaches the package to the GitHub Release. If the chart needs a change the
    operator must act on, say so in the changelog and in the chart README's
    upgrade notes.
-3. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
+3. In `k8s/prod/deployment.yaml` and `k8s/prod/job-setup.yaml`, set every
+   `ghcr.io/denisvmedia/inventario` image to `:vX.Y.Z`. The manifests follow
+   master, so an older pin pairs them with a binary they were not written
+   for. The release workflow refuses a tag they do not name.
+4. Tag `vX.Y.Z` and push. The workflow publishes the section as the release
    body.
 
 Nothing else carries the version. The binary and the UI both get it from the
