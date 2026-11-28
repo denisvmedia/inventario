@@ -304,6 +304,15 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 HELM=/usr/local/bin/helm
 KUBECTL=/usr/local/bin/kubectl
 
+# Helm 4 applies server-side. The Tailscale chart renders the
+# tailscale/operator-oauth Secret, and apply-secrets.sh applies the same
+# Secret server-side with kubectl, so its `stringData` belongs to whichever of
+# the two ran last. A Helm run after apply-secrets.sh stops on that ("Apply
+# failed with 2 conflicts") unless it forces the conflicts, and every
+# `make bootstrap` after the first is such a run. `--server-side=true` fixes
+# the method, because `auto` follows the method of the previous release.
+HELM_APPLY=(--server-side=true --force-conflicts)
+
 # --- helm CLI (pinned, checksum-verified) ---
 if [ "$("$HELM" version --template '{{.Version}}' 2>/dev/null || true)" != "$HELM_VERSION" ]; then
     note "Installing helm $HELM_VERSION"
@@ -351,6 +360,7 @@ EOF
     "$HELM" upgrade --install tailscale-operator tailscale/tailscale-operator \
         --version "$TS_OPERATOR_CHART_VERSION" \
         --namespace tailscale \
+        "${HELM_APPLY[@]}" \
         --values "$TS_OP_STATIC_VALUES" \
         --values "$TS_OAUTH_VALUES" \
         --wait --timeout 5m
@@ -369,6 +379,7 @@ note "Installing/upgrading ArgoCD"
 "$HELM" upgrade --install argocd argo/argo-cd \
     --version "$ARGOCD_CHART_VERSION" \
     --namespace argocd \
+    "${HELM_APPLY[@]}" \
     --set 'configs.params.server\.insecure=true' \
     --set 'configs.params.applicationsetcontroller\.policy=sync' \
     --set 'applicationSet.enabled=true' \
@@ -389,6 +400,7 @@ note "Installing/upgrading reflector"
 "$HELM" upgrade --install reflector emberstack/reflector \
     --version "$REFLECTOR_CHART_VERSION" \
     --namespace reflector --create-namespace \
+    "${HELM_APPLY[@]}" \
     --wait --timeout 5m
 
 # --- Velero (#1865 — daily, encrypted, off-VM backup of inv-vcl01-longevity to R2) ---
@@ -493,6 +505,7 @@ EOF
     "$HELM" repo update >/dev/null || warn "helm repo update failed; using cached chart index for Velero"
     if "$HELM" upgrade --install velero vmware-tanzu/velero \
         --namespace velero \
+        "${HELM_APPLY[@]}" \
         --version "$VELERO_CHART_VERSION" \
         --values "$VELERO_STATIC_VALUES" \
         --values "$VELERO_BSL_VALUES" \
