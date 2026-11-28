@@ -63,3 +63,9 @@ jobs:
         # chart change and PR previews whose pods the cluster refuses; this
         # runs it on hand-written renders that must pass or fail.
         run: ./scripts/test-preview-limits.sh
+
+      - name: Test the changelog assembly
+        # The release pull request builds the published release notes with
+        # .github/scripts/changelog-assemble.sh, and Markdown Lint runs its --check
+        # on every pull request with a fragment.
+        run: ./.github/scripts/test-changelog-assemble.sh

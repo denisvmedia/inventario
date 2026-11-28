@@ -65,3 +65,12 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@3ce8f712b5d8f31acd8e201be6d97e3d2bb23eb7 # v25
         with:
           globs: ''
+
+      # markdownlint skips the fragments in changelog.d/ (see
+      # .markdownlint-cli2.jsonc); this checks what the release assembly
+      # needs from them and from CHANGELOG.md, an empty `## [Unreleased]`
+      # included. It runs after a markdownlint failure too, so one push shows
+      # both.
+      - name: Check the changelog fragments
+        if: ${{ !cancelled() }}
+        run: ./.github/scripts/changelog-assemble.sh --check

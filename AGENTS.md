@@ -173,6 +173,10 @@ When you make such a change:
 
 If a user-facing change genuinely has **no** documentation impact, say so explicitly in the PR rather than silently skipping the check. If a new feature is large enough to warrant its own page, add one and wire it into both the sidebar (`astro.config.mjs`) and the splash grid (`index.mdx`). Translations (`cs`/`ru`) are additive and fall back to English, so English is the bar that must always stay current.
 
+## Changelog entries
+
+A change that needs a changelog entry (the "Changelog" section of [CONTRIBUTING.md](CONTRIBUTING.md#changelog) says which do) adds a fragment: one new file in `changelog.d/`, named after the branch with `/` replaced by `-` (if a file of that name already exists on master, add `-2`, `-3`, …), holding the entries under their `### Added`, `### Fixed`, `### Operators` (and so on) headings in the format of [`changelog.d/README.md`](changelog.d/README.md). New entries never go into `CHANGELOG.md`, whose `## [Unreleased]` section stays empty. Run `.github/scripts/changelog-assemble.sh --check` before committing. Only the release pull request writes a new section into `CHANGELOG.md`, by running `.github/scripts/changelog-assemble.sh X.Y.Z`. Between the release pull request and the tag, an entry for a change that ships in that release goes into that release's section of `CHANGELOG.md`.
+
 ## Key Patterns and Conventions
 
 ### Registry Pattern
