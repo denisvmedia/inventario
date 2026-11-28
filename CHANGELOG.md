@@ -1128,6 +1128,9 @@ when to add an entry and where it goes.
   save because it had no tenant or group, so the log of every restore stayed
   empty, failed restores included
   ([#3022](https://github.com/denisvmedia/inventario/issues/3022)).
+- A restore counts an item it refuses because another user created it as one
+  error. Before, the restore summary counted each such item twice
+  ([#3075](https://github.com/denisvmedia/inventario/issues/3075)).
 - A service visit with a cost of 0, a repair done for free under warranty for
   example, saves with that cost, and the item's Service tab shows "Cost: 0
   EUR". Before, the server refused an amount of 0 with a currency as a

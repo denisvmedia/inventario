@@ -471,7 +471,7 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	if currentUser == nil {
 		return security.ErrNoUserContext
 	}
-	if err := l.validateCommodityOwnershipInDB(ctx, xmlCommodity.ID, currentUser, existing, stats); err != nil {
+	if err := l.validateCommodityOwnershipInDB(ctx, xmlCommodity.ID, currentUser, existing); err != nil {
 		return err
 	}
 
