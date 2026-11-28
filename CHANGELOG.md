@@ -1640,6 +1640,10 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   refused only when its database name or a query value holds a literal `@`;
   write it as `%40`
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- The `k8s/prod` reference manifests pin `v0.3.0`. Each release now moves
+  the pin, and a tag the pins do not name is refused, so the manifests
+  always run the release they were written for
+  ([#3097](https://github.com/denisvmedia/inventario/pull/3097)).
 
 ## [0.2.2] - 2026-11-23
 

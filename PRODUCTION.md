@@ -88,9 +88,10 @@ would have nothing to pull.
   version. Use annotated tags.
 - [ ] **Merge the release pull request first.** It builds the CHANGELOG section from
   the fragments in `changelog.d/` with `.github/scripts/changelog-assemble.sh` and sets
-  `version` and `appVersion` in `helm/inventario/Chart.yaml`; see "Cutting a
-  release" in [CONTRIBUTING.md](CONTRIBUTING.md#cutting-a-release). `release.yml`
-  refuses a tag whose chart does not match it.
+  `version` and `appVersion` in `helm/inventario/Chart.yaml` and the image pins in
+  `k8s/prod`; see "Cutting a release" in
+  [CONTRIBUTING.md](CONTRIBUTING.md#cutting-a-release). `release.yml` refuses a tag
+  whose chart or `k8s/prod` pins do not match it.
 - [ ] **Tag the exact `master` commit and push:**
 
   ```bash
