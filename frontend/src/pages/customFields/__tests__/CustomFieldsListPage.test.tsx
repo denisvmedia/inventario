@@ -87,6 +87,8 @@ describe("<CustomFieldsListPage />", () => {
   it("lists the fields with their types and usage", async () => {
     seed()
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Custom fields · Inventario"))
     expect(await screen.findByTestId("custom-field-row-cf-plate")).toHaveTextContent("Plate")
     expect(screen.getByTestId("custom-field-row-cf-plate")).toHaveTextContent("Text")
     expect(screen.getByTestId("custom-field-row-cf-plate-usage")).toHaveTextContent(

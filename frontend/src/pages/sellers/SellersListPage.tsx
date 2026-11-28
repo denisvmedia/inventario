@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { SellerFormDialog } from "@/components/sellers/SellerFormDialog"
 import { SellerRow } from "@/components/sellers/SellerRow"
 import { Button } from "@/components/ui/button"
@@ -117,6 +118,7 @@ export function SellersListPage() {
 
   return (
     <Page width="wide" data-testid="page-sellers">
+      <RouteTitle title={t("sellers:title")} />
       <PageHeader
         title={t("sellers:title")}
         subtitle={t("sellers:description")}

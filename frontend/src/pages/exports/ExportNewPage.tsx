@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
 import { SelectedItemsPicker } from "@/components/exports/SelectedItemsPicker"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -107,6 +108,7 @@ export function ExportNewPage() {
   if (!groupReady) {
     return (
       <Page width="narrow" className="gap-4" data-testid="page-export-new-loading">
+        <RouteTitle title={t("exports:wizard.title")} />
         <Skeleton className="h-8 w-1/2" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-24 w-full" />
@@ -116,6 +118,7 @@ export function ExportNewPage() {
 
   return (
     <Page width="narrow" data-testid="page-export-new">
+      <RouteTitle title={t("exports:wizard.title")} />
       <PageHeader
         size="detail"
         title={t("exports:wizard.title")}

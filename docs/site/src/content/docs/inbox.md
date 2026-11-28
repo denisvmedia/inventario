@@ -83,8 +83,8 @@ for them.
 ## Review the items one by one
 
 **Review one by one**, at the top of the inbox, opens the first item to
-review. An item opened from the inbox shows a review bar with its place in
-the list, for example "Item 1 of 4 to review":
+review in a side panel over the inbox. An item opened from the inbox shows a
+review bar with its place in the list, for example "Item 1 of 4 to review":
 
 - **Mark as reviewed** marks the item as reviewed, as on the inbox row, and
   opens the next item still waiting for review. After the last one, you are
@@ -101,7 +101,9 @@ before the next item opens, you stay on the item. Marking an item as reviewed ch
 on it but its **Last Edited** date. **Previous** and **Next** at the top, and **Save and next** in the edit
 form, move through the same list (see
 [Go through a list one item at a time](../items/#go-through-a-list-one-item-at-a-time)).
-**Back to inbox** returns to the inbox.
+Close the panel to return to the inbox. On the full item page, for example
+after **View full details** in the panel, **Back to inbox** at the top does the
+same.
 
 ## Finish a batch of files
 
