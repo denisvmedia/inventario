@@ -738,6 +738,34 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n inv-vcl01-pr<N> \
   backoff retry (~30 s).
 - Other crash reason — file an issue with the log.
 
+### Demo PostgreSQL never becomes Ready (`could not send stop signal`)
+
+The demo PostgreSQL pod restarts once, then stays at `0/1 Running` and its
+logs repeat `FATAL: the database system is in recovery mode`. The log of the
+first container ends with:
+
+```text
+pg_ctl: could not send stop signal (PID: 32): Permission denied
+```
+
+AppArmor refuses a signal between two processes of the same container. With
+`kernel.apparmor_restrict_unprivileged_unconfined=1`, Ubuntu 26.04's default,
+runc gives container processes a stacked label
+(`cri-containerd.apparmor.d//&unconfined`) that containerd's default profile
+does not accept as a signal peer. `vm-install.sh` sets the sysctl to 0 for
+this reason. Check the VM:
+
+```bash
+ssh $VM 'sysctl kernel.apparmor_restrict_unprivileged_unconfined'
+ssh $VM 'sudo journalctl -k --since "-10 min" | grep "operation=\"signal\"" | tail -3'
+```
+
+A value of 1, or `apparmor="DENIED" operation="signal" ...
+peer="cri-containerd.apparmor.d//&unconfined"` in the kernel log, confirms
+it. Run `make -C infra bootstrap VM=$VM`, which writes
+`/etc/sysctl.d/60-inventario-apparmor.conf` and applies it, then delete the
+PostgreSQL pod so that it starts with the plain label.
+
 ### TS Operator pod stuck or crashlooping
 
 ```bash

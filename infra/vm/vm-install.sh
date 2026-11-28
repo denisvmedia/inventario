@@ -203,6 +203,30 @@ if [ -e /etc/systemd/system/vcluster.service ] || systemctl is-active --quiet vc
     exit 1
 fi
 
+# AppArmor: container processes must keep a plain profile label.
+# Ubuntu 26.04 ships kernel.apparmor_restrict_unprivileged_unconfined=1. With
+# it, runc stacks the container's profile with `unconfined` (audit message:
+# "change_profile unprivileged unconfined converted to stacking"), so every
+# container process is labeled cri-containerd.apparmor.d//&unconfined, while
+# containerd's default profile lets a process signal only peers labeled
+# cri-containerd.apparmor.d. The processes of one container then cannot signal
+# each other: the demo PostgreSQL entrypoint fails in `pg_ctl stop` with
+# "Permission denied", and the server restarts into recovery and stays there.
+# With the sysctl at 0 containers get the plain label again. What it restricts
+# is an unprivileged, unconfined host process switching AppArmor profiles (the
+# aa-exec route around the unprivileged-userns restriction); this VM has one
+# admin user and no other local accounts. The drop-in sorts after the package's
+# /usr/lib/sysctl.d/10-apparmor.conf, so its value wins. Pods that started
+# before the change keep the stacked label until they are recreated.
+APPARMOR_SYSCTL_FILE=/proc/sys/kernel/apparmor_restrict_unprivileged_unconfined
+if [ -e "$APPARMOR_SYSCTL_FILE" ]; then
+    printf '%s\n' 'kernel.apparmor_restrict_unprivileged_unconfined = 0' >/etc/sysctl.d/60-inventario-apparmor.conf
+    if [ "$(cat "$APPARMOR_SYSCTL_FILE")" != 0 ]; then
+        note "Turning off kernel.apparmor_restrict_unprivileged_unconfined"
+        sysctl -q -w kernel.apparmor_restrict_unprivileged_unconfined=0
+    fi
+fi
+
 # /etc/rancher/k3s/config.yaml carries every server option, so the systemd
 # unit the installer writes needs no flags. k3s reads it on each start.
 #
