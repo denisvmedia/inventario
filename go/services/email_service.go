@@ -365,13 +365,17 @@ func (s *StubEmailService) SendWelcomeEmail(ctx context.Context, to, _ string) e
 
 // SendWarrantyReminderEmail logs the warranty reminder event without
 // dispatching anything externally — useful in tests and the
-// "stub" provider profile.
+// "stub" provider profile. The link is logged only when LogEmailURLs is
+// enabled, as for the other reminders.
 func (s *StubEmailService) SendWarrantyReminderEmail(ctx context.Context, _, _, _, expiryDate, commodityURL string, thresholdDays int) error {
-	slog.InfoContext(ctx, "STUB email: warranty reminder",
+	attrs := []any{
 		"expiry_date", expiryDate,
-		"commodity_url", commodityURL,
 		"threshold_days", thresholdDays,
-	)
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "commodity_url", commodityURL)
+	}
+	slog.InfoContext(ctx, "STUB email: warranty reminder", attrs...)
 	return nil
 }
 

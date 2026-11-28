@@ -477,9 +477,11 @@ func renderScanError(w http.ResponseWriter, r *http.Request, err error) {
 
 	// Identity-missing is a deployment-wiring bug — surface as 500 so
 	// operators see the loud failure mode rather than the misleading
-	// "provider error" 502 a generic mapping would produce.
+	// "provider error" 502 a generic mapping would produce. The service
+	// has already logged it with the identity that was missing, so the
+	// 500 is rendered without a second line.
 	if errors.Is(err, services.ErrScanIdentityMissing) {
-		internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 

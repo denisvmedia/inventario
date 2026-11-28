@@ -1564,6 +1564,25 @@ when to add an entry and where it goes.
   registration and a request that reaches a tenant-only route without a
   tenant are now logged
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- The remaining log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  The server logs why it refuses to start, not only prints it on the command
+  line, when the schema check cannot reach the database
+  (`Refusing to start: could not check the database schema`), when the email
+  provider and the public URL do not fit together (`Invalid email or public
+  URL configuration`), and when the Sentry settings do not parse (`Invalid
+  Sentry configuration`, `Failed to initialize Sentry`). A schema behind the
+  binary is logged once, by `schema_migrations.version is behind the binary's
+  embedded migrations`, without a second `refusing to start` line. A
+  `SENTRY_DSN` that does not parse is no longer quoted in the error. The RLS
+  refusal lines and `Signed URL access attempt by inactive user` carry
+  `user_id` and no address. The stub email service logs the warranty
+  reminder's link only with `--log-email-urls`. The blob backfill, bulk
+  delete and item event lines carry `error` instead of `err`. A scan request
+  without a tenant or user identity is logged once, without a second
+  `internal server error` line, and a restore's unauthorized-attempt line no
+  longer carries the always-empty `request_details`
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 - Email log lines carry an email address only for the sign-in, registration
   and recovery emails (verification, password reset, sign-in link, password
   changed, welcome), under `email` instead of `to`. The reminder, digest,

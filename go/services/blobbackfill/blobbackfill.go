@@ -182,7 +182,7 @@ func (s *Service) processRow(
 	// short-circuits — that's how interrupted runs become idempotent.
 	copied, srcPresent, err := copyIfAbsent(ctx, bucket, legacyKey, newKey)
 	if err != nil {
-		logger.WarnContext(ctx, "blobbackfill: copy failed", "file_id", file.ID, "err", err)
+		logger.WarnContext(ctx, "blobbackfill: copy failed", "file_id", file.ID, "error", err)
 		stats.RowsErrored++
 		return
 	}
@@ -207,7 +207,7 @@ func (s *Service) processRow(
 	// service registry to keep cross-tenant iteration cheap.
 	file.OriginalPath = newKey
 	if _, err := fileReg.Update(ctx, *file); err != nil {
-		logger.WarnContext(ctx, "blobbackfill: row update failed", "file_id", file.ID, "err", err)
+		logger.WarnContext(ctx, "blobbackfill: row update failed", "file_id", file.ID, "error", err)
 		stats.RowsErrored++
 		return
 	}
@@ -231,7 +231,7 @@ func (s *Service) processRow(
 	refs, err := fileReg.ListIDsByOriginalPath(ctx, legacyKey)
 	if err != nil {
 		logger.WarnContext(ctx, "blobbackfill: keeping legacy blob, could not establish sole ownership",
-			"file_id", file.ID, "legacy_key", legacyKey, "err", err)
+			"file_id", file.ID, "legacy_key", legacyKey, "error", err)
 		s.maybeMigrateThumbs(ctx, bucket, file, opts.DryRun, logger, stats)
 		stats.RowsMoved++
 		return
@@ -255,7 +255,7 @@ func (s *Service) processRow(
 		// Legacy blob already gone — nothing to do.
 	default:
 		logger.WarnContext(ctx, "blobbackfill: legacy blob delete failed",
-			"file_id", file.ID, "legacy_key", legacyKey, "err", err)
+			"file_id", file.ID, "legacy_key", legacyKey, "error", err)
 	}
 
 	// Step 4: thumbnails.
@@ -284,7 +284,7 @@ func (s *Service) maybeMigrateThumbs(
 	stats.ThumbsMoved += moved
 	stats.ThumbsMissing += missing
 	if err != nil {
-		logger.WarnContext(ctx, "blobbackfill: thumbnail migration error", "file_id", file.ID, "err", err)
+		logger.WarnContext(ctx, "blobbackfill: thumbnail migration error", "file_id", file.ID, "error", err)
 		stats.RowsErrored++
 	}
 }

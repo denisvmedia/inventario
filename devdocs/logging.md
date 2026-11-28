@@ -74,14 +74,12 @@ Three rules follow from the table:
 - Log an error once. Do not log it and also return it up a stack that logs it
   again; the layer that decides what the user sees is the layer that logs.
 
-Lines that do not fit the table yet are moved one package or area at a time,
-in pull requests that cite this section.
-
 ## Field names
 
 Keys are `snake_case`, and one concept keeps one spelling everywhere. sloglint
-checks the case (`key-naming-case: snake` in `.golangci.yml`); the spelling is
-up to the author and the reviewer.
+checks the case (`key-naming-case: snake` in `.golangci.yml`), and
+[the log guard](#the-log-guard) rejects `err` and `request_id`; the rest of the
+spelling is up to the author and the reviewer.
 
 | Key | Holds |
 | --- | --- |
@@ -104,20 +102,6 @@ up to the author and the reviewer.
 When a key needs qualifying, prefix rather than invent: `file_tenant_id`,
 `existing_user_id`, `created_by_user_id`, `operator_id` and `target_id` for the
 two sides of an impersonation.
-
-Spellings found in the code that do not follow the table, and what replaces
-them as each area is touched:
-
-| Found | Lines | Use instead |
-| --- | --- | --- |
-| `err` | 12 | `error` |
-| `user_email` | 8 | `email` |
-| `to` for an email recipient (`apiserver/groups.go`) | 1 | `email` on a sign-in, registration or recovery line; otherwise `user_id`, or no recipient at all |
-| `user_id` for a back-office user (`apiserver/backoffice_auth*.go`) | 22 | `admin_id` |
-| `user_tenant`, `callback_tenant` (tenant ids, `apiserver/oauth.go`, `apiserver/tenant_context.go`) | 7 | `user_tenant_id`, `callback_tenant_id` |
-| `tenant` (a slug, `debug/seeddata`) | 2 | `tenant_slug` |
-| `item_id`, `item_type` (`registry/memory/registry.go`, which holds every entity type) | 1 | `entity_id`, `entity_type` |
-| `id` | 3 | the entity's own key, such as `verification_id` |
 
 ## What never goes into a log
 
@@ -163,17 +147,22 @@ The one sanctioned exception is local development: `--log-email-urls` makes the
 stub email service log the full links it would have sent, tokens included.
 Never set it on a shared environment.
 
-### The DSN log guard
+### The log guard
 
 `go/internal/logguard` is a test that walks the module's source and fails when
-a slog call, with or without the `Context` suffix, takes a DSN-named value
-(`dsn`, `dbDSN`, `connString`, `databaseURL` and similar) directly. It covers
-the `slog` package functions and the same methods on a logger kept in a value
-named `logger`, such as the migrator's `m.logger`. A DSN is a plain string with
-a predictable name, which is what makes a source-level guard possible. Wrapping
-the value in `shared.RedactDSN(dsn)` (or `dsnutil.Redact` outside `cmd`)
-satisfies it. The rest of this list has no such shape to match and relies on
-review.
+a slog call takes a DSN-named value (`dsn`, `dbDSN`, `connString`,
+`databaseURL` and similar) directly. It covers the `slog` package functions,
+with or without the `Context` suffix, `slog.Log` and `slog.LogAttrs`, and the
+same methods on a logger kept in a value named `logger`, such as the
+migrator's `m.logger`. A DSN is a plain string with a predictable name, which
+is what makes a source-level guard possible. Wrapping the value in
+`shared.RedactDSN(dsn)` (or `dsnutil.Redact` outside `cmd`) satisfies it. The
+rest of this list has no such shape to match and relies on review.
+
+The same test fails on an `err` key, which is `error`, and on a `request_id`
+key, which the handler adds from the context. It reads the literal keys of the
+call and the keys of the `slog.Attr` values built in it, such as
+`slog.Any("error", err)`; keys collected in a slice first are left to review.
 
 The guard sees only log calls. An error from `url.Parse` quotes the whole URL,
 and its reason quotes the part it could not read: with a `#` in the password,

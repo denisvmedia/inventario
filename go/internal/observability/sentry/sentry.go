@@ -1,7 +1,7 @@
 // Package sentry is Inventario's thin wrapper around the Sentry Go SDK for
 // error tracking (#844). It is a leaf package: it imports only the Sentry SDK
-// (github.com/getsentry/sentry-go and its net/http subpackage), cleanenv, and
-// the standard library. Wiring code in the bootstrap and apiserver packages
+// (github.com/getsentry/sentry-go and its net/http subpackage), cleanenv,
+// internal/urlerr, and the standard library. Wiring code in the bootstrap and apiserver packages
 // calls Init, Middleware and CaptureError; nothing else touches the SDK
 // directly.
 //
@@ -12,6 +12,7 @@
 package sentry
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -19,6 +20,8 @@ import (
 
 	sentrygo "github.com/getsentry/sentry-go"
 	"github.com/ilyakaznacheev/cleanenv"
+
+	"go.5x5.cz/inventario/internal/urlerr"
 )
 
 // enabled reports whether Init bound a real Sentry client. It gates the
@@ -55,6 +58,7 @@ func LoadConfig() (Config, error) {
 // once, leaves Sentry disabled, and returns a no-op flush so callers can defer
 // it unconditionally. A non-nil error means the DSN was malformed; the SDK does
 // not perform any network I/O here, so this only fails on operator misconfig.
+// The error quotes nothing from the DSN, which can carry a secret key.
 //
 // Init is intended to be called EXACTLY ONCE during bootstrap, before request
 // serving begins: it binds a process-global client and flips a package-global
@@ -65,6 +69,12 @@ func Init(cfg Config) (flush func(timeout time.Duration) bool, err error) {
 	if cfg.DSN == "" {
 		slog.Info("Sentry disabled (SENTRY_DSN not set)")
 		return noop, nil
+	}
+	// The SDK's parse error quotes the whole DSN. Parsing it first turns a
+	// URL the SDK could not read into fixed text; the SDK's other DSN errors
+	// are fixed text already.
+	if _, parseErr := urlerr.Parse(cfg.DSN); parseErr != nil {
+		return noop, fmt.Errorf("invalid SENTRY_DSN: %w", parseErr)
 	}
 	if initErr := sentrygo.Init(clientOptions(cfg)); initErr != nil {
 		return noop, initErr

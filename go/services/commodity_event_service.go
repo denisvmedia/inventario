@@ -238,7 +238,7 @@ func (s *CommodityEventService) EmitServiceUpdated(ctx context.Context, before, 
 func (s *CommodityEventService) emit(ctx context.Context, commodityID string, kind models.CommodityEventKind, before, after models.CommodityEventPayload) {
 	reg, err := s.factorySet.CommodityEventRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		slog.WarnContext(ctx, "commodity event: failed to build registry", "err", err, "kind", kind, "commodity_id", commodityID)
+		slog.WarnContext(ctx, "commodity event: failed to build registry", "error", err, "kind", kind, "commodity_id", commodityID)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (s *CommodityEventService) emit(ctx context.Context, commodityID string, ki
 		// Wrap-and-log only — see the package-level comment on why we
 		// don't propagate.
 		slog.WarnContext(ctx, "commodity event: failed to write",
-			"err", errxtrace.Wrap("commodity event write", err),
+			"error", errxtrace.Wrap("commodity event write", err),
 			"kind", kind,
 			"commodity_id", commodityID,
 		)

@@ -555,7 +555,7 @@ func (s *CommodityBulkService) Delete(ctx context.Context, targets []BulkTarget)
 		case err == nil:
 			out.Succeeded = append(out.Succeeded, t.ID)
 		case trashed != nil:
-			slog.WarnContext(ctx, "bulk delete: item went to Trash, its files did not", "commodity_id", t.ID, "err", err)
+			slog.WarnContext(ctx, "bulk delete: item went to Trash, its files did not", "commodity_id", t.ID, "error", err)
 			out.Succeeded = append(out.Succeeded, t.ID)
 			out.Notes = append(out.Notes, BulkNote{ID: t.ID, Name: trashed.Name, Code: BulkNoteFilesKept})
 		default:

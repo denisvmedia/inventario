@@ -61,6 +61,34 @@ func TestStubEmailService_LogsFullURLsWhenAsked(t *testing.T) {
 	c.Assert(logged, qt.Contains, secretToken)
 }
 
+// The warranty reminder keeps its link off the log unless asked, like the
+// other reminders (devdocs/logging.md: no full URLs).
+func TestStubEmailService_WarrantyReminderLogsItsLinkOnlyWhenAsked(t *testing.T) {
+	const link = "https://app.test/g/home/commodities/c1"
+	send := func(svc *services.StubEmailService) func() error {
+		return func() error {
+			return svc.SendWarrantyReminderEmail(context.Background(), "u@test", "U", "Drill", "2027-01-01", link, 30)
+		}
+	}
+
+	t.Run("by default", func(t *testing.T) {
+		c := qt.New(t)
+		var err error
+		logged := captureLogs(c, func() { err = send(services.NewStubEmailService())() })
+		c.Assert(err, qt.IsNil)
+		c.Assert(logged, qt.Contains, "STUB email: warranty reminder")
+		c.Assert(logged, qt.Not(qt.Contains), link)
+	})
+
+	t.Run("with --log-email-urls", func(t *testing.T) {
+		c := qt.New(t)
+		var err error
+		logged := captureLogs(c, func() { err = send(services.NewStubEmailService(services.WithLogEmailURLs(true)))() })
+		c.Assert(err, qt.IsNil)
+		c.Assert(logged, qt.Contains, link)
+	})
+}
+
 // A nil option is ignored rather than panicking: the constructor is called
 // from wiring code that builds its option slice conditionally.
 func TestStubEmailService_TolerantOfNilOptions(t *testing.T) {
