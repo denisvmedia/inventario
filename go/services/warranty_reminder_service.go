@@ -458,7 +458,7 @@ func (s *WarrantyReminderService) fanOutToRecipients(
 			slog.DebugContext(ctx, "warranty reminder: recipient opted out",
 				"commodity_id", c.ID,
 				"group_id", c.GroupID,
-				"to", r.email,
+				"user_id", r.user.ID,
 			)
 			continue
 		}
@@ -471,7 +471,8 @@ func (s *WarrantyReminderService) fanOutToRecipients(
 			}
 			slog.ErrorContext(ctx, "warranty reminder: enqueue failed",
 				"commodity_id", c.ID,
-				"to", r.email,
+				"group_id", c.GroupID,
+				"user_id", r.user.ID,
 				"error", sendErr,
 			)
 		}

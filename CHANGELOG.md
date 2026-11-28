@@ -1531,6 +1531,20 @@ when to add an entry and where it goes.
   registration and a request that reaches a tenant-only route without a
   tenant are now logged
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+- Email log lines carry an email address only for the sign-in, registration
+  and recovery emails (verification, password reset, sign-in link, password
+  changed, welcome), under `email` instead of `to`. The reminder, digest,
+  invite, export and feedback lines drop the address, and a provider error on
+  them that quotes it, such as an SMTP rejection, shows `<recipient>` in its
+  place. The stub email service no longer logs names, item names, group names
+  or maintenance titles, and the stub transport no longer logs the recipient
+  or the subject. The reminder lines that dropped the address carry `user_id`
+  and `group_id`. A failed audit event for a sent loan reminder is logged as
+  an error, and a Redis email queue that cannot be created, so the server
+  falls back to the in-memory queue, as a warning. The stub's weekly digest
+  line is
+  `STUB email: weekly digest`
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 - Request, file, upload and back-office log lines in the API follow the
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
   The tenant field checks log their refusals as warnings, not errors
@@ -1556,6 +1570,7 @@ when to add an entry and where it goes.
   resolver line is `group_slug`. The seed endpoint logs `Seed endpoint
   called` and, at debug, `Parsed seed request`. A failed back-office user or
   worker step is logged once, without a second `internal server error` line
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 - Startup, backup, seed data and registry log lines follow the
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
   A JWT secret, file signing key or OAuth state key set to a public

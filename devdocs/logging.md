@@ -112,6 +112,7 @@ them as each area is touched:
 | --- | --- | --- |
 | `err` | 12 | `error` |
 | `user_email` | 8 | `email` |
+| `to` for an email recipient (`apiserver/groups.go`) | 1 | `email` on a sign-in, registration or recovery line; otherwise `user_id`, or no recipient at all |
 | `user_id` for a back-office user (`apiserver/backoffice_auth*.go`) | 22 | `admin_id` |
 | `user_tenant`, `callback_tenant` (tenant ids, `apiserver/oauth.go`, `apiserver/tenant_context.go`) | 7 | `user_tenant_id`, `callback_tenant_id` |
 | `tenant` (a slug, `debug/seeddata`) | 2 | `tenant_slug` |

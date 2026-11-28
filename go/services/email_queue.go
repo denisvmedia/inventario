@@ -122,7 +122,7 @@ func newEmailQueue(redisURL string) emailqueue.Queue {
 		RedisURL: redisURL,
 	})
 	if err != nil {
-		slog.Error("Failed to create Redis email queue, falling back to in-memory", "error", err)
+		slog.Warn("Failed to create Redis email queue, falling back to in-memory", "error", err)
 		return emailqueueinmemory.New(1024)
 	}
 

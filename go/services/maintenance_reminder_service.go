@@ -470,7 +470,7 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			slog.DebugContext(ctx, "maintenance reminder: recipient opted out",
 				"schedule_id", m.ID,
 				"group_id", commodity.GroupID,
-				"to", r.email,
+				"user_id", r.user.ID,
 			)
 			continue
 		}
@@ -483,7 +483,8 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			}
 			slog.ErrorContext(ctx, "maintenance reminder: enqueue failed",
 				"schedule_id", m.ID,
-				"to", r.email,
+				"group_id", commodity.GroupID,
+				"user_id", r.user.ID,
 				"error", sendErr,
 			)
 		}
