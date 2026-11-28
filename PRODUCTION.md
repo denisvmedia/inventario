@@ -829,7 +829,7 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 
 ### Upgrading from v0.2.x
 
-v0.3.0 is the release after v0.2.2. Its upgrade applies 29 migrations, and v0.2.x pods
+v0.3.0 is the release after v0.2.2. Its upgrade applies 30 migrations, and v0.2.x pods
 cannot run against the result. The `### Operators` part of the 0.3.0 section in
 [CHANGELOG.md](CHANGELOG.md) has the details behind each step.
 

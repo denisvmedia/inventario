@@ -55,12 +55,22 @@ describe("<ExportImportPage />", () => {
   })
 
   it("uploads the file then creates an imported export and navigates to restore", async () => {
+    let importBody: unknown = null
     server.use(
       ...exportHandlers.uploadRestore(SLUG, "restores/2026/05/abc.inb"),
-      ...exportHandlers.importBackup(
-        SLUG,
-        exportHandlers.exportFixture({ id: "imp-1", imported: true, type: "imported" })
-      )
+      http.post(apiUrl(`/g/${SLUG}/exports/import`), async ({ request }) => {
+        importBody = await request.json()
+        return HttpResponse.json(
+          {
+            data: {
+              id: "imp-1",
+              type: "exports",
+              attributes: { type: "imported", status: "completed", imported: true },
+            },
+          },
+          { status: 201 }
+        )
+      })
     )
     const user = userEvent.setup()
     renderPage()
@@ -73,6 +83,15 @@ describe("<ExportImportPage />", () => {
     // The page navigates after the import succeeds; the easiest assertion
     // is that the form disappears and the success toast helper has fired.
     await waitFor(() => expect(screen.queryByTestId("import-form")).not.toBeInTheDocument())
+    // The imported backup's file is named after the file the user picked.
+    expect(importBody).toMatchObject({
+      data: {
+        attributes: {
+          source_file_path: "restores/2026/05/abc.inb",
+          source_file_name: "backup.inb",
+        },
+      },
+    })
   })
 
   it("rejects a non-.inb file before uploading and surfaces the error", async () => {

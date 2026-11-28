@@ -1901,6 +1901,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` shows coverage on the report cards.
 
+#### 2026-11-28 — Item print page: brand, model, seller and custom fields
+
+- **Issue/PR**: PR (fix for the item print view, before v0.3.0)
+- **Mock**: the mock has no single-item print page. Its print layout, [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx), titles the item `{brand} {name}` with the model below and has no seller or custom fields.
+- **Reality**: `frontend/src/pages/commodities/CommodityPrintPage.tsx` keeps its own layout and adds what the item page shows: a "brand · model" line under the name (`brandModelText`, as in the item page header), a Seller row after Purchase date in the Purchase section, and one row per custom field the item has a value for at the end of Basics, in the group's order, formatted by `CustomFieldValue`. A brand, model, seller or custom field the item does not have is left out. A seller that cannot be found shows a dash, as on the item page. The page waits for the sellers and custom fields lists when the item uses them, so a print started right away has the values.
+- **Why**: not present in mock. The print page has to carry what the item page shows, and its header follows the item page rather than the insurance report so the two pages of one item read the same.
+- **Approved by**: agent-suggested; awaiting maintainer confirmation in the PR review
+- **Reversion plan**: Follow the mock if `inventario-design` adds a single-item print page.
+
 ---
 
 ## #1966 — Commodity Files tab: unified grid/list, diverging from the mock

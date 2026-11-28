@@ -8,7 +8,13 @@ import { CommodityPrintPage } from "@/pages/commodities/CommodityPrintPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
+import {
+  areaHandlers,
+  commodityHandlers,
+  customFieldHandlers,
+  groupHandlers,
+  sellerHandlers,
+} from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -52,6 +58,15 @@ beforeEach(() => {
   __resetHttpForTests()
 })
 
+// The lists every print reads: the group, its areas and its sellers.
+function listHandlers() {
+  return [
+    ...groupHandlers.list(groupFixture),
+    ...areaHandlers.list(SLUG, areaFixture),
+    ...sellerHandlers.list(SLUG, [{ id: "s1", name: "Apple Store" }]),
+  ]
+}
+
 function renderPrint() {
   setAccessToken("good-token")
   return renderWithProviders({
@@ -71,11 +86,7 @@ function renderPrint() {
 
 describe("<CommodityPrintPage />", () => {
   it("renders the print sections with the commodity data", async () => {
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
-    )
+    server.use(...listHandlers(), ...commodityHandlers.detail(SLUG, ID, commodityFixture))
     renderPrint()
     expect(await screen.findByTestId("page-commodity-print")).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: /macbook pro 16/i })).toBeInTheDocument()
@@ -83,6 +94,47 @@ describe("<CommodityPrintPage />", () => {
     expect(screen.getByText(/\$2,400\.00/)).toBeInTheDocument()
     expect(screen.getByText(/daily driver/i)).toBeInTheDocument()
     expect(screen.getByTestId("commodity-print-header-date").textContent).toMatch(/\b20\d{2}\b/)
+  })
+
+  it("shows the brand, model, seller and custom fields the item has", async () => {
+    server.use(
+      ...listHandlers(),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({ id: "cf1", name: "Color" }),
+        customFieldHandlers.field({ id: "cf2", name: "Insured", type: "boolean" }),
+        customFieldHandlers.field({ id: "cf3", name: "Room" }),
+      ]),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          brand: "Apple",
+          model: "A2991",
+          seller_id: "s1",
+          custom_fields: { cf1: "Space Black", cf2: true },
+        },
+      })
+    )
+    renderPrint()
+    expect(await screen.findByTestId("commodity-print-brand-model")).toHaveTextContent(
+      "Apple · A2991"
+    )
+    expect(screen.getByTestId("commodity-print-seller")).toHaveTextContent("Apple Store")
+    expect(screen.getByTestId("commodity-print-custom-field-cf1")).toHaveTextContent(
+      "ColorSpace Black"
+    )
+    expect(screen.getByTestId("commodity-print-custom-field-cf2")).toHaveTextContent("InsuredYes")
+    // A field without a value for this item is left out.
+    expect(screen.queryByTestId("commodity-print-custom-field-cf3")).toBeNull()
+  })
+
+  it("leaves out the brand, model and seller of an item without them", async () => {
+    server.use(...listHandlers(), ...commodityHandlers.detail(SLUG, ID, commodityFixture))
+    renderPrint()
+    expect(await screen.findByTestId("page-commodity-print")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-print-brand-model")).toBeNull()
+    expect(screen.queryByTestId("commodity-print-seller")).toBeNull()
+    expect(screen.queryByText(/seller/i)).toBeNull()
   })
 
   it("calls window.print when the Print button is clicked", async () => {
@@ -93,22 +145,14 @@ describe("<CommodityPrintPage />", () => {
       writable: true,
       value: printSpy,
     })
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
-    )
+    server.use(...listHandlers(), ...commodityHandlers.detail(SLUG, ID, commodityFixture))
     renderPrint()
     await user.click(await screen.findByTestId("commodity-print-trigger"))
     expect(printSpy).toHaveBeenCalledTimes(1)
   })
 
   it("has no axe violations", async () => {
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
-    )
+    server.use(...listHandlers(), ...commodityHandlers.detail(SLUG, ID, commodityFixture))
     const { container } = renderPrint()
     await screen.findByTestId("page-commodity-print")
     expect(await axe(container)).toHaveNoViolations()

@@ -1975,6 +1975,10 @@ table "exports" {
     type = TIMESTAMP
     null = true
   }
+  column "source_file_name" {
+    type = TEXT
+    default = ""
+  }
   column "tenant_id" {
     type = TEXT
   }

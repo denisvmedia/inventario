@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, type ReactNode } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, Printer } from "lucide-react"
@@ -7,12 +7,18 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { CustomFieldValue } from "@/components/customFields/CustomFieldValue"
 import { useAreas } from "@/features/areas/hooks"
+import { brandModelText } from "@/features/commodities/brand"
 import { useCommodity } from "@/features/commodities/hooks"
 import { formatPrice } from "@/features/commodities/price"
+import type { CustomFieldValues } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { hasValue } from "@/features/customFields/values"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { ITEM_TYPE_FALLBACK_ICON } from "@/features/itemTypes/icons"
 import { useItemTypeLookup } from "@/features/itemTypes/hooks"
+import { useSellers } from "@/features/sellers/hooks"
 import { useTagLabel } from "@/features/tags/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
 
@@ -32,7 +38,11 @@ export function CommodityPrintPage() {
   const areas = useAreas({ enabled })
   const tagLabel = useTagLabel("commodity")
   const itemTypes = useItemTypeLookup()
+  const sellers = useSellers()
+  const customFields = useCustomFields()
   const commodity = detail.data?.commodity
+  const customValues = commodity?.custom_fields as CustomFieldValues | undefined
+  const shownCustomFields = (customFields.data ?? []).filter((f) => hasValue(customValues, f.id))
 
   useEffect(() => {
     if (!commodity?.name) return
@@ -45,7 +55,13 @@ export function CommodityPrintPage() {
   const detailHref =
     slug && id ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}` : "#"
 
-  if (detail.isLoading) {
+  // The seller and the custom fields come from their own lists. Wait for the
+  // ones the item uses, so a print started right away has them.
+  const waitingForLists =
+    (!!commodity?.seller_id && sellers.isLoading) ||
+    (!!customValues && Object.keys(customValues).length > 0 && customFields.isLoading)
+
+  if (detail.isLoading || waitingForLists) {
     return (
       <div className="p-8 max-w-3xl mx-auto" data-testid="commodity-print-loading">
         <Skeleton className="h-8 w-64" />
@@ -73,6 +89,11 @@ export function CommodityPrintPage() {
   const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const noValue = t("commodities:print.noPrice")
   const areaName = (areas.data ?? []).find((a) => a.id === commodity.area_id)?.name ?? noValue
+  const brandModel = brandModelText(commodity)
+  // Like the item page: a seller that cannot be found shows a dash.
+  const sellerName = commodity.seller_id
+    ? sellers.data?.find((s) => s.id === commodity.seller_id)?.name || noValue
+    : null
 
   return (
     <>
@@ -115,6 +136,14 @@ export function CommodityPrintPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <h1 className="text-2xl font-bold tracking-tight">{commodity.name}</h1>
+                {brandModel ? (
+                  <p
+                    className="mt-1 text-sm text-muted-foreground"
+                    data-testid="commodity-print-brand-model"
+                  >
+                    {brandModel}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-sm text-muted-foreground">
                   {commodity.short_name ? `${commodity.short_name} · ` : ""}
                   {itemType?.label ?? ""}
@@ -145,6 +174,22 @@ export function CommodityPrintPage() {
                 label={t("commodities:detail.fields.serialNumber")}
                 value={commodity.serial_number || noValue}
               />
+              {/* The custom fields the item has a value for, in the group's
+                  order, as on the item page. */}
+              {shownCustomFields.map((field) => (
+                <PrintRow
+                  key={field.id}
+                  label={field.name}
+                  value={
+                    <CustomFieldValue
+                      field={field}
+                      raw={customValues?.[field.id]}
+                      linkedItems={detail.data?.linkedItems}
+                    />
+                  }
+                  testId={`commodity-print-custom-field-${field.id}`}
+                />
+              ))}
             </section>
 
             <section className="print-section grid grid-cols-2 gap-4 mb-6">
@@ -159,6 +204,13 @@ export function CommodityPrintPage() {
                     : noValue
                 }
               />
+              {sellerName !== null ? (
+                <PrintRow
+                  label={t("commodities:detail.fields.seller")}
+                  value={sellerName}
+                  testId="commodity-print-seller"
+                />
+              ) : null}
               <PrintRow
                 label={t("commodities:detail.fields.originalPrice")}
                 value={formatPrice(
@@ -224,9 +276,9 @@ export function CommodityPrintPage() {
   )
 }
 
-function PrintRow({ label, value }: { label: string; value: string }) {
+function PrintRow({ label, value, testId }: { label: string; value: ReactNode; testId?: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-0.5" data-testid={testId}>
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
       <span className="text-sm">{value}</span>
     </div>

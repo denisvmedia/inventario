@@ -635,7 +635,8 @@ func TestImportExport_ForeignTenantSourcePath_Rejected(t *testing.T) {
 // cross-tenant guard above: a legitimate restore upload is keyed
 // `t/<callerTenant>/restores/...` (see blobkeys.BuildRestoreUploadKey), so the
 // prefix check MUST pass and the import record must be created (201). This
-// proves the guard does not break real import flows.
+// proves the guard does not break real import flows. The pending import keeps
+// the name of the file the user picked, which names the imported file.
 func TestImportExport_OwnTenantSourcePath_Accepted(t *testing.T) {
 	c := qt.New(t)
 
@@ -673,6 +674,7 @@ func TestImportExport_OwnTenantSourcePath_Accepted(t *testing.T) {
 				Description: "Import my own uploaded backup",
 				// Caller's own restore-upload namespace — must pass.
 				SourceFilePath: "t/caller-tenant-id/restores/backup.inb",
+				SourceFileName: "Home backup.inb",
 			},
 		},
 	}
@@ -686,6 +688,16 @@ func TestImportExport_OwnTenantSourcePath_Accepted(t *testing.T) {
 
 	c.Assert(w.Code, qt.Equals, http.StatusCreated,
 		qt.Commentf("own-tenant import source must be accepted; body: %s", w.Body.String()))
+
+	var created struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &created), qt.IsNil)
+	pending, err := factorySet.CreateServiceRegistrySet().ExportRegistry.Get(context.Background(), created.Data.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(pending.SourceFileName, qt.Equals, "Home backup.inb")
 }
 
 // TestGenerateExportSignedURL covers GET /exports/{id}/signed-url (#1780).

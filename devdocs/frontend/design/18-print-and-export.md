@@ -153,14 +153,16 @@ Print-specific Tailwind utilities (built-in in v4):
 
 The commodity print page includes:
 
-- Title, location/area breadcrumb.
-- Vendor, purchase date, current value, currency.
-- Status, status history (last 3).
-- Warranty status + dates.
-- Tag list.
-- All attached files as 3-column thumbnail grid.
-- A small footer with print date + the route URL (so the printed copy
-  references back to the source).
+- A header with the type icon, the name, the "brand · model" line, the
+  short name and type, and the print date.
+- Basics: area, quantity, status, serial number, then each custom field
+  the item has a value for, in the group's order.
+- Purchase: purchase date, seller, original price, converted price and
+  current value.
+- Extras: tags, extra serial numbers, part numbers and notes.
+
+A brand, model, seller, custom field or Extras row the item does not
+have is left out; the other empty values print as a dash.
 
 What it doesn't include:
 

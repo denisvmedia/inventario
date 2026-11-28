@@ -14,6 +14,7 @@ import (
 	"go.5x5.cz/inventario/backup/stall"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -137,10 +138,7 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	description := export.Description
 	exportID := export.ID
 
-	filename := filepath.Base(filePath)
-	if ext := filepath.Ext(filename); ext != "" {
-		filename = strings.TrimSuffix(filename, ext)
-	}
+	filename := importFileName(export, filePath)
 
 	meta := importFileMeta()
 
@@ -190,6 +188,18 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 	}
 
 	return created, nil
+}
+
+// importFileName is the Path of an imported backup's file, the name it
+// downloads under: the name of the file the user picked, without the
+// extension. An import that did not send it (or whose name has nothing left
+// once cleaned) is named after the uploaded blob.
+func importFileName(export *models.Export, filePath string) string {
+	if name := filekit.DisplayName(export.SourceFileName); name != "" {
+		return name
+	}
+	filename := filepath.Base(filePath)
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
 }
 
 // importFileMetaFields carries the format-specific FileEntity stamping for an

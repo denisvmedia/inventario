@@ -537,14 +537,13 @@ The header also has:
 
 - **Edit** — turns the details into an edit form (see
   [Edit an item](#edit-an-item)).
-- **Insurance Report** and **Print** — printable views (see [Reports](../reports/)).
+- **Insurance Report** and **Print** — printable views (see [Reports](../reports/)
+  and [Print an item](#print-an-item)).
 - **Print label** (the QR code button) — a label for this item (see
   [Asset IDs and QR labels](#asset-ids-and-qr-labels)).
 - **Delete** — moves the item, with the files attached only to it, to the
   [Trash](../trash/), where you can restore it for 30 days. A file that is also
   attached to another item, location, or area stays there.
-
-![A printable insurance report view of an item ready to print or save as PDF](../../assets/screenshots/item-print.png)
 
 A **History** section lists every change — who, when, and what — including
 status changes, price changes, moves, cover-photo changes, and a change of
@@ -565,6 +564,17 @@ and one whose backup has none gets the day of the restore.
 Lending, service, and supplies tracking are only available on single-unit
 items, not bundles.
 :::
+
+### Print an item
+
+**Print** opens the item on one printable page: its name with the brand and
+model, the basics (area, quantity, status, serial number, and every custom field
+the item has a value for), the purchase details with the seller, and its tags,
+other serial and part numbers, and notes. A brand, model, seller or custom field
+the item doesn't have is left out. Click **Print** at the top to print the page
+or save it as a PDF; the buttons don't appear on paper.
+
+![The print view of an item with its brand and model, basics with custom fields, purchase details with the seller, and extras](../../assets/screenshots/item-print.png)
 
 ## Edit an item
 

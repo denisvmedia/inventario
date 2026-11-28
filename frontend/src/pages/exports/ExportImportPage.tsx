@@ -68,6 +68,7 @@ export function ExportImportPage() {
       const created = await importMutation.mutateAsync({
         description,
         source_file_path: upload.sourceFilePath,
+        source_file_name: file.name,
       })
       toast.success(t("exports:importView.success"))
       // Imported exports always start at status=completed (the BE inflates

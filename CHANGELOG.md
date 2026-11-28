@@ -763,6 +763,9 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
 
 ### Fixed
 
+- The print view of an item shows its brand and model, its seller and the
+  custom fields it has a value for, as the item page does. Values the item
+  doesn't have are left out.
 - The **Active sessions**, **Login history** and **API tokens** pages keep the
   active group. The sidebar showed "Select a group" with empty sections there,
   and the rows under **Privacy & security** in Settings opened these pages
@@ -1182,6 +1185,11 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   Add items from files, and to documents delivered by other systems. Files
   already uploaded keep their names, and a restore keeps the names its backup
   carries ([#3085](https://github.com/denisvmedia/inventario/pull/3085)).
+- Downloading an imported backup saves it under the name of the file you
+  uploaded. It was saved under the name of the stored copy, an ID followed by
+  the name in lowercase and a number ("3f2a…-home-backup-1795863438.inb").
+  Backups imported before keep that name
+  ([#3087](https://github.com/denisvmedia/inventario/issues/3087)).
 - An item shows the day it was added and the day it was last edited. Nothing
   set the two dates on an item added from the Add item form, the API, a
   draft, Add from files or a delivered document, so its page showed "Date

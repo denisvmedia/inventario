@@ -22,7 +22,10 @@
 #     that adds a kind fails that PR's sync with "resource ... is not
 #     permitted in project previews" until the kind is added here. The Helm
 #     Lint workflow renders the preview values and fails when this list and
-#     the chart disagree.
+#     the chart disagree. The kinds are allowed, not their every use:
+#     infra/vm/cluster-extras/preview-namespace-limits.yaml caps the
+#     ResourceQuota and the pods' limits, holds Services to ClusterIP, and
+#     Ingresses to the tailscale class without funnel.
 #
 # Applied by infra/vm/bootstrap.sh, not synced by ArgoCD: a change here takes
 # effect on the next bootstrap run.
