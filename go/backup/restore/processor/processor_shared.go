@@ -612,14 +612,16 @@ func (l *RestoreOperationProcessor) clearSurvivingCommodities(ctx context.Contex
 	return nil
 }
 
-// validateCommodityOwnershipInDB validates that a commodity in the database
-// belongs to the current user. Identical behaviour to the original.
+// validateCommodityOwnershipInDB checks that no other user created a
+// commodity with the archived UUID. It returns an error wrapping
+// security.ErrOwnershipViolation when one did, and records nothing in the
+// restore stats: the caller counts the returned error, once, like any other
+// failed item.
 func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	ctx context.Context,
 	originalXMLID string,
 	currentUser *models.User,
 	existing *types.ExistingEntities,
-	stats *types.RestoreStats,
 ) error {
 	existingCommodity := existing.Commodities[originalXMLID]
 	if existingCommodity != nil {
@@ -630,15 +632,12 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 		serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
 		allCommodities, err := listCommoditiesWithTrash(ctx, serviceAccountRegistry)
 		if err != nil {
-			stats.ErrorCount++
-			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
-			stats.Errors = append(stats.Errors, msg)
 			slog.ErrorContext(ctx, "commodity ownership validation list failed",
 				"restore_operation_id", l.restoreOperationID,
 				"original_xml_id", originalXMLID,
 				"error", err,
 			)
-			return err
+			return errxtrace.Wrap("failed to list commodities for ownership validation of "+originalXMLID, err)
 		}
 		l.commodityUUIDMap = make(map[string]*models.Commodity, len(allCommodities))
 		for _, c := range allCommodities {
@@ -660,9 +659,8 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 			AttemptType:    "cross_user_access",
 			Timestamp:      time.Now(),
 		})
-		stats.ErrorCount++
-		stats.Errors = append(stats.Errors, fmt.Sprintf("Security validation failed for commodity %s: commodity belongs to a different user", originalXMLID))
-		return errxtrace.Classify(security.ErrOwnershipViolation, errx.Attrs("xml_id", originalXMLID, "commodity_id", existingDBCommodity.ID))
+		return errxtrace.Wrap("security validation failed for commodity "+originalXMLID, security.ErrOwnershipViolation,
+			errx.Attrs("xml_id", originalXMLID, "commodity_id", existingDBCommodity.ID))
 	}
 
 	return nil
@@ -997,11 +995,8 @@ func (l *RestoreOperationProcessor) createCommodity(
 	if currentUser == nil {
 		return security.ErrNoUserContext
 	}
-	if err := l.validateCommodityOwnershipInDB(ctx, originalID, currentUser, existing, stats); err != nil {
-		if errors.Is(err, security.ErrOwnershipViolation) {
-			return nil
-		}
-		return errxtrace.Wrap("failed to validate commodity ownership in DB", err, errx.Attrs("xml_id", originalID))
+	if err := l.validateCommodityOwnershipInDB(ctx, originalID, currentUser, existing); err != nil {
+		return err
 	}
 
 	if !options.DryRun {

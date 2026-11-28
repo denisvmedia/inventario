@@ -822,7 +822,7 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	if currentUser == nil {
 		return security.ErrNoUserContext
 	}
-	if err := l.validateCommodityOwnershipInDB(w.ctx, c.ID, currentUser, w.existing, w.stats); err != nil {
+	if err := l.validateCommodityOwnershipInDB(w.ctx, c.ID, currentUser, w.existing); err != nil {
 		return err
 	}
 

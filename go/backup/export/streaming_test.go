@@ -3,13 +3,13 @@
 package export
 
 import (
-	"github.com/go-extras/go-kit/ptr"
 	"bytes"
 	"context"
 	"encoding/xml"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/ptr"
 
 	"go.5x5.cz/inventario/models"
 )
