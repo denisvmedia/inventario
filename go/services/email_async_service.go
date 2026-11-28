@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -482,11 +483,12 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 		return
 	}
 
+	sendErr := emailJobErrorForLog(job, err)
 	nextAttempt := job.Attempt + 1
 	if nextAttempt > s.maxRetries {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
 		slog.ErrorContext(ctx, "Email delivery failed after retries; dropping job",
-			slices.Concat(jobAttrs, []any{"attempts", nextAttempt, "error", err})...)
+			slices.Concat(jobAttrs, []any{"attempts", nextAttempt, "error", sendErr})...)
 		return
 	}
 
@@ -497,20 +499,20 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	if marshalErr != nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
 		slog.ErrorContext(ctx, "Failed to encode email retry payload; dropping job",
-			slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "send_error", err, "marshal_error", marshalErr})...)
+			slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "send_error", sendErr, "marshal_error", marshalErr})...)
 		return
 	}
 
 	if retryErr := s.queue.ScheduleRetry(ctx, retryPayload, readyAt); retryErr != nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
 		slog.ErrorContext(ctx, "Failed to schedule email retry; dropping job",
-			slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "send_error", err, "retry_error", retryErr})...)
+			slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "send_error", sendErr, "retry_error", retryErr})...)
 		return
 	}
 
 	metrics.RecordEmailProcessed(metrics.EmailStatusRetried)
 	slog.WarnContext(ctx, "Email delivery failed; retry scheduled",
-		slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "retry_in", delay.String(), "error", err})...)
+		slices.Concat(jobAttrs, []any{"attempt", nextAttempt, "retry_in", delay.String(), "error", sendErr})...)
 }
 
 // emailJobLogAttrs is what every line about a queued email carries: the
@@ -519,12 +521,34 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 // leaves the address out (devdocs/logging.md, What never goes into a log).
 func emailJobLogAttrs(job emailJob, workerID int) []any {
 	attrs := []any{"worker_id", workerID, "job_id", job.ID, "template", job.TemplateType}
-	switch job.TemplateType {
-	case emailTemplateVerification, emailTemplatePasswordReset, emailTemplateMagicLink,
-		emailTemplatePasswordChange, emailTemplateWelcome:
+	if emailJobMayNameRecipient(job) {
 		attrs = append(attrs, "email", job.To)
 	}
 	return attrs
+}
+
+// emailJobMayNameRecipient reports whether a line about the job may carry the
+// recipient's address: only for the sign-in, registration and recovery emails.
+func emailJobMayNameRecipient(job emailJob) bool {
+	switch job.TemplateType {
+	case emailTemplateVerification, emailTemplatePasswordReset, emailTemplateMagicLink,
+		emailTemplatePasswordChange, emailTemplateWelcome:
+		return true
+	default:
+		return false
+	}
+}
+
+// emailJobErrorForLog is the send error as a line about the job may log it. A
+// provider error can quote the recipient (an SMTP rejection names the
+// address), so for an email whose lines leave the address out it returns the
+// error text with the address, in any case, replaced by <recipient>.
+func emailJobErrorForLog(job emailJob, err error) any {
+	to := strings.TrimSpace(job.To)
+	if err == nil || to == "" || emailJobMayNameRecipient(job) {
+		return err
+	}
+	return regexp.MustCompile("(?i)"+regexp.QuoteMeta(to)).ReplaceAllLiteralString(err.Error(), "<recipient>")
 }
 
 func (s *AsyncEmailService) retryDelay(attempt int) time.Duration {
