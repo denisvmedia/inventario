@@ -122,10 +122,13 @@ jobs:
         run: |
           set -euo pipefail
           files="k8s/prod/deployment.yaml k8s/prod/job-setup.yaml"
+          # An untagged reference (an implicit :latest) or a digest counts as
+          # a pin too, so either one fails the check; grep finding nothing
+          # (exit 1) is reported below, a missing file (exit 2) fails here.
           # shellcheck disable=SC2086 # the file list is meant to split
-          pins="$(grep -ho 'ghcr.io/denisvmedia/inventario:[^[:space:]"]*' $files | sort -u)"
+          pins="$(grep -hoE 'ghcr\.io/denisvmedia/inventario([:@][^[:space:]"]*)?' $files | sort -u)" || [ $? -eq 1 ]
           if [ "$pins" != "ghcr.io/denisvmedia/inventario:${TAG}" ]; then
-            echo "::error::k8s/prod pins $(echo "$pins" | tr '\n' ' ')but the tag is ${TAG}. Set every image in ${files} to :${TAG} before tagging."
+            echo "::error::k8s/prod pins $(echo "${pins:-nothing}" | tr '\n' ' ')but the tag is ${TAG}. Set every image in ${files} to :${TAG} before tagging."
             exit 1
           fi
           echo "k8s/prod pins ${TAG}"
