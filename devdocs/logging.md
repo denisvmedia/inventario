@@ -163,10 +163,18 @@ Never set it on a shared environment.
 
 `go/internal/logguard` is a test that walks the module's source and fails when
 a slog call, with or without the `Context` suffix, takes a DSN-named value
-(`dsn`, `dbDSN`, `connString`, `databaseURL` and similar) directly. A DSN is a
-plain string with a predictable name, which is what makes a source-level guard
-possible. Wrapping the value in `shared.RedactDSN(dsn)` satisfies it. The rest
-of this list has no such shape to match and relies on review.
+(`dsn`, `dbDSN`, `connString`, `databaseURL` and similar) directly. It covers
+the `slog` package functions and the same methods on a logger kept in a value
+named `logger`, such as the migrator's `m.logger`. A DSN is a plain string with
+a predictable name, which is what makes a source-level guard possible. Wrapping
+the value in `shared.RedactDSN(dsn)` (or `dsnutil.Redact` outside `cmd`)
+satisfies it. The rest of this list has no such shape to match and relies on
+review.
+
+The guard sees only log calls. An error from `url.Parse` quotes the whole URL,
+so a DSN that does not parse puts its password into the error, and into
+whatever prints or logs it. Parse a DSN or another URL with credentials through
+`internal/urlerr`, which keeps the reason and leaves the URL out.
 
 ## Request IDs
 

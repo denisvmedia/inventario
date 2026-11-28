@@ -126,6 +126,7 @@ the domain token over a generic chart or status color:
 | `--status-expiring` | `oklch(0.78 0.18 75)` | Amber — within 60 days |
 | `--status-expired` | `oklch(0.65 0.22 25)` | Red — past due |
 | `--status-none` | `oklch(0.6 0 0)` | Gray — no warranty |
+| `--item-status-in-use` … `--item-status-stolen` | `oklch(0.48–0.52 …)` | Item status pills and Change Status buttons, one hue per status (`COMMODITY_STATUS_TONES`); text-safe on their `/10` tint |
 | `--chart-1` … `--chart-5` | warm amber → red | Data viz, tag pills |
 | `--tag-amber` … `--tag-muted` | tag-only palette | Tag pills (closed enum, not chart colors) |
 | `--sidebar` etc. | warm off-white | Sidebar surface — distinct from page bg |

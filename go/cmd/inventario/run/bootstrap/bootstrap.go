@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-extras/go-kit/must"
-
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/internal/observability/sentry"
@@ -70,7 +68,9 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 	dsn := dbConfig.DBDSN
 
 	logInventarioEnv()
-	logStartupInfo(mode, cfg.Addr, dsn)
+	if err := logStartupInfo(mode, cfg.Addr, dsn); err != nil {
+		return nil, err
+	}
 
 	if err := verifySchemaMatchesBinary(dsn); err != nil {
 		return nil, err
@@ -174,9 +174,16 @@ func logInventarioEnv() {
 }
 
 // logStartupInfo prints a mode-specific startup banner with the DSN credentials
-// masked. ModeWorkers omits --addr since no HTTP listener is opened.
-func logStartupInfo(mode Mode, addr, dsn string) {
-	parsedDSN := must.Must(registry.Config(dsn).Parse())
+// masked. ModeWorkers omits --addr since no HTTP listener is opened. A DSN that
+// does not parse is an error rather than a panic, and the error leaves the DSN
+// out, since it carries the password.
+func logStartupInfo(mode Mode, addr, dsn string) error {
+	parsedDSN, err := registry.Config(dsn).Parse()
+	if err != nil {
+		err = fmt.Errorf("invalid --db-dsn: %w", err)
+		slog.Error("Invalid database DSN", "error", err)
+		return err
+	}
 	if parsedDSN.User != nil {
 		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
 	}
@@ -188,6 +195,7 @@ func logStartupInfo(mode Mode, addr, dsn string) {
 	default:
 		slog.Info("Starting server", "addr", addr, "db_dsn", parsedDSN.String())
 	}
+	return nil
 }
 
 // verifySchemaMatchesBinary refuses to start the app when the database has

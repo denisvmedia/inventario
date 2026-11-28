@@ -89,6 +89,7 @@ import {
   useUpdateCommodity,
 } from "@/features/commodities/hooks"
 import {
+  COMMODITY_STATUS_TEXT_TONES,
   COMMODITY_STATUS_TONES,
   TERMINAL_COMMODITY_STATUSES,
   warrantyStatus,
@@ -101,23 +102,10 @@ import {
 // buttons on the detail surface (mock: "Change Status" section).
 // Every status but `in_use`, which is what the item transitions *from*.
 // The mock's row stops at Written Off; Donated and Stolen follow it.
+// Each button is an outline button with its label in the status color
+// (the mock's `cn("gap-1.5 text-xs h-7", c.color)` pattern), the same
+// color as the status pill.
 const TERMINAL_STATUSES = TERMINAL_COMMODITY_STATUSES
-
-// Mock parity colour-only mapping for the CHANGE STATUS quick
-// buttons. Lifted from `inventario-design`'s
-// `COMMODITY_STATUS_CONFIG.color` field — text-only, no bg/border
-// tint, so the buttons are plain outline pills with coloured
-// labels (the mock's `cn("gap-1.5 text-xs h-7", c.color)` pattern).
-// Distinct from the project's `COMMODITY_STATUS_TONES` (which adds
-// bg + border for the inline status pills elsewhere).
-const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], string> = {
-  sold: "text-chart-2",
-  lost: "text-status-expiring",
-  disposed: "text-muted-foreground",
-  written_off: "text-status-expired",
-  donated: "text-chart-3",
-  stolen: "text-chart-4",
-}
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import {
@@ -1258,7 +1246,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   type="button"
                   variant="outline"
                   size="sm"
-                  className={cn("gap-1.5 text-xs h-7", STATUS_TRANSITION_TEXT_TONES[s])}
+                  className={cn("gap-1.5 text-xs h-7", COMMODITY_STATUS_TEXT_TONES[s])}
                   onClick={() => handleStatusTransition(s)}
                   data-testid={`commodity-detail-transition-${s}`}
                   disabled={itemSaving || migrationLock.locked}

@@ -61,6 +61,9 @@ jobs:
       docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Find the commit the pull request merges into
+        id: base
+        uses: ./.github/actions/pr-merge-base
       - id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
@@ -68,6 +71,10 @@ jobs:
             docs:
               - 'docs/site/**'
               - '.github/workflows/docs.yml'
+          # Diff with git: the pull request files API would spend the
+          # repository's hourly request budget (devdocs/ci/github-api-budget.md).
+          token: ''
+          base: ${{ steps.base.outputs.sha }}
 
   # Build the full versioned site into _site/. On PRs it builds edge only as a
   # breakage gate (no tag loop, no artifact). On deploys it also builds every
