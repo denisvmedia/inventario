@@ -8,21 +8,49 @@ import (
 	"go.5x5.cz/inventario/internal/redisurl"
 )
 
-func TestParse_ErrorLeavesTheURLOut(t *testing.T) {
+const hint = " (percent-encode the characters a URL reserves in the user name and password, such as @ : / ? # and %)"
+
+// Each error is fixed text, so no character of the URL, the password
+// included, can be in it.
+func TestParse_ErrorQuotesNothingFromTheURL(t *testing.T) {
 	tests := []struct {
-		name      string
-		url       string
-		wantCause string
+		name    string
+		url     string
+		wantErr string
 	}{
 		{
-			name:      "url.Parse error",
-			url:       "redis://:s3cret-password@localhost:notaport/0",
-			wantCause: `invalid port ":notaport" after host`,
+			// "#" starts the fragment, and url.Parse reports the password as
+			// the port: `invalid port ":s3cret-password" after host`.
+			name:    "a # in the password",
+			url:     "redis://:s3cret-password#tail@localhost:6379/0",
+			wantErr: "invalid port after host" + hint,
 		},
 		{
-			name:      "go-redis error",
-			url:       "http://:s3cret-password@localhost:6379/0",
-			wantCause: "redis: invalid URL scheme: http",
+			// "/" ends the host, and go-redis quotes the path, which holds the
+			// rest of the password: `redis: invalid URL path: /secret-tail@…`.
+			name:    "a / in the password",
+			url:     "redis://:123/secret-tail@localhost:6379/0",
+			wantErr: "redis: invalid URL path, expected /<database number>" + hint,
+		},
+		{
+			name:    "a / in the password with one path segment after it",
+			url:     "redis://:123/secret-tail@localhost",
+			wantErr: "redis: invalid database number" + hint,
+		},
+		{
+			name:    "a ? in the password",
+			url:     "redis://:123?secret-tail@localhost/0",
+			wantErr: "redis: unexpected query option" + hint,
+		},
+		{
+			name:    "an option value go-redis cannot read",
+			url:     "redis://:s3cret@localhost/0?dial_timeout=s3cret",
+			wantErr: "redis: invalid query option value" + hint,
+		},
+		{
+			name:    "a scheme go-redis does not know",
+			url:     "s3cret://:s3cret@localhost:6379/0",
+			wantErr: "redis: invalid URL scheme, expected redis, rediss or unix" + hint,
 		},
 	}
 	for _, tt := range tests {
@@ -32,8 +60,8 @@ func TestParse_ErrorLeavesTheURLOut(t *testing.T) {
 			opts, err := redisurl.Parse(tt.url)
 
 			c.Assert(opts, qt.IsNil)
-			c.Assert(err, qt.ErrorMatches, tt.wantCause)
-			c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret-password")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Equals, tt.wantErr)
 		})
 	}
 }

@@ -4,6 +4,7 @@ package dsnutil
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -41,27 +42,56 @@ func StripPGXPoolParams(dbURL string) string {
 	return parsed.String()
 }
 
-// Redact masks the password embedded in a database DSN so credentials never
-// leak into terminal history, CI logs, or screen-shared sessions. The username,
-// host, database, and query parameters are preserved to keep diagnostic banners
-// useful for troubleshooting; only the password component of the userinfo is
-// replaced.
+// Redact masks the password in a database DSN so credentials never leak into
+// terminal history, CI logs, or screen-shared sessions. The username, host,
+// database, and the other query parameters are preserved to keep diagnostic
+// banners useful for troubleshooting.
 //
-// If the DSN parses as a URL with a password, that password is masked. If it
-// parses but carries no password, it is returned unchanged. If it does not parse
-// as a URL at all, a safe placeholder is returned rather than echoing the raw
-// value — a malformed DSN may still embed credentials we cannot reliably locate.
+// A URL DSN has the password of its userinfo and every query parameter whose
+// name holds "password" (password, sslpassword) masked. A keyword DSN
+// (`host=db password=s3cret`) has the value of every such keyword masked. A
+// DSN that does not parse as a URL, or that has an "@" after the host, comes
+// back as a placeholder: the userinfo ends with an "@", so an "@" in the
+// path, the query or the fragment means a character the URL reserves cut the
+// password short and the rest of it sits there.
 func Redact(dsn string) string {
 	parsed, err := url.Parse(dsn)
 	if err != nil {
-		return "<redacted>"
+		return redactedDSN
 	}
-	if parsed.User == nil {
+	if parsed.Scheme == "" {
+		return keywordPassword.ReplaceAllString(dsn, "${1}="+mask)
+	}
+	if parsed.Host != "" && strings.Contains(parsed.Path+parsed.RawQuery+parsed.Fragment, "@") {
+		return redactedDSN
+	}
+	changed := false
+	if parsed.User != nil {
+		if _, hasPassword := parsed.User.Password(); hasPassword {
+			parsed.User = url.UserPassword(parsed.User.Username(), mask)
+			changed = true
+		}
+	}
+	q := parsed.Query()
+	for k := range q {
+		if strings.Contains(strings.ToLower(k), "password") {
+			q.Set(k, mask)
+			parsed.RawQuery = q.Encode()
+			changed = true
+		}
+	}
+	if !changed {
 		return dsn
 	}
-	if _, hasPassword := parsed.User.Password(); !hasPassword {
-		return dsn
-	}
-	parsed.User = url.UserPassword(parsed.User.Username(), "xxxxxx")
 	return parsed.String()
 }
+
+const (
+	mask        = "xxxxxx"
+	redactedDSN = "<redacted>"
+)
+
+// keywordPassword matches a password keyword of a keyword DSN and its value:
+// a single-quoted value with backslash escapes, or a run of characters up to
+// the next unescaped space. An unterminated quote runs to the end.
+var keywordPassword = regexp.MustCompile(`(?i)\b(\w*password)\s*=\s*(?:'(?:[^'\\]|\\.)*'?|(?:[^\s\\]|\\.)*)`)

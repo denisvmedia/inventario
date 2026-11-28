@@ -6,13 +6,14 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"go.5x5.cz/inventario/internal/urlerr"
 	"go.5x5.cz/inventario/services"
 )
 
 // A Redis URL that does not parse falls back to in-memory, and the caller
 // logs the error. That error must not carry the URL: it holds the password.
 func TestRedisFromURL_ErrorLeavesThePasswordOut(t *testing.T) {
-	const badURL = "redis://:s3cret-password@localhost:notaport/0"
+	const badURL = "redis://:s3cret-password#tail@localhost:6379/0"
 
 	tests := []struct {
 		name string
@@ -46,8 +47,10 @@ func TestRedisFromURL_ErrorLeavesThePasswordOut(t *testing.T) {
 
 			err := tt.open()
 
-			c.Assert(err, qt.ErrorMatches, `invalid redis URL: invalid port ":notaport" after host`)
-			c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret-password")
+			var urlErr *urlerr.Error
+			c.Assert(err, qt.ErrorAs, &urlErr)
+			c.Assert(urlErr.Reason, qt.Equals, "invalid port after host")
+			c.Assert(err.Error(), qt.Not(qt.Contains), "s3cret")
 		})
 	}
 }

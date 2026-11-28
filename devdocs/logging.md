@@ -131,7 +131,9 @@ Not at any level, and not truncated:
 - **A URL with credentials in it.** A database DSN, a Redis URL, an upload
   location. Pass a DSN through `shared.RedactDSN` (a thin alias for
   `dsnutil.Redact`), which replaces the password with `xxxxxx` and keeps the
-  user, host and database so the line is still useful.
+  user, host and database so the line is still useful. It masks the
+  userinfo password, a `password` or `sslpassword` query parameter and the
+  `password=` keyword of a keyword DSN.
 - **A full URL or a query string.** Signed URLs and emailed links carry their
   token in the query. Log `path`.
 - **Authorization headers and cookies**, including inside a dumped request.
@@ -172,9 +174,14 @@ satisfies it. The rest of this list has no such shape to match and relies on
 review.
 
 The guard sees only log calls. An error from `url.Parse` quotes the whole URL,
-so a DSN that does not parse puts its password into the error, and into
+and its reason quotes the part it could not read: with a `#` in the password,
+`postgres://app:p#ss@db/x` fails with `invalid port ":p" after host`. So a DSN
+that does not parse puts its password, or part of it, into the error, and into
 whatever prints or logs it. Parse a DSN or another URL with credentials through
-`internal/urlerr`, which keeps the reason and leaves the URL out.
+`internal/urlerr` (`internal/redisurl` for a Redis URL). Its error names the
+kind of problem in fixed text, quotes nothing from the URL, and tells the
+operator to percent-encode the reserved characters in the user name and
+password.
 
 ## Request IDs
 
