@@ -135,6 +135,34 @@ func TestRedact(t *testing.T) {
 			input:    "postgres://app:12?s3cr3t@db/inventario",
 			expected: "<redacted>",
 		},
+		{
+			name:     "a URL without a scheme never echoes its userinfo",
+			input:    "//app:s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a URL with an opaque part never echoes it",
+			input:    "postgres:app:s3cr3t@db/inventario",
+			expected: "<redacted>",
+		},
+		{
+			// Query() drops a pair it cannot decode, password included.
+			name:     "a query that does not decode never echoes the password",
+			input:    "postgres://db/inventario?password=s3cr3t%zz",
+			expected: "<redacted>",
+		},
+		{
+			name:     "a ; in a query password never echoes it",
+			input:    "postgres://app:s3cr3t@db/inventario?password=s3;cr3t",
+			expected: "<redacted>",
+		},
+		{
+			// The "#" ends the query, and the rest of the password is the
+			// fragment.
+			name:     "a # in a query password never echoes the rest of it",
+			input:    "postgres://db/inventario?password=s3#cr3t",
+			expected: "<redacted>",
+		},
 	}
 
 	for _, tt := range tests {

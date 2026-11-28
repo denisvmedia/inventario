@@ -1278,12 +1278,13 @@ when to add an entry and where it goes.
   `Starting workers` lines and the `Database:` line the commands print
   masked only the password in the user part of the DSN. They now also mask a
   `password` or `sslpassword` query parameter and the `password=` keyword of
-  a keyword DSN, and show `<redacted>` for a DSN whose password a `/`, `?` or
-  `#` cut short. If your logs hold the output of `inventario db migrate up`,
-  or of a command run with a `--db-dsn` (`INVENTARIO_DB_DSN`) that did not
-  parse or that carried the password in a query parameter or keyword, purge
-  or restrict those logs and rotate the database password that appears in
-  them, even in part
+  a keyword DSN, and show `<redacted>` for a DSN they cannot mask with
+  certainty, such as one whose password a `/`, `?` or `#` cut short. If your
+  logs hold the output of `inventario db migrate up`, or of a command run
+  with a `--db-dsn` (`INVENTARIO_DB_DSN`) that did not parse, that carried
+  the password in a query parameter or keyword, or whose password contains
+  an unescaped `/`, `?` or `#`, purge or restrict those logs and rotate the
+  database password that appears in them, even in part
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 - The API no longer writes secrets from refused requests to its log. Every
   release since v0.1.0 logged the signature (`sig`) of a refused signed URL,

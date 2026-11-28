@@ -133,7 +133,8 @@ Not at any level, and not truncated:
   `dsnutil.Redact`), which replaces the password with `xxxxxx` and keeps the
   user, host and database so the line is still useful. It masks the
   userinfo password, a `password` or `sslpassword` query parameter and the
-  `password=` keyword of a keyword DSN.
+  `password=` keyword of a keyword DSN, and prints `<redacted>` for a DSN it
+  cannot mask with certainty.
 - **A full URL or a query string.** Signed URLs and emailed links carry their
   token in the query. Log `path`.
 - **Authorization headers and cookies**, including inside a dumped request.

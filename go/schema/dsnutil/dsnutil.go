@@ -49,20 +49,29 @@ func StripPGXPoolParams(dbURL string) string {
 //
 // A URL DSN has the password of its userinfo and every query parameter whose
 // name holds "password" (password, sslpassword) masked. A keyword DSN
-// (`host=db password=s3cret`) has the value of every such keyword masked. A
-// DSN that does not parse as a URL, or that has an "@" after the host, comes
-// back as a placeholder: the userinfo ends with an "@", so an "@" in the
-// path, the query or the fragment means a character the URL reserves cut the
-// password short and the rest of it sits there.
+// (`host=db password=s3cret`), which has no scheme, host or userinfo, has the
+// value of every such keyword masked.
+//
+// Redact fails closed: a DSN it cannot mask with certainty comes back as a
+// placeholder. That covers a DSN that does not parse as a URL, a URL without
+// a scheme or with an opaque part, a query that does not decode, a fragment,
+// and an "@" after the host. The userinfo ends with an "@", so an "@" in the
+// path or the query, or a fragment, means a character the URL reserves cut
+// the password short and the rest of it sits there.
 func Redact(dsn string) string {
 	parsed, err := url.Parse(dsn)
 	if err != nil {
 		return redactedDSN
 	}
-	if parsed.Scheme == "" {
+	if parsed.Scheme == "" && parsed.Host == "" && parsed.User == nil && !strings.HasPrefix(dsn, "//") {
 		return keywordPassword.ReplaceAllString(dsn, "${1}="+mask)
 	}
-	if parsed.Host != "" && strings.Contains(parsed.Path+parsed.RawQuery+parsed.Fragment, "@") {
+	if parsed.Scheme == "" || parsed.Opaque != "" || parsed.Fragment != "" ||
+		strings.Contains(parsed.Path+parsed.RawQuery, "@") {
+		return redactedDSN
+	}
+	q, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
 		return redactedDSN
 	}
 	changed := false
@@ -72,7 +81,6 @@ func Redact(dsn string) string {
 			changed = true
 		}
 	}
-	q := parsed.Query()
 	for k := range q {
 		if strings.Contains(strings.ToLower(k), "password") {
 			q.Set(k, mask)
