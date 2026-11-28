@@ -33,7 +33,9 @@ spec:
     # field to filter on, and `labels` must all be present on every PR, so a
     # second label could not single out forks. Only users with triage access
     # can add the label; what a labeled PR's chart can do is bounded by the
-    # `previews` AppProject and the namespace's Pod Security labels below.
+    # `previews` AppProject, the namespace's Pod Security labels below, and
+    # the quota and exposure caps in
+    # infra/vm/cluster-extras/preview-namespace-limits.yaml.
     - pullRequest:
         github:
           owner: denisvmedia

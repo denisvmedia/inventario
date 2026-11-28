@@ -21,11 +21,20 @@ check here follows the manifests instead of a copy of them.
       preview's sync, and a kind the project allows and nothing renders is a
       permission no preview needs.
 
+  preview-manifests.py limits
+      Fail unless the PR preview render stays within the caps of
+      infra/vm/cluster-extras/preview-namespace-limits.yaml: its
+      ResourceQuota sets every capped resource at or below the cap, and its
+      LimitRange defaults and maximums and every container limit are at or
+      below the per-container ceiling. A render past them would have its
+      quota or its pods refused on the cluster.
+
 The YAML here is read with patterns rather than a parser, because the CI
 runners have no YAML library for Python. The patterns only have to match
 files in this repository, and every lookup fails loudly when it finds nothing.
 """
 
+import fractions
 import pathlib
 import re
 import subprocess
@@ -42,6 +51,13 @@ APPSETS = {
     "longevity": "applicationset-longevity.yaml",
 }
 PROJECT_FILES = ["appproject.yaml", "appproject-master.yaml"]
+LIMITS_POLICY = ROOT / "infra" / "vm" / "cluster-extras" / "preview-namespace-limits.yaml"
+
+QUANTITY_SUFFIXES = {
+    "": 1, "m": fractions.Fraction(1, 1000),
+    "k": 10**3, "M": 10**6, "G": 10**9, "T": 10**12,
+    "Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40,
+}
 
 
 def fail(msg):
@@ -184,11 +200,95 @@ def cmd_kinds():
         sys.exit(1)
 
 
+def quantity(text, where):
+    m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)(m|k|M|G|T|Ki|Mi|Gi|Ti)?", text.strip("'\""))
+    if not m:
+        fail(f"{where}: cannot read quantity {text!r}")
+    return fractions.Fraction(m.group(1)) * QUANTITY_SUFFIXES[m.group(2) or ""]
+
+
+def policy_caps():
+    """Return (quota caps, per-container ceiling) from the limits policy."""
+    text = LIMITS_POLICY.read_text()
+    caps_expr = re.search(r"- name: caps\s*\n\s*expression: >-\s*\n\s*(\{[^}]*\})", text)
+    if not caps_expr:
+        fail(f"{LIMITS_POLICY}: no `caps` variable")
+    caps = dict(re.findall(r"'([^']+)':\s*'([^']+)'", caps_expr.group(1)))
+    ceiling = dict(re.findall(r"limits\['(cpu|memory)'\]\)\.compareTo\(quantity\('([^']+)'\)\)", text))
+    if not caps or set(ceiling) != {"cpu", "memory"}:
+        fail(f"{LIMITS_POLICY}: cannot read the quota caps and the per-container ceiling")
+    return caps, ceiling
+
+
+def documents(manifest, kind):
+    return [d for d in re.split(r"^---\s*$", manifest, flags=re.M) if re.search(rf"^kind:\s*{kind}\s*$", d, re.M)]
+
+
+def nested_pairs(lines, start):
+    """Return the `key: value` lines nested under lines[start], as a dict."""
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    pairs = {}
+    for line in lines[start + 1 :]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break
+        m = re.match(r"^\s*([\w./-]+):\s*(\S+)\s*$", line)
+        if m:
+            pairs[m.group(1)] = m.group(2)
+    return pairs
+
+
+def cmd_limits():
+    caps, ceiling = policy_caps()
+    with tempfile.TemporaryDirectory() as workdir:
+        manifest = render("pr", "inv-vcl01-pr1", workdir)
+    problems = []
+
+    quotas = documents(manifest, "ResourceQuota")
+    if len(quotas) != 1:
+        problems.append(f"the PR render has {len(quotas)} ResourceQuotas, expected 1")
+    for doc in quotas:
+        lines = doc.splitlines()
+        hard = nested_pairs(lines, next(i for i, l in enumerate(lines) if l.strip() == "hard:"))
+        for key, cap in sorted(caps.items()):
+            if key not in hard:
+                problems.append(f"the ResourceQuota sets no {key}; the cluster requires it at most {cap}")
+            elif quantity(hard[key], "ResourceQuota") > quantity(cap, LIMITS_POLICY):
+                problems.append(f"the ResourceQuota sets {key}: {hard[key]}, above the cap of {cap}")
+
+    checked = 0
+    for kind in ("LimitRange", "Deployment", "Job"):
+        for doc in documents(manifest, kind):
+            lines = doc.splitlines()
+            name = re.search(r"^  name:\s*(\S+)\s*$", doc, re.M).group(1)
+            for i, line in enumerate(lines):
+                if kind == "LimitRange" and line.strip() not in ("default:", "max:"):
+                    continue
+                if kind != "LimitRange" and line.strip() != "limits:":
+                    continue
+                pairs = nested_pairs(lines, i)
+                for res, top in ceiling.items():
+                    if res in pairs:
+                        checked += 1
+                        if quantity(pairs[res], name) > quantity(top, LIMITS_POLICY):
+                            problems.append(f"{kind} {name} sets a {res} limit of {pairs[res]}, above the ceiling of {top}")
+    if checked == 0:
+        problems.append("found no container limits or LimitRange values in the PR render")
+
+    for p in problems:
+        print(f"error: {p}", file=sys.stderr)
+    if problems:
+        sys.exit(1)
+    print(f"PR preview within the caps: quota {', '.join(f'{k} <= {v}' for k, v in sorted(caps.items()))}; "
+          f"{checked} container limit values <= {ceiling['cpu']} CPU / {ceiling['memory']}")
+
+
 def main(argv):
     if argv[1:] == ["labels"]:
         cmd_labels()
     elif argv[1:] == ["kinds"]:
         cmd_kinds()
+    elif argv[1:] == ["limits"]:
+        cmd_limits()
     elif len(argv) == 4 and argv[1] == "render":
         out = pathlib.Path(argv[2])
         out.mkdir(parents=True, exist_ok=True)
@@ -196,7 +296,7 @@ def main(argv):
             for name in APPSETS:
                 (out / f"{name}.yaml").write_text(render(name, argv[3], workdir))
     else:
-        fail("usage: preview-manifests.py labels | kinds | render OUT_DIR NAMESPACE")
+        fail("usage: preview-manifests.py labels | kinds | limits | render OUT_DIR NAMESPACE")
 
 
 if __name__ == "__main__":
