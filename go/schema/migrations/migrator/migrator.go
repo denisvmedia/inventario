@@ -69,6 +69,8 @@ type Args struct {
 
 // Migrator provides a simple interface to Ptah's migration capabilities
 type Migrator struct {
+	// dbURL is the DSN as given. The check and the log lines take it as it
+	// is; connURL gives the form the drivers get.
 	dbURL  string
 	logger *slog.Logger
 	migFS  fs.FS
@@ -80,7 +82,7 @@ type Migrator struct {
 //   - dbURL:    PostgreSQL database connection string
 func New(dbURL string, migFS fs.FS) *Migrator {
 	return &Migrator{
-		dbURL:  dsnutil.StripPGXPoolParams(dbURL),
+		dbURL:  dbURL,
 		logger: slog.Default(),
 		migFS:  migFS,
 	}
@@ -104,6 +106,11 @@ func (m *Migrator) SetLogger(logger *slog.Logger) *Migrator {
 
 // MigrateUp applies migrations using embedded migrations or file-based migrations
 func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
+	dsn, err := m.connURL()
+	if err != nil {
+		return err
+	}
+
 	m.logger.InfoContext(ctx, "Applying migrations up", "db_url", dsnutil.Redact(m.dbURL), "dry_run", args.DryRun)
 
 	if args.DryRun {
@@ -113,7 +120,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	// Connect to database using standard ptah approach
 	// When using a shared pool, we still create a separate connection for migrations
 	// but the pool limits will prevent connection exhaustion
-	conn, err := dbschema.ConnectToDatabase(ctx, m.dbURL)
+	conn, err := dbschema.ConnectToDatabase(ctx, dsn)
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -195,7 +202,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 // database does not have, as ErrMissingExtension. It reads pg_extension rather
 // than probing an operator class so the error names the thing to install.
 func (m *Migrator) verifyExtensions(ctx context.Context) error {
-	db, err := openDB(m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -235,7 +242,7 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 // The check runs on every MigrateUp: once the unique index exists it finds
 // nothing, and reading the tenants table costs little.
 func (m *Migrator) verifyTenantDomainsUnique(ctx context.Context) error {
-	db, err := openDB(m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -297,7 +304,7 @@ func (m *Migrator) verifyTenantDomainsUnique(ctx context.Context) error {
 // docker-compose migrate container can't quietly leave the app running
 // against a half-migrated schema (#1655).
 func (m *Migrator) VerifySchemaUpToDate(ctx context.Context) error {
-	db, err := openDB(m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to open database", err)
 	}
@@ -468,7 +475,7 @@ func (m *Migrator) DropTables(ctx context.Context, dryRun bool, confirm bool) er
 	}
 
 	// Create direct database connection for drop operations
-	db, err := openDB(m.dbURL)
+	db, err := m.open()
 	if err != nil {
 		return errxtrace.Wrap("failed to connect to database", err)
 	}
@@ -706,7 +713,11 @@ func (m *Migrator) dropAllTables(ctx context.Context, db *sql.DB, tables []strin
 // parsePostgreSQLDSN parses a PostgreSQL DSN and returns the database name and an admin DSN
 // that connects to the 'postgres' database for administrative operations
 func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err error) {
-	parsed, err := urlerr.Parse(m.dbURL)
+	dsn, err := m.connURL()
+	if err != nil {
+		return "", "", err
+	}
+	parsed, err := urlerr.Parse(dsn)
 	if err != nil {
 		return "", "", errxtrace.Wrap("failed to parse database URL", err)
 	}
@@ -730,14 +741,33 @@ func (m *Migrator) parsePostgreSQLDSN() (dbName string, adminDSN string, err err
 	return dbName, adminDSN, nil
 }
 
+// connURL checks the DSN as given and returns it without the pgxpool query
+// parameters, which lib/pq and pgx.Connect would send to the server. The
+// check comes first: stripping re-encodes the query, and an "@" a password
+// spilled into it reads as %40 afterward.
+func (m *Migrator) connURL() (string, error) {
+	if err := urlerr.CheckDatabaseURL(m.dbURL); err != nil {
+		return "", err
+	}
+	return dsnutil.StripPGXPoolParams(m.dbURL), nil
+}
+
+// open opens the database at connURL with lib/pq.
+func (m *Migrator) open() (*sql.DB, error) {
+	dsn, err := m.connURL()
+	if err != nil {
+		return nil, err
+	}
+	return openDB(dsn)
+}
+
 // openDB opens dsn with lib/pq. lib/pq parses a URL DSN on first use and
 // returns the error of url.Parse, which quotes the DSN, password included.
-// Parsing it here first returns that error without the DSN.
+// Checking it here first returns that error without the DSN, and refuses a
+// DSN whose password spilled past the host (urlerr.CheckDatabaseURL).
 func openDB(dsn string) (*sql.DB, error) {
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		if _, err := urlerr.Parse(dsn); err != nil {
-			return nil, err
-		}
+	if err := urlerr.CheckDatabaseURL(dsn); err != nil {
+		return nil, err
 	}
 	return sql.Open("postgres", dsn)
 }

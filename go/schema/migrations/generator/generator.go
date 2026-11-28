@@ -11,6 +11,8 @@ import (
 	"ptah.run/dbschema"
 	"ptah.run/engine/builtin"
 	"ptah.run/migration/generator"
+
+	"go.5x5.cz/inventario/internal/urlerr"
 )
 
 type Generator struct {
@@ -41,6 +43,10 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 	err := os.MkdirAll(migrationsDir, 0o750)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create output directory", err)
+	}
+
+	if err := urlerr.CheckDatabaseURL(m.dbURL); err != nil {
+		return nil, err
 	}
 
 	// Connect to database first

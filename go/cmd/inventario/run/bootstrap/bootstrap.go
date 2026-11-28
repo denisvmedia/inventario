@@ -178,22 +178,22 @@ func logInventarioEnv() {
 }
 
 // logStartupInfo prints a mode-specific startup banner with the DSN credentials
-// masked: the user name and password of the userinfo, and whatever else
-// shared.RedactDSN masks, such as a password query parameter. ModeWorkers
-// omits --addr since no HTTP listener is opened. A DSN that does not parse is
-// an error rather than a panic, and the error leaves the DSN out, since it
-// carries the password.
+// masked: whatever shared.RedactDSN masks in the DSN as given, such as the
+// password and a password query parameter, and then the user name.
+// ModeWorkers omits --addr since no HTTP listener is opened. A DSN that does
+// not parse is an error rather than a panic, and the error leaves the DSN
+// out, since it carries the password.
 func logStartupInfo(mode Mode, addr, dsn string) error {
-	parsedDSN, err := registry.Config(dsn).Parse()
-	if err != nil {
+	if _, err := registry.Config(dsn).Parse(); err != nil {
 		err = fmt.Errorf("invalid --db-dsn: %w", err)
 		slog.Error("Invalid database DSN", "error", err)
 		return err
 	}
-	if parsedDSN.User != nil {
-		parsedDSN.User = url.UserPassword("xxxxxx", "xxxxxx")
+	maskedDSN := shared.RedactDSN(dsn)
+	if masked, err := url.Parse(maskedDSN); err == nil && masked.User != nil {
+		masked.User = url.UserPassword("xxxxxx", "xxxxxx")
+		maskedDSN = masked.String()
 	}
-	maskedDSN := shared.RedactDSN(parsedDSN.String())
 	switch mode {
 	case ModeAPIServer:
 		slog.Info("Starting API server", "addr", addr, "db_dsn", maskedDSN)

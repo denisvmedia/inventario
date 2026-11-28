@@ -186,6 +186,19 @@ least 8 characters, with an upper-case letter, a lower-case letter and a
 digit. A password that fails it stops the setup before the first user exists,
 which reads as a container that will not boot.
 
+### The server refuses the database URL: "has an @ after the host"
+
+A character that a URL reserves in the database password cuts the URL short.
+In `postgres://app:12/secret@db/inventario` the `/` ends the host part, and
+the rest of the password becomes the database name. The server and every
+`inventario db` command refuse such a URL before they connect.
+
+Percent-encode `/`, `?` and `#` in the password of `--db-dsn`
+(`INVENTARIO_DB_DSN`) as `%2F`, `%3F` and `%23`. The URL above becomes
+`postgres://app:12%2Fsecret@db/inventario`. Encoding only the `@` does not
+help: the host part still ends at the `/`. A literal `@` in the database
+name or in a query value is written as `%40`.
+
 ### Everything works, then every restart loses the data
 
 The server fell back to the in-memory database. That backend exists for trying

@@ -10,8 +10,12 @@ import (
 type Config string
 
 // Parse parses the DSN. Its error leaves the DSN out: url.Parse would quote
-// it, password included.
+// it, password included. A postgres:// DSN with an "@" after the host is
+// refused (urlerr.CheckDatabaseURL).
 func (c Config) Parse() (*url.URL, error) {
+	if err := urlerr.CheckDatabaseURL(string(c)); err != nil {
+		return nil, err
+	}
 	return urlerr.Parse(string(c))
 }
 
