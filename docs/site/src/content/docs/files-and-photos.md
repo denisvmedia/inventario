@@ -24,7 +24,7 @@ uploads the files before it creates the item and shows how each upload goes;
 if one fails, the item is not created until **Retry** uploads it. See
 [Files](../items/#files) on the Items page.
 
-![The Add item dialog with a Files step for attaching photos and documents](../../assets/screenshots/add-item-dialog.png)
+![The Add item dialog with a Files step for attaching photos and documents](../../assets/screenshots/add-item-files-step.png)
 
 **From an existing item**, open it and go to its **Files** tab. The tab has a
 dashed upload zone — click it (or the **Browse** link inside it) to open the

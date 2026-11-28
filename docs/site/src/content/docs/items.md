@@ -135,6 +135,8 @@ waiting for the hourly scan limit, scanning, the products found, or why the
 file could not be read. Scans over the hourly limit wait in the queue and start
 by themselves; they are not dropped.
 
+![The review page of a batch of two files: three products found on an invoice and one on a photo, all ticked, with Create 4 drafts at the bottom](../../assets/screenshots/batch-review.png)
+
 For each product the page shows the name, brand and model, and the amount of
 that product line on the receipt, never the receipt total. A line of several
 identical units (two cups for 24.00) shows a **Quantity** of 2 with the amount

@@ -35,6 +35,8 @@ field also shows how many options it has.
 Type in the search box to keep the fields whose name contains the text. Upper
 and lower case don't matter.
 
+![The Custom fields page listing six fields with their types and item counts](../../assets/screenshots/custom-fields.png)
+
 ## Add a field
 
 1. Click **New field**.
@@ -93,6 +95,8 @@ On a select field you can rename options, add options, and remove them. Each
 option shows how many items have it. Removing an option clears it from those
 items when you save; the dialog says how many items that is before you click
 **Save changes**.
+
+![The Edit custom field dialog for a select field, with its options, the item count next to the option in use, and the item types it is offered on](../../assets/screenshots/custom-field-dialog.png)
 
 ## Delete a field
 

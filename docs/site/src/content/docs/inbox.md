@@ -23,6 +23,8 @@ The card, the line and the number are hidden while there is nothing for them
 to show. If the number cannot be loaded, the dashboard card says so, with
 **Retry** and a link to the inbox.
 
+![The Inbox with two drafts, three items marked as draft and a batch of files, and the Missing details card below](../../assets/screenshots/inbox.png)
+
 ## What is in the inbox
 
 | Reason | What it is | What clears it |
@@ -88,6 +90,8 @@ the list, for example "Item 1 of 4 to review":
   opens the next item still waiting for review. After the last one, you are
   back in the inbox.
 - **Skip** opens the next item and leaves this one in the inbox.
+
+![An item opened with Review one by one, with the review bar showing Item 1 of 3 to review, Skip, and Mark as reviewed](../../assets/screenshots/inbox-review-bar.png)
 
 Edit the item on its page as usual in between: the fields of the **Details**
 tab, or **Edit** for the whole form. **Mark as reviewed** waits while a field

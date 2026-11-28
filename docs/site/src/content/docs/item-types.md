@@ -37,6 +37,8 @@ are counted on their own, as "N in Trash".
 Type in the search box to keep the types whose name contains the text. Upper
 and lower case don't matter.
 
+![The Item types page with the six built-in types and three of the group's own](../../assets/screenshots/item-types.png)
+
 ## Add a type
 
 1. Click **New type**.
