@@ -8,8 +8,11 @@
 //   2. Build the binary with the with_frontend tag:
 //        cd go/cmd/inventario && go build -tags with_frontend -o ../../../bin/inventario .
 //   3. Run the binary (--enable-seed-endpoint mounts the public /seed
-//      route, which is OFF by default in production — #2039):
-//        ./bin/inventario run --db-dsn=memory:// \
+//      route, which is OFF by default in production — #2039). The seed
+//      fills only the `test-org` tenant, and memory:// otherwise starts
+//      with a tenant named `default`, so name it test-org:
+//        INVENTARIO_RUN_MEMORY_TENANT_SLUG=test-org \
+//          ./bin/inventario run --db-dsn=memory:// \
 //          --no-auth-rate-limit --no-global-rate-limit \
 //          --enable-seed-endpoint
 //   4. Seed the DB:

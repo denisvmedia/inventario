@@ -38,6 +38,9 @@ export const GROUP_QUERY_PARAM = "g"
 const PATHS_WITH_GROUP_QUERY = new Set([
   "/profile",
   "/profile/edit",
+  "/profile/sessions",
+  "/profile/login-history",
+  "/profile/api-tokens",
   "/settings",
   "/help",
   "/whats-new",

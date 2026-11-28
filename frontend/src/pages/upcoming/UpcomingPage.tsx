@@ -12,6 +12,7 @@ import { Link, useSearchParams } from "react-router-dom"
 
 import { useReminderText } from "@/components/reminders/useReminderText"
 import { ListLoadError } from "@/components/common/ListLoadError"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Page, PageHeader } from "@/components/ui/page"
@@ -123,6 +124,7 @@ export function UpcomingPage() {
 
   return (
     <Page width="wide" data-testid="page-upcoming">
+      <RouteTitle title={t("reminders:upcoming.title")} />
       <PageHeader
         title={t("reminders:upcoming.title")}
         subtitle={t("reminders:upcoming.subtitle")}

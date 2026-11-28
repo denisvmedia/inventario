@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom"
 import { CustomFieldDeleteDialog } from "@/components/customFields/CustomFieldDeleteDialog"
 import { CustomFieldFormDialog } from "@/components/customFields/CustomFieldFormDialog"
 import { CustomFieldRow } from "@/components/customFields/CustomFieldRow"
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -104,6 +105,7 @@ export function CustomFieldsListPage() {
 
   return (
     <Page width="wide" data-testid="page-custom-fields">
+      <RouteTitle title={t("customFields:title")} />
       <PageHeader
         title={t("customFields:title")}
         subtitle={t("customFields:description")}

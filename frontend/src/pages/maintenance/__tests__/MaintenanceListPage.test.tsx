@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react"
+import { screen, waitFor } from "@testing-library/react"
 import { Route } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
@@ -55,6 +55,8 @@ describe("<MaintenanceListPage />", () => {
   it("renders the empty state when there are no schedules", async () => {
     server.use(...groupHandlers.list(groupFixture), ...maintenanceHandlers.listGroup(SLUG, []))
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Maintenance · Inventario"))
     expect(await screen.findByTestId("maintenance-empty")).toBeInTheDocument()
     expect(screen.queryByTestId("maintenance-table")).toBeNull()
   })

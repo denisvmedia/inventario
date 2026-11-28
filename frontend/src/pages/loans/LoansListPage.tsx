@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useSearchParams } from "react-router-dom"
 
+import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Badge } from "@/components/ui/badge"
 import { ListLoadError } from "@/components/common/ListLoadError"
 import { Card, CardContent } from "@/components/ui/card"
@@ -54,6 +55,7 @@ export function LoansListPage() {
 
   return (
     <Page width="wide" data-testid="page-lent">
+      <RouteTitle title={t("loans:list.title")} />
       <PageHeader title={t("loans:list.title")} subtitle={t("loans:list.subtitle")} />
 
       <div

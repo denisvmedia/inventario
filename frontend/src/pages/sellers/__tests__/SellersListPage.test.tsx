@@ -82,6 +82,8 @@ describe("<SellersListPage />", () => {
   it("lists the sellers with their item counts and details", async () => {
     seed()
     renderPage()
+    // The top bar and the browser tab name the page.
+    await waitFor(() => expect(document.title).toBe("Sellers · Inventario"))
     expect(await screen.findByTestId("seller-row-s1")).toBeVisible()
     expect(screen.getByTestId("sellers-list-count")).toHaveTextContent("2 sellers")
     expect(screen.getByTestId("seller-row-s1-usage")).toHaveTextContent("3 items · Ann, 555-0100")
