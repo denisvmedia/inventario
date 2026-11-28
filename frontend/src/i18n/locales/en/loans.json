@@ -63,6 +63,7 @@
     "blockedByService": "This item is currently in service at {{provider}}. Mark it as received back before lending it out — a commodity can only be in one place at a time.",
     "editHistory": "Edit past loan",
     "emptyState": "Not currently lent. Loans you create here track who has it and when it's due back.",
+    "emptyStateReadOnly": "loans:tab.emptyStateReadOnly",
     "historyTitle": "Past loans",
     "lendButton": "Lend out…",
     "title": "Lent out"

@@ -29,18 +29,27 @@ interface ServiceTabProps {
   // False while the group hides maintenance and repairs (#1607): the tab
   // still shows the item's service records, without the Send button.
   canStart?: boolean
+  // False for a role the server refuses service writes for (#3038): the
+  // tab shows the item's service records with no action on them.
+  canEdit: boolean
 }
 
 // ServiceTab is the in-service surface on commodity detail. Mirrors
 // LendTab structurally — at most one open service row + a history
 // list — but the copy and icons emphasise repair / workshop semantics
 // instead of borrower semantics.
-export function ServiceTab({ commodityId, commodityCount, canStart = true }: ServiceTabProps) {
+export function ServiceTab({
+  commodityId,
+  commodityCount,
+  canStart = true,
+  canEdit,
+}: ServiceTabProps) {
   const { t } = useTranslation(["services", "common"])
   const toast = useAppToast()
   const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
-  useHoldItem(open)
+  // A dialog stays open only while the role may write (#3038), and so does the hold.
+  useHoldItem(canEdit && open)
 
   const isBundle = (commodityCount ?? 0) > 1
   const list = useServicesForCommodity(commodityId)
@@ -130,7 +139,7 @@ export function ServiceTab({ commodityId, commodityCount, canStart = true }: Ser
     <Card data-testid="commodity-detail-service">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("services:tab.title")}</CardTitle>
-        {canStart && !current && !openLoan && !isBundle ? (
+        {canEdit && canStart && !current && !openLoan && !isBundle ? (
           <Button
             type="button"
             size="sm"
@@ -152,7 +161,7 @@ export function ServiceTab({ commodityId, commodityCount, canStart = true }: Ser
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {canStart && !current && openLoan && !isBundle ? (
+        {canEdit && canStart && !current && openLoan && !isBundle ? (
           <Alert data-testid="service-blocked-by-loan">
             <AlertDescription>
               {t("services:tab.blockedByLoan", { borrower: openLoan.borrower_name })}
@@ -163,14 +172,15 @@ export function ServiceTab({ commodityId, commodityCount, canStart = true }: Ser
         {current ? (
           <CurrentServiceCard
             service={current}
-            onReturn={() => handleReturn(current)}
-            onDelete={() => handleDelete(current)}
+            onReturn={canEdit ? () => handleReturn(current) : undefined}
+            onDelete={canEdit ? () => handleDelete(current) : undefined}
             returning={ret.isPending}
             deleting={remove.isPending}
           />
         ) : !isBundle && !list.isLoading ? (
           <p className="text-sm text-muted-foreground" data-testid="service-empty-state">
-            {t("services:tab.emptyState")}
+            {/* A viewer cannot send the item, so the line says only the state (#3038). */}
+            {canEdit ? t("services:tab.emptyState") : t("services:tab.emptyStateReadOnly")}
           </p>
         ) : null}
 
@@ -202,7 +212,7 @@ export function ServiceTab({ commodityId, commodityCount, canStart = true }: Ser
       </CardContent>
 
       <SendForServiceDialog
-        open={open}
+        open={canEdit && open}
         onOpenChange={setOpen}
         onSubmit={handleSubmit}
         isPending={start.isPending}
@@ -211,10 +221,11 @@ export function ServiceTab({ commodityId, commodityCount, canStart = true }: Ser
   )
 }
 
+// The card offers only the actions it is given a handler for.
 interface CurrentServiceCardProps {
   service: ServiceEntity & { id: string }
-  onReturn: () => void
-  onDelete: () => void
+  onReturn?: () => void
+  onDelete?: () => void
   returning: boolean
   deleting: boolean
 }
@@ -275,28 +286,34 @@ function CurrentServiceCard({
             </Badge>
           ) : null}
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            onClick={onReturn}
-            disabled={returning}
-            data-testid="service-mark-returned"
-          >
-            {t("services:current.markReturned")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onDelete}
-            disabled={deleting}
-            className="text-destructive"
-            data-testid="service-delete"
-          >
-            {t("services:current.delete")}
-          </Button>
-        </div>
+        {onReturn || onDelete ? (
+          <div className="flex flex-col gap-1.5">
+            {onReturn ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onReturn}
+                disabled={returning}
+                data-testid="service-mark-returned"
+              >
+                {t("services:current.markReturned")}
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onDelete}
+                disabled={deleting}
+                className="text-destructive"
+                data-testid="service-delete"
+              >
+                {t("services:current.delete")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

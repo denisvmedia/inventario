@@ -61,6 +61,7 @@
   "tab": {
     "blockedByLoan": "Tato položka je aktuálně zapůjčena uživateli {{borrower}}. Před odesláním do servisu označte zápůjčku jako vrácenou — věc může být vždy jen na jednom místě.",
     "emptyState": "Aktuálně není v servisu. Použijte, když položku předáváte do dílny nebo servisního střediska.",
+    "emptyStateReadOnly": "Aktuálně není v servisu.",
     "historyTitle": "Předchozí servisy",
     "sendButton": "Odeslat do servisu…",
     "title": "V servisu"

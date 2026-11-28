@@ -1215,6 +1215,12 @@ when to add an entry and where it goes.
   from an item and deleting an area that still holds items no longer undo a
   change saved on the item at the same time
   ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
+- On an item page, viewers saw Lend, Send for service, Add link, Add schedule
+  and Add reminder, the actions on the item's loans, services, supply links,
+  maintenance schedules and reminders, Revert to In Use, and the prompt to
+  place the item in a location. The server refuses those writes, so the form
+  ended in an error. A viewer now sees these records without the actions
+  ([#3038](https://github.com/denisvmedia/inventario/issues/3038)).
 
 - The password-changed, password reset, sign-in link and welcome emails are
   sent in the language you chose in your settings. They always arrived in

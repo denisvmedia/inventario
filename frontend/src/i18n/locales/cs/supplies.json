@@ -12,6 +12,7 @@
   },
   "edit": "Upravit odkaz na spotřební materiál",
   "empty": "Zatím žádné odkazy na spotřební materiál. Přidejte adresu URL, kde znovu nakupujete spotřební materiál této položky.",
+  "emptyReadOnly": "Zatím žádné odkazy na spotřební materiál.",
   "fields": {
     "label": "Označení",
     "labelPlaceholder": "např. Vodní filtr",

@@ -9,6 +9,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import type { GroupSection } from "@/features/group/sections"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -17,6 +18,7 @@ import {
   groupHandlers,
   loanHandlers,
   maintenanceHandlers,
+  memberHandlers,
   serviceHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -50,8 +52,11 @@ type ItemData = {
   schedules?: Parameters<typeof maintenanceHandlers.listForCommodity>[2]
 }
 
+// The caller is a member with the user role, who may record loans, services
+// and maintenance (#3038).
 function serve(hidden: GroupSection[], attrs: Record<string, unknown> = {}, data: ItemData = {}) {
   server.use(
+    ...memberHandlers.asRole("g1", "user"),
     ...groupHandlers.list([
       { id: "g1", slug: SLUG, name: "Household", group_currency: "USD", hidden_sections: hidden },
     ]),
@@ -68,6 +73,7 @@ function serve(hidden: GroupSection[], attrs: Record<string, unknown> = {}, data
 function renderDetail(search = "") {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath: `/g/${SLUG}/commodities/${ID}${search}`,
     routes: (
       <Route
@@ -75,7 +81,9 @@ function renderDetail(search = "") {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommodityDetailPage />
+              <WhenRoleKnown>
+                <CommodityDetailPage />
+              </WhenRoleKnown>
             </ConfirmProvider>
           </GroupProvider>
         }

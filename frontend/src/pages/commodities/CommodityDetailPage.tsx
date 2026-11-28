@@ -911,14 +911,20 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             the group actually has locations to choose from. Hidden while
             a currency migration holds the group lock — its CTA opens the
             same edit dialog the main Edit button gates on the lock, so
-            hiding it keeps the banner from being a lock-bypass path. */}
+            hiding it keeps the banner from being a lock-bypass path. A role
+            that cannot change the item gets no banner either (#3038). */}
         <AssignLocationBanner
           // Key by commodity id so the banner remounts when the user
           // navigates between items on the same CommodityDetailContent
           // instance — its in-session dismiss is per-item ("returns on the
           // next mount"), not sticky across commodities.
           key={id}
-          show={!commodity.area_id && (locations.data?.length ?? 0) > 0 && !migrationLock.locked}
+          show={
+            canWrite &&
+            !commodity.area_id &&
+            (locations.data?.length ?? 0) > 0 &&
+            !migrationLock.locked
+          }
           onAssign={() => {
             if (!isSheet) setTab("details")
             setQuickEdit("location")
@@ -1314,19 +1320,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 })}
               </p>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
-              onClick={() => handleStatusTransition("in_use")}
-              disabled={itemSaving || migrationLock.locked}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              aria-disabled={migrationLock.locked || undefined}
-              data-testid="commodity-detail-revert-status"
-            >
-              {t("commodities:detail.terminalStatus.revert")}
-            </Button>
+            {canWrite ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
+                onClick={() => handleStatusTransition("in_use")}
+                disabled={itemSaving || migrationLock.locked}
+                title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+                aria-disabled={migrationLock.locked || undefined}
+                data-testid="commodity-detail-revert-status"
+              >
+                {t("commodities:detail.terminalStatus.revert")}
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1414,6 +1422,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   key={`reminders-${id}`}
                   commodityId={commodity.id}
                   className="my-6"
+                  canEdit={canWrite}
                 />
               ) : null}
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
@@ -1446,6 +1455,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
               canStart={showLoans}
+              canEdit={canWrite}
             />
           ) : tab === "service" ? (
             <ServiceTab
@@ -1453,15 +1463,17 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
               canStart={showMaintenance}
+              canEdit={canWrite}
             />
           ) : tab === "supplies" ? (
-            <SuppliesTab key={id} commodityId={commodity?.id ?? id} />
+            <SuppliesTab key={id} commodityId={commodity?.id ?? id} canEdit={canWrite} />
           ) : tab === "maintenance" ? (
             <MaintenanceTab
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
               canStart={showMaintenance}
+              canEdit={canWrite}
             />
           ) : (
             <FilesTab
