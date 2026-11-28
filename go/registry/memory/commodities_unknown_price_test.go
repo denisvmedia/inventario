@@ -121,3 +121,17 @@ func TestCommodityRegistry_GroupCurrencyItemDropsConvertedPrice(t *testing.T) {
 	_, known := updated.Value("USD")
 	c.Assert(known, qt.IsFalse)
 }
+
+func TestCommodityRegistry_BackfillRegisteredDates_NothingToDate(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newUnknownPriceSet(c)
+
+	// Create dates every item, so there is nothing left to date.
+	created := createPriced(c, ctx, set, models.Commodity{Name: "item"})
+	c.Assert(created.RegisteredDate, qt.IsNotNil)
+
+	dated, pending, err := set.CommodityRegistry.BackfillRegisteredDates(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(dated, qt.Equals, 0)
+	c.Assert(pending, qt.IsFalse)
+}

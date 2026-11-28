@@ -153,6 +153,9 @@ func (c *Command) run() error {
 	stopAssetNumberBackfill := bootstrap.StartAssetNumberBackfill(ctx, rs, c.cfg)
 	defer stopAssetNumberBackfill()
 
+	stopRegisteredDateBackfill := bootstrap.StartRegisteredDateBackfill(ctx, rs, c.cfg)
+	defer stopRegisteredDateBackfill()
+
 	stopItemTypeBackfill := bootstrap.StartItemTypeBackfill(ctx, rs, c.cfg)
 	defer stopItemTypeBackfill()
 

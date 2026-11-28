@@ -98,7 +98,7 @@ tab, or **Edit** for the whole form. **Mark as reviewed** waits while a field
 of the **Details** tab is open or being saved; save or cancel it first. If you
 open a field, a dialog or a confirmation on the item, in any of its tabs,
 before the next item opens, you stay on the item. Marking an item as reviewed changes nothing else
-on it. **Previous** and **Next** at the top, and **Save and next** in the edit
+on it but its **Last Edited** date. **Previous** and **Next** at the top, and **Save and next** in the edit
 form, move through the same list (see
 [Go through a list one item at a time](../items/#go-through-a-list-one-item-at-a-time)).
 Close the panel to return to the inbox. On the full item page, for example

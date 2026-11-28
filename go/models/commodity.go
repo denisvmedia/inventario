@@ -206,8 +206,20 @@ type Commodity struct {
 	// PurchaseDate is nil when the date is unknown.
 	//ptah:schema:field name="purchase_date" type="TEXT"
 	PurchaseDate PDate `json:"purchase_date" db:"purchase_date" extensions:"x-nullable=true"`
+	// RegisteredDate is the day the item was added, in UTC. The registry
+	// sets it to today on create unless the caller gives one (a backup
+	// restore keeps the archived day, and a restored item whose backup has
+	// none gets the day of the restore), and an update keeps the stored day
+	// when it gives none. It can be empty: an item stored before the
+	// registry dated new items, with no "created" history event to date it
+	// from, has none, and a restore that merges an archived item without a
+	// date into such an item leaves it so.
 	//ptah:schema:field name="registered_date" type="TEXT"
 	RegisteredDate PDate `json:"registered_date" db:"registered_date"`
+	// LastModifiedDate is the day the item was last changed, in UTC. The
+	// registry sets it to today on create unless the caller gives one, and
+	// on every edit, bulk edits and the draft mark included, whatever the
+	// caller sends.
 	//ptah:schema:field name="last_modified_date" type="TEXT"
 	LastModifiedDate PDate `json:"last_modified_date" db:"last_modified_date"`
 	//ptah:schema:field name="urls" type="JSONB"

@@ -82,6 +82,7 @@ func (r *CommodityRegistry) writePatch(id string, patched models.Commodity) (*mo
 		return nil, "", err
 	}
 	next.Revision = c.Revision + 1
+	next.LastModifiedDate = new(models.NewDate(time.Now()))
 	r.items.Set(id, &next)
 	return copyOut(&next), commodityAreaID(c), nil
 }

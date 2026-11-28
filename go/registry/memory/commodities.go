@@ -181,6 +181,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// So is the revision: a new item starts at 1.
 	commodity.Revision = 1
 
+	// The day the item was added and last changed: today unless the caller
+	// carries them, as a backup restore does.
+	registry.StampNewCommodity(&commodity, time.Now())
+
 	// The asset number is server-managed, as in the postgres registry: the
 	// caller's value is dropped and the number is picked while holding the
 	// lock that also covers storing the row.
@@ -436,10 +440,12 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// preserve the server-managed acquisition columns and asset number
 	// (whatever the caller sent must be ignored).
 	var oldAreaID string
+	var storedRegistered models.PDate
 	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
 		if existingCommodity.AreaID != nil {
 			oldAreaID = *existingCommodity.AreaID
 		}
+		storedRegistered = existingCommodity.RegisteredDate
 		// A changed type must be one of the group's item types.
 		if existingCommodity.Type != commodity.Type && !typeKnown {
 			return nil, errxtrace.Classify(registry.ErrUnknownItemType, errx.Attrs("type", string(commodity.Type)))
@@ -466,6 +472,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// The trash fields belong to Trash and Restore. The base update refuses a
 	// trashed item, as the postgres registry does.
 	commodity.ClearTrashState()
+
+	// The day the item was added stays unless the caller gives one; the day
+	// it was last changed is today.
+	registry.StampEditedCommodity(ctx, &commodity, storedRegistered, time.Now())
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedCommodity, err := r.Registry.UpdateWithUser(ctx, commodity)

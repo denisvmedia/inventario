@@ -19,9 +19,10 @@ import (
 // nothing, so a tag row it created for the change is rolled back with it.
 var errPatchUnchanged = errors.New("the patch changed nothing")
 
-// Patch writes the bulk-editable columns of a live item under its row lock.
-// The tags it may add are locked first and the item after them, the order
-// every writer of an item's tags follows (see ensureTagRowsInTx).
+// Patch writes the bulk-editable columns of a live item under its row lock,
+// and dates the change. The tags it may add are locked first and the item
+// after them, the order every writer of an item's tags follows (see
+// ensureTagRowsInTx).
 func (r *CommodityRegistry) Patch(ctx context.Context, id string, addTags []string, change func(models.Commodity) (models.Commodity, bool, error)) (before, after *models.Commodity, err error) {
 	table := r.tableNames.Commodities()
 	var locked, stored models.Commodity
@@ -60,10 +61,11 @@ func (r *CommodityRegistry) Patch(ctx context.Context, id string, addTags []stri
 		}
 		query := fmt.Sprintf(`
 			UPDATE %s SET tags = $2, type = $3, status = $4, status_date = $5, status_note = $6, sale_price = $7, area_id = $8,
-				revision = revision + 1
+				revision = revision + 1, last_modified_date = $9
 			WHERE id = $1 RETURNING *`, table)
 		if err := scanOne(ctx, tx, &stored, query, id,
-			patched.Tags, patched.Type, patched.Status, patched.StatusDate, patched.StatusNote, patched.SalePrice, patched.AreaID); err != nil {
+			patched.Tags, patched.Type, patched.Status, patched.StatusDate, patched.StatusNote, patched.SalePrice, patched.AreaID,
+			models.NewDate(time.Now())); err != nil {
 			return err
 		}
 		stored.CustomFields = locked.CustomFields.Clone()

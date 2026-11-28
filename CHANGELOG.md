@@ -1187,12 +1187,26 @@ in [the v0.3.0 release notes](.github/release-notes/v0.3.0.md).
   happened to every file whose title you left as it was, to files added with
   Add items from files, and to documents delivered by other systems. Files
   already uploaded keep their names, and a restore keeps the names its backup
-  carries.
+  carries ([#3085](https://github.com/denisvmedia/inventario/pull/3085)).
 - Downloading an imported backup saves it under the name of the file you
   uploaded. It was saved under the name of the stored copy, an ID followed by
   the name in lowercase and a number ("3f2a…-home-backup-1795863438.inb").
   Backups imported before keep that name
   ([#3087](https://github.com/denisvmedia/inventario/issues/3087)).
+- An item shows the day it was added and the day it was last edited. Nothing
+  set the two dates on an item added from the Add item form, the API, a
+  draft, Add from files or a delivered document, so its page showed "Date
+  Added —" and "Last Edited —", the dashboard's Recently added left it out,
+  and sorting by Date added put it last. A new item gets today, in UTC, as
+  both dates unless the request supplies them, and every edit sets Last
+  Edited to today, a bulk change and Mark as reviewed included. A restore
+  keeps the dates its backup carries, and gives a new item whose backup has
+  none the day of the restore. When the server starts, an existing item
+  without a Date Added gets the day its History shows as "Added this item".
+  An item that an earlier release restored from a backup without dates has
+  no such row and stays without one. Last Edited of an existing item stays
+  empty until the item changes
+  ([#3083](https://github.com/denisvmedia/inventario/pull/3083)).
 
 ### Security
 

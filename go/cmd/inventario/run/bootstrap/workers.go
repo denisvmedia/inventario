@@ -702,6 +702,27 @@ func StartAssetNumberBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 	}
 }
 
+// registeredDateBackfillRetryInterval spaces the retries of a failed
+// registered date backfill pass.
+const registeredDateBackfillRetryInterval = time.Minute
+
+// StartRegisteredDateBackfill dates, in the background, the commodities
+// stored without the day they were added (see
+// services.BackfillRegisteredDates) and returns a stop function that cancels
+// the pass and waits for it to return. It runs in a goroutine so a large
+// catalogue cannot delay readiness.
+func StartRegisteredDateBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.BackfillRegisteredDates(ctx, rs.FactorySet, registeredDateBackfillRetryInterval)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
+
 // itemTypeBackfillRetryInterval spaces the retries of a failed item type
 // backfill pass.
 const itemTypeBackfillRetryInterval = time.Minute

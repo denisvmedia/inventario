@@ -300,6 +300,22 @@ func runCommodityDraftLifecycleContract(t *testing.T, newEnv func(t *testing.T) 
 		c.Assert(string(stored.CustomFields[field.ID]), qt.Equals, `"FR-100"`)
 	})
 
+	t.Run("promote dates the new item today", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		draft := createContractDraft(c, env, "key-1", "Drill")
+
+		days := dayWindow()
+		promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", contractItem(env, "Drill"))
+		c.Assert(err, qt.IsNil)
+		stored, err := env.Commodities.Get(env.Ctx, promotion.Commodity.ID)
+		c.Assert(err, qt.IsNil)
+		for _, got := range []*models.Commodity{promotion.Commodity, stored} {
+			assertDatedToday(c, got.RegisteredDate, days())
+			assertDatedToday(c, got.LastModifiedDate, days())
+		}
+	})
+
 	t.Run("promote needs a promotion key", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
