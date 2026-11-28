@@ -23,6 +23,7 @@ import (
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/notifications"
 	"go.5x5.cz/inventario/services/oauth"
 )
 
@@ -134,18 +135,25 @@ type AuthAPI struct {
 	fileSigningService *services.FileSigningService
 	// apiTokens revokes personal API tokens alongside sessions. May be nil.
 	apiTokens *services.APITokenService
+	// emailPrefs reads the recipient's UI language for the account emails.
+	// Nil sends them in English.
+	emailPrefs *notifications.Service
 }
 
-func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
+func (api *AuthAPI) sendPasswordChangedNotification(r *http.Request, user *models.User) {
 	if api.emailService == nil || user == nil {
 		return
 	}
 
+	// Keep the request's values (the request ID among them) but not its
+	// cancelation: the notice must go out after the response is written.
+	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
-			slog.Error("Failed to send password-changed notification email",
+			slog.ErrorContext(ctx, "Failed to send password-changed notification email",
 				"user_id", user.ID,
 				"error", err,
 			)
@@ -1038,6 +1046,11 @@ type AuthParams struct {
 	// APITokenService revokes the user's personal API tokens on a password
 	// change and when MFA is disabled (#2808). Nil skips that step.
 	APITokenService *services.APITokenService
+
+	// SettingsRegistryFactory reads the recipient's UI language, so the
+	// password-changed and magic-link emails go out in it. Nil sends them in
+	// English.
+	SettingsRegistryFactory registry.SettingsRegistryFactory
 }
 
 // Auth sets up the authentication API routes.
@@ -1064,6 +1077,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		accountDeletionService:   params.AccountDeletionService,
 		fileSigningService:       params.FileSigningService,
 		apiTokens:                params.APITokenService,
+		emailPrefs:               newAccountEmailPrefs(params.SettingsRegistryFactory),
 	}
 
 	jwtAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
@@ -1394,7 +1408,7 @@ func (api *AuthAPI) handleChangePassword(w http.ResponseWriter, r *http.Request)
 	}
 	slog.InfoContext(r.Context(), "Password changed successfully", "user_id", user.ID, "email", user.Email, "initial", initialSet)
 	api.logAuth(r.Context(), auditAction, &user.ID, &user.TenantID, true, r, nil)
-	api.sendPasswordChangedNotification(user)
+	api.sendPasswordChangedNotification(r, user)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -1944,7 +1958,7 @@ func (api *AuthAPI) rollbackRefreshToken(ctx context.Context, userID, rowID stri
 	}
 	if err := api.refreshTokenRegistry.RevokeByID(ctx, userID, rowID); err != nil {
 		slog.ErrorContext(ctx, "Failed to roll back refresh token after access mint failure",
-			"user_id", userID, "row_id", rowID, "error", err)
+			"user_id", userID, "token_id", rowID, "error", err)
 	}
 }
 

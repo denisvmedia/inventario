@@ -2799,6 +2799,15 @@ export type paths = {
                         "application/json": string;
                     };
                 };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
             };
         };
         delete?: never;

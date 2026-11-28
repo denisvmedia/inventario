@@ -1,6 +1,8 @@
 package bootstrap_test
 
 import (
+	"bytes"
+	"log/slog"
 	"sort"
 	"testing"
 
@@ -66,4 +68,25 @@ func TestNewReadinessRedisPinger_AllInvalidURLsReturnsNil(t *testing.T) {
 	})
 
 	c.Assert(pinger, qt.IsNil)
+}
+
+// url.Parse quotes the whole URL in its error, password included. The
+// readiness warning keeps the reason and leaves the URL out.
+func TestNewReadinessRedisPinger_InvalidURLLogKeepsPasswordOut(t *testing.T) {
+	c := qt.New(t)
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	c.Cleanup(func() { slog.SetDefault(previous) })
+
+	pinger := bootstrap.NewReadinessRedisPinger(&bootstrap.Config{
+		CSRFRedisURL: "redis://:s3cret-password@localhost:notaport/0",
+	})
+
+	c.Assert(pinger, qt.IsNil)
+	logged := buf.String()
+	c.Assert(logged, qt.Contains, "Invalid Redis URL for readiness check")
+	c.Assert(logged, qt.Contains, "invalid port")
+	c.Assert(logged, qt.Not(qt.Contains), "s3cret-password")
 }

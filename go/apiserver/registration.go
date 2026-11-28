@@ -16,6 +16,7 @@ import (
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/notifications"
 )
 
 // RegistrationAPI handles self-service user registration and email verification.
@@ -27,6 +28,9 @@ type RegistrationAPI struct {
 	rateLimiter          services.AuthRateLimiter
 	groupService         *services.GroupService
 	publicBaseURL        string
+	// emailPrefs reads the recipient's UI language for the verification and
+	// welcome emails. Nil sends them in English.
+	emailPrefs *notifications.Service
 }
 
 // RegistrationParams holds all dependencies needed by the registration API.
@@ -45,6 +49,9 @@ type RegistrationParams struct {
 	// PublicBaseURL, when set, is used to build absolute verification links.
 	// Example: https://inventario.example.com
 	PublicBaseURL string
+	// SettingsRegistryFactory reads the recipient's UI language, so the
+	// verification and welcome emails go out in it. Nil sends them in English.
+	SettingsRegistryFactory registry.SettingsRegistryFactory
 }
 
 // RegisterRequest is the body for POST /register.
@@ -83,6 +90,7 @@ func Registration(params RegistrationParams) func(r chi.Router) {
 		rateLimiter:          params.RateLimiter,
 		groupService:         params.GroupService,
 		publicBaseURL:        strings.TrimSpace(params.PublicBaseURL),
+		emailPrefs:           newAccountEmailPrefs(params.SettingsRegistryFactory),
 	}
 	return func(r chi.Router) {
 		r.With(RegistrationRateLimitMiddleware(params.RateLimiter)).Post("/register", api.handleRegister)
@@ -204,6 +212,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		IsActive: inviteBypass,
 	}
 	if err := user.SetPassword(req.Password); err != nil {
+		slog.ErrorContext(r.Context(), "Failed to hash the password during registration", "error", err)
 		http.Error(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
@@ -389,7 +398,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 	// account is already active, so the retry re-claims cleanly.
 	claimed, err := api.verificationRegistry.MarkVerified(r.Context(), token)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "Failed to mark verification as used", "id", ev.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to mark verification as used", "verification_id", ev.ID, "error", err)
 		http.Error(w, "Failed to verify email", http.StatusInternalServerError)
 		return
 	}
@@ -399,7 +408,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 	}
 
 	api.logAuth(r, "email_verified", &user.ID, true, "")
-	api.sendWelcome(user)
+	api.sendWelcome(r, user)
 	slog.InfoContext(r.Context(), "Email verified", "user_id", user.ID, "email", user.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Email verified successfully. You can now log in."})
 }
@@ -449,7 +458,7 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 	if existing, err := api.verificationRegistry.GetByUserID(r.Context(), user.ID); err == nil {
 		for _, old := range existing {
 			if err := api.verificationRegistry.Delete(r.Context(), old.ID); err != nil {
-				slog.WarnContext(r.Context(), "Failed to delete old verification token", "id", old.ID, "user_id", user.ID, "error", err)
+				slog.WarnContext(r.Context(), "Failed to delete old verification token", "verification_id", old.ID, "user_id", user.ID, "error", err)
 			}
 		}
 	}
@@ -491,22 +500,27 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		// TODO(Phase 3): revisit timeout value once the real SMTP transport is implemented.
 		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendVerificationEmail(ctx, user.Email, user.Name, verificationURL); err != nil {
-			slog.ErrorContext(r.Context(), "Failed to send verification email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to send verification email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
 
-func (api *RegistrationAPI) sendWelcome(user *models.User) {
+func (api *RegistrationAPI) sendWelcome(r *http.Request, user *models.User) {
 	if api.emailService == nil || user == nil {
 		return
 	}
 
+	// Keep the request's values (the request ID among them) but not its
+	// cancelation: the welcome must go out after the response is written.
+	emailCtx := context.WithoutCancel(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendWelcomeEmail(ctx, user.Email, user.Name); err != nil {
-			slog.Error("Failed to send welcome email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to send welcome email", "user_id", user.ID, "error", err)
 		}
 	}()
 }

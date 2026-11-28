@@ -72,14 +72,14 @@ var ErrInvalidBackupSigningKey = errx.NewSentinel("configured backup signing key
 // whose hex value is written once to stderr (outside the structured logger) so
 // operators can capture it on first boot without leaking the signing key into
 // log aggregators.
-func getJWTSecret(configSecret string) ([]byte, error) { //nolint:dupl // distinct secret resolvers (JWT / file-signing / OAuth-state) intentionally share shape; each has its own env var + messages
+func getJWTSecret(configSecret string) ([]byte, error) {
 	// Use the secret from config (which includes environment variables via cleanenv)
 	if configSecret != "" {
 		// Reject well-known public placeholder secrets outright. Accepting one
 		// would let anyone with the public repo forge tokens, so fail fatally
 		// rather than fall back to a random key (leave the value unset for that).
+		// buildServerParams logs the returned error.
 		if isPlaceholderSecret(configSecret) {
-			slog.Error("Configured JWT secret is a well-known public placeholder; refusing to start. Set INVENTARIO_RUN_JWT_SECRET to a real secret (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
 			return nil, errx.Classify(ErrPlaceholderSecret, errx.Attrs("setting", "jwt-secret"))
 		}
 		// If provided as hex string, decode it
@@ -116,14 +116,14 @@ func getJWTSecret(configSecret string) ([]byte, error) { //nolint:dupl // distin
 
 // getFileSigningKey retrieves the file signing key from config/environment or
 // generates a secure random one with the same semantics as getJWTSecret.
-func getFileSigningKey(configKey string) ([]byte, error) { //nolint:dupl // distinct secret resolvers (JWT / file-signing / OAuth-state) intentionally share shape; each has its own env var + messages
+func getFileSigningKey(configKey string) ([]byte, error) {
 	// Use the key from config (which includes environment variables via cleanenv)
 	if configKey != "" {
 		// Reject well-known public placeholder keys outright. Accepting one would
 		// let anyone with the public repo forge signed file URLs, so fail fatally
 		// rather than fall back to a random key (leave the value unset for that).
+		// buildServerParams logs the returned error.
 		if isPlaceholderSecret(configKey) {
-			slog.Error("Configured file signing key is a well-known public placeholder; refusing to start. Set INVENTARIO_RUN_FILE_SIGNING_KEY to a real key (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
 			return nil, errx.Classify(ErrPlaceholderSecret, errx.Attrs("setting", "file-signing-key"))
 		}
 		// If provided as hex string, decode it
@@ -241,13 +241,13 @@ func resolveBackupSeed(configKey string) ([]byte, error) {
 // can capture and persist it. Multi-replica deployments MUST supply a
 // stable value or signed states won't survive a request that lands on
 // a different replica after the provider redirect.
-func getOAuthStateKey(configKey string) ([]byte, error) { //nolint:dupl // distinct secret resolvers (JWT / file-signing / OAuth-state) intentionally share shape; each has its own env var + messages
+func getOAuthStateKey(configKey string) ([]byte, error) {
 	if configKey != "" {
 		// Reject well-known public placeholder keys outright. Accepting one would
 		// let anyone with the public repo forge OAuth state, so fail fatally
 		// rather than fall back to a random key (leave the value unset for that).
+		// buildServerParams logs the returned error.
 		if isPlaceholderSecret(configKey) {
-			slog.Error("Configured OAuth state key is a well-known public placeholder; refusing to start. Set INVENTARIO_RUN_OAUTH_STATE_KEY to a real key (openssl rand -hex 32) or leave it unset for an auto-generated ephemeral key")
 			return nil, errx.Classify(ErrPlaceholderSecret, errx.Attrs("setting", "oauth-state-key"))
 		}
 		if decoded, err := hex.DecodeString(configKey); err == nil && len(decoded) >= 32 {

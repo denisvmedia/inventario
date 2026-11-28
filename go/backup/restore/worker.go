@@ -223,7 +223,8 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 		// only looks at pending rows.
 		if !w.semaphore.TryAcquire(1) {
 			w.inFlight.Delete(restoreOp.ID)
-			slog.WarnContext(ctx, "Failed to acquire semaphore for restore, another restore is in progress, skipping...")
+			slog.DebugContext(ctx, "Failed to acquire semaphore for restore, another restore is in progress, skipping...",
+				"restore_operation_id", restoreOp.ID)
 			return
 		}
 

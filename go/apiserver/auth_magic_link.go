@@ -122,6 +122,7 @@ func (api *AuthAPI) requestMagicLink(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {string} string "Forbidden - account disabled"
 // @Failure 404 {string} string "Not Found - magic-link login disabled"
 // @Failure 429 {string} string "Too Many Requests - account locked"
+// @Failure 500 {string} string "Internal Server Error"
 // @Router /auth/magic-link/verify [post]
 func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	if !api.magicLinkLoginEnabled {
@@ -155,8 +156,13 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// it invalid (#2131).
 	mlt, err := api.magicLinkRegistry.GetByToken(r.Context(), req.Token)
 	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			slog.WarnContext(r.Context(), "Failed to load magic-link token", "error", err)
+			http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
+			return
+		}
 		slog.ErrorContext(r.Context(), "Failed to load magic-link token", "error", err)
-		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	if mlt.IsExpired() {
@@ -173,8 +179,13 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	user, err := api.userRegistry.Get(r.Context(), mlt.UserID)
 	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			slog.WarnContext(r.Context(), "Failed to look up user for magic-link verify", "user_id", mlt.UserID, "error", err)
+			http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
+			return
+		}
 		slog.ErrorContext(r.Context(), "Failed to look up user for magic-link verify", "user_id", mlt.UserID, "error", err)
-		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	// Blocked/disabled accounts are refused at verify even with a valid token
@@ -282,8 +293,9 @@ func (api *AuthAPI) sendMagicLink(r *http.Request, user *models.User) {
 	go func() {
 		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
+		ctx = withRecipientLanguage(ctx, api.emailPrefs, user)
 		if err := api.emailService.SendMagicLinkEmail(ctx, user.Email, user.Name, signInURL); err != nil {
-			slog.ErrorContext(r.Context(), "Failed to send magic-link email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to send magic-link email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
