@@ -1,0 +1,228 @@
+# Caps what a pull request's chart can claim and expose in its preview
+# namespace (inv-vcl01-pr<N>).
+#
+# A PR preview renders helm/inventario and infra/helm-overlays/ at the PR's
+# head commit, fork pull requests included, so the chart and its values are
+# whatever the pull request says. The `previews` AppProject limits the kinds
+# such a chart may create, and preview-namespace-pod-security.yaml keeps the
+# namespace at Pod Security baseline. Within those kinds a chart could still
+# lift its own resource cap or publish the preview outside the tailnet. The
+# policies below refuse that at the API server:
+#
+#   - preview-resource-quota: a ResourceQuota that ArgoCD applies must cap
+#     every resource in `caps` at or below the value there, with no scopes
+#     (a scoped quota counts only some pods). The caps are the values
+#     infra/helm-overlays/preview-base.values.yaml sets; `preview-manifests.py
+#     limits` in the Helm Lint workflow fails when the two disagree.
+#   - preview-pod-resources: every pod in the namespace needs a ResourceQuota
+#     there, and each of its containers a CPU limit of at most 2 and a memory
+#     limit of at most 2Gi. A chart that drops its quota cannot start new pods,
+#     and its LimitRange cannot raise the per-container ceiling, because the
+#     limits are checked on the pod after the LimitRange has filled in its
+#     defaults. This policy selects namespaces by the `inventario-preview:
+#     pull-request` label, not by name (see the policy below).
+#   - preview-service-exposure: Services that ArgoCD applies must be
+#     ClusterIP without externalIPs. LoadBalancer and NodePort Services, and
+#     externalIPs, are published on the node's own addresses (on k3s,
+#     ServiceLB does that for LoadBalancer).
+#   - preview-ingress-exposure: Ingresses that ArgoCD applies must use the
+#     `tailscale` class, so no other controller (Traefik on k3s, the default
+#     class there) serves them on the node.
+#   Neither may carry the `tailscale.com/funnel` annotation, which publishes
+#   a tailnet Ingress to the internet.
+#
+# Scope: the quota, Service and Ingress policies apply to requests from the
+# service accounts in the `argocd` namespace, the only route by which a pull
+# request's content reaches the cluster; the cluster admin is not affected.
+# The pod policy applies to every pod created in a PR namespace, because pods
+# are created by the Deployment and Job controllers, not by ArgoCD. The PR
+# ApplicationSet labels its namespaces, and preview-namespace-pod-security.yaml
+# refuses a PR namespace from ArgoCD without the label.
+# inv-vcl01-master and inv-vcl01-longevity run the chart from master and are
+# not matched.
+#
+# bootstrap.sh applies this directory only when the Tailscale operator is
+# installed. Requires Kubernetes 1.30 or later (ValidatingAdmissionPolicy v1
+# with parameter resources).
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: preview-resource-quota
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["resourcequotas"]
+  matchConditions:
+    - name: pr-preview-namespace
+      expression: request.namespace.startsWith('inv-vcl01-pr')
+    - name: applied-by-argocd
+      expression: request.userInfo.groups.exists(g, g == 'system:serviceaccounts:argocd')
+  variables:
+    - name: caps
+      expression: >-
+        {'requests.cpu': '2', 'requests.memory': '2Gi', 'limits.cpu': '4', 'limits.memory': '4Gi', 'requests.storage': '20Gi', 'persistentvolumeclaims': '5', 'pods': '30'}
+    - name: hard
+      expression: "has(object.spec.hard) ? object.spec.hard : {}"
+  validations:
+    - expression: >-
+        variables.caps.all(k, k in variables.hard &&
+        quantity(variables.hard[k]).compareTo(quantity(variables.caps[k])) <= 0)
+      message: >-
+        A preview ResourceQuota must set requests.cpu <= 2, requests.memory
+        <= 2Gi, limits.cpu <= 4, limits.memory <= 4Gi, requests.storage <=
+        20Gi, persistentvolumeclaims <= 5 and pods <= 30
+        (infra/vm/cluster-extras/preview-namespace-limits.yaml).
+      reason: Forbidden
+    - expression: "!has(object.spec.scopes) && !has(object.spec.scopeSelector)"
+      message: A preview ResourceQuota must not set scopes or a scopeSelector.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: preview-resource-quota
+spec:
+  policyName: preview-resource-quota
+  validationActions: [Deny]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: preview-pod-resources
+spec:
+  failurePolicy: Fail
+  # The binding looks the ResourceQuotas up in the pod's own namespace and
+  # refuses the pod when there is none.
+  paramKind:
+    apiVersion: v1
+    kind: ResourceQuota
+  matchConstraints:
+    # The API server looks the parameters up before it evaluates
+    # matchConditions, so a CEL condition on the namespace name would come
+    # too late: every pod in a namespace without a quota (kube-system
+    # included) would be refused. The namespace selector is checked first.
+    # A label selector cannot match a name prefix, hence the label.
+    namespaceSelector:
+      matchLabels:
+        inventario-preview: pull-request
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    - expression: >-
+        variables.containers.all(c, has(c.resources) && has(c.resources.limits) &&
+        'cpu' in c.resources.limits && 'memory' in c.resources.limits &&
+        quantity(c.resources.limits['cpu']).compareTo(quantity('2')) <= 0 &&
+        quantity(c.resources.limits['memory']).compareTo(quantity('2Gi')) <= 0)
+      message: >-
+        Every container of a preview pod must have a CPU limit of at most 2
+        and a memory limit of at most 2Gi
+        (infra/vm/cluster-extras/preview-namespace-limits.yaml).
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: preview-pod-resources
+spec:
+  policyName: preview-pod-resources
+  validationActions: [Deny]
+  paramRef:
+    # No namespace: the ResourceQuotas of the pod's namespace.
+    selector: {}
+    parameterNotFoundAction: Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: preview-service-exposure
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["services"]
+  matchConditions:
+    - name: pr-preview-namespace
+      expression: request.namespace.startsWith('inv-vcl01-pr')
+    - name: applied-by-argocd
+      expression: request.userInfo.groups.exists(g, g == 'system:serviceaccounts:argocd')
+  validations:
+    - expression: object.spec.type == 'ClusterIP'
+      message: >-
+        A preview Service must be of type ClusterIP; LoadBalancer, NodePort
+        and ExternalName are refused.
+      reason: Forbidden
+    - expression: "!has(object.spec.externalIPs) || size(object.spec.externalIPs) == 0"
+      message: A preview Service must not set externalIPs.
+      reason: Forbidden
+    - expression: >-
+        !has(object.metadata.annotations) ||
+        !('tailscale.com/funnel' in object.metadata.annotations)
+      message: >-
+        A preview must not carry the tailscale.com/funnel annotation, which
+        publishes it to the internet.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: preview-service-exposure
+spec:
+  policyName: preview-service-exposure
+  validationActions: [Deny]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: preview-ingress-exposure
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["networking.k8s.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["ingresses"]
+  matchConditions:
+    - name: pr-preview-namespace
+      expression: request.namespace.startsWith('inv-vcl01-pr')
+    - name: applied-by-argocd
+      expression: request.userInfo.groups.exists(g, g == 'system:serviceaccounts:argocd')
+  variables:
+    - name: annotations
+      expression: "has(object.metadata.annotations) ? object.metadata.annotations : {}"
+  validations:
+    # The API server refuses a kubernetes.io/ingress.class annotation that
+    # differs from ingressClassName, so the field is the one to check.
+    - expression: >-
+        has(object.spec.ingressClassName) && object.spec.ingressClassName == 'tailscale'
+      message: A preview Ingress must use the tailscale ingress class.
+      reason: Forbidden
+    - expression: "!('tailscale.com/funnel' in variables.annotations)"
+      message: >-
+        A preview must not carry the tailscale.com/funnel annotation, which
+        publishes it to the internet.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: preview-ingress-exposure
+spec:
+  policyName: preview-ingress-exposure
+  validationActions: [Deny]

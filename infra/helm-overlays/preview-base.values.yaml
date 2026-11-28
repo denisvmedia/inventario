@@ -155,7 +155,11 @@ backofficeUser:
 
 # Defensive guard-rails per #1866: cap aggregate compute/storage/pod-count
 # in every PR-preview namespace so one runaway pod can't starve other
-# previews sharing the same 16 GiB VM. Sized for the demo bundle below
+# previews sharing the same 16 GiB VM. The cluster holds a PR preview to
+# these numbers whatever its own branch says:
+# infra/vm/cluster-extras/preview-namespace-limits.yaml refuses a quota
+# above them and pods in a namespace without one, so raise both together
+# (Helm Lint's `preview-manifests.py limits` step fails when they differ). Sized for the demo bundle below
 # (run all + postgres + redis + minio + mailpit + transient setup /
 # init-data / mc-bucket Jobs):
 #   - Sum of always-on `limits.cpu` = 500m (inventario run all) + 500m
@@ -192,7 +196,9 @@ quota:
 
 # Expose via Tailscale Ingress, NOT LoadBalancer. The TS operator (#1855)
 # provisions a tailnet proxy node from the Ingress + `className: tailscale`
-# and handles cert termination outside the chart.
+# and handles cert termination outside the chart. For PR previews the
+# cluster enforces it: preview-namespace-limits.yaml refuses non-ClusterIP
+# Services, other ingress classes and the tailscale.com/funnel annotation.
 service:
   type: ClusterIP
   port: 3333

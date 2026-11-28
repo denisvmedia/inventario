@@ -1,5 +1,6 @@
 # Keeps the Pod Security labels on every preview namespace that ArgoCD
-# creates or updates (inv-vcl01-pr<N>, inv-vcl01-master, inv-vcl01-longevity).
+# creates or updates (inv-vcl01-pr<N>, inv-vcl01-master, inv-vcl01-longevity),
+# and the `inventario-preview: pull-request` label on the PR ones.
 #
 # The ApplicationSets in infra/argocd/ put `pod-security.kubernetes.io/enforce:
 # baseline` on these namespaces through managedNamespaceMetadata. That alone
@@ -19,6 +20,12 @@
 # Allowed: `enforce` set to `baseline` or `restricted`, with no
 # `enforce-version` or `enforce-version: latest`. `warn` and `audit` are not
 # checked; they cannot let a pod in.
+#
+# A PR namespace (inv-vcl01-pr<N>) must also carry `inventario-preview:
+# pull-request`, which the PR ApplicationSet sets. The pod policy in
+# preview-namespace-limits.yaml selects its namespaces by that label, so a
+# PR namespace without it would escape the per-container limits and the
+# required quota.
 #
 # bootstrap.sh applies this directory only when the Tailscale operator is
 # installed. Without it the previews still deploy and still get their labels
@@ -57,6 +64,16 @@ spec:
       message: >-
         A preview namespace applied by ArgoCD must not pin
         pod-security.kubernetes.io/enforce-version to an older policy version.
+      reason: Forbidden
+    - expression: >-
+        !object.metadata.name.startsWith('inv-vcl01-pr') ||
+        (has(object.metadata.labels) &&
+        'inventario-preview' in object.metadata.labels &&
+        object.metadata.labels['inventario-preview'] == 'pull-request')
+      message: >-
+        A PR preview namespace applied by ArgoCD must carry the label
+        inventario-preview: pull-request
+        (infra/vm/cluster-extras/preview-namespace-limits.yaml).
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1
