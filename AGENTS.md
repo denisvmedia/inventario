@@ -383,10 +383,15 @@ Support for multiple database backends via DSN:
 ### Migration Strategy
 - Dry-run mode for testing: `--dry-run`
 
+## Working as an agent
+
+Before the first file read on any task, load the [`agent-workflow`](.agents/skills/agent-workflow/SKILL.md) skill (canonical in `.agents/skills/`, linked into `.claude/skills/` for Claude Code). It covers ranged reading, the scoped checks `.agents/skills/agent-workflow/scripts/lint-changed.sh` and `test-changed.sh`, the full chain before a push, local review, and pushing once without polling CI. Run `cd .claude/worktrees/<name> && .agents/skills/agent-workflow/scripts/worktree-setup.sh` in each new worktree (the scripts refuse the main checkout), and read [`devdocs/code-map.md`](devdocs/code-map.md) before exploring the tree.
+
 ## Repo-level skills
 
 Repository-scoped Claude Code skills live under `.claude/skills/`. They activate automatically when their description matches the task — but you should also read them directly when starting related work, since they encode workflows that AGENTS.md only summarizes.
 
+- [`.agents/skills/agent-workflow/SKILL.md`](.agents/skills/agent-workflow/SKILL.md) — how to work here on few tokens: ranged reads, scoped lint and test scripts, the pre-push chain, local review, push once. Claude Code reads it through the `.claude/skills/agent-workflow` symlink. Load it on every task.
 - [`.claude/skills/frontend-work/SKILL.md`](.claude/skills/frontend-work/SKILL.md) — orchestrates any task touching `frontend/`: pre-flight reading, design-mock fidelity, deviation logging, and the optional post-change screenshot/Issue-comment flow. Activates on any change inside `frontend/src/`.
 - [`.claude/skills/screenshot-review/SKILL.md`](.claude/skills/screenshot-review/SKILL.md) — captures local screenshots via `e2e/screenshots.mjs`, reviews them visually for regressions, and (on explicit user request only) publishes them to an `assets/screenshots-<issue>` branch via `e2e/push-screenshots.sh` so they can be embedded in an Issue comment.
 - [`.claude/skills/inventario-e2e/SKILL.md`](.claude/skills/inventario-e2e/SKILL.md) — runs and debugs Playwright e2e tests locally; not for unit/Vitest tests.
