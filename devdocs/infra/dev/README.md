@@ -71,8 +71,8 @@ Three ancillary loops keep the system healthy:
 |     infra/vm/bootstrap.sh    (orchestrator — run from laptop)       |
 |     infra/vm/vm-install.sh   (runs ON the VM, scp'd by bootstrap)   |
 |     infra/vm/secrets/        (sops-encrypted bundle, age key)       |
-|     infra/argocd/            (AppProject + Application + AppSet)    |
-|     infra/vm/cluster-extras/ (ts-orphan-cleanup CronJob)            |
+|     infra/argocd/            (AppProjects + ApplicationSets)        |
+|     infra/vm/cluster-extras/ (CronJobs, admission policies)         |
 |     ~/.kube/inv-vcl01.config (kubeconfig, populated by bootstrap)   |
 |                                                                     |
 +--------------------------------+------------------------------------+
@@ -133,33 +133,41 @@ Nothing in this layout is exposed to the public internet:
 
 ```mermaid
 flowchart TD
-    appproj["AppProject 'previews'<br/>scoped to inv-vcl01-* namespaces<br/>(infra/argocd/appproject.yaml)"]
+    appproj["AppProject 'previews'<br/>inv-vcl01-pr* only, PR preview kinds<br/>(infra/argocd/appproject.yaml)"]
+    appprojmaster["AppProject 'master-previews'<br/>inv-vcl01-master + inv-vcl01-longevity<br/>(infra/argocd/appproject-master.yaml)"]
     appset["ApplicationSet 'inventario-pr-previews'<br/>PR generator + GH App auth<br/>(infra/argocd/applicationset-pr.yaml)"]
     appsetmaster["ApplicationSet 'inventario-master-preview'<br/>git generator, SHA-pinned ({{ .sha }})<br/>(infra/argocd/applicationset-master.yaml)"]
+    appsetlongevity["ApplicationSet 'inventario-longevity-preview'<br/>same pin file, PVC-backed demo stores<br/>(infra/argocd/applicationset-longevity.yaml)"]
     appmaster["Application 'inv-vcl01-master'<br/>generated from the master pin file<br/>(spawned by ApplicationSet)"]
+    applongevity["Application 'inv-vcl01-longevity'<br/>generated from the master pin file<br/>(spawned by ApplicationSet)"]
     appprN["Application 'inv-vcl01-prN'<br/>generated per PR with label 'preview'<br/>(spawned by ApplicationSet)"]
 
-    appproj --> appsetmaster
+    appprojmaster --> appsetmaster
+    appprojmaster --> appsetlongevity
     appproj --> appset
     appsetmaster --> appmaster
+    appsetlongevity --> applongevity
     appset --> appprN
 
     appmaster -->|"sources: chart at master pin SHA<br/>image.tag: sha-&lt;7&gt;"| chartmaster["helm/inventario chart"]
+    applongevity -->|"same, plus<br/>longevity-base.values.yaml"| chartmaster
     appprN -->|"sources: chart at PR head SHA<br/>image.tag: sha-&lt;7&gt;"| chartpr["helm/inventario chart"]
 
     chartmaster --> overlay["preview-base.values.yaml<br/>(shared overlay via $values multi-source)"]
     chartpr --> overlay
 ```
 
-Three ArgoCD resources land at bootstrap time (applied by `bootstrap.sh` via `kubectl apply`):
+Five ArgoCD resources land at bootstrap time (applied by `bootstrap.sh` via `kubectl apply`, the AppProjects first):
 
 | Resource | File | Purpose |
 |---|---|---|
-| `AppProject previews` | `infra/argocd/appproject.yaml` | Restricts both source repos (`denisvmedia/inventario` only) and destination namespaces (`inv-vcl01-*` only). Belt-and-suspenders so a malformed Application can't reach into `argocd`, `tailscale`, `inv-system`, etc. |
+| `AppProject previews` | `infra/argocd/appproject.yaml` | Project of the PR previews. Sources from `denisvmedia/inventario` only; destinations `inv-vcl01-pr*` only; the only cluster-scoped kind is a Namespace named `inv-vcl01-pr*`; the namespaced kinds are exactly what the chart renders with the PR preview values (ConfigMap, LimitRange, ResourceQuota, Secret, Service, ServiceAccount, Deployment, Job, Ingress). A PR chart cannot reach `argocd`, `tailscale`, `inv-system`, the master and longevity namespaces, or any kind outside that list. See [§5](#5-argocd-appprojects-applicationsets-and-preview-isolation). |
+| `AppProject master-previews` | `infra/argocd/appproject-master.yaml` | Project of the master and longevity environments. Destinations `inv-vcl01-master` and `inv-vcl01-longevity`, the same kinds plus PersistentVolumeClaim. Kept apart from `previews` because those namespaces hold the `inventario-admin` Secret from the sops bundle and their chart comes from master commits only. |
 | `ApplicationSet inventario-master-preview` | `infra/argocd/applicationset-master.yaml` | Continuously deploys master to namespace `inv-vcl01-master`. A **git generator** reads the pin file `infra/argocd/master-image.json` (`{ "sha": ..., "imageTag": "sha-<7>" }`) off the dedicated CI-maintained orphan branch `argocd/master-pin` (`revision: argocd/master-pin`, **not** master), exposing `{{ .sha }}` / `{{ .imageTag }}`. Chart + `$values` are pinned to `{{ .sha }}` and the image to the immutable `{{ .imageTag }}` (`pullPolicy: IfNotPresent`) — a master push triggers `docker.yml`, which force-pushes the updated pin file to `argocd/master-pin`, moving the SHA the generator reads and triggering a sync ([#1885](https://github.com/denisvmedia/inventario/issues/1885)). |
+| `ApplicationSet inventario-longevity-preview` | `infra/argocd/applicationset-longevity.yaml` | The persistent `inv-vcl01-longevity` environment ([#1865](https://github.com/denisvmedia/inventario/issues/1865)). Reads the same `argocd/master-pin` file as the master ApplicationSet and layers `infra/helm-overlays/longevity-base.values.yaml` over the shared overlay for PVC-backed demo Postgres and MinIO, which Velero backs up. |
 | `ApplicationSet inventario-pr-previews` | `infra/argocd/applicationset-pr.yaml` | Per-PR previews. `goTemplate: true` + `goTemplateOptions: [missingkey=error]`. Generates one Application per open PR labeled `preview`; image pinned to the PR's `sha-<7>` (immutable). |
 
-Both Applications layer the **shared overlay** `infra/helm-overlays/preview-base.values.yaml` via ArgoCD's multi-source `$values` mechanism — same demo deps (Postgres/Redis/MinIO), same `argocdMode: true` for the setup Job, same admin credentials. Per-Application bits (image tag, ingress hostname, FQDN) layer on top via inline `helm.values`.
+All three ApplicationSets layer the **shared overlay** `infra/helm-overlays/preview-base.values.yaml` via ArgoCD's multi-source `$values` mechanism — same demo deps (Postgres/Redis/MinIO), same `argocdMode: true` for the setup Job. Per-Application bits (image tag, ingress hostname, FQDN, admin credentials) layer on top via inline `helm.values`: master and longevity read the admin password from the `inventario-admin` Secret, and PR previews use the inlined `PreviewAdmin123`.
 
 ---
 
@@ -186,8 +194,8 @@ sequenceDiagram
     V->>K: helm install tailscale-operator
     V->>K: helm install argocd
     L->>V: apply-secrets.sh (operator-oauth, github-app-creds, inv-admin)
-    L->>V: kubectl apply cluster-extras manifests (CronJob)
-    L->>V: kubectl apply ArgoCD manifests (AppProject + Application + ApplicationSet)
+    L->>V: kubectl apply cluster-extras manifests (CronJobs, ArgoCD Ingress, admission policies)
+    L->>V: kubectl apply ArgoCD manifests (AppProjects, then ApplicationSets)
     L->>L: copy kubeconfig back, rewrite server to tailnet IP
     Note over L,V: Bootstrap complete (ArgoCD polls GitHub in the next minute)
 ```
@@ -280,9 +288,9 @@ flowchart LR
     svc --> deploy
 ```
 
-### 5. ArgoCD AppProject / Application / ApplicationSet
+### 5. ArgoCD AppProjects, ApplicationSets and preview isolation
 
-**AppProject** scopes both source repo and destination namespaces — sourceRepos `denisvmedia/inventario` only, destinations `inv-vcl01-*` only. So an Application can't accidentally try to deploy into `argocd` or `tailscale`.
+**AppProjects.** `previews` (`infra/argocd/appproject.yaml`) serves the PR previews: destinations `inv-vcl01-pr*`, a Namespace named `inv-vcl01-pr*` as the only cluster-scoped kind, and the namespaced kinds the chart renders with the PR preview values. `master-previews` (`infra/argocd/appproject-master.yaml`) serves `inv-vcl01-master` and `inv-vcl01-longevity` with the same kinds plus PersistentVolumeClaim. Both take sources from `denisvmedia/inventario` only. They are split because a chart can hard-code `metadata.namespace` on any object and ArgoCD applies it to any namespace its project allows: with one project, a PR chart could put a Deployment into `inv-vcl01-master` that reads the sops-sourced `inventario-admin` Secret.
 
 **ApplicationSet `inventario-master-preview`** deploys master. It is a **git generator** that reads the pin file `infra/argocd/master-image.json` off the dedicated CI-maintained orphan branch `argocd/master-pin` (`revision: argocd/master-pin` — the file does **not** live on `master`) and templates one `inv-vcl01-master` Application, pinned to the pinned SHA (chart + `$values` at `{{ .sha }}`, image at the immutable `{{ .imageTag }}`). A master push triggers `docker.yml`, which force-pushes the new `{ sha, imageTag }` pin file to `argocd/master-pin`; the SHA change on that branch is what ArgoCD diffs on and syncs ([#1885](https://github.com/denisvmedia/inventario/issues/1885)).
 
@@ -300,7 +308,7 @@ spec:
     metadata:
       name: inv-vcl01-master
     spec:
-      project: previews
+      project: master-previews
       sources:
         - repoURL: https://github.com/denisvmedia/inventario
           targetRevision: '{{ .sha }}'
@@ -356,12 +364,35 @@ spec:
         automated:
           prune: true       # unlabel/close → resources go away
           selfHeal: true    # any drift in the cluster → reconciled
+        managedNamespaceMetadata:
+          labels:           # checked by preview-namespace-pod-security
+            pod-security.kubernetes.io/enforce: baseline
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted
+            inventario-preview: pull-request
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
 ```
 
 The `<TAILNET>` placeholder is substituted at apply time (in `bootstrap.sh`) from the sops bundle's `tailscale.tailnet_name`. Keeping this out of the file ArgoCD reads from git makes the file tailnet-agnostic — the same `applicationset-pr.yaml` could run against a different tailnet by changing the sops value.
+
+**Preview isolation.** A PR preview runs the chart and the overlay from the PR's head commit, fork PRs included; the `preview` label (triage access) is the only gate. Beyond the `previews` project, three things hold such a chart in place:
+
+- **Pod Security labels.** All three ApplicationSets label their namespaces `enforce: baseline`, `warn: restricted`, `audit: restricted` through `managedNamespaceMetadata`; the PR one adds `inventario-preview: pull-request`. A chart that renders its own Namespace object would replace them, so the ValidatingAdmissionPolicy in `infra/vm/cluster-extras/preview-namespace-pod-security.yaml` refuses an `inv-vcl01-*` namespace from an `argocd` service account unless `enforce` is `baseline` or `restricted` (with `enforce-version` unset or `latest`), and an `inv-vcl01-pr*` namespace without `inventario-preview: pull-request`. The cluster admin, `apply-secrets.sh` and Velero restores are not matched.
+- **Caps.** `infra/vm/cluster-extras/preview-namespace-limits.yaml` holds four policies for the PR namespaces:
+
+  | Policy | Rule |
+  |---|---|
+  | `preview-resource-quota` | A ResourceQuota from ArgoCD sets `requests.cpu` ≤ 2, `requests.memory` ≤ 2Gi, `limits.cpu` ≤ 4, `limits.memory` ≤ 4Gi, `requests.storage` ≤ 20Gi, `persistentvolumeclaims` ≤ 5 and `pods` ≤ 30 (the values of `preview-base.values.yaml`), with no scopes. |
+  | `preview-pod-resources` | A pod needs a ResourceQuota in its namespace (a policy parameter with `parameterNotFoundAction: Deny`), and each container and init container a CPU limit ≤ 2 and a memory limit ≤ 2Gi, checked after the LimitRange has filled in its defaults. |
+  | `preview-service-exposure` | A Service from ArgoCD is `ClusterIP`, without `externalIPs` and without `tailscale.com/funnel`. ServiceLB would otherwise publish a LoadBalancer on the VM's own ports. |
+  | `preview-ingress-exposure` | An Ingress from ArgoCD has `ingressClassName: tailscale` and no `tailscale.com/funnel`, so Traefik (the k3s default class) serves none of them. |
+
+  The quota, Service and Ingress policies match `inv-vcl01-pr*` by name and requests from the `argocd` service accounts. The pod policy matches pods from any requester, since the Deployment and Job controllers create them, and selects namespaces with a `namespaceSelector` on `inventario-preview: pull-request`. The API server looks up the quota parameter before it evaluates `matchConditions`, so a name condition there would refuse every pod in a namespace without a quota, `kube-system` included.
+- **CI.** Helm Lint runs `.github/scripts/preview-manifests.py kinds` (each AppProject allows exactly the kinds its Applications render) and `limits` (the PR render stays within the caps read from the policy file, every container has an effective CPU and memory limit, and the label is set and guarded). The Helm Kind lane of `docker.yml` installs the chart into kind in a namespace labeled by `preview-manifests.py labels`, which fails unless the three ApplicationSets carry the same Pod Security labels, and in its `argocd` arrangement dry-runs each preview render against Pod Security at the `enforce` level. CI Lint runs `scripts/test-preview-limits.sh`.
+
+`bootstrap.sh` applies the AppProjects, the ApplicationSets and cluster-extras; ArgoCD does not sync them, so a change takes effect on the next bootstrap. cluster-extras is applied only when the Tailscale operator is installed.
 
 ### 6. Helm chart + preview-base overlay
 
@@ -398,7 +429,8 @@ The Job ends up applied **in the default sync wave alongside everything else**. 
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/docker.yml` | PR push, master push, tag push | Builds multi-arch image. PRs get `pr-N` + `sha-<7>` tags; master gets `edge` + `master` + `sha-<7>`. Build is gated by `image_inputs` filter in `.github/filters.yml` — includes `helm/**`, `infra/argocd/**`, `infra/helm-overlays/**` so chart-only PRs still get an image. |
+| `.github/workflows/docker.yml` | PR push, master push, tag push | Builds multi-arch image. PRs get `pr-N` + `sha-<7>` tags; master gets `edge` + `master` + `sha-<7>`. Build is gated by `image_inputs` filter in `.github/filters.yml` — includes `helm/**`, `infra/argocd/**`, `infra/helm-overlays/**` so chart-only PRs still get an image. The lanes that test the image are jobs of the same workflow behind the manifest job: the e2e lanes, the kind smoke test, and the Helm Kind lane (`helm-kind-smoke-test.yml`). The Helm Kind lane runs on every master push and on PRs that touch the chart, the preview manifests, the app's sources or CI; it installs the chart into kind with the preview Pod Security labels and dry-runs the preview renders against them. |
+| `.github/workflows/helm-lint.yml` | Master push; PRs that touch the chart, the monitoring rules, the preview manifests or CI | Lints and renders the chart. For the previews it runs `preview-manifests.py kinds` (the AppProjects allow exactly the kinds the chart renders) and `limits` (the PR render stays within the caps of `preview-namespace-limits.yaml`). See [§5](#5-argocd-appprojects-applicationsets-and-preview-isolation). |
 | `.github/workflows/pr-preview-status.yml` | PR `labeled` / `unlabeled` / `synchronize` / `closed` | Updates a single sticky comment on the PR (via `marocchino/sticky-pull-request-comment`) showing the deployed hostname, head SHA, admin credentials, status. |
 
 The sticky comment displays the hostname as **plain text**, not a clickable link. Two reasons:
@@ -531,6 +563,7 @@ The cert is **only** valid for the FQDN (`inv-vcl01-prN.<tailnet>.ts.net`). Hitt
 | ApplicationSet never spawns Application for the PR | PR doesn't have `preview` label, OR GitHub App credentials missing in sops bundle. | `kubectl -n argocd describe appset inventario-pr-previews` — check `.status.conditions`. `kubectl -n argocd logs deploy/argocd-applicationset-controller`. |
 | Application stuck `Progressing` with `ImagePullBackOff` on the app pod | docker.yml hasn't published `sha-<7>` for this commit yet (chart-only PR + a missing filter entry, OR the build is still running). | Wait 3-5 min. If still failing: check the docker.yml run in GH Actions; verify `.github/filters.yml` `image_inputs` matches the PR's paths. |
 | Application `Healthy` but app pod CrashLoop with "database schema lags the binary's embedded migrations" | Setup Job didn't run yet, OR Postgres came up late. | `kubectl -n inv-vcl01-prN logs job/inv-vcl01-prN-inventario-setup --all-containers` to see migration progress. Force re-sync: `kubectl annotate application inv-vcl01-prN argocd.argoproj.io/refresh=hard --overwrite`. |
+| Sync fails with "resource ... is not permitted in project previews", or a ReplicaSet/Job shows `FailedCreate` with `ValidatingAdmissionPolicy '<name>' ... denied request` | The PR's chart renders a kind the `previews` project does not list, or breaks a cap in `preview-namespace-limits.yaml` (the message names it). | Helm Lint's `kinds` step fails on the same PR for a missing kind, and `limits` for the quota or a container limit; a Service or Ingress refusal shows only on the cluster. Fix the chart, or add the kind to `infra/argocd/appproject.yaml`; raising a cap means changing the policy together with the overlay or the chart. See [§5](#5-argocd-appprojects-applicationsets-and-preview-isolation). |
 | Preview reachable at `inv-vcl01-prN-1.<tailnet>.ts.net` instead of `inv-vcl01-prN` | Stale orphan device record holding the original hostname (most often from snapshot rollback before the hourly CronJob has fired). | Wait < 1 h for `ts-orphan-cleanup` CronJob to fire. To force immediately: `kubectl -n tailscale create job --from=cronjob/ts-orphan-cleanup ts-cleanup-now`. After cleanup, force proxy re-registration: `kubectl -n tailscale delete sts -l tailscale.com/parent-resource-ns=inv-vcl01-prN`. |
 | Browser shows cert mismatch on `https://inv-vcl01-prN/` (short hostname) | Expected — TS cert covers the FQDN only. | Use the FQDN: `https://inv-vcl01-prN.<tailnet>.ts.net/`. |
 | Stale Tailscale device records accumulating despite the CronJob | OAuth client missing `devices:core` scope, or wrong scope name in the script. | `kubectl -n tailscale logs job/ts-orphan-cleanup-XXXXX` — look for "OAuth client cannot grant scopes" (wrong scope name — must be `devices:core`, not `devices`) or "tag:k8s-operator" responses (client lacks `tag:k8s` scope — fix in TS admin). |
