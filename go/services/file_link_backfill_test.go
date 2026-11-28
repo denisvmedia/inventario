@@ -23,9 +23,9 @@ func TestMoveLegacyFileLinks(t *testing.T) {
 		Type:     models.FileTypeDocument,
 		Category: models.FileCategoryDocuments,
 		LegacyFileLink: models.LegacyFileLink{
-			LegacyLinkedEntityType: new(models.FileLinkCommodity),
-			LegacyLinkedEntityID:   new(com.ID),
-			LegacyLinkedEntityMeta: new(models.FileLinkMetaDocuments),
+			LegacyLinkedEntityType: models.FileLinkCommodity,
+			LegacyLinkedEntityID:   com.ID,
+			LegacyLinkedEntityMeta: models.FileLinkMetaDocuments,
 		},
 		File: &models.File{Path: "manual", OriginalPath: "files/manual", Ext: ".pdf", MIMEType: "application/pdf"},
 	}

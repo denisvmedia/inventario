@@ -397,15 +397,6 @@ func (r *FileRegistry) SetThumbnailsOriented(_ context.Context, id string) error
 	return nil
 }
 
-// legacyValue reads one legacy link field. Nil is a column holding NULL, which
-// the postgres move treats as empty.
-func legacyValue(v *string) string {
-	if v == nil {
-		return ""
-	}
-	return *v
-}
-
 // MoveLegacyLinks mirrors the postgres method.
 func (r *FileRegistry) MoveLegacyLinks(_ context.Context, limit int) (int, error) {
 	if limit <= 0 {
@@ -416,14 +407,14 @@ func (r *FileRegistry) MoveLegacyLinks(_ context.Context, limit int) (int, error
 	moved := 0
 	for pair := r.items.Oldest(); pair != nil && moved < limit; pair = pair.Next() {
 		f := pair.Value
-		if f == nil || legacyValue(f.LegacyLinkedEntityType) == "" {
+		if f == nil || f.LegacyLinkedEntityType == "" {
 			continue
 		}
-		if legacyValue(f.LegacyLinkedEntityID) != "" {
+		if f.LegacyLinkedEntityID != "" {
 			r.addLinkLocked(f, models.FileLink{
-				EntityType: legacyValue(f.LegacyLinkedEntityType),
-				EntityID:   legacyValue(f.LegacyLinkedEntityID),
-				Meta:       legacyValue(f.LegacyLinkedEntityMeta),
+				EntityType: f.LegacyLinkedEntityType,
+				EntityID:   f.LegacyLinkedEntityID,
+				Meta:       f.LegacyLinkedEntityMeta,
 				CreatedAt:  f.CreatedAt,
 			})
 		}

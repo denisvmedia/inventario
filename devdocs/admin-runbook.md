@@ -420,8 +420,8 @@ multi-transaction, because the file→entity link is polymorphic and cannot
 carry an FK):
 
 1. **Crash window** — a process dies between an entity-row delete and its
-   linked-file sweep, leaving file rows pointing at an entity that no
-   longer exists.
+   linked-file sweep, leaving file rows whose links point at an entity
+   that no longer exists.
 2. **Concurrent attach** — a file is linked to an entity while that
    entity's delete is in flight.
 3. **Thumbnail mid-generation race** — a file is deleted while the
@@ -431,9 +431,10 @@ carry an FK):
 
 It sweeps exactly two classes:
 
-- **File ROWS** whose `linked_entity_type` is one of
-  `commodity` / `area` / `location` **and** whose `linked_entity_id`
-  names a row that does not exist anywhere in the database.
+- **File ROWS** that have at least one link in `file_links`, **and**
+  every one of whose links is of type `commodity` / `area` / `location`
+  and names a row that does not exist anywhere in the database. One
+  link to a live entity keeps the file.
 - **THUMBNAIL blobs** under `t/<tenant>/thumbnails/` whose owning file
   row is gone. Thumbnails are derived and regenerable, and the key
   embeds the owning row's primary key, so orphan-ness is an exact
@@ -444,10 +445,10 @@ enumerated in the first place:
 
 | Class | Why it is never touched |
 | ----- | ----------------------- |
-| Standalone files (`linked_entity_type = ''`) | First-class since #2235; exported in backups. **"No link" is not "orphan."** The candidate predicate is a positive allowlist, so a standalone file cannot enter it. |
+| Standalone files (no row in `file_links`) | First-class since #2235; exported in backups. **"No link" is not "orphan."** A candidate must have a link, so a standalone file cannot enter the scan. |
 | Files in Trash (`deleted_at` set) | Owned by `trash-purge` (§9). A link to an item in Trash also counts as a live link, so the files of a trashed item are never candidates. |
-| `export`-linked files | Owned by the backup subsystem's own lifecycle. The exports table is never probed, so a soft-deleted (recoverable) export can never be misread as "gone". |
-| Any unknown / future link type | Fails closed — kept until someone explicitly adds it to the allowlist. |
+| Files with an `export` link | Owned by the backup subsystem's own lifecycle. The exports table is never probed, so a soft-deleted (recoverable) export can never be misread as "gone". |
+| Files with a link of an unknown / future type | Fails closed — kept until someone explicitly adds the type to the allowlist. |
 | `t/<tenant>/files/` blobs | Upload, restore, and `inventario backfill blobs` are all **blob-first / row-second**, so a rowless blob is a normal transient state. Reclaiming these safely needs a provably-complete global keep-set; the failure mode is irreversible loss of the user's file bytes. Out of scope for an autonomous worker. (Crash-window blobs are still reclaimed — via the row sweep, which deletes the blob and thumbnails with the row.) |
 | `t/<tenant>/exports/` blobs | A failed export leaves its `.inb` referenced by nothing at all. Fix belongs at the source. |
 | `t/<tenant>/restores/` blobs | An uploaded `.inb` awaiting import has **no row of any kind** — and stays rowless forever if the import fails or is never submitted. Deleting one destroys a user's uploaded backup. |

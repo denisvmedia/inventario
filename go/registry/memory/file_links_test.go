@@ -298,11 +298,7 @@ func TestFileRegistry_Memory_MoveLegacyLinks(t *testing.T) {
 	// stored through the base registry, below the file registry's Create.
 	legacy := func(name, typ, id, meta string) *models.FileEntity {
 		fe := newLinkTestFile(name, 1)
-		fe.LegacyFileLink = models.LegacyFileLink{
-			LegacyLinkedEntityType: new(typ),
-			LegacyLinkedEntityID:   new(id),
-			LegacyLinkedEntityMeta: new(meta),
-		}
+		fe.LegacyFileLink = models.LegacyFileLink{LegacyLinkedEntityType: typ, LegacyLinkedEntityID: id, LegacyLinkedEntityMeta: meta}
 		stored, err := reg.(*memory.FileRegistry).Registry.Create(ctx, fe)
 		c.Assert(err, qt.IsNil)
 		return stored
@@ -349,7 +345,7 @@ func TestFileRegistry_Memory_CreateDropsLegacyLinkFields(t *testing.T) {
 	reg := memory.NewFileRegistryFactory().MustCreateUserRegistry(ctx)
 
 	fe := newLinkTestFile("a", 1)
-	fe.LegacyFileLink = models.LegacyFileLink{LegacyLinkedEntityType: new("commodity"), LegacyLinkedEntityID: new("tv")}
+	fe.LegacyFileLink = models.LegacyFileLink{LegacyLinkedEntityType: "commodity", LegacyLinkedEntityID: "tv"}
 	created, err := reg.Create(ctx, fe)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created.LegacyFileLink, qt.Equals, models.LegacyFileLink{})

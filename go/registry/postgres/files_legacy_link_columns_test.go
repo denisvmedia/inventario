@@ -148,6 +148,32 @@ func TestFileRegistry_Postgres_WorksWithoutLegacyLinkColumns(t *testing.T) {
 	}
 }
 
+// previousReleaseLegacyColumns reads a files row the way releases up to v0.2.2
+// do: `SELECT *` into a struct whose legacy link fields are plain strings, which
+// fails on NULL. It returns the three values joined by slashes.
+func previousReleaseLegacyColumns(c *qt.C, fx fileLinkPGFixture, fileID string) string {
+	c.Helper()
+	var row struct {
+		Type string `db:"linked_entity_type"`
+		ID   string `db:"linked_entity_id"`
+		Meta string `db:"linked_entity_meta"`
+	}
+	err := fx.dbx.Unsafe().GetContext(fx.ctx, &row, `SELECT * FROM files WHERE id = $1`, fileID)
+	c.Assert(err, qt.IsNil)
+	return row.Type + "/" + row.ID + "/" + row.Meta
+}
+
+// Releases up to v0.2.2 serve next to this one while it rolls out, and alone
+// after a rollback. A file this release creates must leave the legacy link
+// columns empty, not NULL, or those releases fail to read it.
+func TestFileRegistry_Postgres_PreviousReleaseReadsNewFile(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkPGFixture(t)
+
+	file := fx.file(c, "receipt", 1, pgCommodityLink("tv", "documents"))
+	c.Assert(previousReleaseLegacyColumns(c, fx, file.ID), qt.Equals, "//")
+}
+
 // A row an older release wrote keeps its legacy link through an edit, and the
 // startup move still links it and empties the columns.
 func TestMoveLegacyFileLinks_Postgres_EditedRow(t *testing.T) {
@@ -160,19 +186,12 @@ func TestMoveLegacyFileLinks_Postgres_EditedRow(t *testing.T) {
 		`UPDATE files SET linked_entity_type = 'commodity', linked_entity_id = 'radio', linked_entity_meta = 'documents' WHERE id = $1`,
 		file.ID)
 	c.Assert(err, qt.IsNil)
-	legacyColumns := func() string {
-		var typ, id, meta string
-		c.Assert(fx.dbx.QueryRowxContext(fx.ctx,
-			`SELECT COALESCE(linked_entity_type, ''), COALESCE(linked_entity_id, ''), COALESCE(linked_entity_meta, '') FROM files WHERE id = $1`,
-			file.ID).Scan(&typ, &id, &meta), qt.IsNil)
-		return typ + "/" + id + "/" + meta
-	}
 
 	edit := *file
 	edit.Title = "manual edited"
 	_, err = reg.Update(fx.ctx, edit)
 	c.Assert(err, qt.IsNil)
-	c.Assert(legacyColumns(), qt.Equals, "commodity/radio/documents")
+	c.Assert(previousReleaseLegacyColumns(c, fx, file.ID), qt.Equals, "commodity/radio/documents")
 
 	moved, err := services.MoveLegacyFileLinks(fx.ctx, fx.factorySet)
 	c.Assert(err, qt.IsNil)
@@ -182,5 +201,6 @@ func TestMoveLegacyFileLinks_Postgres_EditedRow(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(pgLinkKeys(got), qt.DeepEquals, []string{"commodity/radio/documents"})
 	c.Assert(got.Title, qt.Equals, "manual edited")
-	c.Assert(legacyColumns(), qt.Equals, "//")
+	// Emptied, not NULL: releases up to v0.2.2 read the row too.
+	c.Assert(previousReleaseLegacyColumns(c, fx, file.ID), qt.Equals, "//")
 }
